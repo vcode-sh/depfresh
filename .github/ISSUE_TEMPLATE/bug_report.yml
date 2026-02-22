@@ -1,0 +1,89 @@
+name: Bug Report
+description: Something broke. I'd like to hear about it.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before filing, make sure you're on the latest version.
+        Yes, updating is annoying. That's literally what this tool is for.
+
+  - type: input
+    id: bump-version
+    attributes:
+      label: bump version
+      description: "Run `bump --version` or check package.json."
+      placeholder: "0.1.0"
+    validations:
+      required: true
+
+  - type: input
+    id: node-version
+    attributes:
+      label: Node.js version
+      description: "Run `node --version`. Must be >= 24."
+      placeholder: "v24.0.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: package-manager
+    attributes:
+      label: Package manager
+      description: Which one are you using?
+      options:
+        - npm
+        - pnpm
+        - yarn
+        - bun
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Be specific. "It doesn't work" is not a bug report, it's a mood.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: How do I make this happen on my machine? Minimal repo or commands.
+      placeholder: |
+        1. Create a project with `npm init -y`
+        2. Install some outdated deps
+        3. Run `bump`
+        4. Watch it fail spectacularly
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What should have happened?
+      description: Your version of events.
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: What actually happened?
+      description: Reality's version. Screenshots, logs, error messages -- all useful.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: OS
+      description: Optional but helps.
+      options:
+        - macOS
+        - Linux
+        - Windows
+    validations:
+      required: false

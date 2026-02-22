@@ -4,6 +4,27 @@
   "description": "Keep your npm dependencies fresh. Fast, correct, zero-config.",
   "type": "module",
   "license": "MIT",
+  "author": "Vibe Code <hello@vcode.sh> (https://vcode.sh)",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vcode-sh/bump.git"
+  },
+  "bugs": {
+    "url": "https://github.com/vcode-sh/bump/issues"
+  },
+  "homepage": "https://github.com/vcode-sh/bump#readme",
+  "keywords": [
+    "npm",
+    "dependencies",
+    "update",
+    "outdated",
+    "monorepo",
+    "workspace",
+    "cli",
+    "taze",
+    "bump"
+  ],
+  "sideEffects": false,
   "bin": {
     "bump": "./dist/cli.mjs"
   },

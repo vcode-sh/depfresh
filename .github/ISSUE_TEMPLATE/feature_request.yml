@@ -1,0 +1,41 @@
+name: Feature Request
+description: Got an idea? Pitch it.
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Feature requests are welcome. Just remember: every feature is code I'm
+        volunteering to maintain forever. So make it count.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What's the problem?
+      description: "Not \"I want X.\" Tell me what's actually painful. \"When I do Y, I can't Z\" -- that's a problem."
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: How should it work?
+      description: CLI flags, config options, behaviour changes. Be specific or don't bother.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What else did you try?
+      description: Workarounds, other tools, staring at the ceiling. Optional.
+    validations:
+      required: false
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Anything else?
+      description: Screenshots, links, existential dread about dependency management. All valid.
+    validations:
+      required: false
