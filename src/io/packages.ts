@@ -10,19 +10,13 @@ export async function loadPackages(options: BumpOptions): Promise<PackageMeta[]>
   const logger = createLogger(options.loglevel)
   const packages: PackageMeta[] = []
 
-  // Find all package files in parallel
-  const [jsonFiles, _yamlFiles] = await Promise.all([
-    glob(['**/package.json'], {
-      cwd: options.cwd,
-      ignore: options.ignorePaths,
-      absolute: true,
-    }),
-    glob(['**/package.yaml'], {
-      cwd: options.cwd,
-      ignore: options.ignorePaths,
-      absolute: true,
-    }),
-  ])
+  // Find all package files
+  // TODO: Add yaml package support in the future
+  const jsonFiles = await glob(['**/package.json'], {
+    cwd: options.cwd,
+    ignore: options.ignorePaths,
+    absolute: true,
+  })
 
   for (const filepath of jsonFiles) {
     try {
@@ -62,7 +56,7 @@ export async function loadPackages(options: BumpOptions): Promise<PackageMeta[]>
   return packages
 }
 
-function parsePackageManagerField(raw: string): PackageMeta['packageManager'] {
+export function parsePackageManagerField(raw: string): PackageMeta['packageManager'] {
   // Format: name@version or name@version+hash
   const match = raw.match(/^(npm|pnpm|yarn|bun)@([^+]+)(?:\+(.+))?$/)
   if (!match) return undefined

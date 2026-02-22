@@ -2,7 +2,14 @@ import pLimit from 'p-limit'
 import * as semver from 'semver'
 import type { Cache } from '../cache/index'
 import { createSqliteCache } from '../cache/index'
-import type { BumpOptions, PackageData, PackageMeta, RawDep, ResolvedDepChange } from '../types'
+import type {
+  BumpOptions,
+  NpmrcConfig,
+  PackageData,
+  PackageMeta,
+  RawDep,
+  ResolvedDepChange,
+} from '../types'
 import { createLogger } from '../utils/logger'
 import { loadNpmrc } from '../utils/npmrc'
 import {
@@ -16,10 +23,13 @@ import { fetchPackageData } from './registry'
 export async function resolvePackage(
   pkg: PackageMeta,
   options: BumpOptions,
+  externalCache?: Cache,
+  externalNpmrc?: NpmrcConfig,
 ): Promise<ResolvedDepChange[]> {
   const logger = createLogger(options.loglevel)
-  const npmrc = loadNpmrc(options.cwd)
-  const cache = createSqliteCache()
+  const npmrc = externalNpmrc ?? loadNpmrc(options.cwd)
+  const cache = externalCache ?? createSqliteCache()
+  const ownCache = !externalCache
   const limit = pLimit(options.concurrency)
 
   try {
@@ -42,9 +52,11 @@ export async function resolvePackage(
 
     return resolved
   } finally {
-    cache.close()
-    const stats = cache.stats()
-    logger.debug(`Cache stats: ${stats.hits} hits, ${stats.misses} misses, ${stats.size} entries`)
+    if (ownCache) {
+      const stats = cache.stats()
+      cache.close()
+      logger.debug(`Cache stats: ${stats.hits} hits, ${stats.misses} misses, ${stats.size} entries`)
+    }
   }
 }
 

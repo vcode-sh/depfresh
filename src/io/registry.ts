@@ -10,6 +10,15 @@ interface FetchOptions {
   logger: Logger
 }
 
+class RegistryError extends Error {
+  status: number
+  constructor(message: string, status: number) {
+    super(message)
+    this.name = 'RegistryError'
+    this.status = status
+  }
+}
+
 export async function fetchPackageData(name: string, options: FetchOptions): Promise<PackageData> {
   const registry = getRegistryForPackage(name, options.npmrc)
 
@@ -101,11 +110,19 @@ async function fetchWithRetry(
     })
 
     if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText} for ${url}`)
+      throw new RegistryError(
+        `HTTP ${response.status}: ${response.statusText} for ${url}`,
+        response.status,
+      )
     }
 
     return (await response.json()) as Record<string, unknown>
   } catch (error) {
+    // Never retry 4xx client errors — they won't resolve with retries
+    if (error instanceof RegistryError && error.status >= 400 && error.status < 500) {
+      throw error
+    }
+
     if (attempt < options.retries) {
       const delay = Math.min(1000 * 2 ** attempt, 5000)
       options.logger.debug(`Retry ${attempt + 1}/${options.retries} for ${url} in ${delay}ms`)

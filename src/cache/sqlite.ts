@@ -45,6 +45,7 @@ export function createSqliteCache(): Cache {
   const clearStmt = db.prepare('DELETE FROM registry_cache')
   const countStmt = db.prepare('SELECT COUNT(*) as count FROM registry_cache WHERE expires_at > ?')
   const pruneStmt = db.prepare('DELETE FROM registry_cache WHERE expires_at <= ?')
+  const deleteStmt = db.prepare('DELETE FROM registry_cache WHERE package = ?')
 
   let hits = 0
   let misses = 0
@@ -56,8 +57,15 @@ export function createSqliteCache(): Cache {
     get(key: string): PackageData | undefined {
       const row = getStmt.get(key, Date.now()) as { data: string } | undefined
       if (row) {
-        hits++
-        return JSON.parse(row.data)
+        try {
+          const parsed = JSON.parse(row.data)
+          hits++
+          return parsed
+        } catch {
+          deleteStmt.run(key)
+          misses++
+          return undefined
+        }
       }
       misses++
       return undefined

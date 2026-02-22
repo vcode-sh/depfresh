@@ -1,8 +1,10 @@
+import { createSqliteCache } from '../../cache/index'
 import { loadPackages } from '../../io/packages'
 import { resolvePackage } from '../../io/resolve'
 import { writePackage } from '../../io/write'
 import type { BumpOptions, DiffType, ResolvedDepChange } from '../../types'
 import { createLogger } from '../../utils/logger'
+import { loadNpmrc } from '../../utils/npmrc'
 import { renderTable } from './render'
 
 interface JsonPackage {
@@ -52,44 +54,54 @@ export async function check(options: BumpOptions): Promise<number> {
     let hasUpdates = false
     const jsonPackages: JsonPackage[] = []
 
-    for (const pkg of packages) {
-      options.beforePackageStart?.(pkg)
+    // Create cache and npmrc once for all packages
+    const cache = createSqliteCache()
+    const npmrc = loadNpmrc(options.cwd)
 
-      // Resolve all dependencies
-      pkg.resolved = await resolvePackage(pkg, options)
+    try {
+      for (const pkg of packages) {
+        options.beforePackageStart?.(pkg)
 
-      const updates = pkg.resolved.filter((d) => d.diff !== 'none' && d.diff !== 'error')
+        // Resolve all dependencies
+        pkg.resolved = await resolvePackage(pkg, options, cache, npmrc)
 
-      if (updates.length === 0) continue
-      hasUpdates = true
+        const updates = pkg.resolved.filter((d) => d.diff !== 'none' && d.diff !== 'error')
 
-      // Collect JSON output for later
-      if (options.output === 'json') {
-        jsonPackages.push(buildJsonPackage(pkg.name, updates))
-      } else {
-        renderTable(pkg.name, updates, options)
-      }
+        if (updates.length === 0) continue
+        hasUpdates = true
 
-      // Interactive mode
-      if (options.interactive) {
-        const { runInteractive } = await import('./interactive')
-        const selected = await runInteractive(updates)
-        if (selected.length === 0) continue
+        // Collect JSON output for later
+        if (options.output === 'json') {
+          jsonPackages.push(buildJsonPackage(pkg.name, updates))
+        } else {
+          renderTable(pkg.name, updates)
+        }
 
-        if (options.write) {
+        // Interactive mode
+        if (options.interactive) {
+          const { runInteractive } = await import('./interactive')
+          const selected = await runInteractive(updates)
+          if (selected.length === 0) continue
+
+          if (options.write) {
+            const shouldWrite = (await options.beforePackageWrite?.(pkg)) ?? true
+            if (shouldWrite) {
+              writePackage(pkg, selected, options.loglevel)
+              options.afterPackageWrite?.(pkg)
+            }
+          }
+        } else if (options.write) {
           const shouldWrite = (await options.beforePackageWrite?.(pkg)) ?? true
           if (shouldWrite) {
-            writePackage(pkg, selected, options.loglevel)
+            writePackage(pkg, updates, options.loglevel)
             options.afterPackageWrite?.(pkg)
           }
         }
-      } else if (options.write) {
-        const shouldWrite = (await options.beforePackageWrite?.(pkg)) ?? true
-        if (shouldWrite) {
-          writePackage(pkg, updates, options.loglevel)
-          options.afterPackageWrite?.(pkg)
-        }
       }
+    } finally {
+      const stats = cache.stats()
+      cache.close()
+      logger.debug(`Cache stats: ${stats.hits} hits, ${stats.misses} misses, ${stats.size} entries`)
     }
 
     // Print single JSON envelope at the end

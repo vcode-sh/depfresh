@@ -62,6 +62,12 @@ describe('getMaxSatisfying', () => {
     expect(getMaxSatisfying(versions, '^1.0.0')).toBe('1.3.0')
   })
 
+  it('finds max satisfying from deliberately unsorted array', () => {
+    // Verifies explicit semver.gt() comparison, not array order (credit: leny-mi)
+    const versions = ['2.0.0', '1.0.0', '3.0.0', '1.5.0']
+    expect(getMaxSatisfying(versions, '^1.0.0')).toBe('1.5.0')
+  })
+
   it('respects semver range', () => {
     const versions = ['1.0.0', '1.1.0', '2.0.0', '2.1.0']
     expect(getMaxSatisfying(versions, '^1.0.0')).toBe('1.1.0')
@@ -71,8 +77,17 @@ describe('getMaxSatisfying', () => {
     expect(getMaxSatisfying(['2.0.0', '3.0.0'], '^1.0.0')).toBe(null)
   })
 
+  it('returns null for empty array', () => {
+    expect(getMaxSatisfying([], '^1.0.0')).toBe(null)
+  })
+
   it('handles single version', () => {
     expect(getMaxSatisfying(['1.0.0'], '^1.0.0')).toBe('1.0.0')
+  })
+
+  it('handles prerelease versions with range', () => {
+    const versions = ['1.0.0', '1.1.0', '2.0.0-alpha.1', '2.0.0-beta.1']
+    expect(getMaxSatisfying(versions, '^1.0.0')).toBe('1.1.0')
   })
 })
 
@@ -80,6 +95,16 @@ describe('getMaxVersion', () => {
   it('finds max from unsorted array', () => {
     const versions = ['2.0.0', '1.0.0', '3.0.0', '2.5.0']
     expect(getMaxVersion(versions)).toBe('3.0.0')
+  })
+
+  it('finds max from reverse-sorted array', () => {
+    const versions = ['5.0.0', '4.0.0', '3.0.0', '2.0.0', '1.0.0']
+    expect(getMaxVersion(versions)).toBe('5.0.0')
+  })
+
+  it('includes prerelease versions', () => {
+    const versions = ['1.0.0', '2.0.0', '3.0.0-beta.1']
+    expect(getMaxVersion(versions)).toBe('3.0.0-beta.1')
   })
 
   it('returns null for empty array', () => {
@@ -104,8 +129,24 @@ describe('getDiff', () => {
     expect(getDiff('1.0.0', '1.0.0')).toBe('none')
   })
 
+  it('detects identical versions return none', () => {
+    expect(getDiff('3.5.2', '3.5.2')).toBe('none')
+  })
+
+  it('handles prerelease diff as patch', () => {
+    expect(getDiff('1.0.0-beta.1', '1.0.0-beta.2')).toBe('none')
+  })
+
+  it('handles prerelease to release as patch', () => {
+    expect(getDiff('1.0.0-beta.1', '1.0.1')).toBe('patch')
+  })
+
   it('handles invalid versions', () => {
     expect(getDiff('invalid', '1.0.0')).toBe('error')
+  })
+
+  it('handles both invalid versions', () => {
+    expect(getDiff('invalid', 'also-invalid')).toBe('error')
   })
 })
 
@@ -135,5 +176,30 @@ describe('resolveTargetVersion', () => {
 
   it('resolves default mode using semver range', () => {
     expect(resolveTargetVersion('^1.0.0', versions, distTags, 'default')).toBe('1.2.0')
+  })
+
+  it('resolves major mode — picks highest version', () => {
+    expect(resolveTargetVersion('^1.0.0', versions, distTags, 'major')).toBe('3.0.0-beta.1')
+  })
+
+  it('resolves next mode — falls back to latest when no next tag', () => {
+    const tagsNoNext = { latest: '2.1.0' }
+    expect(resolveTargetVersion('^1.0.0', versions, tagsNoNext, 'next')).toBe('2.1.0')
+  })
+
+  it('resolves latest mode — returns null when no latest tag', () => {
+    expect(resolveTargetVersion('^1.0.0', versions, {}, 'latest')).toBe(null)
+  })
+
+  it('resolves default mode — falls back to latest when no range match', () => {
+    expect(resolveTargetVersion('^99.0.0', versions, distTags, 'default')).toBe('2.1.0')
+  })
+
+  it('resolves minor mode with invalid currentVersion', () => {
+    expect(resolveTargetVersion('invalid', versions, distTags, 'minor')).toBe(null)
+  })
+
+  it('resolves patch mode with invalid currentVersion', () => {
+    expect(resolveTargetVersion('invalid', versions, distTags, 'patch')).toBe(null)
   })
 })

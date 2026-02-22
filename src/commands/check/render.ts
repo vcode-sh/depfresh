@@ -1,14 +1,10 @@
 import c from 'ansis'
-import type { BumpOptions, ResolvedDepChange } from '../../types'
+import type { ResolvedDepChange } from '../../types'
 import { arrow, colorDiff, colorVersion, padEnd } from '../../utils/format'
 
 // ansis auto-detects TTY and respects NO_COLOR env var — no manual stripping needed
 
-export function renderTable(
-  packageName: string,
-  updates: ResolvedDepChange[],
-  _options: BumpOptions,
-): void {
+export function renderTable(packageName: string, updates: ResolvedDepChange[]): void {
   // biome-ignore lint/suspicious/noConsole: intentional output
   const log = console.log
 
