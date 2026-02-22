@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync } from 'node:fs'
 import { findUpSync } from 'find-up-simple'
 import { parsePnpmWorkspaceYaml } from 'pnpm-workspace-yaml'
-import type { CatalogSource, RawDep, UpgrOptions } from '../../types'
+import type { CatalogSource, depfreshOptions, RawDep } from '../../types'
 import { isLocked } from '../../utils/versions'
 import type { CatalogLoader } from './index'
 
@@ -10,7 +10,7 @@ export const pnpmCatalogLoader: CatalogLoader = {
     return !!findUpSync('pnpm-workspace.yaml', { cwd })
   },
 
-  async load(cwd: string, options: UpgrOptions): Promise<CatalogSource[]> {
+  async load(cwd: string, options: depfreshOptions): Promise<CatalogSource[]> {
     const filepath = findUpSync('pnpm-workspace.yaml', { cwd })
     if (!filepath) return []
 
@@ -51,7 +51,7 @@ function parseCatalogSection(
   deps: Record<string, string>,
   name: string,
   filepath: string,
-  options: UpgrOptions,
+  options: depfreshOptions,
   rawContent: string,
 ): CatalogSource {
   const parsed: RawDep[] = []

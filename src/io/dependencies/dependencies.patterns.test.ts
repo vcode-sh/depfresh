@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import type { UpgrOptions } from '../../types'
+import type { depfreshOptions } from '../../types'
 import { DEFAULT_OPTIONS } from '../../types'
 import { compilePatterns, parseDependencies, shouldSkipDependency } from './index'
 
-const baseOptions = { ...DEFAULT_OPTIONS } as UpgrOptions
+const baseOptions = { ...DEFAULT_OPTIONS } as depfreshOptions
 
 describe('shouldSkipDependency', () => {
   it('skips workspace: protocol when includeWorkspace is false', () => {

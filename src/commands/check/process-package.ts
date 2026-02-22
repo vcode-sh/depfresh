@@ -1,6 +1,6 @@
 import type { createSqliteCache } from '../../cache/index'
 import { resolvePackage } from '../../io/resolve'
-import type { PackageMeta, ResolvedDepChange, UpgrOptions } from '../../types'
+import type { depfreshOptions, PackageMeta, ResolvedDepChange } from '../../types'
 import type { Logger } from '../../utils/logger'
 import type { loadNpmrc } from '../../utils/npmrc'
 import { selectInteractiveUpdates } from './post-write-actions'
@@ -19,7 +19,7 @@ export interface ProcessPackageHooks {
 
 export async function processPackage(
   pkg: PackageMeta,
-  options: UpgrOptions,
+  options: depfreshOptions,
   hooks: ProcessPackageHooks,
 ): Promise<void> {
   await options.beforePackageStart?.(pkg)

@@ -40,7 +40,7 @@ describe('writePackage protocol preservation', () => {
   let tmpDir: string
 
   beforeEach(() => {
-    tmpDir = mkdtempSync(join(tmpdir(), 'upgr-proto-'))
+    tmpDir = mkdtempSync(join(tmpdir(), 'depfresh-proto-'))
   })
 
   afterEach(() => {

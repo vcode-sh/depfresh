@@ -1,10 +1,10 @@
 # Config Files
 
-You're here because defaults offend you. Fair enough. upgr works perfectly fine out of the box -- zero config, no ceremony, just run `upgr` and watch it tell you everything's outdated. But if you insist on having opinions about how your dependency checker behaves, read on.
+You're here because defaults offend you. Fair enough. depfresh works perfectly fine out of the box -- zero config, no ceremony, just run `depfresh` and watch it tell you everything's outdated. But if you insist on having opinions about how your dependency checker behaves, read on.
 
 ## Zero Config
 
-upgr ships with sensible defaults. Here's what you get for free:
+depfresh ships with sensible defaults. Here's what you get for free:
 
 | Option | Default | What it means |
 |---|---|---|
@@ -27,7 +27,7 @@ That's the full list of things I decided for you. You're welcome.
 
 ## Config File Formats
 
-upgr loads config from multiple file formats. Priority order (highest wins):
+depfresh loads config from multiple file formats. Priority order (highest wins):
 
 1. CLI flags
 2. Config file
@@ -38,8 +38,8 @@ upgr loads config from multiple file formats. Priority order (highest wins):
 **TypeScript** (recommended if you have taste):
 
 ```typescript
-// upgr.config.ts
-import { defineConfig } from 'upgr'
+// depfresh.config.ts
+import { defineConfig } from 'depfresh'
 
 export default defineConfig({
   mode: 'minor',
@@ -55,7 +55,7 @@ export default defineConfig({
 **JavaScript**, if you must:
 
 ```javascript
-// upgr.config.js / upgr.config.mjs
+// depfresh.config.js / depfresh.config.mjs
 export default {
   mode: 'latest',
   write: true,
@@ -66,7 +66,7 @@ export default {
 **JSON**, for the minimalists:
 
 ```json
-// .upgrrc
+// .depfreshrc
 {
   "mode": "minor",
   "recursive": false
@@ -78,7 +78,7 @@ export default {
 ```json
 {
   "name": "my-package",
-  "upgr": {
+  "depfresh": {
     "mode": "minor",
     "exclude": ["webpack"]
   }
@@ -89,11 +89,11 @@ All formats are equivalent. Pick one and pretend the others don't exist.
 
 ## Private Registries
 
-upgr reads your `.npmrc` files automatically. No extra config needed -- if npm can reach your private registry, so can upgr.
+depfresh reads your `.npmrc` files automatically. No extra config needed -- if npm can reach your private registry, so can depfresh.
 
 ### How it works
 
-upgr loads `.npmrc` in this order (later files override earlier ones):
+depfresh loads `.npmrc` in this order (later files override earlier ones):
 
 1. **Global** -- `~/.npmrc` (or wherever `npm_config_userconfig` points)
 2. **Project** -- nearest `.npmrc` found walking up from `cwd`
@@ -126,35 +126,35 @@ These override anything in `.npmrc`:
 
 ### Scoped registries
 
-If you have `@mycompany` packages on a private registry and everything else on npm, upgr handles that automatically:
+If you have `@mycompany` packages on a private registry and everything else on npm, depfresh handles that automatically:
 
 ```ini
 @mycompany:registry=https://npm.mycompany.com/
 //npm.mycompany.com/:_authToken=${COMPANY_NPM_TOKEN}
 ```
 
-upgr maps auth tokens to registries by matching the hostname. If the token URL contains the registry hostname, it gets attached. No manual wiring needed.
+depfresh maps auth tokens to registries by matching the hostname. If the token URL contains the registry hostname, it gets attached. No manual wiring needed.
 
 ### Auth types
 
-upgr supports both `bearer` and `basic` auth, detected from your `.npmrc`. The `_authToken` key maps to bearer tokens, which is what most private registries use. If you're on something exotic, it probably still works. If it doesn't, [file an issue](https://github.com/nicepkg/upgr/issues).
+depfresh supports both `bearer` and `basic` auth, detected from your `.npmrc`. The `_authToken` key maps to bearer tokens, which is what most private registries use. If you're on something exotic, it probably still works. If it doesn't, [file an issue](https://github.com/nicepkg/depfresh/issues).
 
 ## Cache
 
-upgr caches registry responses in a SQLite database at `~/.upgr/cache.db`. You didn't ask for this feature, but you're getting it anyway.
+depfresh caches registry responses in a SQLite database at `~/.depfresh/cache.db`. You didn't ask for this feature, but you're getting it anyway.
 
 ### How it works
 
 - **Engine**: better-sqlite3 with WAL mode for fast concurrent reads
-- **Location**: `~/.upgr/cache.db`
+- **Location**: `~/.depfresh/cache.db`
 - **Default TTL**: 30 minutes (`cacheTTL: 1800000`)
 - **Cleanup**: expired entries are pruned automatically on startup
-- **Fallback**: if better-sqlite3 can't load (native module issues, exotic platform), upgr falls back to an in-memory Map. Same interface, no persistence. You won't even notice unless you check.
+- **Fallback**: if better-sqlite3 can't load (native module issues, exotic platform), depfresh falls back to an in-memory Map. Same interface, no persistence. You won't even notice unless you check.
 
 ### Configuration
 
 ```typescript
-import { defineConfig } from 'upgr'
+import { defineConfig } from 'depfresh'
 
 export default defineConfig({
   // Cache for 1 hour
@@ -165,4 +165,4 @@ export default defineConfig({
 })
 ```
 
-There's no config for the cache location. It lives at `~/.upgr/cache.db` and that's final. Delete it if you want a fresh start -- upgr will recreate it on the next run without complaining.
+There's no config for the cache location. It lives at `~/.depfresh/cache.db` and that's final. Delete it if you want a fresh start -- depfresh will recreate it on the next run without complaining.

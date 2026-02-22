@@ -3,7 +3,7 @@ import { pathToFileURL } from 'node:url'
 import { defu } from 'defu'
 import { join } from 'pathe'
 import { ConfigError } from './errors'
-import type { UpgrOptions } from './types'
+import type { depfreshOptions } from './types'
 import { DEFAULT_OPTIONS } from './types'
 import { createLogger } from './utils/logger'
 
@@ -11,21 +11,21 @@ const TS_RE = /\.[mc]?ts$/
 const JS_RE = /\.[mc]?js$/
 
 const CONFIG_FILES = [
-  'upgr.config.ts',
-  'upgr.config.mts',
-  'upgr.config.cts',
-  'upgr.config.js',
-  'upgr.config.mjs',
-  'upgr.config.cjs',
-  'upgr.config.json',
-  '.upgrrc.ts',
-  '.upgrrc.mts',
-  '.upgrrc.cts',
-  '.upgrrc.js',
-  '.upgrrc.mjs',
-  '.upgrrc.cjs',
-  '.upgrrc.json',
-  '.upgrrc',
+  'depfresh.config.ts',
+  'depfresh.config.mts',
+  'depfresh.config.cts',
+  'depfresh.config.js',
+  'depfresh.config.mjs',
+  'depfresh.config.cjs',
+  'depfresh.config.json',
+  '.depfreshrc.ts',
+  '.depfreshrc.mts',
+  '.depfreshrc.cts',
+  '.depfreshrc.js',
+  '.depfreshrc.mjs',
+  '.depfreshrc.cjs',
+  '.depfreshrc.json',
+  '.depfreshrc',
 ]
 
 async function exists(path: string): Promise<boolean> {
@@ -37,36 +37,36 @@ async function exists(path: string): Promise<boolean> {
   }
 }
 
-async function loadTsFile(filePath: string): Promise<Partial<UpgrOptions> | undefined> {
+async function loadTsFile(filePath: string): Promise<Partial<depfreshOptions> | undefined> {
   try {
     const { createJiti } = await import('jiti')
     const jiti = createJiti(import.meta.url)
     const mod = (await jiti.import(filePath)) as Record<string, unknown>
-    return (mod.default ?? mod) as Partial<UpgrOptions>
+    return (mod.default ?? mod) as Partial<depfreshOptions>
   } catch (error) {
     throw new ConfigError(`Failed to load config file ${filePath}`, { cause: error })
   }
 }
 
-async function loadJsFile(filePath: string): Promise<Partial<UpgrOptions> | undefined> {
+async function loadJsFile(filePath: string): Promise<Partial<depfreshOptions> | undefined> {
   try {
     const mod = (await import(pathToFileURL(filePath).href)) as Record<string, unknown>
-    return (mod.default ?? mod) as Partial<UpgrOptions>
+    return (mod.default ?? mod) as Partial<depfreshOptions>
   } catch (error) {
     throw new ConfigError(`Failed to load config file ${filePath}`, { cause: error })
   }
 }
 
-async function loadJsonFile(filePath: string): Promise<Partial<UpgrOptions> | undefined> {
+async function loadJsonFile(filePath: string): Promise<Partial<depfreshOptions> | undefined> {
   try {
     const content = await readFile(filePath, 'utf-8')
-    return JSON.parse(content) as Partial<UpgrOptions>
+    return JSON.parse(content) as Partial<depfreshOptions>
   } catch (error) {
     throw new ConfigError(`Failed to parse JSON config ${filePath}`, { cause: error })
   }
 }
 
-async function loadConfigFile(cwd: string): Promise<Partial<UpgrOptions> | undefined> {
+async function loadConfigFile(cwd: string): Promise<Partial<depfreshOptions> | undefined> {
   for (const file of CONFIG_FILES) {
     const filePath = join(cwd, file)
     if (!(await exists(filePath))) continue
@@ -81,7 +81,7 @@ async function loadConfigFile(cwd: string): Promise<Partial<UpgrOptions> | undef
     try {
       const content = await readFile(pkgPath, 'utf-8')
       const pkg = JSON.parse(content) as Record<string, unknown>
-      if (pkg.upgr) return pkg.upgr as Partial<UpgrOptions>
+      if (pkg.depfresh) return pkg.depfresh as Partial<depfreshOptions>
     } catch (error) {
       throw new ConfigError(`Failed to parse package.json at ${pkgPath}`, { cause: error })
     }
@@ -90,10 +90,12 @@ async function loadConfigFile(cwd: string): Promise<Partial<UpgrOptions> | undef
   return undefined
 }
 
-export async function resolveConfig(overrides: Partial<UpgrOptions> = {}): Promise<UpgrOptions> {
+export async function resolveConfig(
+  overrides: Partial<depfreshOptions> = {},
+): Promise<depfreshOptions> {
   const cwd = overrides.cwd || process.cwd()
   const fileConfig = await loadConfigFile(cwd)
-  const merged = defu(overrides, fileConfig ?? {}, DEFAULT_OPTIONS) as UpgrOptions
+  const merged = defu(overrides, fileConfig ?? {}, DEFAULT_OPTIONS) as depfreshOptions
 
   const logger = createLogger(merged.loglevel)
   logger.debug('Config resolved:', JSON.stringify(merged, null, 2))

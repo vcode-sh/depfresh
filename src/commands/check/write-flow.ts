@@ -1,6 +1,11 @@
 import { execSync } from 'node:child_process'
 import { backupPackageFiles, restorePackageFiles, writePackage } from '../../io/write'
-import type { PackageManagerName, PackageMeta, ResolvedDepChange, UpgrOptions } from '../../types'
+import type {
+  depfreshOptions,
+  PackageManagerName,
+  PackageMeta,
+  ResolvedDepChange,
+} from '../../types'
 import type { Logger } from '../../utils/logger'
 
 export async function verifyAndWrite(
@@ -35,7 +40,7 @@ export async function verifyAndWrite(
 export async function applyPackageWrite(
   pkg: PackageMeta,
   changes: ResolvedDepChange[],
-  options: UpgrOptions,
+  options: depfreshOptions,
   logger: Logger,
 ): Promise<boolean> {
   if (changes.length === 0) return false

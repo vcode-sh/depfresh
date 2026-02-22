@@ -7,7 +7,7 @@ Everything you can import and call. Each one does exactly what the name says, wh
 The main event. Loads packages, resolves dependencies against the registry, renders output, and optionally writes updates. Everything the CLI does, minus the argument parsing.
 
 ```ts
-function check(options: UpgrOptions): Promise<number>
+function check(options: depfreshOptions): Promise<number>
 ```
 
 **Returns** an exit code:
@@ -16,7 +16,7 @@ function check(options: UpgrOptions): Promise<number>
 - `2` -- something went wrong
 
 ```ts
-import { check, resolveConfig } from 'upgr'
+import { check, resolveConfig } from 'depfresh'
 
 const options = await resolveConfig({ mode: 'latest', write: true })
 const code = await check(options)
@@ -30,20 +30,20 @@ if (code === 2) {
 
 ## `resolveConfig(overrides?)`
 
-Merges your overrides with config file values (`.upgrrc`, `upgr.config.ts`, `package.json#upgr`) and `DEFAULT_OPTIONS`. Config file wins over defaults. Your overrides win over everything.
+Merges your overrides with config file values (`.depfreshrc`, `depfresh.config.ts`, `package.json#depfresh`) and `DEFAULT_OPTIONS`. Config file wins over defaults. Your overrides win over everything.
 
 ```ts
-function resolveConfig(overrides?: Partial<UpgrOptions>): Promise<UpgrOptions>
+function resolveConfig(overrides?: Partial<depfreshOptions>): Promise<depfreshOptions>
 ```
 
 **Config resolution order** (highest priority first):
 1. `overrides` argument
-2. Config file (`.upgrrc`, `upgr.config.ts`, `upgr.config.js`)
-3. `package.json` `"upgr"` field
+2. Config file (`.depfreshrc`, `depfresh.config.ts`, `depfresh.config.js`)
+3. `package.json` `"depfresh"` field
 4. `DEFAULT_OPTIONS`
 
 ```ts
-import { resolveConfig } from 'upgr'
+import { resolveConfig } from 'depfresh'
 
 // Just defaults + config file
 const options = await resolveConfig()
@@ -63,12 +63,12 @@ const options = await resolveConfig({
 A type helper for config files. Does literally nothing at runtime. Returns exactly what you pass in. But your editor will autocomplete, and that's apparently worth an import.
 
 ```ts
-function defineConfig(options: Partial<UpgrOptions>): Partial<UpgrOptions>
+function defineConfig(options: Partial<depfreshOptions>): Partial<depfreshOptions>
 ```
 
 ```ts
-// upgr.config.ts
-import { defineConfig } from 'upgr'
+// depfresh.config.ts
+import { defineConfig } from 'depfresh'
 
 export default defineConfig({
   mode: 'minor',
@@ -84,11 +84,11 @@ export default defineConfig({
 Finds and parses `package.json` files in your project. Respects `recursive`, `ignorePaths`, `ignoreOtherWorkspaces`. Also loads workspace catalogs (pnpm, bun, yarn) and global packages if `global: true`.
 
 ```ts
-function loadPackages(options: UpgrOptions): Promise<PackageMeta[]>
+function loadPackages(options: depfreshOptions): Promise<PackageMeta[]>
 ```
 
 ```ts
-import { loadPackages, resolveConfig } from 'upgr'
+import { loadPackages, resolveConfig } from 'depfresh'
 
 const options = await resolveConfig({ recursive: true })
 const packages = await loadPackages(options)
@@ -107,7 +107,7 @@ Resolves every dependency in a package against the registry. Handles caching, co
 ```ts
 function resolvePackage(
   pkg: PackageMeta,
-  options: UpgrOptions,
+  options: depfreshOptions,
   externalCache?: Cache,
   externalNpmrc?: NpmrcConfig,
   privatePackages?: Set<string>,
@@ -117,13 +117,13 @@ function resolvePackage(
 | Param | Description |
 |-------|-------------|
 | `pkg` | The package to resolve |
-| `options` | Full upgr options (mode, concurrency, timeout, etc.) |
+| `options` | Full depfresh options (mode, concurrency, timeout, etc.) |
 | `externalCache?` | Reuse a cache across multiple packages. If omitted, creates and closes its own |
 | `externalNpmrc?` | Pre-loaded npmrc config. If omitted, loads from disk |
 | `privatePackages?` | Set of workspace package names to skip (no point hitting the registry for local deps) |
 
 ```ts
-import { loadPackages, resolvePackage, resolveConfig } from 'upgr'
+import { loadPackages, resolvePackage, resolveConfig } from 'depfresh'
 
 const options = await resolveConfig({ mode: 'latest' })
 const packages = await loadPackages(options)
@@ -144,12 +144,12 @@ Extracts dependencies from a parsed `package.json` object. Handles all standard 
 ```ts
 function parseDependencies(
   raw: Record<string, unknown>,
-  options: UpgrOptions,
+  options: depfreshOptions,
 ): RawDep[]
 ```
 
 ```ts
-import { parseDependencies, resolveConfig } from 'upgr'
+import { parseDependencies, resolveConfig } from 'depfresh'
 
 const options = await resolveConfig()
 const raw = JSON.parse(fs.readFileSync('package.json', 'utf-8'))
@@ -174,7 +174,7 @@ function writePackage(
 ```
 
 ```ts
-import { loadPackages, resolvePackage, writePackage, resolveConfig } from 'upgr'
+import { loadPackages, resolvePackage, writePackage, resolveConfig } from 'depfresh'
 
 const options = await resolveConfig({ mode: 'minor' })
 const [pkg] = await loadPackages(options)
@@ -196,7 +196,7 @@ function loadGlobalPackages(pm?: string): PackageMeta[]
 ```
 
 ```ts
-import { loadGlobalPackages } from 'upgr'
+import { loadGlobalPackages } from 'depfresh'
 
 const packages = loadGlobalPackages('npm')
 for (const pkg of packages) {
@@ -221,7 +221,7 @@ function writeGlobalPackage(
 ```
 
 ```ts
-import { writeGlobalPackage } from 'upgr'
+import { writeGlobalPackage } from 'depfresh'
 
 writeGlobalPackage('npm', 'typescript', '5.7.0')
 // Runs: npm install -g typescript@5.7.0
@@ -231,7 +231,7 @@ writeGlobalPackage('npm', 'typescript', '5.7.0')
 
 ## Lifecycle Callbacks
 
-Seven hooks. Called in order. All optional. All async-compatible. Wire them into `UpgrOptions` and `check()` will call them at the right moment.
+Seven hooks. Called in order. All optional. All async-compatible. Wire them into `depfreshOptions` and `check()` will call them at the right moment.
 
 ### Call Order
 

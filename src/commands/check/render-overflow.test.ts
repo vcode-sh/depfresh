@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { ResolvedDepChange, UpgrOptions } from '../../types'
+import type { depfreshOptions, ResolvedDepChange } from '../../types'
 import { DEFAULT_OPTIONS } from '../../types'
 import { stripAnsi, visualLength } from '../../utils/format'
 import { renderTable } from './render'
 
-const baseOptions = { ...DEFAULT_OPTIONS, group: false } as UpgrOptions
+const baseOptions = { ...DEFAULT_OPTIONS, group: false } as depfreshOptions
 
 function makeUpdate(overrides: Partial<ResolvedDepChange> = {}): ResolvedDepChange {
   return {

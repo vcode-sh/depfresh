@@ -24,7 +24,7 @@ describe('contextual tips', () => {
     await check({ ...baseOptions, loglevel: 'info', output: 'table', mode: 'default' })
 
     const allOutput = consoleSpy.mock.calls.map((c) => String(c.join(' '))).join('\n')
-    expect(allOutput).toContain('upgr major')
+    expect(allOutput).toContain('depfresh major')
 
     consoleSpy.mockRestore()
   })
@@ -72,7 +72,7 @@ describe('contextual tips', () => {
     await check({ ...baseOptions, loglevel: 'info', output: 'table', mode: 'major' })
 
     const allOutput = consoleSpy.mock.calls.map((c) => String(c.join(' '))).join('\n')
-    expect(allOutput).not.toContain('upgr major')
+    expect(allOutput).not.toContain('depfresh major')
 
     consoleSpy.mockRestore()
   })

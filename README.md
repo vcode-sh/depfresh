@@ -1,6 +1,6 @@
-# upgr
+# depfresh
 
-[![npm version](https://img.shields.io/npm/v/upgr)](https://www.npmjs.com/package/upgr)
+[![npm version](https://img.shields.io/npm/v/depfresh)](https://www.npmjs.com/package/depfresh)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9+-3178c6)](https://www.typescriptlang.org/)
 [![Node.js](https://img.shields.io/badge/Node.js-24+-339933)](https://nodejs.org/)
@@ -11,7 +11,7 @@ Spiritual successor to [taze](https://github.com/antfu/taze) by Anthony Fu - a t
 
 ## Features
 
-- **Zero-config dependency checking** -- run `upgr` and it tells you what's outdated. No YAML. No PhD.
+- **Zero-config dependency checking** -- run `depfresh` and it tells you what's outdated. No YAML. No PhD.
 - **Monorepo & workspace support** -- pnpm, bun, yarn, npm. Auto-detected. Catalog deps included.
 - **7 range modes** -- `default`, `major`, `minor`, `patch`, `latest`, `newest`, `next`. One flag, total control.
 - **Interactive cherry-picking** -- grouped multiselect with colour-coded severity. Pick what you want, ignore the rest.
@@ -35,48 +35,48 @@ Spiritual successor to [taze](https://github.com/antfu/taze) by Anthony Fu - a t
 
 Because `npm outdated` gives you a table and then abandons you. Because Renovate requires a PhD in YAML. Because your AI coding assistant should be able to update your deps without you holding its hand.
 
-upgr checks every `package.json` in your project, tells you what's outdated, and optionally writes the updates. Monorepos, workspace catalogs, private registries - it handles all of it without a config file.
+depfresh checks every `package.json` in your project, tells you what's outdated, and optionally writes the updates. Monorepos, workspace catalogs, private registries - it handles all of it without a config file.
 
 ## Install
 
 ```bash
-npm install -g upgr
+npm install -g depfresh
 ```
 
 Or don't install globally. I'm not your parent.
 
 ```bash
-npx upgr
-pnpm dlx upgr
-bunx upgr
+npx depfresh
+pnpm dlx depfresh
+bunx depfresh
 ```
 
 ## Usage
 
 ```bash
 # Check for outdated dependencies
-upgr
+depfresh
 
 # Actually update them
-upgr --write
+depfresh --write
 
 # Interactive mode -- pick what to update like a civilised person
-upgr --interactive
+depfresh --interactive
 
 # Only minor/patch updates (living cautiously)
-upgr minor -w
+depfresh minor -w
 
 # JSON output for scripts and AI agents
-upgr --output json
+depfresh --output json
 
 # Filter specific packages
-upgr --include "react,vue" --exclude "eslint"
+depfresh --include "react,vue" --exclude "eslint"
 
 # Verify each dep individually, revert failures
-upgr -w --verify-command "pnpm test"
+depfresh -w --verify-command "pnpm test"
 
 # CI: fail if anything is outdated
-upgr --fail-on-outdated
+depfresh --fail-on-outdated
 ```
 
 ## CLI Flags
@@ -103,10 +103,10 @@ The top flags to get you started. Full reference with all 27+ flags: **[docs/cli
 
 ## Config File
 
-Zero config works. But if you want it, create `upgr.config.ts` (or `.upgrrc`, or add a `upgr` key to `package.json`):
+Zero config works. But if you want it, create `depfresh.config.ts` (or `.depfreshrc`, or add a `depfresh` key to `package.json`):
 
 ```typescript
-import { defineConfig } from 'upgr'
+import { defineConfig } from 'depfresh'
 
 export default defineConfig({
   mode: 'minor',
@@ -159,20 +159,20 @@ Full schema and field reference: **[docs/output-formats/](docs/output-formats/)*
 
 ## AI Agent Usage
 
-upgr was designed to work with AI coding assistants out of the box. No special configuration needed.
+depfresh was designed to work with AI coding assistants out of the box. No special configuration needed.
 
 ```bash
 # Check for updates, get structured output
-upgr --output json --loglevel silent
+depfresh --output json --loglevel silent
 
 # Apply all updates
-upgr --write
+depfresh --write
 
 # Apply only safe updates
-upgr --write --mode patch
+depfresh --write --mode patch
 
 # Selective update
-upgr --write --include "typescript,vitest"
+depfresh --write --include "typescript,vitest"
 ```
 
 **Exit codes are semantic:**
@@ -180,12 +180,12 @@ upgr --write --include "typescript,vitest"
 - `1` -- updates available (with `--fail-on-outdated`)
 - `2` -- error
 
-**TTY detection** -- when stdout isn't a terminal (piped, captured by an agent), upgr automatically suppresses spinners and interactive prompts. `NO_COLOR` is respected.
+**TTY detection** -- when stdout isn't a terminal (piped, captured by an agent), depfresh automatically suppresses spinners and interactive prompts. `NO_COLOR` is respected.
 
 ## Programmatic API
 
 ```typescript
-import { check, resolveConfig } from 'upgr'
+import { check, resolveConfig } from 'depfresh'
 
 const options = await resolveConfig({
   cwd: process.cwd(),
@@ -208,7 +208,7 @@ const exitCode = await check(options)
 
 ## Monorepo Support
 
-upgr auto-detects workspace structures. No config needed.
+depfresh auto-detects workspace structures. No config needed.
 
 | Package Manager | Workspaces | Catalogs |
 |----------------|------------|----------|
@@ -217,11 +217,11 @@ upgr auto-detects workspace structures. No config needed.
 | Yarn | `workspaces` in `package.json` | `.yarnrc.yml` catalogs |
 | npm | `workspaces` in `package.json` | -- |
 
-Workspace catalogs are resolved and updated in-place. Your `pnpm-workspace.yaml` catalog entries get upgraded alongside your `package.json` deps. No manual sync needed.
+Workspace catalogs are resolved and updated in-place. Your `pnpm-workspace.yaml` catalog entries get depfreshaded alongside your `package.json` deps. No manual sync needed.
 
 ## Private Registries
 
-upgr reads `.npmrc` from your project and home directory. Scoped registries, auth tokens, proxies -- all respected.
+depfresh reads `.npmrc` from your project and home directory. Scoped registries, auth tokens, proxies -- all respected.
 
 ```ini
 # .npmrc
@@ -235,7 +235,7 @@ This was broken in taze for 4+ years. I fixed it on day one. You're welcome.
 
 Not to throw shade at taze -- it served the community well for years. But some things needed fixing, and "PR welcome" only goes so far when the PRs sit open for months.
 
-| Problem | taze | upgr |
+| Problem | taze | depfresh |
 |---------|------|------|
 | `.npmrc` / private registries | Ignored | Full support |
 | Network retry | None | Exponential backoff |
@@ -264,7 +264,7 @@ The full docs, for people who read manuals before assembling furniture.
 
 ## Standing on the Shoulders of People Who Actually Did the Work
 
-upgr wouldn't exist without [taze](https://github.com/antfu/taze). I rewrote everything from scratch, yes, but "from scratch" is easy when someone else already figured out what the thing should do. Every bug report, every feature PR, every typo fix in the taze repo was a free lesson in what users actually need. I just took notes and built a new house on someone else's blueprint.
+depfresh wouldn't exist without [taze](https://github.com/antfu/taze). I rewrote everything from scratch, yes, but "from scratch" is easy when someone else already figured out what the thing should do. Every bug report, every feature PR, every typo fix in the taze repo was a free lesson in what users actually need. I just took notes and built a new house on someone else's blueprint.
 
 So here's to every contributor who opened a PR on taze. Some of you added features I shamelessly reimplemented. Some of you fixed bugs that taught me where the landmines were. Some of you fixed typos, and honestly, that's braver than any architecture decision I've ever made.
 

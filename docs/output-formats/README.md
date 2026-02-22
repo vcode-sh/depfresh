@@ -1,6 +1,6 @@
 # Output Formats
 
-Because apparently "printing text to a terminal" needs a whole document now. upgr supports three output formats. Well, two and a half -- one of them doesn't exist yet.
+Because apparently "printing text to a terminal" needs a whole document now. depfresh supports three output formats. Well, two and a half -- one of them doesn't exist yet.
 
 ## Pages
 
@@ -18,12 +18,12 @@ Because apparently "printing text to a terminal" needs a whole document now. upg
 | `1`  | Outdated dependencies found (only when `--fail-on-outdated` is set, without `--write`) |
 | `2`  | Something went wrong -- network error, parse failure, registry timeout, etc. |
 
-The `--fail-on-outdated` flag is designed for CI pipelines. Without it, finding outdated deps still exits `0` because I'm not here to break your build over a patch upgr.
+The `--fail-on-outdated` flag is designed for CI pipelines. Without it, finding outdated deps still exits `0` because I'm not here to break your build over a patch depfresh.
 
 ## Quick Reference
 
 ```bash
-upgr --output table   # default -- for humans
-upgr --output json    # for machines, scripts, and AI agents
-upgr --output sarif   # for... eventually
+depfresh --output table   # default -- for humans
+depfresh --output json    # for machines, scripts, and AI agents
+depfresh --output sarif   # for... eventually
 ```

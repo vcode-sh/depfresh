@@ -4,11 +4,11 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Semver
 
 ## [0.9.2] - 2026-02-22
 
-The "fine, it's called upgr now" release. Final naming cleanup, zero feature work.
+The "fine, it's called depfresh now" release. Final naming cleanup, zero feature work.
 
 ### Changed
 
-- **Last rename sweep** -- replaced remaining `bump` references with `upgr` across docs, CLI/API naming, and config conventions. Same behavior, less identity crisis.
+- **Last rename sweep** -- replaced remaining `bump` references with `depfresh` across docs, CLI/API naming, and config conventions. Same behavior, less identity crisis.
 
 ## [0.9.1] - 2026-02-22
 
@@ -34,7 +34,7 @@ The "make it pretty and throw proper errors" release. Progress bars so you can w
 - **Multi-bar progress display** -- dual progress bars during dependency resolution. Top bar tracks packages, bottom bar tracks individual deps within the current package plus a running total. Updates in real-time as registry calls complete. Suppressed automatically for `--output json`, `--silent`, and non-TTY environments. Labels truncate on narrow terminals. Clears itself when done, leaving a clean terminal for the results table. Zero new dependencies.
 - **CJK / Unicode-aware column alignment** -- `visualLength()` handles double-width CJK characters (Hangul, CJK Unified Ideographs, fullwidth forms), zero-width combining marks, variation selectors, and control characters. Table columns now align correctly regardless of whether your package names contain ASCII, Japanese, Korean, or emoji. The `padEnd` and `padStart` utilities are Unicode-aware. `visualTruncate()` adds `…` at the correct visual boundary without splitting a wide character.
 - **Terminal overflow handling** -- table columns shrink to fit your terminal width. Priority order: name column first, then current version, then target version, then source. Minimum widths enforced so nothing collapses entirely. Only activates in TTY mode -- non-TTY output preserves full widths. `render-layout.ts` calculates optimal column widths, `render.ts` applies them. CJK-aware throughout.
-- **Error class hierarchy** -- `UpgrError` base class with `code: string` for reliable branching. Five subclasses: `RegistryError` (HTTP failures, includes `.status` and `.url`), `CacheError` (SQLite issues), `ConfigError` (invalid patterns, bad config files), `WriteError` (file system failures), `ResolveError` (network timeouts, DNS failures). All include `.cause` for wrapping lower-level errors. Integrated into registry, config, write, cache, and pattern compilation paths. Exported from the public API for `instanceof` checks.
+- **Error class hierarchy** -- `depfreshError` base class with `code: string` for reliable branching. Five subclasses: `RegistryError` (HTTP failures, includes `.status` and `.url`), `CacheError` (SQLite issues), `ConfigError` (invalid patterns, bad config files), `WriteError` (file system failures), `ResolveError` (network timeouts, DNS failures). All include `.cause` for wrapping lower-level errors. Integrated into registry, config, write, cache, and pattern compilation paths. Exported from the public API for `instanceof` checks.
 - **Strict pattern validation** -- `parseDependencies()` now throws `ConfigError` for invalid `include`/`exclude` regex patterns instead of silently skipping them. The public `compilePatterns()` utility retains silent skip behaviour for backwards compatibility. Invalid `/regex/flags` syntax is caught and wrapped with the original error as `cause`.
 
 ### Stats
@@ -59,7 +59,7 @@ The "I built a TUI from scratch because Ink ships React" release. The interactiv
 
 ### Changed
 
-- **Config loader rewrite** -- replaced `unconfig` (antfu) with a custom loader using `jiti` for TypeScript files and native `import()` for JavaScript. Supports 15 config file patterns including `upgr.config.ts`, `.upgrrc.json`, and `package.json#upgr`. One fewer dependency. Same behaviour. Better error messages when your config file is cursed.
+- **Config loader rewrite** -- replaced `unconfig` (antfu) with a custom loader using `jiti` for TypeScript files and native `import()` for JavaScript. Supports 15 config file patterns including `depfresh.config.ts`, `.depfreshrc.json`, and `package.json#depfresh`. One fewer dependency. Same behaviour. Better error messages when your config file is cursed.
 
 ### Stats
 
@@ -71,14 +71,14 @@ The "correctness nobody asked for" release. Five features that fix the paper cut
 
 ### Breaking
 
-- **Exit code 1 is now opt-in** -- `upgr` no longer returns exit code 1 when outdated deps are found. This surprised every CI pipeline that just wanted to *check* without failing the build. Add `--fail-on-outdated` to get the old behavior. If you're piping exit codes in scripts, update them. If you weren't, congrats, nothing changes.
+- **Exit code 1 is now opt-in** -- `depfresh` no longer returns exit code 1 when outdated deps are found. This surprised every CI pipeline that just wanted to *check* without failing the build. Add `--fail-on-outdated` to get the old behavior. If you're piping exit codes in scripts, update them. If you weren't, congrats, nothing changes.
 
 ### Added
 
-- **`--cwd` / `-C` flag** -- run upgr from any directory. `upgr --cwd ./packages/foo` checks that package without `cd`-ing around like it's 2004. Scripts and monorepo tooling can now point upgr at specific paths without changing the working directory.
+- **`--cwd` / `-C` flag** -- run depfresh from any directory. `depfresh --cwd ./packages/foo` checks that package without `cd`-ing around like it's 2004. Scripts and monorepo tooling can now point depfresh at specific paths without changing the working directory.
 - **`--fail-on-outdated` flag** -- opt-in exit code 1 when updates are available. For CI pipelines that want to gate on outdated deps. Off by default because "your deps are slightly behind" shouldn't be a build failure.
-- **CRLF line ending preservation** -- Windows users no longer get every line flagged as changed in git after upgr writes. Detects `\r\n` in the original file, preserves it after `JSON.stringify`. Also applied to Bun catalog writes. The fix took 3 lines. The debugging took 3 hours. Classic.
-- **`--ignore-other-workspaces`** (on by default) -- stops upgr from wandering into nested monorepos. If your project contains a git submodule or a separate workspace root, those packages are now skipped automatically. Walks up from each `package.json` looking for `.git`, `pnpm-workspace.yaml`, `.yarnrc.yml`, or `workspaces` in a parent `package.json`. Disable with `--no-ignore-other-workspaces` if you enjoy chaos.
+- **CRLF line ending preservation** -- Windows users no longer get every line flagged as changed in git after depfresh writes. Detects `\r\n` in the original file, preserves it after `JSON.stringify`. Also applied to Bun catalog writes. The fix took 3 lines. The debugging took 3 hours. Classic.
+- **`--ignore-other-workspaces`** (on by default) -- stops depfresh from wandering into nested monorepos. If your project contains a git submodule or a separate workspace root, those packages are now skipped automatically. Walks up from each `package.json` looking for `.git`, `pnpm-workspace.yaml`, `.yarnrc.yml`, or `workspaces` in a parent `package.json`. Disable with `--no-ignore-other-workspaces` if you enjoy chaos.
 - **`currentVersionTime` in resolve output** -- the publish timestamp of your *currently installed* version, not just the target. JSON output now includes `currentVersionTime` when available. AI agents and scripts can calculate how old your current deps are without a second registry call.
 - 42 new tests (385 -> 427 total, 18 test files). CRLF detection, line ending preservation, nested workspace filtering, exit code behavior, cwd config resolution, currentVersionTime population. Plus 20 bug-hunting tests for edge cases: wildcard version coercion, mixed line endings, CRLF without trailing newlines, CRLF with protocol prefixes, deeply nested workspace detection, JSON output envelope coverage, config defaults for new options, bun catalog CRLF writes. Zero bugs found. The code is annoyingly correct.
 
@@ -99,7 +99,7 @@ The "run whatever you want after" release. One feature. Clean. Surgical. No scop
 
 ### Added
 
-- **Execute command** (`--execute` / `-e`) -- runs any shell command once after all packages are written. `upgr -w --execute "pnpm test"` updates your deps then runs your tests. `upgr -w --execute "git add -A && git commit -m 'chore: deps'"` for the dangerously automated. Runs before `--install`/`--update` so your custom command operates on freshly written files before lockfile regeneration. If the command fails, upgr logs it and moves on -- your deps were already updated, the command is a bonus. Different from `--verify-command` which runs per-dep with rollback. This one is fire-and-forget, post-write, no safety net. You asked for it.
+- **Execute command** (`--execute` / `-e`) -- runs any shell command once after all packages are written. `depfresh -w --execute "pnpm test"` updates your deps then runs your tests. `depfresh -w --execute "git add -A && git commit -m 'chore: deps'"` for the dangerously automated. Runs before `--install`/`--update` so your custom command operates on freshly written files before lockfile regeneration. If the command fails, depfresh logs it and moves on -- your deps were already updated, the command is a bonus. Different from `--verify-command` which runs per-dep with rollback. This one is fire-and-forget, post-write, no safety net. You asked for it.
 - 18 new tests (367 -> 385 total). Guards: skips on no write, no updates, undefined, empty string. Order: runs before install, runs before update. Isolation: execute failure doesn't block install. Scope: runs exactly once across multiple packages. Edge case: fires even when `beforePackageWrite` blocks all writes (consistent with install/update). All passing.
 
 ## [0.5.0] - 2026-02-22
@@ -109,8 +109,8 @@ The "I trust nothing" release. Four features that let you verify every single de
 ### Added
 
 - **Enhanced interactive mode** -- `p.groupMultiselect` replaces the flat list. Dependencies grouped by severity: major (red), minor (yellow), patch (green). Click a group header to select/deselect all. Because scrolling through 47 deps in a flat list is not "interactive", it's "punishment". Falls back to flat multiselect for edge cases.
-- **Global package support** (`--global` / `-g`) -- checks npm, pnpm, or bun global packages. Auto-detects your package manager. `upgr -g` lists outdated globals, `upgr -gw` updates them. Parses three different output formats because every PM had to be special. Yarn skipped because Berry deprecated global packages and I respect that decision more than they do.
-- **Verify command** (`--verify-command` / `-V`) -- runs a command after each individual dep update. Fails? Reverts. Passes? Keeps it. `upgr -w -V "pnpm test"` updates one dep at a time, runs your tests, and rolls back the ones that break. Bisecting dependency issues manually is for people who enjoy suffering.
+- **Global package support** (`--global` / `-g`) -- checks npm, pnpm, or bun global packages. Auto-detects your package manager. `depfresh -g` lists outdated globals, `depfresh -gw` updates them. Parses three different output formats because every PM had to be special. Yarn skipped because Berry deprecated global packages and I respect that decision more than they do.
+- **Verify command** (`--verify-command` / `-V`) -- runs a command after each individual dep update. Fails? Reverts. Passes? Keeps it. `depfresh -w -V "pnpm test"` updates one dep at a time, runs your tests, and rolls back the ones that break. Bisecting dependency issues manually is for people who enjoy suffering.
 - **Update flag** (`--update` / `-u`) -- runs `pm update` instead of `pm install` after writing. Takes precedence over `--install`. For when you want your lockfile to actually reflect what you just changed instead of optimistically hoping `install` figures it out.
 - **Backup and restore** -- `backupPackageFiles()` and `restorePackageFiles()` exported from the write module. Captures file contents before mutations, restores on failure. Powers the verify flow but available for API users who enjoy living dangerously.
 - 41 new tests (326 -> 367 total, 16 -> 18 test files). Interactive tests mock @clack/prompts. Global tests mock child_process. Verify tests mock the entire write pipeline. All passing. All colocated.
@@ -123,9 +123,9 @@ The "trust issues" release. Provenance tracking, Node engine compatibility, auto
 
 - **Provenance tracking** -- npm Sigstore attestations classified as `trusted`, `attested`, or `none`. If your target version has *less* provenance than your current version, you get a yellow warning. Because downgrading your supply chain security silently is the kind of thing that makes security researchers cry. Credit: sxzz (Kevin Deng, Vue core) for the concept ([taze#198](https://github.com/antfu/taze/pull/198)).
 - **Node engine compatibility** (`--nodecompat`) -- extracts `engines.node` from the registry for each target version, checks against your running Node with `semver.satisfies()`. Green checkmark if compatible, red cross if not. On by default because shipping broken code to production is someone else's brand, not mine. Credit: GeoffreyParrier ([taze#165](https://github.com/antfu/taze/pull/165)).
-- **Auto-install** (`--install` / `-i`) -- detects your package manager from `packageManager` field or lockfile, runs `${pm} install` after writing. Catches errors gracefully because your install failing shouldn't tank the whole run. `upgr -wi` is now the entire workflow. You're welcome.
+- **Auto-install** (`--install` / `-i`) -- detects your package manager from `packageManager` field or lockfile, runs `${pm} install` after writing. Catches errors gracefully because your install failing shouldn't tank the whole run. `depfresh -wi` is now the entire workflow. You're welcome.
 - **Long display mode** (`--long` / `-L`) -- shows homepage URL under each dependency. For when you need to know where that package lives before you trust it with your codebase. Renders as an indented gray `↳ https://...` because I have aesthetic standards.
-- **pnpm override key parsing** -- handles `name@version-range` format from `pnpm audit --fix`. If pnpm writes `"tar-fs@>=2.0.0 <2.1.2"` into your overrides, upgr now parses the package name correctly instead of treating the whole thing as a name. Credit: taze issue [#173](https://github.com/antfu/taze/issues/173).
+- **pnpm override key parsing** -- handles `name@version-range` format from `pnpm audit --fix`. If pnpm writes `"tar-fs@>=2.0.0 <2.1.2"` into your overrides, depfresh now parses the package name correctly instead of treating the whole thing as a name. Credit: taze issue [#173](https://github.com/antfu/taze/issues/173).
 - **`npm_config_userconfig` support** -- respects the environment variable for custom `.npmrc` location. Enterprise setups with non-standard config paths now work. Credit: taze issue [#118](https://github.com/antfu/taze/issues/118).
 - **Extra lifecycle callbacks** -- `afterPackagesLoaded`, `afterPackageEnd`, `afterPackagesEnd`. Three new hooks for the API users who want fine-grained control over the pipeline. `afterPackageEnd` fires for every package, even ones with no updates, because consistency matters.
 - 50 new tests (276 -> 326 total, still 16 test files). All passing. All colocated. The test-to-feature ratio is getting suspicious.
@@ -156,12 +156,12 @@ The "feature parity but better" release. Twelve features, 276 tests, zero excuse
 - **Bun named catalogs** -- both `workspaces.catalog` (singular, default) and `workspaces.catalogs` (plural, named). `workspaces.catalogs.ui`, `workspaces.catalogs.testing`, whatever you want. Matches taze PR #238 except ours actually works end-to-end.
 - **Glob patterns** -- `--include "@types/*"` and `packageMode: { "@types/*": "ignore" }` now work alongside regex. Auto-detects glob vs regex vs `/regex/flags` syntax. Taze only supports regex. Good luck typing `^@types\/.*$` in your terminal.
 - **Private package filtering** -- auto-detects workspace package names from your monorepo and skips them during resolution. No more 404 errors from trying to fetch `@my-org/internal-lib` from the public registry. Taze makes you manually exclude these. I don't think you should have to.
-- **Prerelease channel detection** -- if you're on `2.0.0-rc.103`, upgr only suggests newer `rc` versions. Not `alpha`. Not `beta`. Just your channel. Taze suggests all prereleases regardless and lets you sort it out.
-- **Positional mode argument** -- `upgr major` is now shorthand for `upgr --mode major`. Less typing. Same result.
-- **`defineConfig()` export** -- typed config helper for `upgr.config.ts`. Identity function with full type inference because we're not animals.
+- **Prerelease channel detection** -- if you're on `2.0.0-rc.103`, depfresh only suggests newer `rc` versions. Not `alpha`. Not `beta`. Just your channel. Taze suggests all prereleases regardless and lets you sort it out.
+- **Positional mode argument** -- `depfresh major` is now shorthand for `depfresh --mode major`. Less typing. Same result.
+- **`defineConfig()` export** -- typed config helper for `depfresh.config.ts`. Identity function with full type inference because we're not animals.
 - **Cursor restoration** -- `restoreCursor()` on SIGINT, SIGTERM, and exit. Interactive mode will never leave your terminal cursor invisible again.
 - **Wider API exports** -- `loadPackages`, `resolvePackage`, `writePackage`, `parseDependencies` all exported. Build whatever workflow you want.
-- **Contextual tips** -- after checking, shows "Run `upgr major` to check for major updates" and "Add `-w` to write changes to package files" when relevant. Only in table mode, only when there are updates, only when you haven't already done it. Subtle, not annoying.
+- **Contextual tips** -- after checking, shows "Run `depfresh major` to check for major updates" and "Add `-w` to write changes to package files" when relevant. Only in table mode, only when there are updates, only when you haven't already done it. Subtle, not annoying.
 - **`publishedAt` in JSON output** -- timestamps for when each target version was published. Useful for scripts that care about age.
 - 117 new tests (159 -> 276 total, 12 -> 16 test files). All passing. All colocated.
 
@@ -215,14 +215,14 @@ First release. Wrote it from scratch because waiting for PRs to get merged in ta
 ### Added
 
 - Full CLI with 15 flags that actually make sense. Powered by citty because I have taste.
-- Config resolution via unconfig + defu. Supports `upgr.config.ts`, `.upgrrc`, or `package.json#upgr`. Pick your poison.
+- Config resolution via unconfig + defu. Supports `depfresh.config.ts`, `.depfreshrc`, or `package.json#depfresh`. Pick your poison.
 - Registry fetching with p-limit concurrency. 16 parallel requests by default because patience is not a virtue, it's a bottleneck.
 - SQLite cache (better-sqlite3, WAL mode). Falls back to memory if native modules aren't available. No JSON file race conditions. You're welcome.
 - `.npmrc` parsing that actually works. Scoped registries, auth tokens, the whole thing. Taze ignored this for 4 years. I fixed it on day one.
 - Retry with exponential backoff. 2 retries by default. I won't accidentally DDoS the npm registry.
 - `--output json` for scripts and AI agents. Clean structured envelope. No ANSI codes. No log noise. Just data.
 - Interactive mode with @clack/prompts. Pick what to update like a civilised person.
-- Workspace catalog support for pnpm, Bun, and Yarn. Catalogs get upgraded alongside your deps. No manual sync.
+- Workspace catalog support for pnpm, Bun, and Yarn. Catalogs get depfreshaded alongside your deps. No manual sync.
 - 7 range modes: `default`, `major`, `minor`, `patch`, `latest`, `newest`, `next`. From cautious to chaotic, your choice.
 - Include/exclude regex filtering. Update what you want, ignore what you don't. Revolutionary.
 - `--deps-only` and `--dev-only` because sometimes you only want half the pain.
@@ -233,14 +233,14 @@ First release. Wrote it from scratch because waiting for PRs to get merged in ta
 - TTY detection. No spinners in your CI logs. `NO_COLOR` respected.
 - 54 tests. More than some production apps I've seen.
 
-[0.9.2]: https://github.com/vcode-sh/upgr/releases/tag/v0.9.2
-[0.9.1]: https://github.com/vcode-sh/upgr/releases/tag/v0.9.1
-[0.9.0]: https://github.com/vcode-sh/upgr/releases/tag/v0.9.0
-[0.8.0]: https://github.com/vcode-sh/upgr/releases/tag/v0.8.0
-[0.7.0]: https://github.com/vcode-sh/upgr/releases/tag/v0.7.0
-[0.6.0]: https://github.com/vcode-sh/upgr/releases/tag/v0.6.0
-[0.5.0]: https://github.com/vcode-sh/upgr/releases/tag/v0.5.0
-[0.4.0]: https://github.com/vcode-sh/upgr/releases/tag/v0.4.0
-[0.3.0]: https://github.com/vcode-sh/upgr/releases/tag/v0.3.0
-[0.2.0]: https://github.com/vcode-sh/upgr/releases/tag/v0.2.0
-[0.1.0]: https://github.com/vcode-sh/upgr/releases/tag/v0.1.0
+[0.9.2]: https://github.com/vcode-sh/depfresh/releases/tag/v0.9.2
+[0.9.1]: https://github.com/vcode-sh/depfresh/releases/tag/v0.9.1
+[0.9.0]: https://github.com/vcode-sh/depfresh/releases/tag/v0.9.0
+[0.8.0]: https://github.com/vcode-sh/depfresh/releases/tag/v0.8.0
+[0.7.0]: https://github.com/vcode-sh/depfresh/releases/tag/v0.7.0
+[0.6.0]: https://github.com/vcode-sh/depfresh/releases/tag/v0.6.0
+[0.5.0]: https://github.com/vcode-sh/depfresh/releases/tag/v0.5.0
+[0.4.0]: https://github.com/vcode-sh/depfresh/releases/tag/v0.4.0
+[0.3.0]: https://github.com/vcode-sh/depfresh/releases/tag/v0.3.0
+[0.2.0]: https://github.com/vcode-sh/depfresh/releases/tag/v0.2.0
+[0.1.0]: https://github.com/vcode-sh/depfresh/releases/tag/v0.1.0

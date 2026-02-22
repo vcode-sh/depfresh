@@ -1,4 +1,4 @@
-import type { DepFieldType, RawDep, UpgrOptions } from '../../types'
+import type { DepFieldType, depfreshOptions, RawDep } from '../../types'
 import { isLocked } from '../../utils/versions'
 import { parseProtocol } from './protocols'
 
@@ -36,7 +36,7 @@ export function getNestedField(obj: Record<string, unknown>, path: string): unkn
 type SkipFn = (
   name: string,
   version: string,
-  options: UpgrOptions,
+  options: depfreshOptions,
   includePatterns: RegExp[],
   excludePatterns: RegExp[],
 ) => boolean
@@ -45,7 +45,7 @@ export function flattenOverrides(
   obj: Record<string, unknown>,
   source: DepFieldType,
   deps: RawDep[],
-  options: UpgrOptions,
+  options: depfreshOptions,
   parents: string[],
   includePatterns: RegExp[],
   excludePatterns: RegExp[],

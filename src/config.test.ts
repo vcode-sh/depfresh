@@ -100,7 +100,7 @@ describe('defineConfig', () => {
     expect(config).toEqual({})
   })
 
-  it('preserves all UpgrOptions fields', () => {
+  it('preserves all depfreshOptions fields', () => {
     const config = defineConfig({
       cwd: '/my/project',
       recursive: false,

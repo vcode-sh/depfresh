@@ -1,7 +1,7 @@
 import c from 'ansis'
 import { createSqliteCache } from '../../cache/index'
 import { loadPackages } from '../../io/packages'
-import type { ResolvedDepChange, UpgrOptions } from '../../types'
+import type { depfreshOptions, ResolvedDepChange } from '../../types'
 import { createLogger } from '../../utils/logger'
 import { loadNpmrc } from '../../utils/npmrc'
 import { buildJsonPackage, type JsonPackage, outputJsonEnvelope } from './json-output'
@@ -11,7 +11,7 @@ import { processPackage } from './process-package'
 import { createCheckProgress } from './progress'
 import { renderTable } from './render'
 
-export async function check(options: UpgrOptions): Promise<number> {
+export async function check(options: depfreshOptions): Promise<number> {
   const logLevel = options.output === 'json' ? 'silent' : options.loglevel
   const logger = createLogger(logLevel)
 
@@ -98,7 +98,7 @@ export async function check(options: UpgrOptions): Promise<number> {
 
     if (hasUpdates && options.output === 'table') {
       if (options.mode === 'default') {
-        logger.info(c.gray('Tip: Run `upgr major` to check for major updates'))
+        logger.info(c.gray('Tip: Run `depfresh major` to check for major updates'))
       }
       if (!options.write) {
         logger.info(c.gray('Tip: Add `-w` to write changes to package files'))

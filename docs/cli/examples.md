@@ -6,75 +6,75 @@ A few real-world incantations for the copy-paste inclined.
 
 ```bash
 # The basics: what's outdated?
-upgr
+depfresh
 
 # Safe minor/patch updates, written to disk
-upgr minor -w
+depfresh minor -w
 
 # Full update with tests
-upgr latest -w --execute "pnpm test"
+depfresh latest -w --execute "pnpm test"
 
 # Paranoid mode: verify each dep individually
-upgr -w --verify-command "pnpm test && pnpm typecheck"
+depfresh -w --verify-command "pnpm test && pnpm typecheck"
 ```
 
 ## Filtering
 
 ```bash
 # Only check a specific package
-upgr --include "typescript"
+depfresh --include "typescript"
 
 # Skip fresh releases
-upgr --cooldown 7
+depfresh --cooldown 7
 
 # Only production deps
-upgr --deps-only
+depfresh --deps-only
 
 # Everything except eslint plugins
-upgr --exclude "eslint-plugin-"
+depfresh --exclude "eslint-plugin-"
 ```
 
 ## Interactive
 
 ```bash
 # Update everything interactively with explanations
-upgr latest -wIE --long
+depfresh latest -wIE --long
 
 # Browse and cherry-pick
-upgr -wI
+depfresh -wI
 ```
 
 ## CI / Automation
 
 ```bash
 # CI pipeline check
-upgr --fail-on-outdated --output json
+depfresh --fail-on-outdated --output json
 
 # JSON output for parsing
-upgr --output json | jq '.summary'
+depfresh --output json | jq '.summary'
 
 # Safe update for automation
-upgr --write --mode minor
+depfresh --write --mode minor
 ```
 
 ## Global Packages
 
 ```bash
 # Global package audit
-upgr -g --all
+depfresh -g --all
 
 # Update all global packages
-upgr -gw
+depfresh -gw
 ```
 
 ## Monorepos
 
 ```bash
 # Specific directory
-upgr -C packages/core -w
+depfresh -C packages/core -w
 
 # Scan everything
-upgr -r --all
+depfresh -r --all
 ```
 
 ---
@@ -87,10 +87,10 @@ upgr -r --all
 
 ```bash
 # Run tests after updating
-upgr -w --execute "pnpm test"
+depfresh -w --execute "pnpm test"
 
 # Run a custom script
-upgr -w -e "node scripts/post-update.js"
+depfresh -w -e "node scripts/post-update.js"
 ```
 
 ### Install / Update
@@ -99,10 +99,10 @@ upgr -w -e "node scripts/post-update.js"
 
 ```bash
 # Write changes and reinstall
-upgr -wi
+depfresh -wi
 
 # Write changes and run update instead
-upgr -wu
+depfresh -wu
 ```
 
 If both are set, `--update` takes priority. Package manager detection order: `packageManager` field > lockfile (`bun.lock`/`bun.lockb` > `pnpm-lock.yaml` > `yarn.lock` > fallback to `npm`).
@@ -111,7 +111,7 @@ If both are set, `--update` takes priority. Package manager detection order: `pa
 
 ## Progress Display
 
-When resolving dependencies in a TTY, upgr shows a dual progress bar:
+When resolving dependencies in a TTY, depfresh shows a dual progress bar:
 
 ```
 Packages         [========----------------] 1/3
@@ -133,7 +133,7 @@ Labels truncate gracefully on narrow terminals. CJK package names are measured c
 
 ### Terminal Overflow
 
-Table columns adapt to your terminal width. On wide terminals, everything fits. On narrow terminals, upgr progressively shrinks columns in priority order: package name first, then current version, then target version, then source. Minimum widths are enforced so nothing collapses entirely -- if your terminal is 40 columns wide, names truncate with `...` but remain readable.
+Table columns adapt to your terminal width. On wide terminals, everything fits. On narrow terminals, depfresh progressively shrinks columns in priority order: package name first, then current version, then target version, then source. Minimum widths are enforced so nothing collapses entirely -- if your terminal is 40 columns wide, names truncate with `...` but remain readable.
 
 CJK characters and other double-width Unicode are measured correctly for column alignment. Combining marks and zero-width characters are handled. Package names like `@hanzi/测试` won't break the table layout.
 
@@ -147,13 +147,13 @@ Overflow handling only activates in TTY mode. Non-TTY output (JSON, piped text) 
 
 ```bash
 # Browse and select
-upgr -I
+depfresh -I
 
 # Browse, select, and write
-upgr -wI
+depfresh -wI
 
 # With human-readable explanations
-upgr -wIE
+depfresh -wIE
 ```
 
 ### List View
@@ -186,7 +186,7 @@ Press `right` or `l` on any dependency to see every available version -- newest 
 - **Node engine** requirements
 - **Provenance** level
 
-Pick any version with `Space` or `Enter` -- not just the one upgr suggested. Press `left` / `h` / `Esc` to go back without changing anything.
+Pick any version with `Space` or `Enter` -- not just the one depfresh suggested. Press `left` / `h` / `Esc` to go back without changing anything.
 
 | Key | Action |
 |-----|--------|
@@ -208,7 +208,7 @@ Plus deprecation, provenance, and Node compatibility warnings when relevant. For
 
 ### Non-TTY Fallback
 
-Requires a TTY. If you're piping output, running in CI, or inside a non-interactive environment, upgr falls back to a `@clack/prompts` grouped multiselect. Functional, just less fancy.
+Requires a TTY. If you're piping output, running in CI, or inside a non-interactive environment, depfresh falls back to a `@clack/prompts` grouped multiselect. Functional, just less fancy.
 
 ---
 
@@ -227,16 +227,16 @@ Requires a TTY. If you're piping output, running in CI, or inside a non-interact
 
 ### Nested Workspaces
 
-`--ignore-other-workspaces` (on by default) detects when a subdirectory belongs to a separate workspace (has its own workspace root) and skips it. This prevents upgr from double-processing packages in monorepo-within-monorepo setups.
+`--ignore-other-workspaces` (on by default) detects when a subdirectory belongs to a separate workspace (has its own workspace root) and skips it. This prevents depfresh from double-processing packages in monorepo-within-monorepo setups.
 
 Disable with `--no-ignore-other-workspaces` if you genuinely want to process everything.
 
 ### Catalog Support
 
-upgr understands workspace catalogs for **pnpm**, **bun**, and **yarn**:
+depfresh understands workspace catalogs for **pnpm**, **bun**, and **yarn**:
 
 - **pnpm**: Reads `catalog:` and `catalog:<name>` protocol references from `pnpm-workspace.yaml`
 - **bun**: Reads catalog entries from `bunfig.toml`
 - **yarn**: Reads catalog entries from `.yarnrc.yml`
 
-Catalog dependencies are resolved and updated alongside regular dependencies. When writing, upgr updates both the catalog source file and any `package.json` files that reference it.
+Catalog dependencies are resolved and updated alongside regular dependencies. When writing, depfresh updates both the catalog source file and any `package.json` files that reference it.

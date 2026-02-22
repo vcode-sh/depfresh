@@ -40,7 +40,7 @@ describe('writePackage', () => {
   let tmpDir: string
 
   beforeEach(() => {
-    tmpDir = mkdtempSync(join(tmpdir(), 'upgr-write-'))
+    tmpDir = mkdtempSync(join(tmpdir(), 'depfresh-write-'))
   })
 
   afterEach(() => {

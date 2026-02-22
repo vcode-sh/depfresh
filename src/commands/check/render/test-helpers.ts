@@ -1,7 +1,7 @@
-import type { ResolvedDepChange, UpgrOptions } from '../../../types'
+import type { depfreshOptions, ResolvedDepChange } from '../../../types'
 import { DEFAULT_OPTIONS } from '../../../types'
 
-export const defaultOpts = { ...DEFAULT_OPTIONS } as UpgrOptions
+export const defaultOpts = { ...DEFAULT_OPTIONS } as depfreshOptions
 
 export function makeUpdate(overrides: Partial<ResolvedDepChange> = {}): ResolvedDepChange {
   return {

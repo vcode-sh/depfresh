@@ -1,5 +1,5 @@
 import { vi } from 'vitest'
-import type { PackageMeta, ResolvedDepChange, UpgrOptions } from '../../types'
+import type { depfreshOptions, PackageMeta, ResolvedDepChange } from '../../types'
 import { DEFAULT_OPTIONS } from '../../types'
 
 vi.mock('../../io/packages', () => ({
@@ -47,8 +47,8 @@ vi.mock('../../io/global', () => ({
   writeGlobalPackage: vi.fn(),
 }))
 
-export const baseOptions: UpgrOptions = {
-  ...(DEFAULT_OPTIONS as UpgrOptions),
+export const baseOptions: depfreshOptions = {
+  ...(DEFAULT_OPTIONS as depfreshOptions),
   cwd: '/tmp/test',
   loglevel: 'silent',
 }

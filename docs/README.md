@@ -2,7 +2,7 @@
 
 You opened the docs. Voluntarily. I'm genuinely impressed -- most people just guess at flags until something works, then commit before anyone notices.
 
-Everything I know about upgr is in here, split into files so you can pretend you'll read more than one.
+Everything I know about depfresh is in here, split into files so you can pretend you'll read more than one.
 
 ## Table of Contents
 
@@ -16,7 +16,7 @@ Everything I know about upgr is in here, split into files so you can pretend you
   - [Options Reference](./configuration/options.md) -- the exhaustive list
   - [Workspaces](./configuration/workspaces.md) -- monorepos, catalogs, scanning
 
-- **[Programmatic API](./api/)** -- Exported functions, lifecycle callbacks, types, and workflow examples. For when you want to wrap upgr in your own tooling and take credit for it. I respect the hustle.
+- **[Programmatic API](./api/)** -- Exported functions, lifecycle callbacks, types, and workflow examples. For when you want to wrap depfresh in your own tooling and take credit for it. I respect the hustle.
   - [Overview](./api/overview.md) -- quick start, defaults, examples
   - [Functions](./api/functions.md) -- every exported function
   - [Types](./api/types.md) -- the type catalogue
