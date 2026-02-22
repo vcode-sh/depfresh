@@ -33,3 +33,6 @@ audit/
 # AI
 .claude/
 CLAUDE.md
+.agent/
+.agents/
+skills-lock.json
