@@ -50,6 +50,8 @@ export interface RawDep {
   protocol?: string
 }
 
+export type ProvenanceLevel = 'trusted' | 'attested' | 'none'
+
 export interface ResolvedDepChange extends RawDep {
   targetVersion: string
   diff: DiffType
@@ -59,6 +61,10 @@ export interface ResolvedDepChange extends RawDep {
   latestVersion?: string
   publishedAt?: string
   score?: UpdateScore
+  provenance?: ProvenanceLevel
+  currentProvenance?: ProvenanceLevel
+  nodeCompat?: string
+  nodeCompatible?: boolean
 }
 
 export interface PackageData {
@@ -70,6 +76,8 @@ export interface PackageData {
   description?: string
   homepage?: string
   repository?: string
+  provenance?: Record<string, ProvenanceLevel>
+  engines?: Record<string, string>
 }
 
 export interface UpdateScore {
@@ -142,12 +150,20 @@ export interface BumpOptions {
   sort: SortOption
   timediff: boolean
   cooldown: number
+  nodecompat: boolean
+  long: boolean
+
+  // Post-write
+  install: boolean
 
   // Callbacks
   beforePackageStart?: (pkg: PackageMeta) => void | Promise<void>
   onDependencyResolved?: (pkg: PackageMeta, dep: ResolvedDepChange) => void | Promise<void>
   beforePackageWrite?: (pkg: PackageMeta) => boolean | Promise<boolean>
   afterPackageWrite?: (pkg: PackageMeta) => void | Promise<void>
+  afterPackagesLoaded?: (pkgs: PackageMeta[]) => void | Promise<void>
+  afterPackageEnd?: (pkg: PackageMeta) => void | Promise<void>
+  afterPackagesEnd?: (pkgs: PackageMeta[]) => void | Promise<void>
 }
 
 export interface RegistryConfig {
@@ -189,4 +205,7 @@ export const DEFAULT_OPTIONS: Partial<BumpOptions> = {
   sort: 'diff-asc',
   timediff: true,
   cooldown: 0,
+  nodecompat: true,
+  long: false,
+  install: false,
 }

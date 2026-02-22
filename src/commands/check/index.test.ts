@@ -34,6 +34,14 @@ vi.mock('../../utils/npmrc', () => ({
   })),
 }))
 
+vi.mock('node:child_process', () => ({
+  execSync: vi.fn(),
+}))
+
+vi.mock('node:fs', () => ({
+  existsSync: vi.fn(() => false),
+}))
+
 const baseOptions: BumpOptions = {
   ...(DEFAULT_OPTIONS as BumpOptions),
   cwd: '/tmp/test',
@@ -466,5 +474,268 @@ describe('contextual tips', () => {
     expect(allOutput).not.toContain('Tip:')
 
     consoleSpy.mockRestore()
+  })
+})
+
+describe('lifecycle callbacks', () => {
+  let loadPackagesMock: ReturnType<typeof vi.fn>
+  let resolvePackageMock: ReturnType<typeof vi.fn>
+
+  beforeEach(async () => {
+    vi.clearAllMocks()
+    const packagesModule = await import('../../io/packages')
+    const resolveModule = await import('../../io/resolve')
+    loadPackagesMock = packagesModule.loadPackages as ReturnType<typeof vi.fn>
+    resolvePackageMock = resolveModule.resolvePackage as ReturnType<typeof vi.fn>
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('calls afterPackagesLoaded with all packages', async () => {
+    const pkg1 = makePkg('app-a')
+    const pkg2 = makePkg('app-b')
+    loadPackagesMock.mockResolvedValue([pkg1, pkg2])
+    resolvePackageMock.mockResolvedValue([])
+
+    const afterPackagesLoaded = vi.fn()
+    const { check } = await import('./index')
+    await check({ ...baseOptions, afterPackagesLoaded })
+
+    expect(afterPackagesLoaded).toHaveBeenCalledTimes(1)
+    expect(afterPackagesLoaded).toHaveBeenCalledWith([pkg1, pkg2])
+  })
+
+  it('does not call afterPackagesLoaded when no packages found', async () => {
+    loadPackagesMock.mockResolvedValue([])
+
+    const afterPackagesLoaded = vi.fn()
+    const { check } = await import('./index')
+    await check({ ...baseOptions, afterPackagesLoaded })
+
+    expect(afterPackagesLoaded).not.toHaveBeenCalled()
+  })
+
+  it('calls afterPackageEnd for every package including ones without updates', async () => {
+    const pkg1 = makePkg('app-a')
+    const pkg2 = makePkg('app-b')
+    loadPackagesMock.mockResolvedValue([pkg1, pkg2])
+    // pkg1 has no updates, pkg2 has updates
+    resolvePackageMock
+      .mockResolvedValueOnce([makeResolved({ diff: 'none', targetVersion: '^1.0.0' })])
+      .mockResolvedValueOnce([makeResolved({ diff: 'major', targetVersion: '^2.0.0' })])
+
+    const afterPackageEnd = vi.fn()
+    const { check } = await import('./index')
+    await check({ ...baseOptions, afterPackageEnd })
+
+    expect(afterPackageEnd).toHaveBeenCalledTimes(2)
+    expect(afterPackageEnd).toHaveBeenCalledWith(pkg1)
+    expect(afterPackageEnd).toHaveBeenCalledWith(pkg2)
+  })
+
+  it('calls afterPackagesEnd with all packages after processing', async () => {
+    const pkg1 = makePkg('app-a')
+    const pkg2 = makePkg('app-b')
+    loadPackagesMock.mockResolvedValue([pkg1, pkg2])
+    resolvePackageMock.mockResolvedValue([makeResolved({ diff: 'minor', targetVersion: '^1.1.0' })])
+
+    const afterPackagesEnd = vi.fn()
+    const { check } = await import('./index')
+    await check({ ...baseOptions, afterPackagesEnd })
+
+    expect(afterPackagesEnd).toHaveBeenCalledTimes(1)
+    expect(afterPackagesEnd).toHaveBeenCalledWith([pkg1, pkg2])
+  })
+
+  it('calls callbacks in correct order', async () => {
+    const pkg = makePkg('my-app')
+    loadPackagesMock.mockResolvedValue([pkg])
+    resolvePackageMock.mockResolvedValue([makeResolved({ diff: 'minor', targetVersion: '^1.1.0' })])
+
+    const order: string[] = []
+    const afterPackagesLoaded = vi.fn(() => {
+      order.push('afterPackagesLoaded')
+    })
+    const beforePackageStart = vi.fn(() => {
+      order.push('beforePackageStart')
+    })
+    const afterPackageEnd = vi.fn(() => {
+      order.push('afterPackageEnd')
+    })
+    const afterPackagesEnd = vi.fn(() => {
+      order.push('afterPackagesEnd')
+    })
+
+    const { check } = await import('./index')
+    await check({
+      ...baseOptions,
+      afterPackagesLoaded,
+      beforePackageStart,
+      afterPackageEnd,
+      afterPackagesEnd,
+    })
+
+    expect(order).toEqual([
+      'afterPackagesLoaded',
+      'beforePackageStart',
+      'afterPackageEnd',
+      'afterPackagesEnd',
+    ])
+  })
+})
+
+describe('detectPackageManager', () => {
+  let existsSyncMock: ReturnType<typeof vi.fn>
+
+  beforeEach(async () => {
+    vi.clearAllMocks()
+    const fs = await import('node:fs')
+    existsSyncMock = fs.existsSync as ReturnType<typeof vi.fn>
+    existsSyncMock.mockReturnValue(false)
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('returns name from packageManager field if present', async () => {
+    const pkg = makePkg('my-app')
+    pkg.packageManager = { name: 'pnpm', version: '9.0.0', raw: 'pnpm@9.0.0' }
+
+    const { detectPackageManager } = await import('./index')
+    expect(detectPackageManager('/tmp/test', [pkg])).toBe('pnpm')
+  })
+
+  it('detects bun from bun.lock', async () => {
+    existsSyncMock.mockImplementation((p: string) => p.endsWith('bun.lock'))
+
+    const { detectPackageManager } = await import('./index')
+    expect(detectPackageManager('/tmp/test', [])).toBe('bun')
+  })
+
+  it('detects bun from bun.lockb', async () => {
+    existsSyncMock.mockImplementation((p: string) => p.endsWith('bun.lockb'))
+
+    const { detectPackageManager } = await import('./index')
+    expect(detectPackageManager('/tmp/test', [])).toBe('bun')
+  })
+
+  it('detects pnpm from pnpm-lock.yaml', async () => {
+    existsSyncMock.mockImplementation((p: string) => p.endsWith('pnpm-lock.yaml'))
+
+    const { detectPackageManager } = await import('./index')
+    expect(detectPackageManager('/tmp/test', [])).toBe('pnpm')
+  })
+
+  it('detects yarn from yarn.lock', async () => {
+    existsSyncMock.mockImplementation((p: string) => p.endsWith('yarn.lock'))
+
+    const { detectPackageManager } = await import('./index')
+    expect(detectPackageManager('/tmp/test', [])).toBe('yarn')
+  })
+
+  it('defaults to npm when no lockfile found', async () => {
+    const { detectPackageManager } = await import('./index')
+    expect(detectPackageManager('/tmp/test', [])).toBe('npm')
+  })
+
+  it('prefers packageManager field over lockfiles', async () => {
+    existsSyncMock.mockImplementation((p: string) => p.endsWith('yarn.lock'))
+    const pkg = makePkg('my-app')
+    pkg.packageManager = { name: 'bun', version: '1.0.0', raw: 'bun@1.0.0' }
+
+    const { detectPackageManager } = await import('./index')
+    expect(detectPackageManager('/tmp/test', [pkg])).toBe('bun')
+  })
+})
+
+describe('--install flag', () => {
+  let loadPackagesMock: ReturnType<typeof vi.fn>
+  let resolvePackageMock: ReturnType<typeof vi.fn>
+  let execSyncMock: ReturnType<typeof vi.fn>
+  let existsSyncMock: ReturnType<typeof vi.fn>
+
+  beforeEach(async () => {
+    vi.clearAllMocks()
+    const packagesModule = await import('../../io/packages')
+    const resolveModule = await import('../../io/resolve')
+    const cp = await import('node:child_process')
+    const fs = await import('node:fs')
+    loadPackagesMock = packagesModule.loadPackages as ReturnType<typeof vi.fn>
+    resolvePackageMock = resolveModule.resolvePackage as ReturnType<typeof vi.fn>
+    execSyncMock = cp.execSync as ReturnType<typeof vi.fn>
+    existsSyncMock = fs.existsSync as ReturnType<typeof vi.fn>
+    existsSyncMock.mockReturnValue(false)
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('runs install after write when install=true and write=true', async () => {
+    const pkg = makePkg('my-app')
+    pkg.packageManager = { name: 'pnpm', version: '9.0.0', raw: 'pnpm@9.0.0' }
+    loadPackagesMock.mockResolvedValue([pkg])
+    resolvePackageMock.mockResolvedValue([makeResolved({ diff: 'minor', targetVersion: '^1.1.0' })])
+
+    const { check } = await import('./index')
+    await check({ ...baseOptions, write: true, install: true })
+
+    expect(execSyncMock).toHaveBeenCalledWith('pnpm install', {
+      cwd: '/tmp/test',
+      stdio: 'inherit',
+    })
+  })
+
+  it('does not run install when write=false', async () => {
+    const pkg = makePkg('my-app')
+    loadPackagesMock.mockResolvedValue([pkg])
+    resolvePackageMock.mockResolvedValue([makeResolved({ diff: 'minor', targetVersion: '^1.1.0' })])
+
+    const { check } = await import('./index')
+    await check({ ...baseOptions, write: false, install: true })
+
+    expect(execSyncMock).not.toHaveBeenCalled()
+  })
+
+  it('does not run install when install=false', async () => {
+    const pkg = makePkg('my-app')
+    loadPackagesMock.mockResolvedValue([pkg])
+    resolvePackageMock.mockResolvedValue([makeResolved({ diff: 'minor', targetVersion: '^1.1.0' })])
+
+    const { check } = await import('./index')
+    await check({ ...baseOptions, write: true, install: false })
+
+    expect(execSyncMock).not.toHaveBeenCalled()
+  })
+
+  it('does not run install when no updates', async () => {
+    const pkg = makePkg('my-app')
+    loadPackagesMock.mockResolvedValue([pkg])
+    resolvePackageMock.mockResolvedValue([makeResolved({ diff: 'none', targetVersion: '^1.0.0' })])
+
+    const { check } = await import('./index')
+    await check({ ...baseOptions, write: true, install: true })
+
+    expect(execSyncMock).not.toHaveBeenCalled()
+  })
+
+  it('handles install failure gracefully without changing exit code', async () => {
+    const pkg = makePkg('my-app')
+    pkg.packageManager = { name: 'npm', version: '10.0.0', raw: 'npm@10.0.0' }
+    loadPackagesMock.mockResolvedValue([pkg])
+    resolvePackageMock.mockResolvedValue([makeResolved({ diff: 'minor', targetVersion: '^1.1.0' })])
+    execSyncMock.mockImplementation(() => {
+      throw new Error('install failed')
+    })
+
+    const { check } = await import('./index')
+    const result = await check({ ...baseOptions, write: true, install: true })
+
+    // Exit code should be 0 (write succeeded), not affected by install failure
+    expect(result).toBe(0)
+    expect(execSyncMock).toHaveBeenCalled()
   })
 })

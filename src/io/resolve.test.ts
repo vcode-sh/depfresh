@@ -56,6 +56,9 @@ function makeOptions(overrides: Partial<BumpOptions> = {}): BumpOptions {
     sort: 'diff-asc',
     timediff: true,
     cooldown: 0,
+    nodecompat: true,
+    long: false,
+    install: false,
     ...overrides,
   }
 }
@@ -670,5 +673,151 @@ describe('cooldown integration', () => {
     // Best remaining is 1.1.0
     expect(result.length).toBe(1)
     expect(result[0]!.targetVersion).toBe('^1.1.0')
+  })
+})
+
+describe('provenance tracking', () => {
+  beforeEach(() => {
+    vi.resetAllMocks()
+  })
+
+  it('populates provenance fields from package data', async () => {
+    const { fetchPackageData } = await import('./registry')
+    const { resolvePackage } = await import('./resolve')
+
+    const cache = createMockCache()
+    const pkgData: PackageData = {
+      name: 'test-pkg',
+      versions: ['1.0.0', '2.0.0'],
+      distTags: { latest: '2.0.0' },
+      provenance: { '1.0.0': 'attested', '2.0.0': 'none' },
+    }
+    vi.mocked(fetchPackageData).mockResolvedValue(pkgData)
+
+    const dep = makeDep({ currentVersion: '^1.0.0' })
+    const pkg = makePkg([dep])
+    const options = makeOptions({ mode: 'latest' })
+    const npmrc: NpmrcConfig = {
+      registries: new Map(),
+      defaultRegistry: 'https://registry.npmjs.org/',
+      strictSsl: true,
+    }
+
+    const result = await resolvePackage(pkg, options, cache, npmrc)
+
+    expect(result.length).toBe(1)
+    expect(result[0]!.provenance).toBe('none')
+    expect(result[0]!.currentProvenance).toBe('attested')
+  })
+
+  it('leaves provenance undefined when package data has no provenance', async () => {
+    const { fetchPackageData } = await import('./registry')
+    const { resolvePackage } = await import('./resolve')
+
+    const cache = createMockCache()
+    vi.mocked(fetchPackageData).mockResolvedValue(mockPkgData)
+
+    const dep = makeDep()
+    const pkg = makePkg([dep])
+    const options = makeOptions({ mode: 'latest' })
+    const npmrc: NpmrcConfig = {
+      registries: new Map(),
+      defaultRegistry: 'https://registry.npmjs.org/',
+      strictSsl: true,
+    }
+
+    const result = await resolvePackage(pkg, options, cache, npmrc)
+
+    expect(result.length).toBe(1)
+    expect(result[0]!.provenance).toBeUndefined()
+    expect(result[0]!.currentProvenance).toBeUndefined()
+  })
+})
+
+describe('node engine compatibility', () => {
+  beforeEach(() => {
+    vi.resetAllMocks()
+  })
+
+  it('populates nodeCompat and nodeCompatible from engines data', async () => {
+    const { fetchPackageData } = await import('./registry')
+    const { resolvePackage } = await import('./resolve')
+
+    const cache = createMockCache()
+    const pkgData: PackageData = {
+      name: 'test-pkg',
+      versions: ['1.0.0', '2.0.0'],
+      distTags: { latest: '2.0.0' },
+      engines: { '1.0.0': '>=14', '2.0.0': '>=18' },
+    }
+    vi.mocked(fetchPackageData).mockResolvedValue(pkgData)
+
+    const dep = makeDep({ currentVersion: '^1.0.0' })
+    const pkg = makePkg([dep])
+    const options = makeOptions({ mode: 'latest' })
+    const npmrc: NpmrcConfig = {
+      registries: new Map(),
+      defaultRegistry: 'https://registry.npmjs.org/',
+      strictSsl: true,
+    }
+
+    const result = await resolvePackage(pkg, options, cache, npmrc)
+
+    expect(result.length).toBe(1)
+    expect(result[0]!.nodeCompat).toBe('>=18')
+    // Node >= 24 so >=18 should be compatible
+    expect(result[0]!.nodeCompatible).toBe(true)
+  })
+
+  it('marks incompatible node versions', async () => {
+    const { fetchPackageData } = await import('./registry')
+    const { resolvePackage } = await import('./resolve')
+
+    const cache = createMockCache()
+    const pkgData: PackageData = {
+      name: 'test-pkg',
+      versions: ['1.0.0', '2.0.0'],
+      distTags: { latest: '2.0.0' },
+      engines: { '2.0.0': '<16' },
+    }
+    vi.mocked(fetchPackageData).mockResolvedValue(pkgData)
+
+    const dep = makeDep({ currentVersion: '^1.0.0' })
+    const pkg = makePkg([dep])
+    const options = makeOptions({ mode: 'latest' })
+    const npmrc: NpmrcConfig = {
+      registries: new Map(),
+      defaultRegistry: 'https://registry.npmjs.org/',
+      strictSsl: true,
+    }
+
+    const result = await resolvePackage(pkg, options, cache, npmrc)
+
+    expect(result.length).toBe(1)
+    expect(result[0]!.nodeCompat).toBe('<16')
+    expect(result[0]!.nodeCompatible).toBe(false)
+  })
+
+  it('leaves nodeCompat undefined when no engines data', async () => {
+    const { fetchPackageData } = await import('./registry')
+    const { resolvePackage } = await import('./resolve')
+
+    const cache = createMockCache()
+    vi.mocked(fetchPackageData).mockResolvedValue(mockPkgData)
+
+    const dep = makeDep()
+    const pkg = makePkg([dep])
+    const options = makeOptions({ mode: 'latest' })
+    const npmrc: NpmrcConfig = {
+      registries: new Map(),
+      defaultRegistry: 'https://registry.npmjs.org/',
+      strictSsl: true,
+    }
+
+    const result = await resolvePackage(pkg, options, cache, npmrc)
+
+    expect(result.length).toBe(1)
+    expect(result[0]!.nodeCompat).toBeUndefined()
+    expect(result[0]!.nodeCompatible).toBeUndefined()
   })
 })

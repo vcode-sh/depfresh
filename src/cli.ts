@@ -152,6 +152,23 @@ const main = defineCommand({
       description: 'Skip versions published less than N days ago (0 = disabled)',
       default: '0',
     },
+    nodecompat: {
+      type: 'boolean',
+      description: 'Show Node.js engine compatibility for target versions',
+      default: true,
+    },
+    long: {
+      type: 'boolean',
+      alias: 'L',
+      description: 'Show extra details (homepage URL) per package',
+      default: false,
+    },
+    install: {
+      type: 'boolean',
+      alias: 'i',
+      description: 'Run package manager install after writing',
+      default: false,
+    },
   },
   async run({ args }) {
     try {
@@ -197,6 +214,9 @@ const main = defineCommand({
         sort: args.sort as SortOption,
         timediff: args.timediff,
         cooldown: Number.parseInt(args.cooldown, 10),
+        nodecompat: args.nodecompat,
+        long: args.long,
+        install: args.install,
       })
 
       const exitCode = await check(options)

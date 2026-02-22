@@ -16,6 +16,7 @@ export type {
   PackageManagerName,
   PackageMeta,
   PackageType,
+  ProvenanceLevel,
   RangeMode,
   RawDep,
   RegistryConfig,

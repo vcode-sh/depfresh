@@ -7,6 +7,7 @@ import type {
   NpmrcConfig,
   PackageData,
   PackageMeta,
+  ProvenanceLevel,
   RangeMode,
   RawDep,
   ResolvedDepChange,
@@ -131,6 +132,16 @@ async function resolveDependency(
     return null
   }
 
+  const cleanCurrent = semver.coerce(dep.currentVersion)?.version ?? undefined
+  const currentProvenance: ProvenanceLevel | undefined = cleanCurrent
+    ? pkgData.provenance?.[cleanCurrent]
+    : undefined
+  const targetProvenance: ProvenanceLevel | undefined = pkgData.provenance?.[targetVersion]
+  const nodeCompat: string | undefined = pkgData.engines?.[targetVersion]
+  const nodeCompatible: boolean | undefined = nodeCompat
+    ? semver.satisfies(process.version, nodeCompat)
+    : undefined
+
   return {
     ...dep,
     targetVersion: prefixedTarget,
@@ -139,6 +150,10 @@ async function resolveDependency(
     deprecated: pkgData.deprecated?.[targetVersion],
     latestVersion: pkgData.distTags.latest,
     publishedAt: pkgData.time?.[targetVersion],
+    provenance: targetProvenance,
+    currentProvenance,
+    nodeCompat,
+    nodeCompatible,
   }
 }
 

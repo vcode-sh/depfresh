@@ -15,7 +15,7 @@ export function loadNpmrc(cwd: string): NpmrcConfig {
   }
 
   // Load in order: builtin defaults -> global -> user -> project
-  const globalPath = join(homedir(), '.npmrc')
+  const globalPath = process.env.npm_config_userconfig || join(homedir(), '.npmrc')
   const projectFile = findUpSync('.npmrc', { cwd })
 
   loadNpmrcFile(globalPath, config)

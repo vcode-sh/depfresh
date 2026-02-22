@@ -1,5 +1,5 @@
 import * as semver from 'semver'
-import type { NpmrcConfig, PackageData, RegistryConfig } from '../types'
+import type { NpmrcConfig, PackageData, ProvenanceLevel, RegistryConfig } from '../types'
 import type { Logger } from '../utils/logger'
 import { getRegistryForPackage } from '../utils/npmrc'
 
@@ -58,9 +58,17 @@ async function fetchNpmPackage(
   const time = (json.time ?? {}) as Record<string, string>
   const deprecated: Record<string, string> = {}
 
+  const provenance: Record<string, ProvenanceLevel> = {}
+  const engines: Record<string, string> = {}
+
   for (const [ver, data] of Object.entries(versionsObj)) {
     if (data.deprecated) {
       deprecated[ver] = String(data.deprecated)
+    }
+    provenance[ver] = data.hasSignatures ? 'attested' : 'none'
+    const enginesObj = data.engines as Record<string, string> | undefined
+    if (enginesObj?.node) {
+      engines[ver] = enginesObj.node
     }
   }
 
@@ -70,6 +78,8 @@ async function fetchNpmPackage(
     distTags,
     time,
     deprecated: Object.keys(deprecated).length > 0 ? deprecated : undefined,
+    provenance: Object.keys(provenance).length > 0 ? provenance : undefined,
+    engines: Object.keys(engines).length > 0 ? engines : undefined,
     description: json.description as string | undefined,
     homepage: json.homepage as string | undefined,
     repository:

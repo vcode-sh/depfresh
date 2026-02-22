@@ -162,6 +162,63 @@ describe('fetchPackageData', () => {
 
     expect(result.deprecated).toEqual({ '1.0.0': 'Use 2.x' })
   })
+
+  it('extracts provenance from hasSignatures field', async () => {
+    const npmResponse = {
+      versions: {
+        '1.0.0': { hasSignatures: true },
+        '2.0.0': { hasSignatures: false },
+        '3.0.0': {},
+      },
+      'dist-tags': { latest: '3.0.0' },
+    }
+    globalThis.fetch = mockFetchResponse(npmResponse)
+
+    const { fetchPackageData } = await import('./registry')
+    const result = await fetchPackageData('signed-pkg', defaultOptions)
+
+    expect(result.provenance).toEqual({
+      '1.0.0': 'attested',
+      '2.0.0': 'none',
+      '3.0.0': 'none',
+    })
+  })
+
+  it('extracts engines.node per version', async () => {
+    const npmResponse = {
+      versions: {
+        '1.0.0': { engines: { node: '>=14' } },
+        '2.0.0': { engines: { node: '>=18' } },
+        '3.0.0': {},
+      },
+      'dist-tags': { latest: '3.0.0' },
+    }
+    globalThis.fetch = mockFetchResponse(npmResponse)
+
+    const { fetchPackageData } = await import('./registry')
+    const result = await fetchPackageData('engines-pkg', defaultOptions)
+
+    expect(result.engines).toEqual({
+      '1.0.0': '>=14',
+      '2.0.0': '>=18',
+    })
+  })
+
+  it('returns undefined engines when no versions have engines', async () => {
+    const npmResponse = {
+      versions: {
+        '1.0.0': {},
+        '2.0.0': {},
+      },
+      'dist-tags': { latest: '2.0.0' },
+    }
+    globalThis.fetch = mockFetchResponse(npmResponse)
+
+    const { fetchPackageData } = await import('./registry')
+    const result = await fetchPackageData('no-engines-pkg', defaultOptions)
+
+    expect(result.engines).toBeUndefined()
+  })
 })
 
 describe('fetchWithRetry', () => {

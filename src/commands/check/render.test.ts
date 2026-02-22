@@ -222,4 +222,226 @@ describe('renderTable', () => {
       expect(headerLine).toBeUndefined()
     })
   })
+
+  describe('provenance warning', () => {
+    it('shows warning when provenance downgrades from attested to none', () => {
+      const updates = [
+        makeUpdate({
+          name: 'risky-pkg',
+          currentProvenance: 'attested',
+          provenance: 'none',
+        }),
+      ]
+
+      renderTable('test-project', updates, defaultOpts)
+
+      const stripped = lines.map(stripAnsi)
+      const depLine = stripped.find((l) => l.includes('risky-pkg'))
+      expect(depLine).toContain('\u26A0')
+    })
+
+    it('shows warning when provenance downgrades from trusted to none', () => {
+      const updates = [
+        makeUpdate({
+          name: 'trusted-pkg',
+          currentProvenance: 'trusted',
+          provenance: 'none',
+        }),
+      ]
+
+      renderTable('test-project', updates, defaultOpts)
+
+      const stripped = lines.map(stripAnsi)
+      const depLine = stripped.find((l) => l.includes('trusted-pkg'))
+      expect(depLine).toContain('\u26A0')
+    })
+
+    it('does not show warning when provenance stays attested', () => {
+      const updates = [
+        makeUpdate({
+          name: 'safe-pkg',
+          currentProvenance: 'attested',
+          provenance: 'attested',
+        }),
+      ]
+
+      renderTable('test-project', updates, defaultOpts)
+
+      const stripped = lines.map(stripAnsi)
+      const depLine = stripped.find((l) => l.includes('safe-pkg'))
+      expect(depLine).not.toContain('\u26A0')
+    })
+
+    it('does not show warning when no provenance data', () => {
+      const updates = [makeUpdate({ name: 'normal-pkg' })]
+
+      renderTable('test-project', updates, defaultOpts)
+
+      const stripped = lines.map(stripAnsi)
+      const depLine = stripped.find((l) => l.includes('normal-pkg'))
+      expect(depLine).not.toContain('\u26A0')
+    })
+  })
+
+  describe('nodecompat display', () => {
+    it('shows check mark when node is compatible', () => {
+      const updates = [
+        makeUpdate({
+          name: 'compat-pkg',
+          nodeCompatible: true,
+          nodeCompat: '>=18',
+        }),
+      ]
+
+      renderTable('test-project', updates, { ...defaultOpts, nodecompat: true })
+
+      const stripped = lines.map(stripAnsi)
+      const depLine = stripped.find((l) => l.includes('compat-pkg'))
+      expect(depLine).toContain('\u2713')
+    })
+
+    it('shows cross mark when node is incompatible', () => {
+      const updates = [
+        makeUpdate({
+          name: 'incompat-pkg',
+          nodeCompatible: false,
+          nodeCompat: '<16',
+        }),
+      ]
+
+      renderTable('test-project', updates, { ...defaultOpts, nodecompat: true })
+
+      const stripped = lines.map(stripAnsi)
+      const depLine = stripped.find((l) => l.includes('incompat-pkg'))
+      expect(depLine).toContain('\u2717node')
+    })
+
+    it('shows nothing when nodeCompatible is undefined', () => {
+      const updates = [makeUpdate({ name: 'no-engines-pkg' })]
+
+      renderTable('test-project', updates, { ...defaultOpts, nodecompat: true })
+
+      const stripped = lines.map(stripAnsi)
+      const depLine = stripped.find((l) => l.includes('no-engines-pkg'))
+      expect(depLine).not.toContain('\u2713')
+      expect(depLine).not.toContain('\u2717')
+    })
+
+    it('hides nodecompat indicators when nodecompat option is false', () => {
+      const updates = [
+        makeUpdate({
+          name: 'compat-pkg',
+          nodeCompatible: true,
+          nodeCompat: '>=18',
+        }),
+      ]
+
+      renderTable('test-project', updates, { ...defaultOpts, nodecompat: false })
+
+      const stripped = lines.map(stripAnsi)
+      const depLine = stripped.find((l) => l.includes('compat-pkg'))
+      expect(depLine).not.toContain('\u2713')
+      expect(depLine).not.toContain('\u2717')
+    })
+  })
+
+  describe('--long mode', () => {
+    it('shows homepage URL when long=true and homepage exists', () => {
+      const updates = [
+        makeUpdate({
+          name: 'cool-pkg',
+          pkgData: {
+            name: 'cool-pkg',
+            versions: ['1.0.0', '2.0.0'],
+            distTags: { latest: '2.0.0' },
+            homepage: 'https://github.com/user/cool-pkg',
+          },
+        }),
+      ]
+
+      renderTable('test-project', updates, { ...defaultOpts, long: true })
+
+      const stripped = lines.map(stripAnsi)
+      expect(stripped.some((l) => l.includes('https://github.com/user/cool-pkg'))).toBe(true)
+      expect(stripped.some((l) => l.includes('\u21B3'))).toBe(true)
+    })
+
+    it('does not show homepage when long=false', () => {
+      const updates = [
+        makeUpdate({
+          name: 'cool-pkg',
+          pkgData: {
+            name: 'cool-pkg',
+            versions: ['1.0.0', '2.0.0'],
+            distTags: { latest: '2.0.0' },
+            homepage: 'https://github.com/user/cool-pkg',
+          },
+        }),
+      ]
+
+      renderTable('test-project', updates, { ...defaultOpts, long: false })
+
+      const stripped = lines.map(stripAnsi)
+      expect(stripped.some((l) => l.includes('https://github.com/user/cool-pkg'))).toBe(false)
+    })
+
+    it('does not show homepage line when dep has no homepage', () => {
+      const updates = [
+        makeUpdate({
+          name: 'no-home-pkg',
+          pkgData: {
+            name: 'no-home-pkg',
+            versions: ['1.0.0', '2.0.0'],
+            distTags: { latest: '2.0.0' },
+          },
+        }),
+      ]
+
+      renderTable('test-project', updates, { ...defaultOpts, long: true })
+
+      const stripped = lines.map(stripAnsi)
+      expect(stripped.some((l) => l.includes('\u21B3'))).toBe(false)
+    })
+
+    it('shows homepage for each dep that has one in long mode', () => {
+      const updates = [
+        makeUpdate({
+          name: 'pkg-a',
+          pkgData: {
+            name: 'pkg-a',
+            versions: ['1.0.0', '2.0.0'],
+            distTags: { latest: '2.0.0' },
+            homepage: 'https://pkg-a.dev',
+          },
+        }),
+        makeUpdate({
+          name: 'pkg-b',
+          diff: 'minor',
+          pkgData: {
+            name: 'pkg-b',
+            versions: ['1.0.0', '1.1.0'],
+            distTags: { latest: '1.1.0' },
+          },
+        }),
+        makeUpdate({
+          name: 'pkg-c',
+          diff: 'patch',
+          pkgData: {
+            name: 'pkg-c',
+            versions: ['1.0.0', '1.0.1'],
+            distTags: { latest: '1.0.1' },
+            homepage: 'https://pkg-c.io',
+          },
+        }),
+      ]
+
+      renderTable('test-project', updates, { ...defaultOpts, long: true })
+
+      const stripped = lines.map(stripAnsi)
+      const homepageLines = stripped.filter((l) => l.includes('\u21B3'))
+      expect(homepageLines).toHaveLength(2)
+      expect(homepageLines[0]).toContain('https://pkg-a.dev')
+      expect(homepageLines[1]).toContain('https://pkg-c.io')
+    })
+  })
 })

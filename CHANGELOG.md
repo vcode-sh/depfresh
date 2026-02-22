@@ -2,6 +2,30 @@
 
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Semver because I'm not a psychopath.
 
+## [0.4.0] - 2026-02-22
+
+The "trust issues" release. Provenance tracking, Node engine compatibility, auto-install, and seven other features I implemented because taze had 28 open issues and 14 unmerged PRs collecting dust. 326 tests now. More tests than some companies have engineers.
+
+### Added
+
+- **Provenance tracking** -- npm Sigstore attestations classified as `trusted`, `attested`, or `none`. If your target version has *less* provenance than your current version, you get a yellow warning. Because downgrading your supply chain security silently is the kind of thing that makes security researchers cry. Credit: sxzz (Kevin Deng, Vue core) for the concept ([taze#198](https://github.com/antfu/taze/pull/198)).
+- **Node engine compatibility** (`--nodecompat`) -- extracts `engines.node` from the registry for each target version, checks against your running Node with `semver.satisfies()`. Green checkmark if compatible, red cross if not. On by default because shipping broken code to production is someone else's brand, not mine. Credit: GeoffreyParrier ([taze#165](https://github.com/antfu/taze/pull/165)).
+- **Auto-install** (`--install` / `-i`) -- detects your package manager from `packageManager` field or lockfile, runs `${pm} install` after writing. Catches errors gracefully because your install failing shouldn't tank the whole run. `bump -wi` is now the entire workflow. You're welcome.
+- **Long display mode** (`--long` / `-L`) -- shows homepage URL under each dependency. For when you need to know where that package lives before you trust it with your codebase. Renders as an indented gray `↳ https://...` because I have aesthetic standards.
+- **pnpm override key parsing** -- handles `name@version-range` format from `pnpm audit --fix`. If pnpm writes `"tar-fs@>=2.0.0 <2.1.2"` into your overrides, bump now parses the package name correctly instead of treating the whole thing as a name. Credit: taze issue [#173](https://github.com/antfu/taze/issues/173).
+- **`npm_config_userconfig` support** -- respects the environment variable for custom `.npmrc` location. Enterprise setups with non-standard config paths now work. Credit: taze issue [#118](https://github.com/antfu/taze/issues/118).
+- **Extra lifecycle callbacks** -- `afterPackagesLoaded`, `afterPackageEnd`, `afterPackagesEnd`. Three new hooks for the API users who want fine-grained control over the pipeline. `afterPackageEnd` fires for every package, even ones with no updates, because consistency matters.
+- 50 new tests (276 -> 326 total, still 16 test files). All passing. All colocated. The test-to-feature ratio is getting suspicious.
+
+### Credits
+
+Ideas and bug reports from the taze ecosystem that informed this release:
+
+- **sxzz** (Kevin Deng, Vue core) -- provenance downgrade warning concept ([taze#198](https://github.com/antfu/taze/pull/198))
+- **GeoffreyParrier** -- engines.node compatibility column ([taze#165](https://github.com/antfu/taze/pull/165))
+- **runyasak** -- auto-install concept discussion
+- taze issues [#173](https://github.com/antfu/taze/issues/173) (override parsing), [#118](https://github.com/antfu/taze/issues/118) (npmrc config), [#48](https://github.com/antfu/taze/issues/48) (auto-install)
+
 ## [0.3.0] - 2026-02-22
 
 The "feature parity but better" release. Twelve features, 276 tests, zero excuses. Taze has been building these for 4 years across scattered PRs. Thanks to everyone who contributed.
@@ -96,6 +120,7 @@ First release. Wrote it from scratch because waiting for PRs to get merged in ta
 - TTY detection. No spinners in your CI logs. `NO_COLOR` respected.
 - 54 tests. More than some production apps I've seen.
 
+[0.4.0]: https://github.com/vcode-sh/bump/releases/tag/v0.4.0
 [0.3.0]: https://github.com/vcode-sh/bump/releases/tag/v0.3.0
 [0.2.0]: https://github.com/vcode-sh/bump/releases/tag/v0.2.0
 [0.1.0]: https://github.com/vcode-sh/bump/releases/tag/v0.1.0

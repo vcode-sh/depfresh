@@ -29,13 +29,12 @@ export function renderTable(
   log(c.cyan.bold(packageName))
   log()
 
-  const showTimediff = options.timediff
   const sorted = sortDeps(updates, options.sort)
 
   if (options.group) {
-    renderGrouped(sorted, showTimediff, log)
+    renderGrouped(sorted, options, log)
   } else {
-    renderFlat(sorted, showTimediff, log)
+    renderFlat(sorted, options, log)
   }
 
   // Summary
@@ -54,7 +53,7 @@ export function renderTable(
 
 function renderGrouped(
   sorted: ResolvedDepChange[],
-  showTimediff: boolean,
+  options: BumpOptions,
   log: (...args: unknown[]) => void,
 ): void {
   // Group by source
@@ -72,26 +71,36 @@ function renderGrouped(
   for (const [source, deps] of groups) {
     const label = DEP_SOURCE_SHORT_NAMES[source as DepFieldType] ?? source
     log(c.gray(`  ${label}`))
-    renderRows(deps, showTimediff, log, false)
+    renderRows(deps, options, log, false)
     log()
   }
 }
 
 function renderFlat(
   sorted: ResolvedDepChange[],
-  showTimediff: boolean,
+  options: BumpOptions,
   log: (...args: unknown[]) => void,
 ): void {
-  renderRows(sorted, showTimediff, log, true)
+  renderRows(sorted, options, log, true)
   log()
+}
+
+function hasProvenanceDowngrade(dep: ResolvedDepChange): boolean {
+  return (
+    (dep.currentProvenance === 'trusted' || dep.currentProvenance === 'attested') &&
+    dep.provenance === 'none'
+  )
 }
 
 function renderRows(
   deps: ResolvedDepChange[],
-  showTimediff: boolean,
+  options: BumpOptions,
   log: (...args: unknown[]) => void,
   showSource: boolean,
 ): void {
+  const showTimediff = options.timediff
+  const showNodecompat = options.nodecompat
+  const showLong = options.long
   // Calculate column widths
   const nameWidth = Math.max(...deps.map((u) => u.name.length), 4)
   const currentWidth = Math.max(...deps.map((u) => u.currentVersion.length), 7)
@@ -141,8 +150,24 @@ function renderRows(
       }
     }
 
+    if (hasProvenanceDowngrade(dep)) {
+      line += `  ${c.yellow('\u26A0')}`
+    }
+
+    if (showNodecompat) {
+      if (dep.nodeCompatible === true) {
+        line += `  ${c.green.dim('\u2713')}`
+      } else if (dep.nodeCompatible === false) {
+        line += `  ${c.red('\u2717node')}`
+      }
+    }
+
     line += deprecated
 
     log(line)
+
+    if (showLong && dep.pkgData.homepage) {
+      log(c.gray(`      \u21B3 ${dep.pkgData.homepage}`))
+    }
   }
 }

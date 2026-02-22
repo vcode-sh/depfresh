@@ -151,6 +151,27 @@ function getNestedField(obj: Record<string, unknown>, path: string): unknown {
   return current
 }
 
+export function parseOverrideKey(key: string): string {
+  // Scoped packages: @scope/name@version-range -> @scope/name
+  if (key.startsWith('@')) {
+    const secondAt = key.indexOf('@', 1)
+    if (secondAt !== -1) {
+      return key.slice(0, secondAt)
+    }
+    // @scope/name with no version suffix
+    return key
+  }
+
+  // Regular packages: name@version-range -> name
+  const atIndex = key.indexOf('@')
+  if (atIndex !== -1) {
+    return key.slice(0, atIndex)
+  }
+
+  // Plain name
+  return key
+}
+
 function flattenOverrides(
   obj: Record<string, unknown>,
   source: DepFieldType,
@@ -162,14 +183,15 @@ function flattenOverrides(
 ): void {
   for (const [key, value] of Object.entries(obj)) {
     if (typeof value === 'string') {
-      if (shouldSkipDependency(key, value, options, includePatterns, excludePatterns)) continue
+      const name = parseOverrideKey(key)
+      if (shouldSkipDependency(name, value, options, includePatterns, excludePatterns)) continue
       const protocol = parseProtocol(value)
       deps.push({
-        name: key,
+        name,
         currentVersion: protocol.currentVersion,
         source,
         update: !isLocked(protocol.currentVersion) || options.includeLocked,
-        parents,
+        parents: [...parents, key],
         protocol: protocol.protocol,
       })
     } else if (typeof value === 'object' && value !== null) {
