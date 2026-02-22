@@ -27,14 +27,9 @@ Thumbs.db
 debug.log
 *.log
 
-# Plans
-audit/*
-/audit/**
+# Internal docs
+audit/
 
 # AI
-./claude
-claude.md
-./claude/**
-.claude/settings.json
-audit/architecture.md
-audit/modern-stack.md
+.claude/
+CLAUDE.md
