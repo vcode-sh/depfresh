@@ -78,6 +78,15 @@ async function verifyAndWrite(
   return { applied, reverted }
 }
 
+async function runExecute(command: string, cwd: string, logger: Logger): Promise<void> {
+  try {
+    logger.info(`Running: ${command}`)
+    execSync(command, { cwd, stdio: 'inherit' })
+  } catch {
+    logger.error(`Command failed: ${command}`)
+  }
+}
+
 async function runUpdate(cwd: string, packages: PackageMeta[], logger: Logger): Promise<void> {
   const pm = detectPackageManager(cwd, packages)
   try {
@@ -108,6 +117,7 @@ export async function check(options: BumpOptions): Promise<number> {
     await options.afterPackagesLoaded?.(packages)
 
     let hasUpdates = false
+    let didWrite = false
     const jsonPackages: JsonPackage[] = []
 
     // Create cache and npmrc once for all packages
@@ -178,14 +188,17 @@ export async function check(options: BumpOptions): Promise<number> {
               if (options.verifyCommand) {
                 const result = await verifyAndWrite(pkg, selected, options.verifyCommand, logger)
                 logger.info(`  Verify: ${result.applied} applied, ${result.reverted} reverted`)
+                if (result.applied > 0) didWrite = true
               } else if (pkg.type === 'global') {
                 const { writeGlobalPackage } = await import('../../io/global')
                 const pmName = pkg.filepath.replace('global:', '') as PackageManagerName
                 for (const change of selected) {
                   writeGlobalPackage(pmName, change.name, change.targetVersion)
                 }
+                didWrite = true
               } else {
                 writePackage(pkg, selected, options.loglevel)
+                didWrite = true
               }
               options.afterPackageWrite?.(pkg)
             }
@@ -196,14 +209,17 @@ export async function check(options: BumpOptions): Promise<number> {
             if (options.verifyCommand) {
               const result = await verifyAndWrite(pkg, updates, options.verifyCommand, logger)
               logger.info(`  Verify: ${result.applied} applied, ${result.reverted} reverted`)
+              if (result.applied > 0) didWrite = true
             } else if (pkg.type === 'global') {
               const { writeGlobalPackage } = await import('../../io/global')
               const pmName = pkg.filepath.replace('global:', '') as PackageManagerName
               for (const change of updates) {
                 writeGlobalPackage(pmName, change.name, change.targetVersion)
               }
+              didWrite = true
             } else {
               writePackage(pkg, updates, options.loglevel)
+              didWrite = true
             }
             options.afterPackageWrite?.(pkg)
           }
@@ -227,8 +243,13 @@ export async function check(options: BumpOptions): Promise<number> {
       logger.debug(`Cache stats: ${stats.hits} hits, ${stats.misses} misses, ${stats.size} entries`)
     }
 
+    // Post-write execute hook
+    if (options.execute && options.write && didWrite) {
+      await runExecute(options.execute, options.cwd, logger)
+    }
+
     // Auto-install/update after writing
-    if (options.write && hasUpdates) {
+    if (options.write && didWrite) {
       if (options.update) {
         await runUpdate(options.cwd, packages, logger)
       } else if (options.install) {

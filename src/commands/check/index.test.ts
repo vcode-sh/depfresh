@@ -744,6 +744,47 @@ describe('--install flag', () => {
     expect(result).toBe(0)
     expect(execSyncMock).toHaveBeenCalled()
   })
+
+  it('does not run install when beforePackageWrite blocks all writes', async () => {
+    const pkg = makePkg('my-app')
+    pkg.packageManager = { name: 'pnpm', version: '9.0.0', raw: 'pnpm@9.0.0' }
+    loadPackagesMock.mockResolvedValue([pkg])
+    resolvePackageMock.mockResolvedValue([makeResolved({ diff: 'minor', targetVersion: '^1.1.0' })])
+
+    const { check } = await import('./index')
+    await check({
+      ...baseOptions,
+      write: true,
+      install: true,
+      beforePackageWrite: () => false,
+    })
+
+    expect(execSyncMock).not.toHaveBeenCalled()
+  })
+
+  it('does not run install when verify reverts all deps', async () => {
+    const pkg = makePkg('my-app')
+    pkg.packageManager = { name: 'pnpm', version: '9.0.0', raw: 'pnpm@9.0.0' }
+    loadPackagesMock.mockResolvedValue([pkg])
+    resolvePackageMock.mockResolvedValue([
+      makeResolved({ name: 'dep-a', diff: 'minor', targetVersion: '^1.1.0' }),
+    ])
+
+    execSyncMock.mockImplementation((cmd: string) => {
+      if (cmd === 'npm test') throw new Error('test failed')
+    })
+
+    const { check } = await import('./index')
+    await check({
+      ...baseOptions,
+      write: true,
+      install: true,
+      verifyCommand: 'npm test',
+    })
+
+    // verify command was called but install should not fire (0 applied)
+    expect(execSyncMock).not.toHaveBeenCalledWith('pnpm install', expect.anything())
+  })
 })
 
 describe('--verify-command flag', () => {
@@ -940,6 +981,294 @@ describe('--update flag', () => {
 
     const { check } = await import('./index')
     await check({ ...baseOptions, write: true, update: true })
+
+    expect(execSyncMock).not.toHaveBeenCalled()
+  })
+
+  it('does not run update when beforePackageWrite blocks all writes', async () => {
+    const pkg = makePkg('my-app')
+    pkg.packageManager = { name: 'npm', version: '10.0.0', raw: 'npm@10.0.0' }
+    loadPackagesMock.mockResolvedValue([pkg])
+    resolvePackageMock.mockResolvedValue([makeResolved({ diff: 'minor', targetVersion: '^1.1.0' })])
+
+    const { check } = await import('./index')
+    await check({
+      ...baseOptions,
+      write: true,
+      update: true,
+      beforePackageWrite: () => false,
+    })
+
+    expect(execSyncMock).not.toHaveBeenCalled()
+  })
+})
+
+describe('--execute flag', () => {
+  let loadPackagesMock: ReturnType<typeof vi.fn>
+  let resolvePackageMock: ReturnType<typeof vi.fn>
+  let execSyncMock: ReturnType<typeof vi.fn>
+  let existsSyncMock: ReturnType<typeof vi.fn>
+
+  beforeEach(async () => {
+    vi.clearAllMocks()
+    const packagesModule = await import('../../io/packages')
+    const resolveModule = await import('../../io/resolve')
+    const cp = await import('node:child_process')
+    const fs = await import('node:fs')
+    loadPackagesMock = packagesModule.loadPackages as ReturnType<typeof vi.fn>
+    resolvePackageMock = resolveModule.resolvePackage as ReturnType<typeof vi.fn>
+    execSyncMock = cp.execSync as ReturnType<typeof vi.fn>
+    existsSyncMock = fs.existsSync as ReturnType<typeof vi.fn>
+    existsSyncMock.mockReturnValue(false)
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('runs command after write', async () => {
+    const pkg = makePkg('my-app')
+    loadPackagesMock.mockResolvedValue([pkg])
+    resolvePackageMock.mockResolvedValue([makeResolved({ diff: 'minor', targetVersion: '^1.1.0' })])
+
+    const { check } = await import('./index')
+    await check({ ...baseOptions, write: true, execute: 'echo done' })
+
+    expect(execSyncMock).toHaveBeenCalledWith('echo done', {
+      cwd: '/tmp/test',
+      stdio: 'inherit',
+    })
+  })
+
+  it('does not run when write=false', async () => {
+    const pkg = makePkg('my-app')
+    loadPackagesMock.mockResolvedValue([pkg])
+    resolvePackageMock.mockResolvedValue([makeResolved({ diff: 'minor', targetVersion: '^1.1.0' })])
+
+    const { check } = await import('./index')
+    await check({ ...baseOptions, write: false, execute: 'echo done' })
+
+    expect(execSyncMock).not.toHaveBeenCalled()
+  })
+
+  it('does not run when no updates', async () => {
+    const pkg = makePkg('my-app')
+    loadPackagesMock.mockResolvedValue([pkg])
+    resolvePackageMock.mockResolvedValue([makeResolved({ diff: 'none', targetVersion: '^1.0.0' })])
+
+    const { check } = await import('./index')
+    await check({ ...baseOptions, write: true, execute: 'echo done' })
+
+    expect(execSyncMock).not.toHaveBeenCalled()
+  })
+
+  it('does not run when execute is undefined', async () => {
+    const pkg = makePkg('my-app')
+    loadPackagesMock.mockResolvedValue([pkg])
+    resolvePackageMock.mockResolvedValue([makeResolved({ diff: 'minor', targetVersion: '^1.1.0' })])
+
+    const { check } = await import('./index')
+    await check({ ...baseOptions, write: true })
+
+    expect(execSyncMock).not.toHaveBeenCalled()
+  })
+
+  it('does not run when execute is empty string', async () => {
+    const pkg = makePkg('my-app')
+    loadPackagesMock.mockResolvedValue([pkg])
+    resolvePackageMock.mockResolvedValue([makeResolved({ diff: 'minor', targetVersion: '^1.1.0' })])
+
+    const { check } = await import('./index')
+    await check({ ...baseOptions, write: true, execute: '' })
+
+    expect(execSyncMock).not.toHaveBeenCalled()
+  })
+
+  it('handles command failure gracefully', async () => {
+    const pkg = makePkg('my-app')
+    loadPackagesMock.mockResolvedValue([pkg])
+    resolvePackageMock.mockResolvedValue([makeResolved({ diff: 'minor', targetVersion: '^1.1.0' })])
+    execSyncMock.mockImplementation(() => {
+      throw new Error('command failed')
+    })
+
+    const { check } = await import('./index')
+    const result = await check({ ...baseOptions, write: true, execute: 'exit 1' })
+
+    expect(result).toBe(0)
+    expect(execSyncMock).toHaveBeenCalled()
+  })
+
+  it('runs before install', async () => {
+    const pkg = makePkg('my-app')
+    pkg.packageManager = { name: 'pnpm', version: '9.0.0', raw: 'pnpm@9.0.0' }
+    loadPackagesMock.mockResolvedValue([pkg])
+    resolvePackageMock.mockResolvedValue([makeResolved({ diff: 'minor', targetVersion: '^1.1.0' })])
+
+    const callOrder: string[] = []
+    execSyncMock.mockImplementation((cmd: string) => {
+      callOrder.push(cmd)
+    })
+
+    const { check } = await import('./index')
+    await check({ ...baseOptions, write: true, execute: 'echo done', install: true })
+
+    expect(callOrder[0]).toBe('echo done')
+    expect(callOrder[1]).toBe('pnpm install')
+  })
+
+  it('runs before update', async () => {
+    const pkg = makePkg('my-app')
+    pkg.packageManager = { name: 'npm', version: '10.0.0', raw: 'npm@10.0.0' }
+    loadPackagesMock.mockResolvedValue([pkg])
+    resolvePackageMock.mockResolvedValue([makeResolved({ diff: 'minor', targetVersion: '^1.1.0' })])
+
+    const callOrder: string[] = []
+    execSyncMock.mockImplementation((cmd: string) => {
+      callOrder.push(cmd)
+    })
+
+    const { check } = await import('./index')
+    await check({ ...baseOptions, write: true, execute: 'echo done', update: true })
+
+    expect(callOrder[0]).toBe('echo done')
+    expect(callOrder[1]).toBe('npm update')
+  })
+
+  it('install still runs when execute fails', async () => {
+    const pkg = makePkg('my-app')
+    pkg.packageManager = { name: 'pnpm', version: '9.0.0', raw: 'pnpm@9.0.0' }
+    loadPackagesMock.mockResolvedValue([pkg])
+    resolvePackageMock.mockResolvedValue([makeResolved({ diff: 'minor', targetVersion: '^1.1.0' })])
+
+    const callOrder: string[] = []
+    execSyncMock.mockImplementation((cmd: string) => {
+      callOrder.push(cmd)
+      if (cmd === 'bad-cmd') {
+        throw new Error('command not found')
+      }
+    })
+
+    const { check } = await import('./index')
+    const result = await check({
+      ...baseOptions,
+      write: true,
+      execute: 'bad-cmd',
+      install: true,
+    })
+
+    expect(result).toBe(0)
+    expect(callOrder).toEqual(['bad-cmd', 'pnpm install'])
+  })
+
+  it('runs exactly once with multiple packages', async () => {
+    const pkg1 = makePkg('app-a')
+    const pkg2 = makePkg('app-b')
+    const pkg3 = makePkg('app-c')
+    loadPackagesMock.mockResolvedValue([pkg1, pkg2, pkg3])
+    resolvePackageMock.mockResolvedValue([makeResolved({ diff: 'minor', targetVersion: '^1.1.0' })])
+
+    const executeCalls: string[] = []
+    execSyncMock.mockImplementation((cmd: string) => {
+      executeCalls.push(cmd)
+    })
+
+    const { check } = await import('./index')
+    await check({ ...baseOptions, write: true, execute: 'pnpm test' })
+
+    expect(executeCalls).toEqual(['pnpm test'])
+  })
+
+  it('does not run when beforePackageWrite blocks all writes', async () => {
+    const pkg = makePkg('my-app')
+    loadPackagesMock.mockResolvedValue([pkg])
+    resolvePackageMock.mockResolvedValue([makeResolved({ diff: 'minor', targetVersion: '^1.1.0' })])
+
+    const { check } = await import('./index')
+    await check({
+      ...baseOptions,
+      write: true,
+      execute: 'echo done',
+      beforePackageWrite: () => false,
+    })
+
+    // Nothing was actually written, so execute should not fire
+    expect(execSyncMock).not.toHaveBeenCalled()
+  })
+
+  it('does not run when verify reverts all deps', async () => {
+    const pkg = makePkg('my-app')
+    loadPackagesMock.mockResolvedValue([pkg])
+    resolvePackageMock.mockResolvedValue([
+      makeResolved({ name: 'dep-a', diff: 'minor', targetVersion: '^1.1.0' }),
+      makeResolved({ name: 'dep-b', diff: 'patch', targetVersion: '^1.0.1' }),
+    ])
+
+    // All deps fail verification
+    execSyncMock.mockImplementation((cmd: string) => {
+      if (cmd === 'npm test') throw new Error('test failed')
+    })
+
+    const { check } = await import('./index')
+    await check({
+      ...baseOptions,
+      write: true,
+      execute: 'echo done',
+      verifyCommand: 'npm test',
+    })
+
+    // verify command was called but execute should not fire (0 applied)
+    expect(execSyncMock).not.toHaveBeenCalledWith('echo done', expect.anything())
+  })
+
+  it('runs when verify applies at least one dep', async () => {
+    const pkg = makePkg('my-app')
+    loadPackagesMock.mockResolvedValue([pkg])
+    resolvePackageMock.mockResolvedValue([
+      makeResolved({ name: 'dep-a', diff: 'minor', targetVersion: '^1.1.0' }),
+      makeResolved({ name: 'dep-b', diff: 'patch', targetVersion: '^1.0.1' }),
+    ])
+
+    // First dep passes, second fails
+    let verifyCallCount = 0
+    execSyncMock.mockImplementation((cmd: string) => {
+      if (cmd === 'npm test') {
+        verifyCallCount++
+        if (verifyCallCount === 2) throw new Error('test failed')
+      }
+    })
+
+    const { check } = await import('./index')
+    await check({
+      ...baseOptions,
+      write: true,
+      execute: 'echo done',
+      verifyCommand: 'npm test',
+    })
+
+    // One dep applied, so execute should fire
+    expect(execSyncMock).toHaveBeenCalledWith('echo done', {
+      cwd: '/tmp/test',
+      stdio: 'inherit',
+    })
+  })
+
+  it('does not run when interactive selects nothing', async () => {
+    const pkg = makePkg('my-app')
+    loadPackagesMock.mockResolvedValue([pkg])
+    resolvePackageMock.mockResolvedValue([makeResolved({ diff: 'minor', targetVersion: '^1.1.0' })])
+
+    vi.doMock('./interactive', () => ({
+      runInteractive: vi.fn().mockResolvedValue([]),
+    }))
+
+    const { check } = await import('./index')
+    await check({
+      ...baseOptions,
+      write: true,
+      interactive: true,
+      execute: 'echo done',
+    })
 
     expect(execSyncMock).not.toHaveBeenCalled()
   })

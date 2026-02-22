@@ -50,7 +50,6 @@ describe('loadNpmrc npm_config_userconfig', () => {
       ['NPM_CONFIG_REGISTRY', savedRegistryUpper],
     ] as const) {
       if (val === undefined) {
-        // biome-ignore lint/performance/noDelete: must actually remove env var, not set to "undefined"
         delete process.env[key]
       } else {
         process.env[key] = val

@@ -156,6 +156,7 @@ export interface BumpOptions {
   // Post-write
   install: boolean
   update: boolean
+  execute?: string
   verifyCommand?: string
 
   // Callbacks

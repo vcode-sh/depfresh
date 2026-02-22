@@ -2,6 +2,19 @@
 
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Semver because I'm not a psychopath.
 
+## [0.6.0] - 2026-02-22
+
+The "run whatever you want after" release. One feature. Clean. Surgical. No scope creep. The antithesis of every sprint planning meeting you've ever attended.
+
+### Fixed
+
+- **Post-write hooks false positives** -- `--execute`, `--install`, and `--update` hooks fired when updates were *detected* but never actually *written*. Three scenarios: `beforePackageWrite` returns `false` for all packages, interactive mode with 0 selections, or `--verify-command` reverts every dep. Hooks now track whether anything was actually written to disk. Exit code logic unchanged -- still reports updates available when they exist, even if you chose not to write them. The kind of bug that only bites you at 2am when you're wondering why your post-update script ran on an untouched codebase.
+
+### Added
+
+- **Execute command** (`--execute` / `-e`) -- runs any shell command once after all packages are written. `bump -w --execute "pnpm test"` updates your deps then runs your tests. `bump -w --execute "git add -A && git commit -m 'chore: deps'"` for the dangerously automated. Runs before `--install`/`--update` so your custom command operates on freshly written files before lockfile regeneration. If the command fails, bump logs it and moves on -- your deps were already updated, the command is a bonus. Different from `--verify-command` which runs per-dep with rollback. This one is fire-and-forget, post-write, no safety net. You asked for it.
+- 18 new tests (367 -> 385 total). Guards: skips on no write, no updates, undefined, empty string. Order: runs before install, runs before update. Isolation: execute failure doesn't block install. Scope: runs exactly once across multiple packages. Edge case: fires even when `beforePackageWrite` blocks all writes (consistent with install/update). All passing.
+
 ## [0.5.0] - 2026-02-22
 
 The "I trust nothing" release. Four features that let you verify every single dependency update before committing, manage global packages like a real CLI should, and group your interactive selections so you can actually see what you're about to break. 41 new tests because paranoia is a feature, not a bug. 367 total. At this point the tests outnumber the lines they're testing.
@@ -133,6 +146,7 @@ First release. Wrote it from scratch because waiting for PRs to get merged in ta
 - TTY detection. No spinners in your CI logs. `NO_COLOR` respected.
 - 54 tests. More than some production apps I've seen.
 
+[0.6.0]: https://github.com/vcode-sh/bump/releases/tag/v0.6.0
 [0.5.0]: https://github.com/vcode-sh/bump/releases/tag/v0.5.0
 [0.4.0]: https://github.com/vcode-sh/bump/releases/tag/v0.4.0
 [0.3.0]: https://github.com/vcode-sh/bump/releases/tag/v0.3.0

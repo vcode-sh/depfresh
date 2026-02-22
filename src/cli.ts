@@ -175,6 +175,11 @@ const main = defineCommand({
       description: 'Run package manager update instead of install after writing',
       default: false,
     },
+    execute: {
+      type: 'string',
+      alias: 'e',
+      description: 'Run command after writing updates (e.g. "pnpm test")',
+    },
     'verify-command': {
       type: 'string',
       alias: 'V',
@@ -229,6 +234,7 @@ const main = defineCommand({
         long: args.long,
         install: args.install,
         update: args.update,
+        execute: args.execute,
         verifyCommand: args['verify-command'],
       })
 

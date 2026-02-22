@@ -79,6 +79,49 @@ bump --deps-only
 | `--dev-only` | — | `false` | Only check devDependencies |
 | `--global` | `-g` | `false` | Check global packages |
 | `--loglevel` | — | `info` | Log level: `silent` `info` `debug` |
+| `--execute` | `-e` | — | Run command after writing (e.g. `"pnpm test"`) |
+
+## Post-write Hooks
+
+Run commands after bump writes your updated dependencies. Because updating deps is only half the job.
+
+### `--execute`
+
+```bash
+# Run tests after updating
+bump -w --execute "pnpm test"
+
+# Reinstall and rebuild
+bump -w --execute "pnpm install && pnpm build"
+
+# Commit the changes
+bump -w --execute "git add -A && git commit -m 'chore: update deps'"
+
+# Chain it all
+bump -w --execute "pnpm install" --install
+```
+
+The command runs once after all packages are written. If it fails, bump logs the error but still exits 0 -- your deps were already updated successfully, the command is a bonus.
+
+### `--install` / `--update`
+
+Convenience flags that auto-detect your package manager and run `install` or `update` after writing.
+
+```bash
+bump -w --install    # runs pnpm/npm/yarn/bun install
+bump -w --update     # runs pnpm/npm/yarn/bun update
+```
+
+### In config
+
+```typescript
+import { defineConfig } from 'bump-cli'
+
+export default defineConfig({
+  write: true,
+  execute: 'pnpm install && pnpm test',
+})
+```
 
 ## Config File
 
