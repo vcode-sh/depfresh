@@ -5,7 +5,7 @@ import { join } from 'pathe'
 import { createSqliteCache } from '../../cache/index'
 import { loadPackages } from '../../io/packages'
 import { resolvePackage } from '../../io/resolve'
-import { writePackage } from '../../io/write'
+import { backupPackageFiles, restorePackageFiles, writePackage } from '../../io/write'
 import type {
   BumpOptions,
   DiffType,
@@ -44,6 +44,47 @@ interface JsonOutput {
     cwd: string
     mode: string
     timestamp: string
+  }
+}
+
+async function verifyAndWrite(
+  pkg: PackageMeta,
+  changes: ResolvedDepChange[],
+  verifyCommand: string,
+  logger: Logger,
+): Promise<{ applied: number; reverted: number }> {
+  let applied = 0
+  let reverted = 0
+
+  for (const change of changes) {
+    const backups = backupPackageFiles(pkg)
+
+    // Write single dep
+    writePackage(pkg, [change], 'silent')
+
+    try {
+      execSync(verifyCommand, { cwd: pkg.filepath.replace(/\/[^/]+$/, ''), stdio: 'pipe' })
+      applied++
+      logger.success(`  ${change.name} ${change.currentVersion} → ${change.targetVersion} ✓`)
+    } catch {
+      restorePackageFiles(backups)
+      reverted++
+      logger.warn(
+        `  ${change.name} ${change.currentVersion} → ${change.targetVersion} ✗ (reverted)`,
+      )
+    }
+  }
+
+  return { applied, reverted }
+}
+
+async function runUpdate(cwd: string, packages: PackageMeta[], logger: Logger): Promise<void> {
+  const pm = detectPackageManager(cwd, packages)
+  try {
+    logger.info(`Running ${pm} update...`)
+    execSync(`${pm} update`, { cwd, stdio: 'inherit' })
+  } catch {
+    logger.error(`${pm} update failed`)
   }
 }
 
@@ -134,14 +175,36 @@ export async function check(options: BumpOptions): Promise<number> {
           if (options.write) {
             const shouldWrite = (await options.beforePackageWrite?.(pkg)) ?? true
             if (shouldWrite) {
-              writePackage(pkg, selected, options.loglevel)
+              if (options.verifyCommand) {
+                const result = await verifyAndWrite(pkg, selected, options.verifyCommand, logger)
+                logger.info(`  Verify: ${result.applied} applied, ${result.reverted} reverted`)
+              } else if (pkg.type === 'global') {
+                const { writeGlobalPackage } = await import('../../io/global')
+                const pmName = pkg.filepath.replace('global:', '') as PackageManagerName
+                for (const change of selected) {
+                  writeGlobalPackage(pmName, change.name, change.targetVersion)
+                }
+              } else {
+                writePackage(pkg, selected, options.loglevel)
+              }
               options.afterPackageWrite?.(pkg)
             }
           }
         } else if (options.write) {
           const shouldWrite = (await options.beforePackageWrite?.(pkg)) ?? true
           if (shouldWrite) {
-            writePackage(pkg, updates, options.loglevel)
+            if (options.verifyCommand) {
+              const result = await verifyAndWrite(pkg, updates, options.verifyCommand, logger)
+              logger.info(`  Verify: ${result.applied} applied, ${result.reverted} reverted`)
+            } else if (pkg.type === 'global') {
+              const { writeGlobalPackage } = await import('../../io/global')
+              const pmName = pkg.filepath.replace('global:', '') as PackageManagerName
+              for (const change of updates) {
+                writeGlobalPackage(pmName, change.name, change.targetVersion)
+              }
+            } else {
+              writePackage(pkg, updates, options.loglevel)
+            }
             options.afterPackageWrite?.(pkg)
           }
         }
@@ -164,9 +227,13 @@ export async function check(options: BumpOptions): Promise<number> {
       logger.debug(`Cache stats: ${stats.hits} hits, ${stats.misses} misses, ${stats.size} entries`)
     }
 
-    // Auto-install after writing
-    if (options.install && options.write && hasUpdates) {
-      await runInstall(options.cwd, packages, logger)
+    // Auto-install/update after writing
+    if (options.write && hasUpdates) {
+      if (options.update) {
+        await runUpdate(options.cwd, packages, logger)
+      } else if (options.install) {
+        await runInstall(options.cwd, packages, logger)
+      }
     }
 
     // Print single JSON envelope at the end

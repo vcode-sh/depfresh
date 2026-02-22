@@ -59,6 +59,7 @@ function makeOptions(overrides: Partial<BumpOptions> = {}): BumpOptions {
     nodecompat: true,
     long: false,
     install: false,
+    update: false,
     ...overrides,
   }
 }

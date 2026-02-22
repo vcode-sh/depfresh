@@ -1,6 +1,7 @@
 export { check } from './commands/check/index'
 export { resolveConfig } from './config'
 export { parseDependencies } from './io/dependencies'
+export { loadGlobalPackages, writeGlobalPackage } from './io/global'
 export { loadPackages } from './io/packages'
 export { resolvePackage } from './io/resolve'
 export { writePackage } from './io/write'

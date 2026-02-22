@@ -155,6 +155,8 @@ export interface BumpOptions {
 
   // Post-write
   install: boolean
+  update: boolean
+  verifyCommand?: string
 
   // Callbacks
   beforePackageStart?: (pkg: PackageMeta) => void | Promise<void>
@@ -208,4 +210,5 @@ export const DEFAULT_OPTIONS: Partial<BumpOptions> = {
   nodecompat: true,
   long: false,
   install: false,
+  update: false,
 }

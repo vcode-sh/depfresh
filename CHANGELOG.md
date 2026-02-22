@@ -2,6 +2,19 @@
 
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Semver because I'm not a psychopath.
 
+## [0.5.0] - 2026-02-22
+
+The "I trust nothing" release. Four features that let you verify every single dependency update before committing, manage global packages like a real CLI should, and group your interactive selections so you can actually see what you're about to break. 41 new tests because paranoia is a feature, not a bug. 367 total. At this point the tests outnumber the lines they're testing.
+
+### Added
+
+- **Enhanced interactive mode** -- `p.groupMultiselect` replaces the flat list. Dependencies grouped by severity: major (red), minor (yellow), patch (green). Click a group header to select/deselect all. Because scrolling through 47 deps in a flat list is not "interactive", it's "punishment". Falls back to flat multiselect for edge cases.
+- **Global package support** (`--global` / `-g`) -- checks npm, pnpm, or bun global packages. Auto-detects your package manager. `bump -g` lists outdated globals, `bump -gw` updates them. Parses three different output formats because every PM had to be special. Yarn skipped because Berry deprecated global packages and I respect that decision more than they do.
+- **Verify command** (`--verify-command` / `-V`) -- runs a command after each individual dep update. Fails? Reverts. Passes? Keeps it. `bump -w -V "pnpm test"` updates one dep at a time, runs your tests, and rolls back the ones that break. Bisecting dependency issues manually is for people who enjoy suffering.
+- **Update flag** (`--update` / `-u`) -- runs `pm update` instead of `pm install` after writing. Takes precedence over `--install`. For when you want your lockfile to actually reflect what you just changed instead of optimistically hoping `install` figures it out.
+- **Backup and restore** -- `backupPackageFiles()` and `restorePackageFiles()` exported from the write module. Captures file contents before mutations, restores on failure. Powers the verify flow but available for API users who enjoy living dangerously.
+- 41 new tests (326 -> 367 total, 16 -> 18 test files). Interactive tests mock @clack/prompts. Global tests mock child_process. Verify tests mock the entire write pipeline. All passing. All colocated.
+
 ## [0.4.0] - 2026-02-22
 
 The "trust issues" release. Provenance tracking, Node engine compatibility, auto-install, and seven other features I implemented because taze had 28 open issues and 14 unmerged PRs collecting dust. 326 tests now. More tests than some companies have engineers.
@@ -120,6 +133,7 @@ First release. Wrote it from scratch because waiting for PRs to get merged in ta
 - TTY detection. No spinners in your CI logs. `NO_COLOR` respected.
 - 54 tests. More than some production apps I've seen.
 
+[0.5.0]: https://github.com/vcode-sh/bump/releases/tag/v0.5.0
 [0.4.0]: https://github.com/vcode-sh/bump/releases/tag/v0.4.0
 [0.3.0]: https://github.com/vcode-sh/bump/releases/tag/v0.3.0
 [0.2.0]: https://github.com/vcode-sh/bump/releases/tag/v0.2.0

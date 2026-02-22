@@ -13,6 +13,8 @@ vi.mock('../../io/resolve', () => ({
 
 vi.mock('../../io/write', () => ({
   writePackage: vi.fn(),
+  backupPackageFiles: vi.fn(() => [{ filepath: '/tmp/test/package.json', content: '{}' }]),
+  restorePackageFiles: vi.fn(),
 }))
 
 vi.mock('../../cache/index', () => ({
@@ -40,6 +42,10 @@ vi.mock('node:child_process', () => ({
 
 vi.mock('node:fs', () => ({
   existsSync: vi.fn(() => false),
+}))
+
+vi.mock('../../io/global', () => ({
+  writeGlobalPackage: vi.fn(),
 }))
 
 const baseOptions: BumpOptions = {
@@ -737,5 +743,320 @@ describe('--install flag', () => {
     // Exit code should be 0 (write succeeded), not affected by install failure
     expect(result).toBe(0)
     expect(execSyncMock).toHaveBeenCalled()
+  })
+})
+
+describe('--verify-command flag', () => {
+  let loadPackagesMock: ReturnType<typeof vi.fn>
+  let resolvePackageMock: ReturnType<typeof vi.fn>
+  let writePackageMock: ReturnType<typeof vi.fn>
+  let execSyncMock: ReturnType<typeof vi.fn>
+  let backupPackageFilesMock: ReturnType<typeof vi.fn>
+  let restorePackageFilesMock: ReturnType<typeof vi.fn>
+
+  beforeEach(async () => {
+    vi.clearAllMocks()
+    const packagesModule = await import('../../io/packages')
+    const resolveModule = await import('../../io/resolve')
+    const writeModule = await import('../../io/write')
+    const cp = await import('node:child_process')
+    loadPackagesMock = packagesModule.loadPackages as ReturnType<typeof vi.fn>
+    resolvePackageMock = resolveModule.resolvePackage as ReturnType<typeof vi.fn>
+    writePackageMock = writeModule.writePackage as ReturnType<typeof vi.fn>
+    execSyncMock = cp.execSync as ReturnType<typeof vi.fn>
+    backupPackageFilesMock = writeModule.backupPackageFiles as ReturnType<typeof vi.fn>
+    restorePackageFilesMock = writeModule.restorePackageFiles as ReturnType<typeof vi.fn>
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('writes deps one at a time and runs verify command', async () => {
+    const pkg = makePkg('my-app')
+    const dep1 = makeResolved({ name: 'dep-a', diff: 'minor', targetVersion: '^1.1.0' })
+    const dep2 = makeResolved({ name: 'dep-b', diff: 'patch', targetVersion: '^1.0.1' })
+    loadPackagesMock.mockResolvedValue([pkg])
+    resolvePackageMock.mockResolvedValue([dep1, dep2])
+
+    const { check } = await import('./index')
+    await check({ ...baseOptions, write: true, verifyCommand: 'npm test' })
+
+    // writePackage called once per dep (one at a time)
+    expect(writePackageMock).toHaveBeenCalledTimes(2)
+    expect(writePackageMock).toHaveBeenCalledWith(pkg, [dep1], 'silent')
+    expect(writePackageMock).toHaveBeenCalledWith(pkg, [dep2], 'silent')
+
+    // verify command called for each dep
+    expect(execSyncMock).toHaveBeenCalledTimes(2)
+    expect(execSyncMock).toHaveBeenCalledWith(
+      'npm test',
+      expect.objectContaining({ stdio: 'pipe' }),
+    )
+  })
+
+  it('reverts on verify command failure and continues', async () => {
+    const pkg = makePkg('my-app')
+    const dep1 = makeResolved({ name: 'dep-a', diff: 'minor', targetVersion: '^1.1.0' })
+    const dep2 = makeResolved({ name: 'dep-b', diff: 'patch', targetVersion: '^1.0.1' })
+    loadPackagesMock.mockResolvedValue([pkg])
+    resolvePackageMock.mockResolvedValue([dep1, dep2])
+
+    // First dep fails verify, second succeeds
+    execSyncMock
+      .mockImplementationOnce(() => {
+        throw new Error('test failed')
+      })
+      .mockImplementationOnce(() => {})
+
+    const { check } = await import('./index')
+    await check({ ...baseOptions, write: true, verifyCommand: 'npm test' })
+
+    // restore called for the failed dep
+    expect(restorePackageFilesMock).toHaveBeenCalledTimes(1)
+    // backup called for both deps
+    expect(backupPackageFilesMock).toHaveBeenCalledTimes(2)
+    // writePackage still called for both (tried both)
+    expect(writePackageMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('reports applied and reverted counts', async () => {
+    const pkg = makePkg('my-app')
+    const dep1 = makeResolved({ name: 'dep-a', diff: 'minor', targetVersion: '^1.1.0' })
+    const dep2 = makeResolved({ name: 'dep-b', diff: 'patch', targetVersion: '^1.0.1' })
+    const dep3 = makeResolved({ name: 'dep-c', diff: 'major', targetVersion: '^2.0.0' })
+    loadPackagesMock.mockResolvedValue([pkg])
+    resolvePackageMock.mockResolvedValue([dep1, dep2, dep3])
+
+    // First succeeds, second fails, third succeeds
+    execSyncMock
+      .mockImplementationOnce(() => {})
+      .mockImplementationOnce(() => {
+        throw new Error('test failed')
+      })
+      .mockImplementationOnce(() => {})
+
+    const { check } = await import('./index')
+    const result = await check({ ...baseOptions, write: true, verifyCommand: 'npm test' })
+
+    // 2 applied, 1 reverted — still returns 0 because write=true
+    expect(result).toBe(0)
+    expect(restorePackageFilesMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('works with interactive mode too', async () => {
+    const pkg = makePkg('my-app')
+    const dep1 = makeResolved({ name: 'dep-a', diff: 'minor', targetVersion: '^1.1.0' })
+    loadPackagesMock.mockResolvedValue([pkg])
+    resolvePackageMock.mockResolvedValue([dep1])
+
+    // Mock interactive module
+    vi.doMock('./interactive', () => ({
+      runInteractive: vi.fn().mockResolvedValue([dep1]),
+    }))
+
+    const { check } = await import('./index')
+    await check({ ...baseOptions, write: true, interactive: true, verifyCommand: 'npm test' })
+
+    // Should still use verify flow
+    expect(backupPackageFilesMock).toHaveBeenCalled()
+    expect(execSyncMock).toHaveBeenCalledWith(
+      'npm test',
+      expect.objectContaining({ stdio: 'pipe' }),
+    )
+  })
+})
+
+describe('--update flag', () => {
+  let loadPackagesMock: ReturnType<typeof vi.fn>
+  let resolvePackageMock: ReturnType<typeof vi.fn>
+  let execSyncMock: ReturnType<typeof vi.fn>
+  let existsSyncMock: ReturnType<typeof vi.fn>
+
+  beforeEach(async () => {
+    vi.clearAllMocks()
+    const packagesModule = await import('../../io/packages')
+    const resolveModule = await import('../../io/resolve')
+    const cp = await import('node:child_process')
+    const fs = await import('node:fs')
+    loadPackagesMock = packagesModule.loadPackages as ReturnType<typeof vi.fn>
+    resolvePackageMock = resolveModule.resolvePackage as ReturnType<typeof vi.fn>
+    execSyncMock = cp.execSync as ReturnType<typeof vi.fn>
+    existsSyncMock = fs.existsSync as ReturnType<typeof vi.fn>
+    existsSyncMock.mockReturnValue(false)
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('runs pm update when update=true and write=true', async () => {
+    const pkg = makePkg('my-app')
+    pkg.packageManager = { name: 'pnpm', version: '9.0.0', raw: 'pnpm@9.0.0' }
+    loadPackagesMock.mockResolvedValue([pkg])
+    resolvePackageMock.mockResolvedValue([makeResolved({ diff: 'minor', targetVersion: '^1.1.0' })])
+
+    const { check } = await import('./index')
+    await check({ ...baseOptions, write: true, update: true })
+
+    expect(execSyncMock).toHaveBeenCalledWith('pnpm update', {
+      cwd: '/tmp/test',
+      stdio: 'inherit',
+    })
+  })
+
+  it('does not run update when write=false', async () => {
+    const pkg = makePkg('my-app')
+    loadPackagesMock.mockResolvedValue([pkg])
+    resolvePackageMock.mockResolvedValue([makeResolved({ diff: 'minor', targetVersion: '^1.1.0' })])
+
+    const { check } = await import('./index')
+    await check({ ...baseOptions, write: false, update: true })
+
+    expect(execSyncMock).not.toHaveBeenCalled()
+  })
+
+  it('update takes precedence over install', async () => {
+    const pkg = makePkg('my-app')
+    pkg.packageManager = { name: 'npm', version: '10.0.0', raw: 'npm@10.0.0' }
+    loadPackagesMock.mockResolvedValue([pkg])
+    resolvePackageMock.mockResolvedValue([makeResolved({ diff: 'minor', targetVersion: '^1.1.0' })])
+
+    const { check } = await import('./index')
+    await check({ ...baseOptions, write: true, update: true, install: true })
+
+    // Should run update, not install
+    expect(execSyncMock).toHaveBeenCalledWith('npm update', {
+      cwd: '/tmp/test',
+      stdio: 'inherit',
+    })
+    expect(execSyncMock).not.toHaveBeenCalledWith('npm install', expect.anything())
+  })
+
+  it('does not run update when no updates', async () => {
+    const pkg = makePkg('my-app')
+    loadPackagesMock.mockResolvedValue([pkg])
+    resolvePackageMock.mockResolvedValue([makeResolved({ diff: 'none', targetVersion: '^1.0.0' })])
+
+    const { check } = await import('./index')
+    await check({ ...baseOptions, write: true, update: true })
+
+    expect(execSyncMock).not.toHaveBeenCalled()
+  })
+})
+
+describe('global write dispatch', () => {
+  let loadPackagesMock: ReturnType<typeof vi.fn>
+  let resolvePackageMock: ReturnType<typeof vi.fn>
+  let writePackageMock: ReturnType<typeof vi.fn>
+  let writeGlobalPackageMock: ReturnType<typeof vi.fn>
+
+  beforeEach(async () => {
+    vi.clearAllMocks()
+    const packagesModule = await import('../../io/packages')
+    const resolveModule = await import('../../io/resolve')
+    const writeModule = await import('../../io/write')
+    const globalModule = await import('../../io/global')
+    loadPackagesMock = packagesModule.loadPackages as ReturnType<typeof vi.fn>
+    resolvePackageMock = resolveModule.resolvePackage as ReturnType<typeof vi.fn>
+    writePackageMock = writeModule.writePackage as ReturnType<typeof vi.fn>
+    writeGlobalPackageMock = globalModule.writeGlobalPackage as ReturnType<typeof vi.fn>
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('calls writeGlobalPackage for global type packages', async () => {
+    const pkg: PackageMeta = {
+      name: 'Global packages',
+      type: 'global',
+      filepath: 'global:npm',
+      deps: [
+        {
+          name: 'typescript',
+          currentVersion: '5.0.0',
+          source: 'dependencies',
+          update: true,
+          parents: [],
+        },
+      ],
+      resolved: [],
+      raw: {},
+      indent: '  ',
+    }
+    loadPackagesMock.mockResolvedValue([pkg])
+    resolvePackageMock.mockResolvedValue([
+      makeResolved({
+        name: 'typescript',
+        diff: 'major',
+        currentVersion: '5.0.0',
+        targetVersion: '6.0.0',
+      }),
+    ])
+
+    const { check } = await import('./index')
+    await check({ ...baseOptions, write: true })
+
+    expect(writeGlobalPackageMock).toHaveBeenCalledWith('npm', 'typescript', '6.0.0')
+    expect(writePackageMock).not.toHaveBeenCalled()
+  })
+
+  it('extracts PM name from filepath (global:pnpm -> pnpm)', async () => {
+    const pkg: PackageMeta = {
+      name: 'Global packages',
+      type: 'global',
+      filepath: 'global:pnpm',
+      deps: [
+        {
+          name: 'eslint',
+          currentVersion: '8.0.0',
+          source: 'dependencies',
+          update: true,
+          parents: [],
+        },
+      ],
+      resolved: [],
+      raw: {},
+      indent: '  ',
+    }
+    loadPackagesMock.mockResolvedValue([pkg])
+    resolvePackageMock.mockResolvedValue([
+      makeResolved({
+        name: 'eslint',
+        diff: 'major',
+        currentVersion: '8.0.0',
+        targetVersion: '9.0.0',
+      }),
+    ])
+
+    const { check } = await import('./index')
+    await check({ ...baseOptions, write: true })
+
+    expect(writeGlobalPackageMock).toHaveBeenCalledWith('pnpm', 'eslint', '9.0.0')
+  })
+
+  it('skips regular writePackage for global type', async () => {
+    const globalPkg: PackageMeta = {
+      name: 'Global packages',
+      type: 'global',
+      filepath: 'global:bun',
+      deps: [
+        { name: 'tsx', currentVersion: '4.0.0', source: 'dependencies', update: true, parents: [] },
+      ],
+      resolved: [],
+      raw: {},
+      indent: '  ',
+    }
+    loadPackagesMock.mockResolvedValue([globalPkg])
+    resolvePackageMock.mockResolvedValue([
+      makeResolved({ name: 'tsx', diff: 'minor', currentVersion: '4.0.0', targetVersion: '4.1.0' }),
+    ])
+
+    const { check } = await import('./index')
+    await check({ ...baseOptions, write: true })
+
+    expect(writeGlobalPackageMock).toHaveBeenCalledWith('bun', 'tsx', '4.1.0')
+    expect(writePackageMock).not.toHaveBeenCalled()
   })
 })

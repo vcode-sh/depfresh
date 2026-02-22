@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { BumpOptions } from '../types'
 import { DEFAULT_OPTIONS } from '../types'
 import { loadPackages, parsePackageManagerField } from './packages'
@@ -118,6 +118,61 @@ describe('loadPackages', () => {
       hash: undefined,
       raw: 'pnpm@9.0.0',
     })
+  })
+})
+
+describe('loadPackages with global flag', () => {
+  it('returns global packages when global=true', async () => {
+    vi.doMock('./global', () => ({
+      loadGlobalPackages: () => [
+        {
+          name: 'Global packages',
+          type: 'global',
+          filepath: 'global:npm',
+          deps: [
+            {
+              name: 'typescript',
+              currentVersion: '5.3.3',
+              source: 'dependencies',
+              update: true,
+              parents: [],
+            },
+          ],
+          resolved: [],
+          raw: {},
+          indent: '  ',
+        },
+      ],
+    }))
+
+    const packages = await loadPackages({
+      ...baseOptions,
+      global: true,
+      loglevel: 'silent',
+    })
+
+    expect(packages).toHaveLength(1)
+    expect(packages[0]?.type).toBe('global')
+    expect(packages[0]?.name).toBe('Global packages')
+
+    vi.doUnmock('./global')
+  })
+
+  it('skips filesystem scan when global=true', async () => {
+    vi.doMock('./global', () => ({
+      loadGlobalPackages: () => [],
+    }))
+
+    const packages = await loadPackages({
+      ...baseOptions,
+      global: true,
+      loglevel: 'silent',
+    })
+
+    // Should return empty from global, not scan filesystem
+    expect(packages).toEqual([])
+
+    vi.doUnmock('./global')
   })
 })
 

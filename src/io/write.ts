@@ -6,6 +6,39 @@ import { bunCatalogLoader } from './catalogs/bun'
 import { pnpmCatalogLoader } from './catalogs/pnpm'
 import { yarnCatalogLoader } from './catalogs/yarn'
 
+export interface FileBackup {
+  filepath: string
+  content: string
+}
+
+export function backupPackageFiles(pkg: PackageMeta): FileBackup[] {
+  const backups: FileBackup[] = []
+
+  // Backup main package file
+  backups.push({
+    filepath: pkg.filepath,
+    content: readFileSync(pkg.filepath, 'utf-8'),
+  })
+
+  // Backup catalog files if present
+  if (pkg.catalogs?.length) {
+    for (const catalog of pkg.catalogs) {
+      backups.push({
+        filepath: catalog.filepath,
+        content: readFileSync(catalog.filepath, 'utf-8'),
+      })
+    }
+  }
+
+  return backups
+}
+
+export function restorePackageFiles(backups: FileBackup[]): void {
+  for (const backup of backups) {
+    writeFileSync(backup.filepath, backup.content, 'utf-8')
+  }
+}
+
 /**
  * Single-writer architecture: reads once, applies all mutations, writes once.
  * Never allow independent writers to clobber each other.

@@ -9,6 +9,17 @@ import { parseDependencies } from './dependencies'
 
 export async function loadPackages(options: BumpOptions): Promise<PackageMeta[]> {
   const logger = createLogger(options.loglevel)
+
+  // Global packages mode — skip filesystem scan
+  if (options.global) {
+    const { loadGlobalPackages } = await import('./global')
+    const packages = loadGlobalPackages()
+    logger.info(
+      `Found ${packages.length} packages with ${packages.reduce((sum, p) => sum + p.deps.length, 0)} dependencies`,
+    )
+    return packages
+  }
+
   const packages: PackageMeta[] = []
 
   // Find all package files

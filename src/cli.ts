@@ -169,6 +169,17 @@ const main = defineCommand({
       description: 'Run package manager install after writing',
       default: false,
     },
+    update: {
+      type: 'boolean',
+      alias: 'u',
+      description: 'Run package manager update instead of install after writing',
+      default: false,
+    },
+    'verify-command': {
+      type: 'string',
+      alias: 'V',
+      description: 'Run command after each dep update, revert on failure',
+    },
   },
   async run({ args }) {
     try {
@@ -217,6 +228,8 @@ const main = defineCommand({
         nodecompat: args.nodecompat,
         long: args.long,
         install: args.install,
+        update: args.update,
+        verifyCommand: args['verify-command'],
       })
 
       const exitCode = await check(options)
