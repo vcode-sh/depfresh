@@ -1,5 +1,3 @@
-import type { Agent } from 'undici'
-
 export type RangeMode = 'default' | 'major' | 'minor' | 'patch' | 'latest' | 'newest' | 'next'
 
 export type DiffType = 'major' | 'minor' | 'patch' | 'none' | 'error'
@@ -74,7 +72,13 @@ export interface CatalogSource {
   indent: string
 }
 
-export type PackageType = 'package.json' | 'package.yaml' | 'pnpm-workspace' | 'bun-workspace' | 'yarn-workspace' | 'global'
+export type PackageType =
+  | 'package.json'
+  | 'package.yaml'
+  | 'pnpm-workspace'
+  | 'bun-workspace'
+  | 'yarn-workspace'
+  | 'global'
 
 export interface PackageMeta {
   name: string
@@ -137,7 +141,6 @@ export interface NpmrcConfig {
   httpsProxy?: string
   strictSsl: boolean
   cafile?: string
-  agent?: Agent
 }
 
 export const DEFAULT_OPTIONS: Partial<BumpOptions> = {
@@ -157,10 +160,5 @@ export const DEFAULT_OPTIONS: Partial<BumpOptions> = {
   loglevel: 'info',
   peer: false,
   global: false,
-  ignorePaths: [
-    '**/node_modules/**',
-    '**/dist/**',
-    '**/coverage/**',
-    '**/.git/**',
-  ],
+  ignorePaths: ['**/node_modules/**', '**/dist/**', '**/coverage/**', '**/.git/**'],
 }

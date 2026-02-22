@@ -32,7 +32,7 @@ export function getMaxVersion(versions: string[]): string | null {
 export function getDiff(current: string, target: string): DiffType {
   const c = semver.coerce(current)
   const t = semver.coerce(target)
-  if (!c || !t) return 'error'
+  if (!(c && t)) return 'error'
 
   if (semver.eq(c, t)) return 'none'
 
@@ -57,8 +57,6 @@ export function resolveTargetVersion(
   distTags: Record<string, string>,
   mode: RangeMode,
 ): string | null {
-  const prefix = getVersionPrefix(currentVersion)
-
   switch (mode) {
     case 'latest':
       return distTags.latest ?? null
@@ -92,8 +90,6 @@ export function resolveTargetVersion(
       })
       return getMaxVersion(patch)
     }
-
-    case 'default':
     default:
       return getMaxSatisfying(versions, currentVersion) ?? distTags.latest ?? null
   }

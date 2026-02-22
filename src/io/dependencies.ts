@@ -8,11 +8,7 @@ const DEP_FIELDS: DepFieldType[] = [
   'optionalDependencies',
 ]
 
-const OVERRIDE_FIELDS: DepFieldType[] = [
-  'overrides',
-  'resolutions',
-  'pnpm.overrides',
-]
+const OVERRIDE_FIELDS: DepFieldType[] = ['overrides', 'resolutions', 'pnpm.overrides']
 
 export function isDepFieldEnabled(field: DepFieldType, options: BumpOptions): boolean {
   if (options.depFields?.[field] === false) return false
@@ -20,10 +16,7 @@ export function isDepFieldEnabled(field: DepFieldType, options: BumpOptions): bo
   return true
 }
 
-export function parseDependencies(
-  raw: Record<string, unknown>,
-  options: BumpOptions,
-): RawDep[] {
+export function parseDependencies(raw: Record<string, unknown>, options: BumpOptions): RawDep[] {
   const deps: RawDep[] = []
 
   // Standard dependency fields
@@ -36,13 +29,14 @@ export function parseDependencies(
     for (const [name, version] of Object.entries(section as Record<string, string>)) {
       if (shouldSkipDependency(name, version, options)) continue
 
+      const protocol = parseProtocol(version)
       deps.push({
         name,
-        currentVersion: version,
+        currentVersion: protocol.currentVersion,
         source: field,
-        update: !isLocked(version) || options.includeLocked,
+        update: !isLocked(protocol.currentVersion) || options.includeLocked,
         parents: [],
-        ...parseProtocol(version),
+        protocol: protocol.protocol,
       })
     }
   }
@@ -60,11 +54,7 @@ export function parseDependencies(
   return deps
 }
 
-function shouldSkipDependency(
-  name: string,
-  version: string,
-  options: BumpOptions,
-): boolean {
+function shouldSkipDependency(name: string, version: string, options: BumpOptions): boolean {
   // Skip workspace: protocol
   if (version.startsWith('workspace:') && !options.includeWorkspace) return false
 
@@ -121,13 +111,14 @@ function flattenOverrides(
   for (const [key, value] of Object.entries(obj)) {
     if (typeof value === 'string') {
       if (shouldSkipDependency(key, value, options)) continue
+      const protocol = parseProtocol(value)
       deps.push({
         name: key,
-        currentVersion: value,
+        currentVersion: protocol.currentVersion,
         source,
-        update: !isLocked(value) || options.includeLocked,
+        update: !isLocked(protocol.currentVersion) || options.includeLocked,
         parents,
-        ...parseProtocol(value),
+        protocol: protocol.protocol,
       })
     } else if (typeof value === 'object' && value !== null) {
       flattenOverrides(value as Record<string, unknown>, source, deps, options, [...parents, key])

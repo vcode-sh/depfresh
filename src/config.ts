@@ -1,18 +1,23 @@
-import { loadConfig } from 'c12'
 import { defu } from 'defu'
+import { loadConfig } from 'unconfig'
 import type { BumpOptions } from './types'
 import { DEFAULT_OPTIONS } from './types'
 import { createLogger } from './utils/logger'
 
-export async function resolveConfig(
-  overrides: Partial<BumpOptions> = {},
-): Promise<BumpOptions> {
+export async function resolveConfig(overrides: Partial<BumpOptions> = {}): Promise<BumpOptions> {
   const { config: fileConfig } = await loadConfig<Partial<BumpOptions>>({
-    name: 'bump',
+    sources: [
+      {
+        files: ['bump.config', '.bumprc'],
+      },
+      {
+        files: ['package.json'],
+        rewrite(config) {
+          return (config as Record<string, unknown>).bump as Partial<BumpOptions> | undefined
+        },
+      },
+    ],
     cwd: overrides.cwd || process.cwd(),
-    rcFile: '.bumprc',
-    packageJson: 'bump',
-    defaults: {},
   })
 
   const merged = defu(overrides, fileConfig ?? {}, DEFAULT_OPTIONS) as BumpOptions

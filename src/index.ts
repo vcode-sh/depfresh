@@ -1,3 +1,5 @@
+export { check } from './commands/check/index'
+export { resolveConfig } from './config'
 export type {
   BumpOptions,
   CatalogSource,
@@ -16,7 +18,4 @@ export type {
   ResolvedDepChange,
   UpdateScore,
 } from './types'
-
 export { DEFAULT_OPTIONS } from './types'
-export { resolveConfig } from './config'
-export { check } from './commands/check/index'

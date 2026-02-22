@@ -26,3 +26,15 @@ Thumbs.db
 # Debug
 debug.log
 *.log
+
+# Plans
+audit/*
+/audit/**
+
+# AI
+./claude
+claude.md
+./claude/**
+.claude/settings.json
+audit/architecture.md
+audit/modern-stack.md

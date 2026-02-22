@@ -10,10 +10,7 @@ export interface CatalogLoader {
   write(catalog: CatalogSource, changes: Map<string, string>): void
 }
 
-export async function loadCatalogs(
-  cwd: string,
-  options: BumpOptions,
-): Promise<CatalogSource[]> {
+export async function loadCatalogs(cwd: string, options: BumpOptions): Promise<CatalogSource[]> {
   const catalogs: CatalogSource[] = []
 
   // Load all catalogs in parallel

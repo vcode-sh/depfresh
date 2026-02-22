@@ -1,17 +1,17 @@
 import { readFileSync } from 'node:fs'
-import { join, dirname } from 'pathe'
-import { glob } from 'tinyglobby'
 import detectIndent from 'detect-indent'
-import type { BumpOptions, PackageMeta, RawDep } from '../types'
-import { parseDependencies } from './dependencies'
+import { dirname } from 'pathe'
+import { glob } from 'tinyglobby'
+import type { BumpOptions, PackageManagerName, PackageMeta } from '../types'
 import { createLogger } from '../utils/logger'
+import { parseDependencies } from './dependencies'
 
 export async function loadPackages(options: BumpOptions): Promise<PackageMeta[]> {
   const logger = createLogger(options.loglevel)
   const packages: PackageMeta[] = []
 
   // Find all package files in parallel
-  const [jsonFiles, yamlFiles] = await Promise.all([
+  const [jsonFiles, _yamlFiles] = await Promise.all([
     glob(['**/package.json'], {
       cwd: options.cwd,
       ignore: options.ignorePaths,
@@ -56,7 +56,9 @@ export async function loadPackages(options: BumpOptions): Promise<PackageMeta[]>
   // TODO: yaml packages, workspace catalogs
   // These will be added as we port the catalog loaders
 
-  logger.info(`Found ${packages.length} packages with ${packages.reduce((sum, p) => sum + p.deps.length, 0)} dependencies`)
+  logger.info(
+    `Found ${packages.length} packages with ${packages.reduce((sum, p) => sum + p.deps.length, 0)} dependencies`,
+  )
   return packages
 }
 
@@ -66,7 +68,7 @@ function parsePackageManagerField(raw: string): PackageMeta['packageManager'] {
   if (!match) return undefined
 
   return {
-    name: match[1] as PackageMeta['packageManager'] & { name: string }['name'],
+    name: match[1] as PackageManagerName,
     version: match[2]!,
     hash: match[3],
     raw,

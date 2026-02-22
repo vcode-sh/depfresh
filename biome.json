@@ -1,12 +1,9 @@
 {
-  "$schema": "https://biomejs.dev/schemas/1.9.4/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.4.4/schema.json",
   "vcs": {
     "enabled": true,
     "clientKind": "git",
     "useIgnoreFile": true
-  },
-  "organizeImports": {
-    "enabled": true
   },
   "formatter": {
     "enabled": true,
@@ -41,7 +38,7 @@
         "noDelete": "warn"
       },
       "style": {
-        "noNonNullAssertion": "warn",
+        "noNonNullAssertion": "off",
         "useConst": "error",
         "useTemplate": "error",
         "useImportType": "error",
@@ -54,11 +51,13 @@
     }
   },
   "files": {
-    "ignore": [
-      "node_modules",
-      "dist",
-      "*.d.ts",
-      "test/fixtures"
-    ]
+    "includes": ["src/**", "test/**", "!!**/node_modules", "!!**/dist", "!!**/test/fixtures"]
+  },
+  "assist": {
+    "actions": {
+      "source": {
+        "organizeImports": "on"
+      }
+    }
   }
 }

@@ -1,17 +1,17 @@
 import pLimit from 'p-limit'
-import type {
-  BumpOptions,
-  PackageData,
-  PackageMeta,
-  RawDep,
-  ResolvedDepChange,
-} from '../types'
+import * as semver from 'semver'
 import type { Cache } from '../cache/index'
 import { createSqliteCache } from '../cache/index'
-import { fetchPackageData } from './registry'
-import { loadNpmrc } from '../utils/npmrc'
-import { getDiff, resolveTargetVersion, applyVersionPrefix, getVersionPrefix } from '../utils/versions'
+import type { BumpOptions, PackageData, PackageMeta, RawDep, ResolvedDepChange } from '../types'
 import { createLogger } from '../utils/logger'
+import { loadNpmrc } from '../utils/npmrc'
+import {
+  applyVersionPrefix,
+  getDiff,
+  getVersionPrefix,
+  resolveTargetVersion,
+} from '../utils/versions'
+import { fetchPackageData } from './registry'
 
 export async function resolvePackage(
   pkg: PackageMeta,
@@ -26,9 +26,7 @@ export async function resolvePackage(
     const results = await Promise.allSettled(
       pkg.deps
         .filter((dep) => dep.update)
-        .map((dep) =>
-          limit(() => resolveDependency(dep, options, cache, npmrc, logger)),
-        ),
+        .map((dep) => limit(() => resolveDependency(dep, options, cache, npmrc, logger))),
     )
 
     const resolved: ResolvedDepChange[] = []
@@ -83,7 +81,7 @@ async function resolveDependency(
   }
 
   // Filter out deprecated versions unless current is deprecated
-  const versions = filterVersions(pkgData, dep, options)
+  const versions = filterVersions(pkgData, dep)
 
   // Resolve the target version based on mode
   const mode = options.packageMode?.[packageName] ?? options.mode
@@ -113,19 +111,14 @@ async function resolveDependency(
   }
 }
 
-function filterVersions(
-  pkgData: PackageData,
-  dep: RawDep,
-  _options: BumpOptions,
-): string[] {
+function filterVersions(pkgData: PackageData, dep: RawDep): string[] {
   return pkgData.versions.filter((v) => {
     // Skip deprecated unless current version is also deprecated
     if (pkgData.deprecated?.[v] && !pkgData.deprecated?.[dep.currentVersion]) {
       return false
     }
     // Skip prerelease unless current is prerelease
-    const { prerelease } = require('semver') as typeof import('semver')
-    if (prerelease(v)?.length && !prerelease(dep.currentVersion)?.length) {
+    if (semver.prerelease(v)?.length && !semver.prerelease(dep.currentVersion)?.length) {
       return false
     }
     return true

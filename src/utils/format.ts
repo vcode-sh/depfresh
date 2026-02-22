@@ -29,8 +29,10 @@ export function padEnd(str: string, len: number): string {
   return diff > 0 ? str + ' '.repeat(diff) : str
 }
 
+const ANSI_PATTERN = new RegExp(`${String.fromCharCode(27)}\\[\\d+m`, 'g')
+
 export function stripAnsi(str: string): string {
-  return str.replace(/\u001B\[\d+m/g, '')
+  return str.replace(ANSI_PATTERN, '')
 }
 
 export function truncate(str: string, maxLen: number): string {

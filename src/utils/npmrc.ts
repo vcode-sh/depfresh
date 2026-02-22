@@ -1,8 +1,8 @@
 import { readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { join, resolve } from 'pathe'
-import { parse as parseIni } from 'ini'
 import { findUpSync } from 'find-up-simple'
+import { parse as parseIni } from 'ini'
+import { join, resolve } from 'pathe'
 import type { NpmrcConfig, RegistryConfig } from '../types'
 
 const DEFAULT_REGISTRY = 'https://registry.npmjs.org/'
@@ -81,7 +81,7 @@ function loadNpmrcFile(filepath: string, config: NpmrcConfig): void {
     if (tokenMatch && typeof value === 'string') {
       const host = tokenMatch[1]!
       // Find which scope this registry belongs to
-      for (const [scope, reg] of config.registries) {
+      for (const [_scope, reg] of config.registries) {
         if (reg.url.includes(host)) {
           reg.token = value
           reg.authType = 'bearer'
@@ -96,7 +96,6 @@ function loadNpmrcFile(filepath: string, config: NpmrcConfig): void {
         defaultReg.authType = 'bearer'
         config.registries.set('default', defaultReg)
       }
-      continue
     }
   }
 }

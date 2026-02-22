@@ -49,7 +49,7 @@ function writePackageJson(
 
     for (const change of sourceChanges) {
       if (change.name in section) {
-        const oldVersion = section[change.name]
+        const oldVersion = section[change.name]!
         section[change.name] = rebuildVersion(oldVersion, change.targetVersion)
         logger.debug(`  ${change.name}: ${oldVersion} -> ${section[change.name]}`)
       }

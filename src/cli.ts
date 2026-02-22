@@ -96,41 +96,47 @@ const main = defineCommand({
     },
   },
   async run({ args }) {
-    const { resolveConfig } = await import('./config')
-    const { check } = await import('./commands/check/index')
+    try {
+      const { resolveConfig } = await import('./config')
+      const { check } = await import('./commands/check/index')
 
-    const depFields: Record<string, boolean> = {}
-    if (args['deps-only']) {
-      depFields.devDependencies = false
-      depFields.peerDependencies = false
-      depFields.optionalDependencies = false
+      const depFields: Record<string, boolean> = {}
+      if (args['deps-only']) {
+        depFields.devDependencies = false
+        depFields.peerDependencies = false
+        depFields.optionalDependencies = false
+      }
+      if (args['dev-only']) {
+        depFields.dependencies = false
+        depFields.peerDependencies = false
+        depFields.optionalDependencies = false
+      }
+
+      const options = await resolveConfig({
+        cwd: process.cwd(),
+        recursive: args.recursive,
+        write: args.write,
+        interactive: args.interactive,
+        mode: args.mode as RangeMode,
+        include: args.include?.split(',').map((s) => s.trim()),
+        exclude: args.exclude?.split(',').map((s) => s.trim()),
+        force: args.force,
+        global: args.global,
+        peer: args.peer,
+        includeLocked: args['include-locked'],
+        output: args.output as OutputFormat,
+        concurrency: Number.parseInt(args.concurrency, 10),
+        loglevel: args.loglevel as 'silent' | 'info' | 'debug',
+        depFields,
+      })
+
+      const exitCode = await check(options)
+      process.exit(exitCode)
+    } catch (error) {
+      // biome-ignore lint/suspicious/noConsole: intentional error output
+      console.error('Fatal error:', error instanceof Error ? error.message : String(error))
+      process.exit(2)
     }
-    if (args['dev-only']) {
-      depFields.dependencies = false
-      depFields.peerDependencies = false
-      depFields.optionalDependencies = false
-    }
-
-    const options = await resolveConfig({
-      cwd: process.cwd(),
-      recursive: args.recursive,
-      write: args.write,
-      interactive: args.interactive,
-      mode: args.mode as RangeMode,
-      include: args.include?.split(',').map((s) => s.trim()),
-      exclude: args.exclude?.split(',').map((s) => s.trim()),
-      force: args.force,
-      global: args.global,
-      peer: args.peer,
-      includeLocked: args['include-locked'],
-      output: args.output as OutputFormat,
-      concurrency: Number.parseInt(args.concurrency, 10),
-      loglevel: args.loglevel as 'silent' | 'info' | 'debug',
-      depFields,
-    })
-
-    const exitCode = await check(options)
-    process.exit(exitCode)
   },
 })
 

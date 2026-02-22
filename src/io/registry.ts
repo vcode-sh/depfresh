@@ -1,6 +1,7 @@
-import type { PackageData, NpmrcConfig, RegistryConfig } from '../types'
-import { getRegistryForPackage } from '../utils/npmrc'
+import * as semver from 'semver'
+import type { NpmrcConfig, PackageData, RegistryConfig } from '../types'
 import type { Logger } from '../utils/logger'
+import { getRegistryForPackage } from '../utils/npmrc'
 
 interface FetchOptions {
   npmrc: NpmrcConfig
@@ -9,10 +10,7 @@ interface FetchOptions {
   logger: Logger
 }
 
-export async function fetchPackageData(
-  name: string,
-  options: FetchOptions,
-): Promise<PackageData> {
+export async function fetchPackageData(name: string, options: FetchOptions): Promise<PackageData> {
   const registry = getRegistryForPackage(name, options.npmrc)
 
   // JSR protocol
@@ -28,7 +26,9 @@ async function fetchNpmPackage(
   registry: RegistryConfig,
   options: FetchOptions,
 ): Promise<PackageData> {
-  const encodedName = name.startsWith('@') ? `@${encodeURIComponent(name.slice(1))}` : encodeURIComponent(name)
+  const encodedName = name.startsWith('@')
+    ? `@${encodeURIComponent(name.slice(1))}`
+    : encodeURIComponent(name)
   const url = `${registry.url}${encodedName}`
 
   const headers: Record<string, string> = {
@@ -36,26 +36,22 @@ async function fetchNpmPackage(
   }
 
   if (registry.token) {
-    headers.authorization = registry.authType === 'basic'
-      ? `Basic ${registry.token}`
-      : `Bearer ${registry.token}`
+    headers.authorization =
+      registry.authType === 'basic' ? `Basic ${registry.token}` : `Bearer ${registry.token}`
   }
 
   const json = await fetchWithRetry(url, headers, options)
 
-  const versions = Object.keys(json.versions ?? {}).filter((v) => {
-    // Skip invalid semver
-    const { valid } = await import('semver')
-    return valid(v)
-  })
+  const versionsObj = (json.versions ?? {}) as Record<string, Record<string, unknown>>
+  const versions = Object.keys(versionsObj).filter((v) => semver.valid(v))
 
-  const distTags: Record<string, string> = json['dist-tags'] ?? {}
-  const time: Record<string, string> = json.time ?? {}
+  const distTags = (json['dist-tags'] ?? {}) as Record<string, string>
+  const time = (json.time ?? {}) as Record<string, string>
   const deprecated: Record<string, string> = {}
 
-  for (const [ver, data] of Object.entries(json.versions ?? {})) {
-    if ((data as Record<string, unknown>).deprecated) {
-      deprecated[ver] = String((data as Record<string, unknown>).deprecated)
+  for (const [ver, data] of Object.entries(versionsObj)) {
+    if (data.deprecated) {
+      deprecated[ver] = String(data.deprecated)
     }
   }
 
@@ -65,23 +61,22 @@ async function fetchNpmPackage(
     distTags,
     time,
     deprecated: Object.keys(deprecated).length > 0 ? deprecated : undefined,
-    description: json.description,
-    homepage: json.homepage,
-    repository: typeof json.repository === 'string'
-      ? json.repository
-      : json.repository?.url,
+    description: json.description as string | undefined,
+    homepage: json.homepage as string | undefined,
+    repository:
+      typeof json.repository === 'string'
+        ? json.repository
+        : ((json.repository as Record<string, unknown> | undefined)?.url as string | undefined),
   }
 }
 
-async function fetchJsrPackage(
-  name: string,
-  options: FetchOptions,
-): Promise<PackageData> {
+async function fetchJsrPackage(name: string, options: FetchOptions): Promise<PackageData> {
   const url = `https://jsr.io/${name}/meta.json`
   const json = await fetchWithRetry(url, {}, options)
 
-  const versions = Object.keys(json.versions ?? {})
-  const latest = json.latest ?? versions[versions.length - 1] ?? ''
+  const versionsObj = (json.versions ?? {}) as Record<string, unknown>
+  const versions = Object.keys(versionsObj)
+  const latest = (json.latest as string) ?? versions[versions.length - 1] ?? ''
 
   return {
     name: `jsr:${name}`,
@@ -109,7 +104,7 @@ async function fetchWithRetry(
       throw new Error(`HTTP ${response.status}: ${response.statusText} for ${url}`)
     }
 
-    return await response.json() as Record<string, unknown>
+    return (await response.json()) as Record<string, unknown>
   } catch (error) {
     if (attempt < options.retries) {
       const delay = Math.min(1000 * 2 ** attempt, 5000)
