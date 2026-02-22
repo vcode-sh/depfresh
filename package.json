@@ -53,7 +53,7 @@
     "@biomejs/biome": "^2.4.4",
     "@types/better-sqlite3": "^7.6.13",
     "@types/ini": "^4.1.1",
-    "@types/node": "^22.19.11",
+    "@types/node": "^24.10.13",
     "@types/semver": "^7.7.1",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",
@@ -67,6 +67,6 @@
     ]
   },
   "engines": {
-    "node": ">=22.13.0"
+    "node": ">=24.0.0"
   }
 }
