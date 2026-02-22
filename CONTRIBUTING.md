@@ -33,7 +33,7 @@ pnpm install
 src/
   cli.ts                  # CLI entry (citty)
   index.ts                # Library exports
-  config.ts               # Config resolution (unconfig + defu)
+  config.ts               # Config resolution (jiti + defu)
   config.test.ts          # Tests live next to source. Like adults.
   types.ts                # All the types
   commands/check/         # Check command, interactive mode, rendering

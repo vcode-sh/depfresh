@@ -2,6 +2,30 @@
 
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Semver because I'm not a psychopath.
 
+## [0.8.0] - 2026-02-22
+
+The "I built a TUI from scratch because Ink ships React" release. The interactive mode got evicted from its `@clack/prompts` flat-list apartment and moved into a custom readline penthouse with vim navigation, per-dependency version drill-down, viewport scrolling, and a keyboard help bar. Also replaced the config loader, wrote a docs site, and rewrote the README. 69 new tests because apparently I have a compulsion.
+
+### Added
+
+- **Custom interactive TUI** -- full readline-based terminal UI replacing the `@clack/prompts` checkbox list. Two views: a grouped list with colour-coded severity, and a detail drill-down showing every available version per dependency. All rendered in-place below the table output. Zero new dependencies. `@clack/prompts` preserved as a non-TTY fallback because not everyone deserves nice things.
+- **Per-dependency version drill-down** -- press `→` or `l` on any dependency to see its full version history. Diff type, age, dist-tags, deprecation warnings, Node engine compatibility, provenance level. Pick any version, not just the one I picked for you. Press `←` to go back. Revolutionary UX from 1985.
+- **Vim navigation** -- `j`/`k` to move, `g`/`G` to jump to first/last, `space` to toggle, `a` to select all, `h`/`l` for drill-down. Page up/down for the scroll wheel enthusiasts. Because arrow keys are for people who haven't seen the light.
+- **Viewport scrolling** -- handles terminal resize, follow-scroll cursor tracking, overflow indicators. Works in terminals smaller than your ambitions. `SIGWINCH` handled because I'm not an animal.
+- **`--explain` / `-E` flag** -- human-readable explanations in the version detail view. "Breaking change. Check migration guide." for majors. "Bug fixes only. Safe to update." for patches. Deprecation and provenance warnings appended. For the AI agents and juniors who want to know *why*, not just *what*.
+- **Keyboard help bar** -- context-aware help at the bottom of both views. Changes between list and detail mode. Because discoverability isn't a dirty word, it's just usually ignored.
+- **State machine architecture** -- pure functional state transitions, modular decomposition (model, list, detail, layout), thin facade pattern. Every state change is a pure function. No side effects. No "it works if you squint". Testable by design. Largest module: 167 LOC.
+- **Documentation site** (`docs/`) -- CLI reference, configuration guide, programmatic API docs, output format specs, and a troubleshooting page. Split into five files so you can pretend you'll read more than one.
+- **README rewrite** -- features section, proper structure, less rambling. Still sarcastic. Just organised sarcasm now.
+
+### Changed
+
+- **Config loader rewrite** -- replaced `unconfig` (antfu) with a custom loader using `jiti` for TypeScript files and native `import()` for JavaScript. Supports 15 config file patterns including `bump.config.ts`, `.bumprc.json`, and `package.json#bump`. One fewer dependency. Same behaviour. Better error messages when your config file is cursed.
+
+### Stats
+
+- 69 new tests (427 → 496 total, 18 → 24 test files). TUI module fully covered: viewport, detail, state, keymap, renderer, index. Interactive gate tests for TTY and fallback paths. All passing. All colocated. The test-to-line ratio is now genuinely concerning.
+
 ## [0.7.0] - 2026-02-22
 
 The "correctness nobody asked for" release. Five features that fix the paper cuts real users actually hit. Windows line endings, nested monorepos, CI exit codes, working directories, and timestamps for your current deps. The kind of stuff that sounds boring until you waste 45 minutes debugging why git shows every line changed in your `package.json`. 22 new tests because I'm not shipping vibes.
@@ -170,6 +194,7 @@ First release. Wrote it from scratch because waiting for PRs to get merged in ta
 - TTY detection. No spinners in your CI logs. `NO_COLOR` respected.
 - 54 tests. More than some production apps I've seen.
 
+[0.8.0]: https://github.com/vcode-sh/bump/releases/tag/v0.8.0
 [0.7.0]: https://github.com/vcode-sh/bump/releases/tag/v0.7.0
 [0.6.0]: https://github.com/vcode-sh/bump/releases/tag/v0.6.0
 [0.5.0]: https://github.com/vcode-sh/bump/releases/tag/v0.5.0

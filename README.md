@@ -9,6 +9,28 @@ Keep your npm dependencies fresh. Fast, correct, zero-config.
 
 Spiritual successor to [taze](https://github.com/antfu/taze) by Anthony Fu - a tool that did the job well until maintenance slowed and issues piled up. I took the best ideas, rewrote everything from scratch, fixed the bugs that sat open for years, and made it work for humans and AI agents alike. Credit where it's due.
 
+## Features
+
+- **Zero-config dependency checking** -- run `bump` and it tells you what's outdated. No YAML. No PhD.
+- **Monorepo & workspace support** -- pnpm, bun, yarn, npm. Auto-detected. Catalog deps included.
+- **7 range modes** -- `default`, `major`, `minor`, `patch`, `latest`, `newest`, `next`. One flag, total control.
+- **Interactive cherry-picking** -- grouped multiselect with colour-coded severity. Pick what you want, ignore the rest.
+- **Per-package modes** -- `packageMode` lets you set exact, glob, or regex patterns per dependency.
+- **Write safely** -- `--write` updates files. `--verify-command` tests each dep individually and reverts failures.
+- **Post-write hooks** -- `--execute`, `--install`, `--update`. Chain commands after writing.
+- **Global packages** -- `--global` checks npm, pnpm, and bun globals.
+- **Private registries** -- full `.npmrc` support. Scoped registries, auth tokens, env vars. Fixed from day one.
+- **JSON output** -- structured envelope for scripts and AI agents. No ANSI noise.
+- **CI mode** -- `--fail-on-outdated` exits with code 1. Plug it into your pipeline.
+- **SQLite cache** -- WAL mode, 30min TTL, auto-fallback to memory. Fast repeat runs.
+- **Provenance tracking** -- warnings for unsigned or downgraded attestations.
+- **Node engine compat** -- flags updates that don't match your Node version.
+- **Cooldown filter** -- skip versions published less than N days ago. Let the early adopters find the bugs.
+- **Sorting** -- 6 strategies: by diff severity, publish time, or name.
+- **CRLF preservation** -- Windows line endings survive the write. You're welcome.
+- **Nested workspace detection** -- auto-skips monorepos inside monorepos.
+- **Programmatic API** -- 9 exported functions, 7 lifecycle callbacks, full type safety.
+
 ## Why
 
 Because `npm outdated` gives you a table and then abandons you. Because Renovate requires a PhD in YAML. Because your AI coding assistant should be able to update your deps without you holding its hand.
@@ -41,11 +63,8 @@ bump --write
 # Interactive mode -- pick what to update like a civilised person
 bump --interactive
 
-# Only major updates (living dangerously)
-bump --mode major
-
-# Only patch updates (living cautiously)
-bump --mode patch
+# Only minor/patch updates (living cautiously)
+bump minor -w
 
 # JSON output for scripts and AI agents
 bump --output json
@@ -53,14 +72,16 @@ bump --output json
 # Filter specific packages
 bump --include "react,vue" --exclude "eslint"
 
-# Only devDependencies
-bump --dev-only
+# Verify each dep individually, revert failures
+bump -w --verify-command "pnpm test"
 
-# Only production dependencies
-bump --deps-only
+# CI: fail if anything is outdated
+bump --fail-on-outdated
 ```
 
 ## CLI Flags
+
+The top flags to get you started. Full reference with all 27+ flags: **[docs/cli.md](docs/cli.md)**
 
 | Flag | Alias | Default | Description |
 |------|-------|---------|-------------|
@@ -68,60 +89,17 @@ bump --deps-only
 | `--write` | `-w` | `false` | Write updated versions to package files |
 | `--interactive` | `-I` | `false` | Select which deps to update |
 | `--mode` | `-m` | `default` | Range mode: `default` `major` `minor` `patch` `latest` `newest` `next` |
-| `--include` | `-n` | — | Only include packages matching regex (comma-separated) |
-| `--exclude` | `-x` | — | Exclude packages matching regex (comma-separated) |
+| `--include` | `-n` | -- | Only include packages matching regex (comma-separated) |
+| `--exclude` | `-x` | -- | Exclude packages matching regex (comma-separated) |
 | `--force` | `-f` | `false` | Force update even if version is satisfied |
-| `--peer` | `-P` | `false` | Include peer dependencies |
-| `--include-locked` | `-l` | `false` | Include pinned dependencies |
-| `--output` | `-o` | `table` | Output format: `table` `json` |
-| `--concurrency` | `-c` | `16` | Max concurrent registry requests |
-| `--deps-only` | — | `false` | Only check dependencies |
-| `--dev-only` | — | `false` | Only check devDependencies |
 | `--global` | `-g` | `false` | Check global packages |
-| `--loglevel` | — | `info` | Log level: `silent` `info` `debug` |
-| `--execute` | `-e` | — | Run command after writing (e.g. `"pnpm test"`) |
-
-## Post-write Hooks
-
-Run commands after bump writes your updated dependencies. Because updating deps is only half the job.
-
-### `--execute`
-
-```bash
-# Run tests after updating
-bump -w --execute "pnpm test"
-
-# Reinstall and rebuild
-bump -w --execute "pnpm install && pnpm build"
-
-# Commit the changes
-bump -w --execute "git add -A && git commit -m 'chore: update deps'"
-
-# Chain it all
-bump -w --execute "pnpm install" --install
-```
-
-The command runs once after all packages are written. If it fails, bump logs the error but still exits 0 -- your deps were already updated successfully, the command is a bonus.
-
-### `--install` / `--update`
-
-Convenience flags that auto-detect your package manager and run `install` or `update` after writing.
-
-```bash
-bump -w --install    # runs pnpm/npm/yarn/bun install
-bump -w --update     # runs pnpm/npm/yarn/bun update
-```
-
-### In config
-
-```typescript
-import { defineConfig } from 'bump-cli'
-
-export default defineConfig({
-  write: true,
-  execute: 'pnpm install && pnpm test',
-})
-```
+| `--output` | `-o` | `table` | Output format: `table` `json` |
+| `--execute` | `-e` | -- | Run command after writing (e.g. `"pnpm test"`) |
+| `--verify-command` | `-V` | -- | Run command per dep, revert on failure |
+| `--install` | `-i` | `false` | Run package manager install after writing |
+| `--fail-on-outdated` | -- | `false` | Exit code 1 when outdated deps found (CI mode) |
+| `--cooldown` | -- | `0` | Skip versions published less than N days ago |
+| `--sort` | `-s` | `diff-asc` | Sort: `diff-asc` `diff-desc` `time-asc` `time-desc` `name-asc` `name-desc` |
 
 ## Config File
 
@@ -139,6 +117,8 @@ export default defineConfig({
   },
 })
 ```
+
+Full options reference: **[docs/configuration.md](docs/configuration.md)**
 
 ## JSON Output
 
@@ -175,6 +155,8 @@ export default defineConfig({
 }
 ```
 
+Full schema and field reference: **[docs/output-formats.md](docs/output-formats.md)**
+
 ## AI Agent Usage
 
 bump was designed to work with AI coding assistants out of the box. No special configuration needed.
@@ -188,14 +170,41 @@ bump --write
 
 # Apply only safe updates
 bump --write --mode patch
+
+# Selective update
+bump --write --include "typescript,vitest"
 ```
 
 **Exit codes are semantic:**
-- `0` — all deps up to date (or updates were written)
-- `1` — updates available (not written)
-- `2` — error
+- `0` -- all deps up to date (or updates were written)
+- `1` -- updates available (with `--fail-on-outdated`)
+- `2` -- error
 
-**TTY detection** — when stdout isn't a terminal (piped, captured by an agent), bump automatically suppresses spinners and interactive prompts. `NO_COLOR` is respected.
+**TTY detection** -- when stdout isn't a terminal (piped, captured by an agent), bump automatically suppresses spinners and interactive prompts. `NO_COLOR` is respected.
+
+## Programmatic API
+
+```typescript
+import { check, resolveConfig } from 'bump-cli'
+
+const options = await resolveConfig({
+  cwd: process.cwd(),
+  mode: 'minor',
+  write: true,
+  onDependencyResolved: (pkg, dep) => {
+    if (dep.diff === 'major') {
+      console.log(`Major update: ${dep.name} ${dep.currentVersion} -> ${dep.targetVersion}`)
+    }
+  },
+  beforePackageWrite: (pkg) => {
+    return true // return false to skip
+  },
+})
+
+const exitCode = await check(options)
+```
+
+9 exported functions, 7 lifecycle callbacks, 16+ types. Full API reference: **[docs/api.md](docs/api.md)**
 
 ## Monorepo Support
 
@@ -206,7 +215,7 @@ bump auto-detects workspace structures. No config needed.
 | pnpm | `pnpm-workspace.yaml` | `catalog:` protocol |
 | Bun | `workspaces` in `package.json` | `workspaces.catalog` |
 | Yarn | `workspaces` in `package.json` | `yarn.config.cjs` catalogs |
-| npm | `workspaces` in `package.json` | — |
+| npm | `workspaces` in `package.json` | -- |
 
 Workspace catalogs are resolved and updated in-place. Your `pnpm-workspace.yaml` catalog entries get bumped alongside your `package.json` deps. No manual sync needed.
 
@@ -221,43 +230,6 @@ bump reads `.npmrc` from your project and home directory. Scoped registries, aut
 ```
 
 This was broken in taze for 4+ years. I fixed it on day one. You're welcome.
-
-## Programmatic API
-
-```typescript
-import { check, resolveConfig } from 'bump-cli'
-
-const options = await resolveConfig({
-  cwd: process.cwd(),
-  mode: 'minor',
-  output: 'json',
-})
-
-const exitCode = await check(options)
-```
-
-Lifecycle callbacks for custom workflows:
-
-```typescript
-const options = await resolveConfig({
-  cwd: process.cwd(),
-  beforePackageStart: (pkg) => {
-    console.log(`Checking ${pkg.name}...`)
-  },
-  onDependencyResolved: (pkg, dep) => {
-    if (dep.diff === 'major') {
-      console.log(`Major update: ${dep.name} ${dep.currentVersion} -> ${dep.targetVersion}`)
-    }
-  },
-  beforePackageWrite: (pkg) => {
-    // Return false to skip writing this package
-    return true
-  },
-  afterPackageWrite: (pkg) => {
-    console.log(`Updated ${pkg.name}`)
-  },
-})
-```
 
 ## What I Fixed from taze
 
@@ -275,6 +247,16 @@ Not to throw shade at taze -- it served the community well for years. But some t
 | Config merging | deepmerge (CJS) | defu (ESM) |
 | npm config loading | @npmcli/config (heavy, hacky) | Direct ini parsing |
 | Cache | JSON file (race conditions) | SQLite with WAL mode |
+
+## Documentation
+
+The full docs, for people who read manuals before assembling furniture.
+
+- **[CLI Reference](docs/cli.md)** -- all 27+ flags, modes, sorting, filtering, hooks, interactive, CI, workspaces
+- **[Configuration](docs/configuration.md)** -- config files, every option, packageMode, depFields, private registries, cache
+- **[Programmatic API](docs/api.md)** -- exported functions, lifecycle callbacks, types, workflow examples
+- **[Output Formats](docs/output-formats.md)** -- table, JSON, SARIF, exit codes, AI agent integration
+- **[Troubleshooting](docs/troubleshooting.md)** -- common issues, workspace gotchas, known limitations
 
 ## Requirements
 

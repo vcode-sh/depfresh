@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { DiffType, ResolvedDepChange } from '../../types'
 import { stripAnsi } from '../../utils/format'
 
@@ -10,6 +10,14 @@ const clackMock = {
 }
 
 vi.mock('@clack/prompts', () => clackMock)
+
+const stdinTTYDescriptor = Object.getOwnPropertyDescriptor(process.stdin, 'isTTY')
+const stdoutTTYDescriptor = Object.getOwnPropertyDescriptor(process.stdout, 'isTTY')
+
+function setTTY(stdinTTY: boolean, stdoutTTY: boolean): void {
+  Object.defineProperty(process.stdin, 'isTTY', { value: stdinTTY, configurable: true })
+  Object.defineProperty(process.stdout, 'isTTY', { value: stdoutTTY, configurable: true })
+}
 
 function makeDep(
   name: string,
@@ -36,7 +44,46 @@ function makeDep(
 describe('runInteractive', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.resetModules()
     clackMock.isCancel.mockReturnValue(false)
+    setTTY(false, false)
+  })
+
+  afterAll(() => {
+    if (stdinTTYDescriptor) {
+      Object.defineProperty(process.stdin, 'isTTY', stdinTTYDescriptor)
+    }
+    if (stdoutTTYDescriptor) {
+      Object.defineProperty(process.stdout, 'isTTY', stdoutTTYDescriptor)
+    }
+  })
+
+  it('uses custom TUI on full TTY and forwards explain option', async () => {
+    const updates = [makeDep('a', 'major')]
+    const createInteractiveTUIMock = vi.fn().mockResolvedValue(updates)
+    vi.doMock('./tui/index', () => ({
+      createInteractiveTUI: createInteractiveTUIMock,
+    }))
+    setTTY(true, true)
+
+    const { runInteractive } = await import('./interactive')
+    const result = await runInteractive(updates, { explain: true })
+
+    expect(createInteractiveTUIMock).toHaveBeenCalledWith(updates, { explain: true })
+    expect(result).toEqual(updates)
+    expect(clackMock.groupMultiselect).not.toHaveBeenCalled()
+  })
+
+  it('falls back to clack when either stream is non-TTY', async () => {
+    const updates = [makeDep('a', 'major')]
+    clackMock.groupMultiselect.mockResolvedValue(['a'])
+    setTTY(true, false)
+
+    const { runInteractive } = await import('./interactive')
+    const result = await runInteractive(updates, { explain: true })
+
+    expect(clackMock.groupMultiselect).toHaveBeenCalledOnce()
+    expect(result).toEqual(updates)
   })
 
   it('groups deps by diff type into major, minor, patch groups', async () => {
@@ -105,7 +152,6 @@ describe('runInteractive', () => {
 
     const { runInteractive } = await import('./interactive')
 
-    // Pass in reverse order to verify sorting
     const updates = [makeDep('c', 'patch'), makeDep('b', 'minor'), makeDep('a', 'major')]
 
     await runInteractive(updates)

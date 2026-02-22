@@ -154,6 +154,7 @@ export interface BumpOptions {
   cooldown: number
   nodecompat: boolean
   long: boolean
+  explain: boolean
 
   // Exit behavior
   failOnOutdated: boolean
@@ -216,6 +217,7 @@ export const DEFAULT_OPTIONS: Partial<BumpOptions> = {
   cooldown: 0,
   nodecompat: true,
   long: false,
+  explain: false,
   failOnOutdated: false,
   install: false,
   update: false,

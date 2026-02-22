@@ -168,6 +168,12 @@ const main = defineCommand({
       description: 'Show extra details (homepage URL) per package',
       default: false,
     },
+    explain: {
+      type: 'boolean',
+      alias: 'E',
+      description: 'Show human-readable explanations for update types in interactive mode',
+      default: false,
+    },
     install: {
       type: 'boolean',
       alias: 'i',
@@ -247,6 +253,7 @@ const main = defineCommand({
         cooldown: Number.parseInt(args.cooldown, 10),
         nodecompat: args.nodecompat,
         long: args.long,
+        explain: args.explain,
         install: args.install,
         update: args.update,
         execute: args.execute,

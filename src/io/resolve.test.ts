@@ -59,6 +59,7 @@ function makeOptions(overrides: Partial<BumpOptions> = {}): BumpOptions {
     cooldown: 0,
     nodecompat: true,
     long: false,
+    explain: false,
     failOnOutdated: false,
     install: false,
     update: false,

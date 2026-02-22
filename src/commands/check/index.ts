@@ -177,7 +177,7 @@ export async function check(options: BumpOptions): Promise<number> {
         // Interactive mode
         if (options.interactive) {
           const { runInteractive } = await import('./interactive')
-          const selected = await runInteractive(updates)
+          const selected = await runInteractive(updates, { explain: options.explain })
           if (selected.length === 0) {
             await options.afterPackageEnd?.(pkg)
             continue

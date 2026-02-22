@@ -1020,6 +1020,23 @@ describe('--verify-command flag', () => {
       expect.objectContaining({ stdio: 'pipe' }),
     )
   })
+
+  it('passes explain option into interactive mode', async () => {
+    const pkg = makePkg('my-app')
+    const dep1 = makeResolved({ name: 'dep-a', diff: 'minor', targetVersion: '^1.1.0' })
+    loadPackagesMock.mockResolvedValue([pkg])
+    resolvePackageMock.mockResolvedValue([dep1])
+
+    const runInteractiveMock = vi.fn().mockResolvedValue([dep1])
+    vi.doMock('./interactive', () => ({
+      runInteractive: runInteractiveMock,
+    }))
+
+    const { check } = await import('./index')
+    await check({ ...baseOptions, interactive: true, explain: true })
+
+    expect(runInteractiveMock).toHaveBeenCalledWith([dep1], { explain: true })
+  })
 })
 
 describe('--update flag', () => {

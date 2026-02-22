@@ -19,7 +19,7 @@ function makeOption(dep: ResolvedDepChange) {
   }
 }
 
-export async function runInteractive(updates: ResolvedDepChange[]): Promise<ResolvedDepChange[]> {
+async function runClackFallback(updates: ResolvedDepChange[]): Promise<ResolvedDepChange[]> {
   const grouped = new Map<DiffType, ResolvedDepChange[]>()
 
   for (const dep of updates) {
@@ -74,4 +74,18 @@ export async function runInteractive(updates: ResolvedDepChange[]): Promise<Reso
   }
 
   return updates.filter((u) => (selected as string[]).includes(u.name))
+}
+
+export async function runInteractive(
+  updates: ResolvedDepChange[],
+  options?: { explain?: boolean },
+): Promise<ResolvedDepChange[]> {
+  if (updates.length === 0) return []
+
+  if (process.stdin.isTTY && process.stdout.isTTY) {
+    const { createInteractiveTUI } = await import('./tui/index')
+    return createInteractiveTUI(updates, { explain: options?.explain ?? false })
+  }
+
+  return runClackFallback(updates)
 }
