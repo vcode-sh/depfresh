@@ -2,6 +2,30 @@
 
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Semver because I'm not a psychopath.
 
+## [0.7.0] - 2026-02-22
+
+The "correctness nobody asked for" release. Five features that fix the paper cuts real users actually hit. Windows line endings, nested monorepos, CI exit codes, working directories, and timestamps for your current deps. The kind of stuff that sounds boring until you waste 45 minutes debugging why git shows every line changed in your `package.json`. 22 new tests because I'm not shipping vibes.
+
+### Breaking
+
+- **Exit code 1 is now opt-in** -- `bump` no longer returns exit code 1 when outdated deps are found. This surprised every CI pipeline that just wanted to *check* without failing the build. Add `--fail-on-outdated` to get the old behavior. If you're piping exit codes in scripts, update them. If you weren't, congrats, nothing changes.
+
+### Added
+
+- **`--cwd` / `-C` flag** -- run bump from any directory. `bump --cwd ./packages/foo` checks that package without `cd`-ing around like it's 2004. Scripts and monorepo tooling can now point bump at specific paths without changing the working directory.
+- **`--fail-on-outdated` flag** -- opt-in exit code 1 when updates are available. For CI pipelines that want to gate on outdated deps. Off by default because "your deps are slightly behind" shouldn't be a build failure.
+- **CRLF line ending preservation** -- Windows users no longer get every line flagged as changed in git after bump writes. Detects `\r\n` in the original file, preserves it after `JSON.stringify`. Also applied to Bun catalog writes. The fix took 3 lines. The debugging took 3 hours. Classic.
+- **`--ignore-other-workspaces`** (on by default) -- stops bump from wandering into nested monorepos. If your project contains a git submodule or a separate workspace root, those packages are now skipped automatically. Walks up from each `package.json` looking for `.git`, `pnpm-workspace.yaml`, `.yarnrc.yml`, or `workspaces` in a parent `package.json`. Disable with `--no-ignore-other-workspaces` if you enjoy chaos.
+- **`currentVersionTime` in resolve output** -- the publish timestamp of your *currently installed* version, not just the target. JSON output now includes `currentVersionTime` when available. AI agents and scripts can calculate how old your current deps are without a second registry call.
+- 42 new tests (385 -> 427 total, 18 test files). CRLF detection, line ending preservation, nested workspace filtering, exit code behavior, cwd config resolution, currentVersionTime population. Plus 20 bug-hunting tests for edge cases: wildcard version coercion, mixed line endings, CRLF without trailing newlines, CRLF with protocol prefixes, deeply nested workspace detection, JSON output envelope coverage, config defaults for new options, bun catalog CRLF writes. Zero bugs found. The code is annoyingly correct.
+
+### Credits
+
+Ideas informed by the taze ecosystem:
+
+- taze issue [#183](https://github.com/antfu/taze/issues/183) -- CRLF line ending preservation on Windows
+- taze issue [#56](https://github.com/antfu/taze/issues/56) -- exit code 1 should be opt-in for CI
+
 ## [0.6.0] - 2026-02-22
 
 The "run whatever you want after" release. One feature. Clean. Surgical. No scope creep. The antithesis of every sprint planning meeting you've ever attended.
@@ -146,6 +170,7 @@ First release. Wrote it from scratch because waiting for PRs to get merged in ta
 - TTY detection. No spinners in your CI logs. `NO_COLOR` respected.
 - 54 tests. More than some production apps I've seen.
 
+[0.7.0]: https://github.com/vcode-sh/bump/releases/tag/v0.7.0
 [0.6.0]: https://github.com/vcode-sh/bump/releases/tag/v0.6.0
 [0.5.0]: https://github.com/vcode-sh/bump/releases/tag/v0.5.0
 [0.4.0]: https://github.com/vcode-sh/bump/releases/tag/v0.4.0

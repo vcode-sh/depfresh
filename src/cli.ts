@@ -38,6 +38,11 @@ const main = defineCommand({
       description: 'Version range mode shorthand (major, minor, patch, latest, newest, next)',
       required: false,
     },
+    cwd: {
+      type: 'string',
+      alias: 'C',
+      description: 'Working directory for bump to run in',
+    },
     recursive: {
       type: 'boolean',
       alias: 'r',
@@ -185,6 +190,16 @@ const main = defineCommand({
       alias: 'V',
       description: 'Run command after each dep update, revert on failure',
     },
+    'fail-on-outdated': {
+      type: 'boolean',
+      description: 'Exit with code 1 when outdated dependencies are found (CI mode)',
+      default: false,
+    },
+    'ignore-other-workspaces': {
+      type: 'boolean',
+      description: 'Skip packages that belong to nested/separate workspaces',
+      default: true,
+    },
   },
   async run({ args }) {
     try {
@@ -210,7 +225,7 @@ const main = defineCommand({
           : (args.mode as RangeMode)
 
       const options = await resolveConfig({
-        cwd: process.cwd(),
+        cwd: args.cwd || process.cwd(),
         recursive: args.recursive,
         write: args.write,
         interactive: args.interactive,
@@ -236,6 +251,8 @@ const main = defineCommand({
         update: args.update,
         execute: args.execute,
         verifyCommand: args['verify-command'],
+        failOnOutdated: args['fail-on-outdated'],
+        ignoreOtherWorkspaces: args['ignore-other-workspaces'],
       })
 
       const exitCode = await check(options)

@@ -51,6 +51,7 @@ function makeOptions(overrides: Partial<BumpOptions> = {}): BumpOptions {
     peer: false,
     global: false,
     ignorePaths: [],
+    ignoreOtherWorkspaces: true,
     all: false,
     group: true,
     sort: 'diff-asc',
@@ -58,6 +59,7 @@ function makeOptions(overrides: Partial<BumpOptions> = {}): BumpOptions {
     cooldown: 0,
     nodecompat: true,
     long: false,
+    failOnOutdated: false,
     install: false,
     update: false,
     ...overrides,
@@ -820,5 +822,161 @@ describe('node engine compatibility', () => {
     expect(result.length).toBe(1)
     expect(result[0]!.nodeCompat).toBeUndefined()
     expect(result[0]!.nodeCompatible).toBeUndefined()
+  })
+})
+
+describe('currentVersionTime', () => {
+  beforeEach(() => {
+    vi.resetAllMocks()
+  })
+
+  it('populates currentVersionTime when time data exists for current version', async () => {
+    const { fetchPackageData } = await import('./registry')
+    const { resolvePackage } = await import('./resolve')
+
+    const cache = createMockCache()
+    const pkgData: PackageData = {
+      name: 'test-pkg',
+      versions: ['1.0.0', '2.0.0'],
+      distTags: { latest: '2.0.0' },
+      time: {
+        '1.0.0': '2024-01-15T10:00:00.000Z',
+        '2.0.0': '2024-06-20T12:00:00.000Z',
+      },
+    }
+    vi.mocked(fetchPackageData).mockResolvedValue(pkgData)
+
+    const dep = makeDep({ currentVersion: '^1.0.0' })
+    const pkg = makePkg([dep])
+    const options = makeOptions({ mode: 'latest' })
+    const npmrc: NpmrcConfig = {
+      registries: new Map(),
+      defaultRegistry: 'https://registry.npmjs.org/',
+      strictSsl: true,
+    }
+
+    const result = await resolvePackage(pkg, options, cache, npmrc)
+
+    expect(result.length).toBe(1)
+    expect(result[0]!.currentVersionTime).toBe('2024-01-15T10:00:00.000Z')
+    expect(result[0]!.publishedAt).toBe('2024-06-20T12:00:00.000Z')
+  })
+
+  it('returns undefined currentVersionTime for wildcard version *', async () => {
+    const { fetchPackageData } = await import('./registry')
+    const { resolvePackage } = await import('./resolve')
+
+    const cache = createMockCache()
+    const pkgData: PackageData = {
+      name: 'test-pkg',
+      versions: ['1.0.0', '2.0.0'],
+      distTags: { latest: '2.0.0' },
+      time: {
+        '1.0.0': '2024-01-15T10:00:00.000Z',
+        '2.0.0': '2024-06-20T12:00:00.000Z',
+      },
+    }
+    vi.mocked(fetchPackageData).mockResolvedValue(pkgData)
+
+    const dep = makeDep({ currentVersion: '*' })
+    const pkg = makePkg([dep])
+    const options = makeOptions({ mode: 'latest' })
+    const npmrc: NpmrcConfig = {
+      registries: new Map(),
+      defaultRegistry: 'https://registry.npmjs.org/',
+      strictSsl: true,
+    }
+
+    const result = await resolvePackage(pkg, options, cache, npmrc)
+
+    expect(result.length).toBe(1)
+    // semver.coerce('*') returns null, so currentVersionTime should be undefined
+    expect(result[0]!.currentVersionTime).toBeUndefined()
+  })
+
+  it('coerces range version for currentVersionTime lookup', async () => {
+    const { fetchPackageData } = await import('./registry')
+    const { resolvePackage } = await import('./resolve')
+
+    const cache = createMockCache()
+    const pkgData: PackageData = {
+      name: 'test-pkg',
+      versions: ['1.2.0', '2.0.0'],
+      distTags: { latest: '2.0.0' },
+      time: {
+        '1.2.0': '2024-03-01T08:00:00.000Z',
+        '2.0.0': '2024-06-20T12:00:00.000Z',
+      },
+    }
+    vi.mocked(fetchPackageData).mockResolvedValue(pkgData)
+
+    // ~1.2.0 should coerce to 1.2.0 for time lookup
+    const dep = makeDep({ currentVersion: '~1.2.0' })
+    const pkg = makePkg([dep])
+    const options = makeOptions({ mode: 'latest' })
+    const npmrc: NpmrcConfig = {
+      registries: new Map(),
+      defaultRegistry: 'https://registry.npmjs.org/',
+      strictSsl: true,
+    }
+
+    const result = await resolvePackage(pkg, options, cache, npmrc)
+
+    expect(result.length).toBe(1)
+    expect(result[0]!.currentVersionTime).toBe('2024-03-01T08:00:00.000Z')
+  })
+
+  it('populates currentVersionTime for exact version without prefix', async () => {
+    const { fetchPackageData } = await import('./registry')
+    const { resolvePackage } = await import('./resolve')
+
+    const cache = createMockCache()
+    const pkgData: PackageData = {
+      name: 'test-pkg',
+      versions: ['1.0.0', '2.0.0'],
+      distTags: { latest: '2.0.0' },
+      time: {
+        '1.0.0': '2024-02-10T09:00:00.000Z',
+        '2.0.0': '2024-06-20T12:00:00.000Z',
+      },
+    }
+    vi.mocked(fetchPackageData).mockResolvedValue(pkgData)
+
+    // Exact pinned version
+    const dep = makeDep({ currentVersion: '1.0.0' })
+    const pkg = makePkg([dep])
+    const options = makeOptions({ mode: 'latest' })
+    const npmrc: NpmrcConfig = {
+      registries: new Map(),
+      defaultRegistry: 'https://registry.npmjs.org/',
+      strictSsl: true,
+    }
+
+    const result = await resolvePackage(pkg, options, cache, npmrc)
+
+    expect(result.length).toBe(1)
+    expect(result[0]!.currentVersionTime).toBe('2024-02-10T09:00:00.000Z')
+  })
+
+  it('leaves currentVersionTime undefined when time data is missing', async () => {
+    const { fetchPackageData } = await import('./registry')
+    const { resolvePackage } = await import('./resolve')
+
+    const cache = createMockCache()
+    vi.mocked(fetchPackageData).mockResolvedValue(mockPkgData)
+
+    const dep = makeDep()
+    const pkg = makePkg([dep])
+    const options = makeOptions({ mode: 'latest' })
+    const npmrc: NpmrcConfig = {
+      registries: new Map(),
+      defaultRegistry: 'https://registry.npmjs.org/',
+      strictSsl: true,
+    }
+
+    const result = await resolvePackage(pkg, options, cache, npmrc)
+
+    expect(result.length).toBe(1)
+    expect(result[0]!.currentVersionTime).toBeUndefined()
   })
 })

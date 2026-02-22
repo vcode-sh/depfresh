@@ -150,6 +150,7 @@ async function resolveDependency(
     deprecated: pkgData.deprecated?.[targetVersion],
     latestVersion: pkgData.distTags.latest,
     publishedAt: pkgData.time?.[targetVersion],
+    currentVersionTime: cleanCurrent ? pkgData.time?.[cleanCurrent] : undefined,
     provenance: targetProvenance,
     currentProvenance,
     nodeCompat,

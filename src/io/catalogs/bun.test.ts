@@ -368,6 +368,53 @@ describe('bunCatalogLoader.write', () => {
     expect(updated.workspaces.catalog.nonexistent).toBeUndefined()
   })
 
+  it('preserves CRLF line endings when writing', () => {
+    const filepath = join(testDir, 'package.json')
+    const content =
+      '{\r\n  "name": "test",\r\n  "workspaces": {\r\n    "catalog": {\r\n      "react": "^18.0.0"\r\n    }\r\n  }\r\n}\r\n'
+    writeFileSync(filepath, content, 'utf-8')
+
+    const catalog: CatalogSource = {
+      type: 'bun',
+      name: 'default',
+      filepath,
+      deps: [],
+      raw: JSON.parse(content),
+      indent: '  ',
+    }
+
+    bunCatalogLoader.write(catalog, new Map([['react', '^19.0.0']]))
+
+    const result = readFileSync(filepath, 'utf-8')
+    expect(result).toContain('\r\n')
+    expect(result).not.toMatch(/[^\r]\n/)
+    const parsed = JSON.parse(result)
+    expect(parsed.workspaces.catalog.react).toBe('^19.0.0')
+  })
+
+  it('keeps LF when input has LF', () => {
+    const filepath = join(testDir, 'package.json')
+    const raw = { name: 'test', workspaces: { catalog: { react: '^18.0.0' } } }
+    const content = `${JSON.stringify(raw, null, 2)}\n`
+    writeFileSync(filepath, content, 'utf-8')
+
+    const catalog: CatalogSource = {
+      type: 'bun',
+      name: 'default',
+      filepath,
+      deps: [],
+      raw,
+      indent: '  ',
+    }
+
+    bunCatalogLoader.write(catalog, new Map([['react', '^19.0.0']]))
+
+    const result = readFileSync(filepath, 'utf-8')
+    expect(result).not.toContain('\r\n')
+    const parsed = JSON.parse(result)
+    expect(parsed.workspaces.catalog.react).toBe('^19.0.0')
+  })
+
   it('skips write when catalog section is missing', () => {
     writePackageJson(testDir, {
       name: 'test',

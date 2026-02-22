@@ -3,6 +3,7 @@ import detectIndent from 'detect-indent'
 import { join } from 'pathe'
 import type { BumpOptions, CatalogSource, RawDep } from '../../types'
 import { isLocked } from '../../utils/versions'
+import { detectLineEnding } from '../write'
 import type { CatalogLoader } from './index'
 
 function parseCatalogDeps(
@@ -97,8 +98,10 @@ export const bunCatalogLoader: CatalogLoader = {
       }
     }
 
+    const lineEnding = detectLineEnding(content)
     const newContent = JSON.stringify(raw, null, indent)
-    const final = content.endsWith('\n') ? `${newContent}\n` : newContent
+    const withTrailing = content.endsWith('\n') ? `${newContent}\n` : newContent
+    const final = lineEnding === '\r\n' ? withTrailing.replace(/\n/g, '\r\n') : withTrailing
     writeFileSync(catalog.filepath, final, 'utf-8')
   },
 }

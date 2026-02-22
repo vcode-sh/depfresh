@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { BumpOptions } from '../types'
 import { DEFAULT_OPTIONS } from '../types'
-import { loadPackages, parsePackageManagerField } from './packages'
+import { belongsToNestedWorkspace, loadPackages, parsePackageManagerField } from './packages'
 
 const baseOptions = { ...DEFAULT_OPTIONS } as BumpOptions
 
@@ -218,5 +218,227 @@ describe('parsePackageManagerField', () => {
   it('parses version with prerelease suffix', () => {
     const result = parsePackageManagerField('pnpm@9.0.0-beta.1')
     expect(result?.version).toBe('9.0.0-beta.1')
+  })
+})
+
+describe('belongsToNestedWorkspace', () => {
+  let tmpDir: string
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), 'bump-nested-ws-'))
+  })
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true })
+  })
+
+  it('returns false for package at root', () => {
+    writeFileSync(join(tmpDir, 'package.json'), JSON.stringify({ name: 'root' }))
+    expect(belongsToNestedWorkspace(join(tmpDir, 'package.json'), tmpDir)).toBe(false)
+  })
+
+  it('returns false for direct child without workspace markers', () => {
+    mkdirSync(join(tmpDir, 'packages', 'a'), { recursive: true })
+    writeFileSync(join(tmpDir, 'packages', 'a', 'package.json'), JSON.stringify({ name: 'a' }))
+    expect(belongsToNestedWorkspace(join(tmpDir, 'packages', 'a', 'package.json'), tmpDir)).toBe(
+      false,
+    )
+  })
+
+  it('detects nested pnpm workspace', () => {
+    // Root has its own workspace, but nested-mono has pnpm-workspace.yaml
+    mkdirSync(join(tmpDir, 'nested-mono', 'packages', 'x'), { recursive: true })
+    writeFileSync(join(tmpDir, 'nested-mono', 'pnpm-workspace.yaml'), 'packages:\n  - packages/*\n')
+    writeFileSync(
+      join(tmpDir, 'nested-mono', 'packages', 'x', 'package.json'),
+      JSON.stringify({ name: 'x' }),
+    )
+    expect(
+      belongsToNestedWorkspace(
+        join(tmpDir, 'nested-mono', 'packages', 'x', 'package.json'),
+        tmpDir,
+      ),
+    ).toBe(true)
+  })
+
+  it('detects nested yarn workspace via .yarnrc.yml', () => {
+    mkdirSync(join(tmpDir, 'nested-yarn', 'packages', 'y'), { recursive: true })
+    writeFileSync(join(tmpDir, 'nested-yarn', '.yarnrc.yml'), 'nodeLinker: node-modules\n')
+    writeFileSync(
+      join(tmpDir, 'nested-yarn', 'packages', 'y', 'package.json'),
+      JSON.stringify({ name: 'y' }),
+    )
+    expect(
+      belongsToNestedWorkspace(
+        join(tmpDir, 'nested-yarn', 'packages', 'y', 'package.json'),
+        tmpDir,
+      ),
+    ).toBe(true)
+  })
+
+  it('detects nested npm workspace via package.json with workspaces field', () => {
+    mkdirSync(join(tmpDir, 'nested-npm', 'packages', 'z'), { recursive: true })
+    writeFileSync(
+      join(tmpDir, 'nested-npm', 'package.json'),
+      JSON.stringify({ name: 'nested-root', workspaces: ['packages/*'] }),
+    )
+    writeFileSync(
+      join(tmpDir, 'nested-npm', 'packages', 'z', 'package.json'),
+      JSON.stringify({ name: 'z' }),
+    )
+    expect(
+      belongsToNestedWorkspace(join(tmpDir, 'nested-npm', 'packages', 'z', 'package.json'), tmpDir),
+    ).toBe(true)
+  })
+
+  it('detects nested .git directory as repo boundary', () => {
+    mkdirSync(join(tmpDir, 'nested-repo', '.git'), { recursive: true })
+    mkdirSync(join(tmpDir, 'nested-repo', 'packages', 'w'), { recursive: true })
+    writeFileSync(
+      join(tmpDir, 'nested-repo', 'packages', 'w', 'package.json'),
+      JSON.stringify({ name: 'w' }),
+    )
+    expect(
+      belongsToNestedWorkspace(
+        join(tmpDir, 'nested-repo', 'packages', 'w', 'package.json'),
+        tmpDir,
+      ),
+    ).toBe(true)
+  })
+
+  it('detects deeply nested workspace (4+ levels deep)', () => {
+    mkdirSync(join(tmpDir, 'deep', 'nested', 'mono', 'packages', 'x'), { recursive: true })
+    writeFileSync(
+      join(tmpDir, 'deep', 'nested', 'mono', 'pnpm-workspace.yaml'),
+      'packages:\n  - packages/*\n',
+    )
+    writeFileSync(
+      join(tmpDir, 'deep', 'nested', 'mono', 'packages', 'x', 'package.json'),
+      JSON.stringify({ name: 'deep-x' }),
+    )
+    expect(
+      belongsToNestedWorkspace(
+        join(tmpDir, 'deep', 'nested', 'mono', 'packages', 'x', 'package.json'),
+        tmpDir,
+      ),
+    ).toBe(true)
+  })
+
+  it('returns false when workspace markers exist only at root', () => {
+    // pnpm-workspace.yaml at root should not cause child packages to be flagged
+    writeFileSync(join(tmpDir, 'pnpm-workspace.yaml'), 'packages:\n  - packages/*\n')
+    mkdirSync(join(tmpDir, 'packages', 'a'), { recursive: true })
+    writeFileSync(join(tmpDir, 'packages', 'a', 'package.json'), JSON.stringify({ name: 'a' }))
+    expect(belongsToNestedWorkspace(join(tmpDir, 'packages', 'a', 'package.json'), tmpDir)).toBe(
+      false,
+    )
+  })
+
+  it('ignores package.json without workspaces field', () => {
+    mkdirSync(join(tmpDir, 'sub', 'deep'), { recursive: true })
+    // sub/package.json has no workspaces — not a workspace root
+    writeFileSync(join(tmpDir, 'sub', 'package.json'), JSON.stringify({ name: 'sub-root' }))
+    writeFileSync(join(tmpDir, 'sub', 'deep', 'package.json'), JSON.stringify({ name: 'deep' }))
+    expect(belongsToNestedWorkspace(join(tmpDir, 'sub', 'deep', 'package.json'), tmpDir)).toBe(
+      false,
+    )
+  })
+})
+
+describe('loadPackages with ignoreOtherWorkspaces', () => {
+  let tmpDir: string
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), 'bump-ignore-ws-'))
+  })
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true })
+  })
+
+  it('filters out packages from nested pnpm workspaces', async () => {
+    // Root workspace
+    writeFileSync(join(tmpDir, 'package.json'), JSON.stringify({ name: 'root' }, null, 2))
+    mkdirSync(join(tmpDir, 'packages', 'a'), { recursive: true })
+    writeFileSync(
+      join(tmpDir, 'packages', 'a', 'package.json'),
+      JSON.stringify({ name: 'a', dependencies: { lodash: '^4.0.0' } }, null, 2),
+    )
+
+    // Nested monorepo
+    mkdirSync(join(tmpDir, 'vendor', 'other-mono', 'packages', 'b'), { recursive: true })
+    writeFileSync(
+      join(tmpDir, 'vendor', 'other-mono', 'pnpm-workspace.yaml'),
+      'packages:\n  - packages/*\n',
+    )
+    writeFileSync(
+      join(tmpDir, 'vendor', 'other-mono', 'package.json'),
+      JSON.stringify({ name: 'other-mono' }, null, 2),
+    )
+    writeFileSync(
+      join(tmpDir, 'vendor', 'other-mono', 'packages', 'b', 'package.json'),
+      JSON.stringify({ name: 'b' }, null, 2),
+    )
+
+    const packages = await loadPackages({
+      ...baseOptions,
+      cwd: tmpDir,
+      ignoreOtherWorkspaces: true,
+      loglevel: 'silent',
+    })
+
+    const names = packages.map((p) => p.name).sort()
+    expect(names).toEqual(['a', 'root'])
+  })
+
+  it('keeps nested workspace packages when disabled', async () => {
+    writeFileSync(join(tmpDir, 'package.json'), JSON.stringify({ name: 'root' }, null, 2))
+    mkdirSync(join(tmpDir, 'vendor', 'other-mono', 'packages', 'b'), { recursive: true })
+    writeFileSync(
+      join(tmpDir, 'vendor', 'other-mono', 'pnpm-workspace.yaml'),
+      'packages:\n  - packages/*\n',
+    )
+    writeFileSync(
+      join(tmpDir, 'vendor', 'other-mono', 'package.json'),
+      JSON.stringify({ name: 'other-mono' }, null, 2),
+    )
+    writeFileSync(
+      join(tmpDir, 'vendor', 'other-mono', 'packages', 'b', 'package.json'),
+      JSON.stringify({ name: 'b' }, null, 2),
+    )
+
+    const packages = await loadPackages({
+      ...baseOptions,
+      cwd: tmpDir,
+      ignoreOtherWorkspaces: false,
+      loglevel: 'silent',
+    })
+
+    const names = packages.map((p) => p.name).sort()
+    expect(names).toEqual(['b', 'other-mono', 'root'])
+  })
+
+  it('filters nested npm workspaces (package.json with workspaces field)', async () => {
+    writeFileSync(join(tmpDir, 'package.json'), JSON.stringify({ name: 'root' }, null, 2))
+
+    mkdirSync(join(tmpDir, 'external', 'lib', 'packages', 'c'), { recursive: true })
+    writeFileSync(
+      join(tmpDir, 'external', 'lib', 'package.json'),
+      JSON.stringify({ name: 'lib-root', workspaces: ['packages/*'] }, null, 2),
+    )
+    writeFileSync(
+      join(tmpDir, 'external', 'lib', 'packages', 'c', 'package.json'),
+      JSON.stringify({ name: 'c' }, null, 2),
+    )
+
+    const packages = await loadPackages({
+      ...baseOptions,
+      cwd: tmpDir,
+      ignoreOtherWorkspaces: true,
+      loglevel: 'silent',
+    })
+
+    const names = packages.map((p) => p.name).sort()
+    expect(names).toEqual(['root'])
   })
 })

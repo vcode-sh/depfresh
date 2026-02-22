@@ -28,6 +28,65 @@ describe('resolveConfig', () => {
   })
 })
 
+describe('Phase 5 option defaults', () => {
+  it('failOnOutdated defaults to false', async () => {
+    const config = await resolveConfig({ cwd: '/tmp', loglevel: 'silent' })
+
+    expect(config.failOnOutdated).toBe(false)
+  })
+
+  it('ignoreOtherWorkspaces defaults to true', async () => {
+    const config = await resolveConfig({ cwd: '/tmp', loglevel: 'silent' })
+
+    expect(config.ignoreOtherWorkspaces).toBe(true)
+  })
+
+  it('failOnOutdated can be overridden to true', async () => {
+    const config = await resolveConfig({
+      cwd: '/tmp',
+      loglevel: 'silent',
+      failOnOutdated: true,
+    })
+
+    expect(config.failOnOutdated).toBe(true)
+  })
+
+  it('ignoreOtherWorkspaces can be overridden to false', async () => {
+    const config = await resolveConfig({
+      cwd: '/tmp',
+      loglevel: 'silent',
+      ignoreOtherWorkspaces: false,
+    })
+
+    expect(config.ignoreOtherWorkspaces).toBe(false)
+  })
+})
+
+describe('cwd option', () => {
+  it('uses cwd override when provided', async () => {
+    const config = await resolveConfig({ cwd: '/tmp/my-project', loglevel: 'silent' })
+
+    expect(config.cwd).toBe('/tmp/my-project')
+  })
+
+  it('falls back to default cwd when not provided', async () => {
+    const config = await resolveConfig({ loglevel: 'silent' })
+
+    expect(config.cwd).toBe('.')
+  })
+
+  it('passes cwd through to config resolution', async () => {
+    const config = await resolveConfig({
+      cwd: '/tmp/test-workspace',
+      mode: 'latest',
+      loglevel: 'silent',
+    })
+
+    expect(config.cwd).toBe('/tmp/test-workspace')
+    expect(config.mode).toBe('latest')
+  })
+})
+
 describe('defineConfig', () => {
   it('returns the config object as-is', () => {
     const config = defineConfig({ mode: 'major', concurrency: 8 })

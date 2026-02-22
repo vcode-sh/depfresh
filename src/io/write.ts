@@ -6,6 +6,10 @@ import { bunCatalogLoader } from './catalogs/bun'
 import { pnpmCatalogLoader } from './catalogs/pnpm'
 import { yarnCatalogLoader } from './catalogs/yarn'
 
+export function detectLineEnding(content: string): '\n' | '\r\n' {
+  return content.includes('\r\n') ? '\r\n' : '\n'
+}
+
 export interface FileBackup {
   filepath: string
   content: string
@@ -101,8 +105,10 @@ function writePackageJson(
   }
 
   // Preserve key order by serializing with the original key order
+  const lineEnding = detectLineEnding(content)
   const newContent = JSON.stringify(raw, null, indent)
-  const finalContent = content.endsWith('\n') ? `${newContent}\n` : newContent
+  const withTrailing = content.endsWith('\n') ? `${newContent}\n` : newContent
+  const finalContent = lineEnding === '\r\n' ? withTrailing.replace(/\n/g, '\r\n') : withTrailing
 
   writeFileSync(pkg.filepath, finalContent, 'utf-8')
   logger.success(`Updated ${pkg.filepath} (${changes.length} changes)`)

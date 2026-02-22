@@ -28,6 +28,7 @@ interface JsonPackage {
     source: string
     deprecated?: string | boolean
     publishedAt?: string
+    currentVersionTime?: string
   }>
 }
 
@@ -276,7 +277,7 @@ export async function check(options: BumpOptions): Promise<number> {
       }
     }
 
-    return hasUpdates && !options.write ? 1 : 0
+    return hasUpdates && !options.write && options.failOnOutdated ? 1 : 0
   } catch (error) {
     const logger = createLogger(options.loglevel)
     logger.error('Check failed:', error instanceof Error ? error.message : String(error))
@@ -295,6 +296,7 @@ function buildJsonPackage(name: string, updates: ResolvedDepChange[]): JsonPacka
       source: u.source,
       ...(u.deprecated ? { deprecated: u.deprecated } : {}),
       ...(u.publishedAt ? { publishedAt: u.publishedAt } : {}),
+      ...(u.currentVersionTime ? { currentVersionTime: u.currentVersionTime } : {}),
     })),
   }
 }

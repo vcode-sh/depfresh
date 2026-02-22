@@ -60,6 +60,7 @@ export interface ResolvedDepChange extends RawDep {
   deprecated?: string | boolean
   latestVersion?: string
   publishedAt?: string
+  currentVersionTime?: string
   score?: UpdateScore
   provenance?: ProvenanceLevel
   currentProvenance?: ProvenanceLevel
@@ -143,6 +144,7 @@ export interface BumpOptions {
   global: boolean
 
   ignorePaths: string[]
+  ignoreOtherWorkspaces: boolean
 
   // Display options
   all: boolean
@@ -152,6 +154,9 @@ export interface BumpOptions {
   cooldown: number
   nodecompat: boolean
   long: boolean
+
+  // Exit behavior
+  failOnOutdated: boolean
 
   // Post-write
   install: boolean
@@ -203,6 +208,7 @@ export const DEFAULT_OPTIONS: Partial<BumpOptions> = {
   peer: false,
   global: false,
   ignorePaths: ['**/node_modules/**', '**/dist/**', '**/coverage/**', '**/.git/**'],
+  ignoreOtherWorkspaces: true,
   all: false,
   group: true,
   sort: 'diff-asc',
@@ -210,6 +216,7 @@ export const DEFAULT_OPTIONS: Partial<BumpOptions> = {
   cooldown: 0,
   nodecompat: true,
   long: false,
+  failOnOutdated: false,
   install: false,
   update: false,
 }

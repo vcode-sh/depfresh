@@ -125,7 +125,7 @@ describe('check', () => {
     expect(result).toBe(0)
   })
 
-  it('returns 1 when updates available and write=false', async () => {
+  it('returns 0 when updates available and write=false (default)', async () => {
     const pkg = makePkg('my-app')
     loadPackagesMock.mockResolvedValue([pkg])
     resolvePackageMock.mockResolvedValue([makeResolved({ diff: 'major', targetVersion: '^2.0.0' })])
@@ -133,7 +133,41 @@ describe('check', () => {
     const { check } = await import('./index')
     const result = await check({ ...baseOptions, write: false })
 
+    expect(result).toBe(0)
+  })
+
+  it('returns 1 when updates available and failOnOutdated=true', async () => {
+    const pkg = makePkg('my-app')
+    loadPackagesMock.mockResolvedValue([pkg])
+    resolvePackageMock.mockResolvedValue([makeResolved({ diff: 'major', targetVersion: '^2.0.0' })])
+
+    const { check } = await import('./index')
+    const result = await check({ ...baseOptions, write: false, failOnOutdated: true })
+
     expect(result).toBe(1)
+  })
+
+  it('returns 0 when no updates regardless of failOnOutdated', async () => {
+    const pkg = makePkg('my-app')
+    loadPackagesMock.mockResolvedValue([pkg])
+    resolvePackageMock.mockResolvedValue([makeResolved({ diff: 'none', targetVersion: '^1.0.0' })])
+
+    const { check } = await import('./index')
+    const result = await check({ ...baseOptions, failOnOutdated: true })
+
+    expect(result).toBe(0)
+  })
+
+  it('returns 0 after successful write regardless of failOnOutdated', async () => {
+    const pkg = makePkg('my-app')
+    loadPackagesMock.mockResolvedValue([pkg])
+    resolvePackageMock.mockResolvedValue([makeResolved({ diff: 'minor', targetVersion: '^1.1.0' })])
+
+    const { check } = await import('./index')
+    const result = await check({ ...baseOptions, write: true, failOnOutdated: true })
+
+    expect(result).toBe(0)
+    expect(writePackageMock).toHaveBeenCalled()
   })
 
   it('returns 0 when updates available and write=true', async () => {
@@ -238,6 +272,86 @@ describe('check', () => {
     const result = await check(baseOptions)
 
     expect(result).toBe(2)
+  })
+
+  it('returns 2 on error even when failOnOutdated is true', async () => {
+    loadPackagesMock.mockRejectedValue(new Error('filesystem crash'))
+
+    const { check } = await import('./index')
+    const result = await check({ ...baseOptions, failOnOutdated: true })
+
+    expect(result).toBe(2)
+  })
+
+  it('JSON output includes currentVersionTime when present', async () => {
+    const pkg = makePkg('my-app')
+    loadPackagesMock.mockResolvedValue([pkg])
+    resolvePackageMock.mockResolvedValue([
+      makeResolved({
+        name: 'lodash',
+        diff: 'major',
+        currentVersion: '^4.0.0',
+        targetVersion: '^5.0.0',
+        currentVersionTime: '2023-01-15T10:00:00.000Z',
+        publishedAt: '2024-06-01T12:00:00.000Z',
+      }),
+    ])
+
+    const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+
+    const { check } = await import('./index')
+    await check({ ...baseOptions, output: 'json' })
+
+    const jsonCall = consoleSpy.mock.calls.find((call) => {
+      try {
+        const parsed = JSON.parse(call[0] as string)
+        return parsed.packages !== undefined
+      } catch {
+        return false
+      }
+    })
+
+    expect(jsonCall).toBeDefined()
+    const output = JSON.parse(jsonCall![0] as string)
+    const update = output.packages[0].updates[0]
+    expect(update.currentVersionTime).toBe('2023-01-15T10:00:00.000Z')
+    expect(update.publishedAt).toBe('2024-06-01T12:00:00.000Z')
+
+    consoleSpy.mockRestore()
+  })
+
+  it('JSON output omits currentVersionTime when not present', async () => {
+    const pkg = makePkg('my-app')
+    loadPackagesMock.mockResolvedValue([pkg])
+    resolvePackageMock.mockResolvedValue([
+      makeResolved({
+        name: 'lodash',
+        diff: 'major',
+        currentVersion: '^4.0.0',
+        targetVersion: '^5.0.0',
+      }),
+    ])
+
+    const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+
+    const { check } = await import('./index')
+    await check({ ...baseOptions, output: 'json' })
+
+    const jsonCall = consoleSpy.mock.calls.find((call) => {
+      try {
+        const parsed = JSON.parse(call[0] as string)
+        return parsed.packages !== undefined
+      } catch {
+        return false
+      }
+    })
+
+    expect(jsonCall).toBeDefined()
+    const output = JSON.parse(jsonCall![0] as string)
+    const update = output.packages[0].updates[0]
+    expect(update.currentVersionTime).toBeUndefined()
+
+    consoleSpy.mockRestore()
   })
 
   it('calls writePackage when write=true and beforePackageWrite returns true', async () => {
