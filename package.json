@@ -1,0 +1,66 @@
+{
+  "name": "bump-cli",
+  "version": "0.1.0",
+  "description": "Keep your npm dependencies fresh. Fast, correct, zero-config.",
+  "type": "module",
+  "license": "MIT",
+  "bin": {
+    "bump": "./dist/cli.mjs"
+  },
+  "main": "./dist/index.mjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsdown",
+    "dev": "tsx src/cli.ts",
+    "start": "tsx src/cli.ts",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "format": "biome format --write .",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "pnpm run build"
+  },
+  "dependencies": {
+    "@clack/prompts": "^1.0.1",
+    "ansis": "^4.2.0",
+    "better-sqlite3": "^12.6.2",
+    "c12": "^4.0.0-beta.3",
+    "citty": "^0.2.1",
+    "defu": "^6.1.4",
+    "detect-indent": "^7.0.2",
+    "find-up-simple": "^1.0.1",
+    "ini": "^6.0.0",
+    "p-limit": "^7.3.0",
+    "package-manager-detector": "^1.6.0",
+    "pathe": "^2.0.3",
+    "pnpm-workspace-yaml": "^1.5.0",
+    "semver": "^7.7.4",
+    "tinyglobby": "^0.2.15",
+    "yaml": "^2.8.2"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.4.4",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/ini": "^4.1.1",
+    "@types/node": "^25.3.0",
+    "@types/semver": "^7.7.1",
+    "tsdown": "^0.20.3",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

@@ -1,0 +1,128 @@
+import type { PackageData, NpmrcConfig, RegistryConfig } from '../types'
+import { getRegistryForPackage } from '../utils/npmrc'
+import type { Logger } from '../utils/logger'
+
+interface FetchOptions {
+  npmrc: NpmrcConfig
+  timeout: number
+  retries: number
+  logger: Logger
+}
+
+export async function fetchPackageData(
+  name: string,
+  options: FetchOptions,
+): Promise<PackageData> {
+  const registry = getRegistryForPackage(name, options.npmrc)
+
+  // JSR protocol
+  if (name.startsWith('jsr:')) {
+    return fetchJsrPackage(name.slice(4), options)
+  }
+
+  return fetchNpmPackage(name, registry, options)
+}
+
+async function fetchNpmPackage(
+  name: string,
+  registry: RegistryConfig,
+  options: FetchOptions,
+): Promise<PackageData> {
+  const encodedName = name.startsWith('@') ? `@${encodeURIComponent(name.slice(1))}` : encodeURIComponent(name)
+  const url = `${registry.url}${encodedName}`
+
+  const headers: Record<string, string> = {
+    accept: 'application/vnd.npm.install-v1+json',
+  }
+
+  if (registry.token) {
+    headers.authorization = registry.authType === 'basic'
+      ? `Basic ${registry.token}`
+      : `Bearer ${registry.token}`
+  }
+
+  const json = await fetchWithRetry(url, headers, options)
+
+  const versions = Object.keys(json.versions ?? {}).filter((v) => {
+    // Skip invalid semver
+    const { valid } = await import('semver')
+    return valid(v)
+  })
+
+  const distTags: Record<string, string> = json['dist-tags'] ?? {}
+  const time: Record<string, string> = json.time ?? {}
+  const deprecated: Record<string, string> = {}
+
+  for (const [ver, data] of Object.entries(json.versions ?? {})) {
+    if ((data as Record<string, unknown>).deprecated) {
+      deprecated[ver] = String((data as Record<string, unknown>).deprecated)
+    }
+  }
+
+  return {
+    name,
+    versions,
+    distTags,
+    time,
+    deprecated: Object.keys(deprecated).length > 0 ? deprecated : undefined,
+    description: json.description,
+    homepage: json.homepage,
+    repository: typeof json.repository === 'string'
+      ? json.repository
+      : json.repository?.url,
+  }
+}
+
+async function fetchJsrPackage(
+  name: string,
+  options: FetchOptions,
+): Promise<PackageData> {
+  const url = `https://jsr.io/${name}/meta.json`
+  const json = await fetchWithRetry(url, {}, options)
+
+  const versions = Object.keys(json.versions ?? {})
+  const latest = json.latest ?? versions[versions.length - 1] ?? ''
+
+  return {
+    name: `jsr:${name}`,
+    versions,
+    distTags: { latest },
+  }
+}
+
+async function fetchWithRetry(
+  url: string,
+  headers: Record<string, string>,
+  options: FetchOptions,
+  attempt = 0,
+): Promise<Record<string, unknown>> {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), options.timeout)
+
+  try {
+    const response = await fetch(url, {
+      headers,
+      signal: controller.signal,
+    })
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText} for ${url}`)
+    }
+
+    return await response.json() as Record<string, unknown>
+  } catch (error) {
+    if (attempt < options.retries) {
+      const delay = Math.min(1000 * 2 ** attempt, 5000)
+      options.logger.debug(`Retry ${attempt + 1}/${options.retries} for ${url} in ${delay}ms`)
+      await sleep(delay)
+      return fetchWithRetry(url, headers, options, attempt + 1)
+    }
+    throw error
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
