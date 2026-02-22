@@ -2,9 +2,9 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { loadPackages, parsePackageManagerField } from './packages'
 import type { BumpOptions } from '../types'
 import { DEFAULT_OPTIONS } from '../types'
+import { loadPackages, parsePackageManagerField } from './packages'
 
 const baseOptions = { ...DEFAULT_OPTIONS } as BumpOptions
 

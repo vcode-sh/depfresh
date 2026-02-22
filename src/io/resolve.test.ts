@@ -1,12 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type {
-  BumpOptions,
-  Cache,
-  NpmrcConfig,
-  PackageData,
-  PackageMeta,
-  RawDep,
-} from '../types'
+import type { Cache } from '../cache/index'
+import type { BumpOptions, NpmrcConfig, PackageData, PackageMeta, RawDep } from '../types'
 
 vi.mock('./registry', () => ({
   fetchPackageData: vi.fn(),

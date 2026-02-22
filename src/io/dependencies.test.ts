@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest'
+import type { BumpOptions } from '../types'
+import { DEFAULT_OPTIONS } from '../types'
 import {
   compilePatterns,
   isDepFieldEnabled,
   parseDependencies,
   shouldSkipDependency,
 } from './dependencies'
-import type { BumpOptions } from '../types'
-import { DEFAULT_OPTIONS } from '../types'
 
 const baseOptions = { ...DEFAULT_OPTIONS } as BumpOptions
 
