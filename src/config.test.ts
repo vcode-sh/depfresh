@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { resolveConfig } from '../src/config'
+import { resolveConfig } from './config'
 
 describe('resolveConfig', () => {
   it('returns default options when no config file', async () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { PackageData } from '../src/types'
+import type { PackageData } from '../types'
 
 const mockData: PackageData = {
   name: 'test-pkg',
@@ -9,7 +9,7 @@ const mockData: PackageData = {
 
 describe('sqlite cache', () => {
   it('stores and retrieves data', async () => {
-    const { createSqliteCache } = await import('../src/cache/sqlite')
+    const { createSqliteCache } = await import('./sqlite')
     const cache = createSqliteCache()
 
     cache.set('test-pkg', mockData, 60_000)
@@ -20,7 +20,7 @@ describe('sqlite cache', () => {
   })
 
   it('returns undefined for missing key', async () => {
-    const { createSqliteCache } = await import('../src/cache/sqlite')
+    const { createSqliteCache } = await import('./sqlite')
     const cache = createSqliteCache()
 
     const result = cache.get('nonexistent')
@@ -29,7 +29,7 @@ describe('sqlite cache', () => {
   })
 
   it('reports correct stats', async () => {
-    const { createSqliteCache } = await import('../src/cache/sqlite')
+    const { createSqliteCache } = await import('./sqlite')
     const cache = createSqliteCache()
 
     cache.set('test', mockData, 60_000)
@@ -43,7 +43,7 @@ describe('sqlite cache', () => {
   })
 
   it('clears all entries', async () => {
-    const { createSqliteCache } = await import('../src/cache/sqlite')
+    const { createSqliteCache } = await import('./sqlite')
     const cache = createSqliteCache()
 
     cache.set('a', mockData, 60_000)
@@ -58,7 +58,7 @@ describe('sqlite cache', () => {
 
 describe('cache round-trip with PackageData', () => {
   it('preserves all PackageData fields through set/get', async () => {
-    const { createSqliteCache } = await import('../src/cache/sqlite')
+    const { createSqliteCache } = await import('./sqlite')
     const cache = createSqliteCache()
 
     const fullData: PackageData = {
@@ -82,7 +82,7 @@ describe('cache round-trip with PackageData', () => {
 
 describe('cache TTL expiration', () => {
   it('returns undefined after TTL expires', async () => {
-    const { createSqliteCache } = await import('../src/cache/sqlite')
+    const { createSqliteCache } = await import('./sqlite')
     const cache = createSqliteCache()
 
     // Set with 1ms TTL
@@ -99,7 +99,7 @@ describe('cache TTL expiration', () => {
 
 describe('cache stats accuracy', () => {
   it('tracks hits and misses accurately', async () => {
-    const { createSqliteCache } = await import('../src/cache/sqlite')
+    const { createSqliteCache } = await import('./sqlite')
     const cache = createSqliteCache()
 
     cache.set('pkg-a', mockData, 60_000)
@@ -145,7 +145,7 @@ describe('corrupt JSON data handling', () => {
     ).run('corrupt-pkg', '{invalid json!!!', Date.now(), Date.now() + 60_000)
     db.close()
 
-    const { createSqliteCache } = await import('../src/cache/sqlite')
+    const { createSqliteCache } = await import('./sqlite')
     const cache = createSqliteCache()
 
     const result = cache.get('corrupt-pkg')
@@ -159,7 +159,7 @@ describe('corrupt JSON data handling', () => {
 
 describe('scoped package names', () => {
   it('handles @scope/pkg names correctly', async () => {
-    const { createSqliteCache } = await import('../src/cache/sqlite')
+    const { createSqliteCache } = await import('./sqlite')
     const cache = createSqliteCache()
 
     const scopedData: PackageData = {
@@ -189,7 +189,7 @@ describe('memory fallback', () => {
     }))
 
     // Must re-import to pick up the mock
-    const { createSqliteCache } = await import('../src/cache/sqlite')
+    const { createSqliteCache } = await import('./sqlite')
     const cache = createSqliteCache()
 
     // Basic operations should work with memory fallback
@@ -216,7 +216,7 @@ describe('memory fallback', () => {
       },
     }))
 
-    const { createSqliteCache } = await import('../src/cache/sqlite')
+    const { createSqliteCache } = await import('./sqlite')
     const cache = createSqliteCache()
 
     cache.set('expiring', mockData, 1)

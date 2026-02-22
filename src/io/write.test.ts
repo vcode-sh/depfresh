@@ -2,8 +2,8 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { writePackage } from '../src/io/write'
-import type { PackageMeta, ResolvedDepChange } from '../src/types'
+import { writePackage } from './write'
+import type { PackageMeta, ResolvedDepChange } from '../types'
 
 function makeChange(overrides: Partial<ResolvedDepChange> = {}): ResolvedDepChange {
   return {

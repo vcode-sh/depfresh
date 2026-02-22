@@ -6,17 +6,17 @@ import type {
   PackageData,
   PackageMeta,
   RawDep,
-} from '../src/types'
+} from '../types'
 
-vi.mock('../src/io/registry', () => ({
+vi.mock('./registry', () => ({
   fetchPackageData: vi.fn(),
 }))
 
-vi.mock('../src/cache/index', () => ({
+vi.mock('../cache/index', () => ({
   createSqliteCache: vi.fn(),
 }))
 
-vi.mock('../src/utils/npmrc', () => ({
+vi.mock('../utils/npmrc', () => ({
   loadNpmrc: vi.fn(),
 }))
 
@@ -92,8 +92,8 @@ describe('resolvePackage', () => {
   })
 
   it('returns cached data without fetching', async () => {
-    const { fetchPackageData } = await import('../src/io/registry')
-    const { resolvePackage } = await import('../src/io/resolve')
+    const { fetchPackageData } = await import('./registry')
+    const { resolvePackage } = await import('./resolve')
 
     const cache = createMockCache()
     vi.mocked(cache.get).mockReturnValue(mockPkgData)
@@ -116,8 +116,8 @@ describe('resolvePackage', () => {
   })
 
   it('fetches from registry on cache miss and caches result', async () => {
-    const { fetchPackageData } = await import('../src/io/registry')
-    const { resolvePackage } = await import('../src/io/resolve')
+    const { fetchPackageData } = await import('./registry')
+    const { resolvePackage } = await import('./resolve')
 
     const cache = createMockCache()
     vi.mocked(fetchPackageData).mockResolvedValue(mockPkgData)
@@ -139,8 +139,8 @@ describe('resolvePackage', () => {
   })
 
   it('returns error diff on registry fetch failure', async () => {
-    const { fetchPackageData } = await import('../src/io/registry')
-    const { resolvePackage } = await import('../src/io/resolve')
+    const { fetchPackageData } = await import('./registry')
+    const { resolvePackage } = await import('./resolve')
 
     const cache = createMockCache()
     vi.mocked(fetchPackageData).mockRejectedValue(new Error('Network error'))
@@ -162,8 +162,8 @@ describe('resolvePackage', () => {
   })
 
   it('resolves multiple deps with concurrency', async () => {
-    const { fetchPackageData } = await import('../src/io/registry')
-    const { resolvePackage } = await import('../src/io/resolve')
+    const { fetchPackageData } = await import('./registry')
+    const { resolvePackage } = await import('./resolve')
 
     const cache = createMockCache()
 
@@ -197,8 +197,8 @@ describe('resolvePackage', () => {
   })
 
   it('calls onDependencyResolved callback per dep', async () => {
-    const { fetchPackageData } = await import('../src/io/registry')
-    const { resolvePackage } = await import('../src/io/resolve')
+    const { fetchPackageData } = await import('./registry')
+    const { resolvePackage } = await import('./resolve')
 
     const cache = createMockCache()
     vi.mocked(fetchPackageData).mockResolvedValue(mockPkgData)
@@ -223,8 +223,8 @@ describe('resolvePackage', () => {
   })
 
   it('skips deps with update=false', async () => {
-    const { fetchPackageData } = await import('../src/io/registry')
-    const { resolvePackage } = await import('../src/io/resolve')
+    const { fetchPackageData } = await import('./registry')
+    const { resolvePackage } = await import('./resolve')
 
     const cache = createMockCache()
     const dep = makeDep({ update: false })
@@ -243,8 +243,8 @@ describe('resolvePackage', () => {
   })
 
   it('uses packageMode override over global mode', async () => {
-    const { fetchPackageData } = await import('../src/io/registry')
-    const { resolvePackage } = await import('../src/io/resolve')
+    const { fetchPackageData } = await import('./registry')
+    const { resolvePackage } = await import('./resolve')
 
     const cache = createMockCache()
     vi.mocked(fetchPackageData).mockResolvedValue(mockPkgData)
@@ -269,7 +269,7 @@ describe('resolvePackage', () => {
   })
 
   it('does not close externally provided cache', async () => {
-    const { resolvePackage } = await import('../src/io/resolve')
+    const { resolvePackage } = await import('./resolve')
 
     const cache = createMockCache()
     vi.mocked(cache.get).mockReturnValue(mockPkgData)
@@ -293,8 +293,8 @@ describe('filterVersions', () => {
   // filterVersions is not exported, so we test it indirectly through resolvePackage
 
   it('removes deprecated versions when current is not deprecated', async () => {
-    const { fetchPackageData } = await import('../src/io/registry')
-    const { resolvePackage } = await import('../src/io/resolve')
+    const { fetchPackageData } = await import('./registry')
+    const { resolvePackage } = await import('./resolve')
 
     const cache = createMockCache()
     const pkgData: PackageData = {
@@ -323,8 +323,8 @@ describe('filterVersions', () => {
   })
 
   it('keeps prerelease versions when current is prerelease', async () => {
-    const { fetchPackageData } = await import('../src/io/registry')
-    const { resolvePackage } = await import('../src/io/resolve')
+    const { fetchPackageData } = await import('./registry')
+    const { resolvePackage } = await import('./resolve')
 
     const cache = createMockCache()
     const pkgData: PackageData = {

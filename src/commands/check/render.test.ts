@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { renderTable } from '../src/commands/check/render'
-import type { ResolvedDepChange } from '../src/types'
-import { stripAnsi } from '../src/utils/format'
+import { renderTable } from './render'
+import type { ResolvedDepChange } from '../../types'
+import { stripAnsi } from '../../utils/format'
 
 function makeUpdate(overrides: Partial<ResolvedDepChange> = {}): ResolvedDepChange {
   return {

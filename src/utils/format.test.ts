@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { colorDiff, formatMs, stripAnsi, truncate } from '../src/utils/format'
+import { colorDiff, formatMs, stripAnsi, truncate } from './format'
 
 describe('stripAnsi', () => {
   it('strips ANSI codes', () => {

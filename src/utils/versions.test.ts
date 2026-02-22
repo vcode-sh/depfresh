@@ -7,7 +7,7 @@ import {
   isLocked,
   isRange,
   resolveTargetVersion,
-} from '../src/utils/versions'
+} from './versions'
 
 describe('getVersionPrefix', () => {
   it('extracts ^ prefix', () => {

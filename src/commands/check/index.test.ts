@@ -1,21 +1,21 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { BumpOptions, PackageMeta, ResolvedDepChange } from '../src/types'
-import { DEFAULT_OPTIONS } from '../src/types'
+import type { BumpOptions, PackageMeta, ResolvedDepChange } from '../../types'
+import { DEFAULT_OPTIONS } from '../../types'
 
 // Mock modules before importing check
-vi.mock('../src/io/packages', () => ({
+vi.mock('../../io/packages', () => ({
   loadPackages: vi.fn(),
 }))
 
-vi.mock('../src/io/resolve', () => ({
+vi.mock('../../io/resolve', () => ({
   resolvePackage: vi.fn(),
 }))
 
-vi.mock('../src/io/write', () => ({
+vi.mock('../../io/write', () => ({
   writePackage: vi.fn(),
 }))
 
-vi.mock('../src/cache/index', () => ({
+vi.mock('../../cache/index', () => ({
   createSqliteCache: vi.fn(() => ({
     get: vi.fn(),
     set: vi.fn(),
@@ -26,7 +26,7 @@ vi.mock('../src/cache/index', () => ({
   })),
 }))
 
-vi.mock('../src/utils/npmrc', () => ({
+vi.mock('../../utils/npmrc', () => ({
   loadNpmrc: vi.fn(() => ({
     registries: new Map(),
     defaultRegistry: 'https://registry.npmjs.org/',
@@ -79,9 +79,9 @@ describe('check', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks()
-    const packagesModule = await import('../src/io/packages')
-    const resolveModule = await import('../src/io/resolve')
-    const writeModule = await import('../src/io/write')
+    const packagesModule = await import('../../io/packages')
+    const resolveModule = await import('../../io/resolve')
+    const writeModule = await import('../../io/write')
     loadPackagesMock = packagesModule.loadPackages as ReturnType<typeof vi.fn>
     resolvePackageMock = resolveModule.resolvePackage as ReturnType<typeof vi.fn>
     writePackageMock = writeModule.writePackage as ReturnType<typeof vi.fn>
@@ -94,7 +94,7 @@ describe('check', () => {
   it('returns 0 when no packages found', async () => {
     loadPackagesMock.mockResolvedValue([])
 
-    const { check } = await import('../src/commands/check/index')
+    const { check } = await import('./index')
     const result = await check(baseOptions)
 
     expect(result).toBe(0)
@@ -105,7 +105,7 @@ describe('check', () => {
     loadPackagesMock.mockResolvedValue([pkg])
     resolvePackageMock.mockResolvedValue([makeResolved({ diff: 'none', targetVersion: '^1.0.0' })])
 
-    const { check } = await import('../src/commands/check/index')
+    const { check } = await import('./index')
     const result = await check(baseOptions)
 
     expect(result).toBe(0)
@@ -116,7 +116,7 @@ describe('check', () => {
     loadPackagesMock.mockResolvedValue([pkg])
     resolvePackageMock.mockResolvedValue([makeResolved({ diff: 'major', targetVersion: '^2.0.0' })])
 
-    const { check } = await import('../src/commands/check/index')
+    const { check } = await import('./index')
     const result = await check({ ...baseOptions, write: false })
 
     expect(result).toBe(1)
@@ -127,7 +127,7 @@ describe('check', () => {
     loadPackagesMock.mockResolvedValue([pkg])
     resolvePackageMock.mockResolvedValue([makeResolved({ diff: 'minor', targetVersion: '^1.1.0' })])
 
-    const { check } = await import('../src/commands/check/index')
+    const { check } = await import('./index')
     const result = await check({ ...baseOptions, write: true })
 
     expect(result).toBe(0)
@@ -141,7 +141,7 @@ describe('check', () => {
     resolvePackageMock.mockResolvedValue([])
 
     const beforePackageStart = vi.fn()
-    const { check } = await import('../src/commands/check/index')
+    const { check } = await import('./index')
     await check({ ...baseOptions, beforePackageStart })
 
     expect(beforePackageStart).toHaveBeenCalledTimes(2)
@@ -159,7 +159,7 @@ describe('check', () => {
     resolvePackageMock.mockResolvedValue(resolved)
 
     const onDependencyResolved = vi.fn()
-    const { check } = await import('../src/commands/check/index')
+    const { check } = await import('./index')
     await check({ ...baseOptions, onDependencyResolved })
 
     // onDependencyResolved is called inside resolvePackage which we mocked,
@@ -188,7 +188,7 @@ describe('check', () => {
 
     const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
 
-    const { check } = await import('../src/commands/check/index')
+    const { check } = await import('./index')
     await check({ ...baseOptions, output: 'json' })
 
     const jsonCall = consoleSpy.mock.calls.find((call) => {
@@ -220,7 +220,7 @@ describe('check', () => {
   it('handles errors gracefully and returns 2', async () => {
     loadPackagesMock.mockRejectedValue(new Error('filesystem crash'))
 
-    const { check } = await import('../src/commands/check/index')
+    const { check } = await import('./index')
     const result = await check(baseOptions)
 
     expect(result).toBe(2)
@@ -234,7 +234,7 @@ describe('check', () => {
     const beforePackageWrite = vi.fn().mockResolvedValue(true)
     const afterPackageWrite = vi.fn()
 
-    const { check } = await import('../src/commands/check/index')
+    const { check } = await import('./index')
     await check({ ...baseOptions, write: true, beforePackageWrite, afterPackageWrite })
 
     expect(writePackageMock).toHaveBeenCalled()
@@ -249,7 +249,7 @@ describe('check', () => {
     const beforePackageWrite = vi.fn().mockResolvedValue(false)
     const afterPackageWrite = vi.fn()
 
-    const { check } = await import('../src/commands/check/index')
+    const { check } = await import('./index')
     await check({ ...baseOptions, write: true, beforePackageWrite, afterPackageWrite })
 
     expect(writePackageMock).not.toHaveBeenCalled()

@@ -4,9 +4,9 @@ import {
   isDepFieldEnabled,
   parseDependencies,
   shouldSkipDependency,
-} from '../src/io/dependencies'
-import type { BumpOptions } from '../src/types'
-import { DEFAULT_OPTIONS } from '../src/types'
+} from './dependencies'
+import type { BumpOptions } from '../types'
+import { DEFAULT_OPTIONS } from '../types'
 
 const baseOptions = { ...DEFAULT_OPTIONS } as BumpOptions
 

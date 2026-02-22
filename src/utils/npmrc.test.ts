@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import type { NpmrcConfig } from '../src/types'
-import { getRegistryForPackage } from '../src/utils/npmrc'
+import type { NpmrcConfig } from '../types'
+import { getRegistryForPackage } from './npmrc'
 
 describe('getRegistryForPackage', () => {
   const config: NpmrcConfig = {

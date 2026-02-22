@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { NpmrcConfig } from '../src/types'
-import type { Logger } from '../src/utils/logger'
+import type { NpmrcConfig } from '../types'
+import type { Logger } from '../utils/logger'
 
 const mockLogger: Logger = {
   info: vi.fn(),
@@ -48,7 +48,7 @@ describe('fetchPackageData', () => {
     }
     globalThis.fetch = mockFetchResponse(npmResponse)
 
-    const { fetchPackageData } = await import('../src/io/registry')
+    const { fetchPackageData } = await import('./registry')
     const result = await fetchPackageData('lodash', defaultOptions)
 
     expect(globalThis.fetch).toHaveBeenCalledWith(
@@ -71,7 +71,7 @@ describe('fetchPackageData', () => {
     }
     globalThis.fetch = mockFetchResponse(jsrResponse)
 
-    const { fetchPackageData } = await import('../src/io/registry')
+    const { fetchPackageData } = await import('./registry')
     const result = await fetchPackageData('jsr:@std/path', defaultOptions)
 
     expect(globalThis.fetch).toHaveBeenCalledWith(
@@ -89,7 +89,7 @@ describe('fetchPackageData', () => {
     }
     globalThis.fetch = mockFetchResponse(npmResponse)
 
-    const { fetchPackageData } = await import('../src/io/registry')
+    const { fetchPackageData } = await import('./registry')
     await fetchPackageData('@vue/reactivity', defaultOptions)
 
     expect(globalThis.fetch).toHaveBeenCalledWith(
@@ -105,7 +105,7 @@ describe('fetchPackageData', () => {
     }
     globalThis.fetch = mockFetchResponse(npmResponse)
 
-    const { fetchPackageData } = await import('../src/io/registry')
+    const { fetchPackageData } = await import('./registry')
     await fetchPackageData('test-pkg', defaultOptions)
 
     const fetchCall = vi.mocked(globalThis.fetch).mock.calls[0]!
@@ -136,7 +136,7 @@ describe('fetchPackageData', () => {
       strictSsl: true,
     }
 
-    const { fetchPackageData } = await import('../src/io/registry')
+    const { fetchPackageData } = await import('./registry')
     await fetchPackageData('@private/pkg', {
       ...defaultOptions,
       npmrc: scopedNpmrc,
@@ -157,7 +157,7 @@ describe('fetchPackageData', () => {
     }
     globalThis.fetch = mockFetchResponse(npmResponse)
 
-    const { fetchPackageData } = await import('../src/io/registry')
+    const { fetchPackageData } = await import('./registry')
     const result = await fetchPackageData('old-pkg', defaultOptions)
 
     expect(result.deprecated).toEqual({ '1.0.0': 'Use 2.x' })
@@ -179,7 +179,7 @@ describe('fetchWithRetry', () => {
     }
     globalThis.fetch = mockFetchResponse(npmResponse)
 
-    const { fetchPackageData } = await import('../src/io/registry')
+    const { fetchPackageData } = await import('./registry')
     const result = await fetchPackageData('test-pkg', defaultOptions)
 
     expect(globalThis.fetch).toHaveBeenCalledTimes(1)
@@ -211,7 +211,7 @@ describe('fetchWithRetry', () => {
       })
     })
 
-    const { fetchPackageData } = await import('../src/io/registry')
+    const { fetchPackageData } = await import('./registry')
     const result = await fetchPackageData('test-pkg', {
       ...defaultOptions,
       retries: 2,
@@ -232,7 +232,7 @@ describe('fetchWithRetry', () => {
       json: () => Promise.resolve({}),
     })
 
-    const { fetchPackageData } = await import('../src/io/registry')
+    const { fetchPackageData } = await import('./registry')
 
     await expect(
       fetchPackageData('nonexistent-pkg', {
@@ -253,7 +253,7 @@ describe('fetchWithRetry', () => {
       json: () => Promise.resolve({}),
     })
 
-    const { fetchPackageData } = await import('../src/io/registry')
+    const { fetchPackageData } = await import('./registry')
 
     await expect(
       fetchPackageData('private-pkg', {
@@ -286,7 +286,7 @@ describe('fetchWithRetry', () => {
       })
     })
 
-    const { fetchPackageData } = await import('../src/io/registry')
+    const { fetchPackageData } = await import('./registry')
     const result = await fetchPackageData('test-pkg', {
       ...defaultOptions,
       retries: 2,
@@ -299,7 +299,7 @@ describe('fetchWithRetry', () => {
   it('throws after all retries exhausted', async () => {
     globalThis.fetch = vi.fn().mockRejectedValue(new TypeError('fetch failed'))
 
-    const { fetchPackageData } = await import('../src/io/registry')
+    const { fetchPackageData } = await import('./registry')
 
     await expect(
       fetchPackageData('test-pkg', {
