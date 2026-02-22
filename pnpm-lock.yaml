@@ -15,8 +15,8 @@ importers:
         specifier: ^4.2.0
         version: 4.2.0
       better-sqlite3:
-        specifier: ^11.10.0
-        version: 11.10.0
+        specifier: ^12.6.2
+        version: 12.6.2
       citty:
         specifier: ^0.2.1
         version: 0.2.1
@@ -752,8 +752,9 @@ packages:
     engines: {node: '>=6.0.0'}
     hasBin: true
 
-  better-sqlite3@11.10.0:
-    resolution: {integrity: sha512-EwhOpyXiOEL/lKzHz9AW1msWFNzGc/z+LzeB3/jnFJpxu+th2yqvzsSWas1v9jgs9+xiXJcD5A8CJxAG2TaghQ==}
+  better-sqlite3@12.6.2:
+    resolution: {integrity: sha512-8VYKM3MjCa9WcaSAI3hzwhmyHVlH8tiGFwf0RlTsZPWJ1I5MkzjiudCo4KC4DxOaL/53A5B1sI/IbldNFDbsKA==}
+    engines: {node: 20.x || 22.x || 23.x || 24.x || 25.x}
 
   bindings@1.5.0:
     resolution: {integrity: sha512-p2q/t/mhvuOj/UeLlV6566GD/guowlr0hHxClI0W9m7MWYkL1F0hLo+0Aexs9HSPCtR1SXQ0TD3MMKrXZajbiQ==}
@@ -1995,7 +1996,7 @@ snapshots:
 
   baseline-browser-mapping@2.10.0: {}
 
-  better-sqlite3@11.10.0:
+  better-sqlite3@12.6.2:
     dependencies:
       bindings: 1.5.0
       prebuild-install: 7.1.3
