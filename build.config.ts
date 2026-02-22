@@ -10,6 +10,10 @@ export default defineBuildConfig({
   rollup: {
     emitCJS: false,
     inlineDependencies: true,
+    output: {
+      banner: (chunk) =>
+        chunk.fileName === 'cli.mjs' ? '#!/usr/bin/env node' : '',
+    },
   },
   externals: ['better-sqlite3'],
 })

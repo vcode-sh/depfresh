@@ -26,7 +26,7 @@
   ],
   "sideEffects": false,
   "bin": {
-    "upgr": "./dist/cli.mjs"
+    "upgr": "dist/cli.mjs"
   },
   "main": "./dist/index.mjs",
   "module": "./dist/index.mjs",
