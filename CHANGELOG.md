@@ -2,6 +2,40 @@
 
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Semver because I'm not a psychopath.
 
+## [0.2.0] - 2026-02-22
+
+The "actually test your code" release. Went from 54 tests to 159 and fixed bugs I didn't know I had. Classic.
+
+### Fixed
+
+- `shouldSkipDependency` had inverted logic for `workspace:` and `catalog:` protocols. It was skipping things it shouldn't and keeping things it should skip. Impressive, really.
+- `cache.stats()` was called after `cache.close()` in the resolve pipeline. Worked by accident. Fixed it before it didn't.
+- `JSON.parse` in `cache.get()` now handles corrupt entries instead of exploding. Deletes the bad row and moves on like a mature adult.
+- 4xx registry errors (404, 403) no longer trigger retries. Because retrying "package not found" three times won't make it appear. That's not how reality works.
+
+### Changed
+
+- Cache and `.npmrc` loading lifted from per-package to per-run in `check()`. One SQLite open, one `.npmrc` read, regardless of monorepo size. Taze still opens one per package. I sleep well.
+- Include/exclude patterns now pre-compiled once via `compilePatterns()` instead of `new RegExp()` on every dependency. Micro-optimisation? Sure. But it's the principle.
+- Removed `package-manager-detector` dependency — was imported in package.json but never used in source. Ghost dependency. Spooky.
+- Removed unused `_options` parameter from `renderTable()`. Dead code is dead.
+- Tests colocated with source files. `foo.ts` gets `foo.test.ts` in the same directory. The separate `test/` folder has been ritually cremated. It's not 2017.
+
+### Added
+
+- 105 new tests across 8 new test files. Total: 159 tests, 12 files. All passing.
+- Tests for: dependencies parsing, version resolution, SQLite cache (including memory fallback and corrupt data), registry fetching with retry logic, package discovery, write operations, check command integration, and table rendering.
+- Exported `parsePackageManagerField` and `shouldSkipDependency` for direct testing.
+
+### Credits
+
+Bugs and improvements informed by taze contributors who filed issues and PRs that never got merged:
+
+- **leny-mi** (Lennart Mischnaewski) — unsorted version array bug ([taze#217](https://github.com/antfu/taze/pull/217))
+- **runyasak** — deprecated version filtering ([taze#199](https://github.com/antfu/taze/pull/199))
+- **hyoban** (Stephen Zhou) — packageManager hash preservation ([taze#234](https://github.com/antfu/taze/pull/234))
+- **sxzz** (Kevin Deng) — provenance downgrade warning ([taze#198](https://github.com/antfu/taze/pull/198))
+
 ## [0.1.0] - 2026-02-22
 
 First release. Wrote it from scratch because waiting for PRs to get merged in taze was aging me faster than JavaScript frameworks.
@@ -27,4 +61,5 @@ First release. Wrote it from scratch because waiting for PRs to get merged in ta
 - TTY detection. No spinners in your CI logs. `NO_COLOR` respected.
 - 54 tests. More than some production apps I've seen.
 
+[0.2.0]: https://github.com/vcode-sh/bump/releases/tag/v0.2.0
 [0.1.0]: https://github.com/vcode-sh/bump/releases/tag/v0.1.0
