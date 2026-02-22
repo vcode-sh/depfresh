@@ -1,7 +1,7 @@
 import * as readline from 'node:readline'
 import type { ResolvedDepChange } from '../../../types'
 import { handleKeypress } from './keymap'
-import { eraseLines, renderFrame } from './renderer'
+import { eraseLines, renderFrame } from './render'
 import { createInitialState, resize, type TuiState } from './state'
 
 interface InteractiveTUIOptions {

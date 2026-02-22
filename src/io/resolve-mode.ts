@@ -1,4 +1,5 @@
 import type { RangeMode } from '../types'
+import { patternToRegex } from '../utils/patterns'
 
 export function getPackageMode(
   packageName: string,
@@ -15,7 +16,7 @@ export function getPackageMode(
     if (pattern === packageName) continue
 
     try {
-      const regex = patternToMatchRegex(pattern)
+      const regex = patternToRegex(pattern)
       if (regex.test(packageName)) {
         return mode
       }
@@ -25,12 +26,4 @@ export function getPackageMode(
   }
 
   return defaultMode
-}
-
-function patternToMatchRegex(pattern: string): RegExp {
-  if (pattern.includes('*') && !/[\^$[\]()\\|+?]/.test(pattern)) {
-    const escaped = pattern.replace(/[.@/]/g, '\\$&').replace(/\*/g, '[^/]*')
-    return new RegExp(`^${escaped}$`)
-  }
-  return new RegExp(pattern)
 }

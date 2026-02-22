@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { ResolvedDepChange } from '../../../types'
 import { stripAnsi } from '../../../utils/format'
-import { eraseLines, renderFrame } from './renderer'
+import { eraseLines, renderFrame } from './render'
 import { createInitialState, enterDetail, moveCursor, toggleSelection } from './state'
 
 function makeDep(name: string, source: ResolvedDepChange['source']): ResolvedDepChange {

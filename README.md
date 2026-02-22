@@ -81,7 +81,7 @@ bump --fail-on-outdated
 
 ## CLI Flags
 
-The top flags to get you started. Full reference with all 27+ flags: **[docs/cli.md](docs/cli.md)**
+The top flags to get you started. Full reference with all 27+ flags: **[docs/cli/](docs/cli/)**
 
 | Flag | Alias | Default | Description |
 |------|-------|---------|-------------|
@@ -118,7 +118,7 @@ export default defineConfig({
 })
 ```
 
-Full options reference: **[docs/configuration.md](docs/configuration.md)**
+Full options reference: **[docs/configuration/](docs/configuration/)**
 
 ## JSON Output
 
@@ -155,7 +155,7 @@ Full options reference: **[docs/configuration.md](docs/configuration.md)**
 }
 ```
 
-Full schema and field reference: **[docs/output-formats.md](docs/output-formats.md)**
+Full schema and field reference: **[docs/output-formats/](docs/output-formats/)**
 
 ## AI Agent Usage
 
@@ -204,7 +204,7 @@ const options = await resolveConfig({
 const exitCode = await check(options)
 ```
 
-9 exported functions, 7 lifecycle callbacks, 16+ types. Full API reference: **[docs/api.md](docs/api.md)**
+9 exported functions, 7 lifecycle callbacks, 16+ types. Full API reference: **[docs/api/](docs/api/)**
 
 ## Monorepo Support
 
@@ -252,10 +252,10 @@ Not to throw shade at taze -- it served the community well for years. But some t
 
 The full docs, for people who read manuals before assembling furniture.
 
-- **[CLI Reference](docs/cli.md)** -- all 27+ flags, modes, sorting, filtering, hooks, interactive, CI, workspaces
-- **[Configuration](docs/configuration.md)** -- config files, every option, packageMode, depFields, private registries, cache
-- **[Programmatic API](docs/api.md)** -- exported functions, lifecycle callbacks, types, workflow examples
-- **[Output Formats](docs/output-formats.md)** -- table, JSON, SARIF, exit codes, AI agent integration
+- **[CLI Reference](docs/cli/)** -- all 27+ flags, modes, sorting, filtering, hooks, interactive, CI, workspaces
+- **[Configuration](docs/configuration/)** -- config files, every option, packageMode, depFields, private registries, cache
+- **[Programmatic API](docs/api/)** -- exported functions, lifecycle callbacks, types, workflow examples
+- **[Output Formats](docs/output-formats/)** -- table, JSON, SARIF, exit codes, AI agent integration
 - **[Troubleshooting](docs/troubleshooting.md)** -- common issues, workspace gotchas, known limitations
 
 ## Requirements

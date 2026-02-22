@@ -2,6 +2,21 @@
 
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Semver because I'm not a psychopath.
 
+## [0.9.1] - 2026-02-22
+
+The "every file was too long and I have standards" release. Full codebase modularisation. Every production file that crept past 200 LOC got split into focused single-responsibility modules. Every test file over 250 LOC got the same treatment. Docs too, because why stop. Zero behaviour changes, zero new features, zero regressions. Just a codebase that doesn't make you scroll for 30 seconds to find the function you're looking for.
+
+### Changed
+
+- **Codebase modularisation** -- 10 production files split into focused directories with barrel re-exports. `types.ts`, `cli.ts`, `format.ts`, `dependencies.ts`, `resolve.ts`, `write.ts`, `packages.ts`, `check/index.ts`, `render.ts`, and `tui/renderer.ts` all decomposed into single-responsibility modules. No file above 200 LOC. Import paths unchanged because barrel exports exist for a reason.
+- **Shared pattern engine** -- deduplicated glob-to-regex logic from `dependencies.ts` and `resolve-mode.ts` into `src/utils/patterns.ts`. One pattern compiler to rule them all.
+- **Test suite split** -- 5 oversized test files (largest: 1,522 LOC) broken into 33 focused test files grouped by behaviour. Same 515 tests, just organised like an adult wrote them.
+- **Documentation split** -- `api.md`, `cli.md`, `configuration.md`, and `output-formats.md` each split into subdirectories with index pages. For the 3 people who read docs, you're welcome.
+
+### Stats
+
+- 141 source files (up from ~30). 62 test files (up from 29). 515/515 tests passing. Typecheck, lint, build all clean. The codebase grew in files and shrank in complexity. That's the whole point.
+
 ## [0.9.0] - 2026-02-22
 
 The "make it pretty and throw proper errors" release. Progress bars so you can watch your dependencies resolve in real time. CJK character width handling so the table doesn't fall apart when someone names their package in kanji. Terminal overflow so narrow terminals get truncated columns instead of broken layouts. And a typed error hierarchy because `catch (e: any)` was getting embarrassing. 19 new tests across 5 new test files. The kind of release that sounds cosmetic until you try using the tool in a 60-column tmux pane.
@@ -210,6 +225,7 @@ First release. Wrote it from scratch because waiting for PRs to get merged in ta
 - TTY detection. No spinners in your CI logs. `NO_COLOR` respected.
 - 54 tests. More than some production apps I've seen.
 
+[0.9.1]: https://github.com/vcode-sh/bump/releases/tag/v0.9.1
 [0.9.0]: https://github.com/vcode-sh/bump/releases/tag/v0.9.0
 [0.8.0]: https://github.com/vcode-sh/bump/releases/tag/v0.8.0
 [0.7.0]: https://github.com/vcode-sh/bump/releases/tag/v0.7.0
