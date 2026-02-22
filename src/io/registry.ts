@@ -1,4 +1,5 @@
 import * as semver from 'semver'
+import { RegistryError, ResolveError } from '../errors'
 import type { NpmrcConfig, PackageData, ProvenanceLevel, RegistryConfig } from '../types'
 import type { Logger } from '../utils/logger'
 import { getRegistryForPackage } from '../utils/npmrc'
@@ -8,15 +9,6 @@ interface FetchOptions {
   timeout: number
   retries: number
   logger: Logger
-}
-
-class RegistryError extends Error {
-  status: number
-  constructor(message: string, status: number) {
-    super(message)
-    this.name = 'RegistryError'
-    this.status = status
-  }
 }
 
 export async function fetchPackageData(name: string, options: FetchOptions): Promise<PackageData> {
@@ -123,6 +115,7 @@ async function fetchWithRetry(
       throw new RegistryError(
         `HTTP ${response.status}: ${response.statusText} for ${url}`,
         response.status,
+        url,
       )
     }
 
@@ -139,10 +132,32 @@ async function fetchWithRetry(
       await sleep(delay)
       return fetchWithRetry(url, headers, options, attempt + 1)
     }
-    throw error
+
+    if (error instanceof RegistryError) {
+      throw error
+    }
+
+    if (error instanceof ResolveError) {
+      throw error
+    }
+
+    if (isAbortError(error)) {
+      throw new ResolveError(`Request timeout after ${options.timeout}ms for ${url}`, {
+        cause: error,
+      })
+    }
+
+    const causeMessage = error instanceof Error ? `: ${error.message}` : ''
+    throw new ResolveError(`Network failure while fetching ${url}${causeMessage}`, { cause: error })
   } finally {
     clearTimeout(timer)
   }
+}
+
+function isAbortError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false
+  const named = error as { name?: string }
+  return named.name === 'AbortError'
 }
 
 function sleep(ms: number): Promise<void> {

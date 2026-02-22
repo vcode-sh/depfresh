@@ -148,6 +148,22 @@ If `better-sqlite3` isn't available (hello, exotic environments), bump falls bac
 
 For monorepos with dozens of packages: increase concurrency, double-check your `ignorePaths` aren't scanning the entire universe, and use `--loglevel debug` to see where time is being spent.
 
+## Error types
+
+If you're using the programmatic API, all errors thrown by bump extend `BumpError`. You can branch on error class or the `.code` string:
+
+| Error | Code | Meaning |
+|-------|------|---------|
+| `RegistryError` | `ERR_REGISTRY` | HTTP errors from npm/JSR. Check `.status` and `.url`. 4xx errors (404, 403) don't retry. 5xx errors retry up to `retries` times. |
+| `CacheError` | `ERR_CACHE` | SQLite corruption, connection failure. bump auto-falls back to memory cache, so you only see this if using the cache API directly. |
+| `ConfigError` | `ERR_CONFIG` | Invalid config file, broken regex in `include`/`exclude`. Check your `.bumprc` or `bump.config.ts`. |
+| `WriteError` | `ERR_WRITE` | File system failure during write. Permission denied, disk full, read-only filesystem. |
+| `ResolveError` | `ERR_RESOLVE` | Network-level failures. DNS, timeouts, fetch errors that aren't HTTP status codes. |
+
+All errors include `.cause` when wrapping a lower-level failure. If you're debugging a `ConfigError` from a bad regex, `error.cause` gives you the original `SyntaxError`.
+
+---
+
 ## Known limitations
 
 **SARIF output.** The type exists in the codebase. The implementation doesn't. Yet.

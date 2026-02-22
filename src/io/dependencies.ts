@@ -1,3 +1,4 @@
+import { ConfigError } from '../errors'
 import type { BumpOptions, DepFieldType, RawDep } from '../types'
 import { isLocked } from '../utils/versions'
 
@@ -16,7 +17,19 @@ export function compilePatterns(patterns: string[]): RegExp[] {
     try {
       compiled.push(patternToRegex(p))
     } catch {
-      // Skip invalid patterns silently
+      // Skip invalid patterns in public utility mode.
+    }
+  }
+  return compiled
+}
+
+function compilePatternsStrict(patterns: string[]): RegExp[] {
+  const compiled: RegExp[] = []
+  for (const p of patterns) {
+    try {
+      compiled.push(patternToRegex(p))
+    } catch (error) {
+      throw new ConfigError(`Invalid dependency filter pattern: ${p}`, { cause: error })
     }
   }
   return compiled
@@ -52,8 +65,8 @@ export function isDepFieldEnabled(field: DepFieldType, options: BumpOptions): bo
 
 export function parseDependencies(raw: Record<string, unknown>, options: BumpOptions): RawDep[] {
   const deps: RawDep[] = []
-  const includePatterns = options.include?.length ? compilePatterns(options.include) : []
-  const excludePatterns = options.exclude?.length ? compilePatterns(options.exclude) : []
+  const includePatterns = options.include?.length ? compilePatternsStrict(options.include) : []
+  const excludePatterns = options.exclude?.length ? compilePatternsStrict(options.exclude) : []
 
   // Standard dependency fields
   for (const field of DEP_FIELDS) {

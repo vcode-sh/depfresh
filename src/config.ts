@@ -2,6 +2,7 @@ import { access, readFile } from 'node:fs/promises'
 import { pathToFileURL } from 'node:url'
 import { defu } from 'defu'
 import { join } from 'pathe'
+import { ConfigError } from './errors'
 import type { BumpOptions } from './types'
 import { DEFAULT_OPTIONS } from './types'
 import { createLogger } from './utils/logger'
@@ -37,20 +38,32 @@ async function exists(path: string): Promise<boolean> {
 }
 
 async function loadTsFile(filePath: string): Promise<Partial<BumpOptions> | undefined> {
-  const { createJiti } = await import('jiti')
-  const jiti = createJiti(import.meta.url)
-  const mod = (await jiti.import(filePath)) as Record<string, unknown>
-  return (mod.default ?? mod) as Partial<BumpOptions>
+  try {
+    const { createJiti } = await import('jiti')
+    const jiti = createJiti(import.meta.url)
+    const mod = (await jiti.import(filePath)) as Record<string, unknown>
+    return (mod.default ?? mod) as Partial<BumpOptions>
+  } catch (error) {
+    throw new ConfigError(`Failed to load config file ${filePath}`, { cause: error })
+  }
 }
 
 async function loadJsFile(filePath: string): Promise<Partial<BumpOptions> | undefined> {
-  const mod = (await import(pathToFileURL(filePath).href)) as Record<string, unknown>
-  return (mod.default ?? mod) as Partial<BumpOptions>
+  try {
+    const mod = (await import(pathToFileURL(filePath).href)) as Record<string, unknown>
+    return (mod.default ?? mod) as Partial<BumpOptions>
+  } catch (error) {
+    throw new ConfigError(`Failed to load config file ${filePath}`, { cause: error })
+  }
 }
 
 async function loadJsonFile(filePath: string): Promise<Partial<BumpOptions> | undefined> {
-  const content = await readFile(filePath, 'utf-8')
-  return JSON.parse(content) as Partial<BumpOptions>
+  try {
+    const content = await readFile(filePath, 'utf-8')
+    return JSON.parse(content) as Partial<BumpOptions>
+  } catch (error) {
+    throw new ConfigError(`Failed to parse JSON config ${filePath}`, { cause: error })
+  }
 }
 
 async function loadConfigFile(cwd: string): Promise<Partial<BumpOptions> | undefined> {
@@ -65,9 +78,13 @@ async function loadConfigFile(cwd: string): Promise<Partial<BumpOptions> | undef
 
   const pkgPath = join(cwd, 'package.json')
   if (await exists(pkgPath)) {
-    const content = await readFile(pkgPath, 'utf-8')
-    const pkg = JSON.parse(content) as Record<string, unknown>
-    if (pkg.bump) return pkg.bump as Partial<BumpOptions>
+    try {
+      const content = await readFile(pkgPath, 'utf-8')
+      const pkg = JSON.parse(content) as Record<string, unknown>
+      if (pkg.bump) return pkg.bump as Partial<BumpOptions>
+    } catch (error) {
+      throw new ConfigError(`Failed to parse package.json at ${pkgPath}`, { cause: error })
+    }
   }
 
   return undefined

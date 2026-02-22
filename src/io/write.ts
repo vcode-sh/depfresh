@@ -1,5 +1,6 @@
 import { readFileSync, writeFileSync } from 'node:fs'
 import detectIndent from 'detect-indent'
+import { WriteError } from '../errors'
 import type { PackageMeta, ResolvedDepChange } from '../types'
 import { createLogger } from '../utils/logger'
 import { bunCatalogLoader } from './catalogs/bun'
@@ -19,17 +20,29 @@ export function backupPackageFiles(pkg: PackageMeta): FileBackup[] {
   const backups: FileBackup[] = []
 
   // Backup main package file
+  let mainContent: string
+  try {
+    mainContent = readFileSync(pkg.filepath, 'utf-8')
+  } catch (error) {
+    throw new WriteError(`Failed to backup file ${pkg.filepath}`, { cause: error })
+  }
   backups.push({
     filepath: pkg.filepath,
-    content: readFileSync(pkg.filepath, 'utf-8'),
+    content: mainContent,
   })
 
   // Backup catalog files if present
   if (pkg.catalogs?.length) {
     for (const catalog of pkg.catalogs) {
+      let catalogContent: string
+      try {
+        catalogContent = readFileSync(catalog.filepath, 'utf-8')
+      } catch (error) {
+        throw new WriteError(`Failed to backup file ${catalog.filepath}`, { cause: error })
+      }
       backups.push({
         filepath: catalog.filepath,
-        content: readFileSync(catalog.filepath, 'utf-8'),
+        content: catalogContent,
       })
     }
   }
@@ -39,7 +52,11 @@ export function backupPackageFiles(pkg: PackageMeta): FileBackup[] {
 
 export function restorePackageFiles(backups: FileBackup[]): void {
   for (const backup of backups) {
-    writeFileSync(backup.filepath, backup.content, 'utf-8')
+    try {
+      writeFileSync(backup.filepath, backup.content, 'utf-8')
+    } catch (error) {
+      throw new WriteError(`Failed to restore file ${backup.filepath}`, { cause: error })
+    }
   }
 }
 
@@ -69,9 +86,20 @@ function writePackageJson(
   logger: ReturnType<typeof createLogger>,
 ): void {
   // Read fresh content for formatting detection
-  const content = readFileSync(pkg.filepath, 'utf-8')
+  let content: string
+  try {
+    content = readFileSync(pkg.filepath, 'utf-8')
+  } catch (error) {
+    throw new WriteError(`Failed to read ${pkg.filepath}`, { cause: error })
+  }
+
   const indent = detectIndent(content).indent || pkg.indent
-  const raw = JSON.parse(content)
+  let raw: Record<string, unknown>
+  try {
+    raw = JSON.parse(content) as Record<string, unknown>
+  } catch (error) {
+    throw new WriteError(`Failed to parse JSON in ${pkg.filepath}`, { cause: error })
+  }
 
   // Group changes by source field
   const bySource = new Map<string, ResolvedDepChange[]>()
@@ -110,7 +138,11 @@ function writePackageJson(
   const withTrailing = content.endsWith('\n') ? `${newContent}\n` : newContent
   const finalContent = lineEnding === '\r\n' ? withTrailing.replace(/\n/g, '\r\n') : withTrailing
 
-  writeFileSync(pkg.filepath, finalContent, 'utf-8')
+  try {
+    writeFileSync(pkg.filepath, finalContent, 'utf-8')
+  } catch (error) {
+    throw new WriteError(`Failed to write ${pkg.filepath}`, { cause: error })
+  }
   logger.success(`Updated ${pkg.filepath} (${changes.length} changes)`)
 }
 
@@ -165,7 +197,14 @@ function writeCatalogPackage(
 
     const writer = catalogWriters[catalog.type]
     if (writer) {
-      writer.write(catalog, changeMap)
+      try {
+        writer.write(catalog, changeMap)
+      } catch (error) {
+        throw new WriteError(
+          `Failed to write ${catalog.type} catalog "${catalog.name}" (${catalog.filepath})`,
+          { cause: error },
+        )
+      }
       logger.success(
         `Updated ${catalog.type} catalog "${catalog.name}" (${changeMap.size} changes)`,
       )

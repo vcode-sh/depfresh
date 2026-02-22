@@ -2,6 +2,7 @@ import { mkdirSync } from 'node:fs'
 import { homedir } from 'node:os'
 import Database from 'better-sqlite3'
 import { join } from 'pathe'
+import { CacheError } from '../errors'
 import type { PackageData } from '../types'
 import type { Cache } from './index'
 
@@ -32,10 +33,15 @@ export function createSqliteCache(): Cache {
     return createMemoryFallback()
   }
 
-  db.exec('PRAGMA journal_mode = WAL')
-  db.exec('PRAGMA synchronous = NORMAL')
-  db.exec(SCHEMA)
-  db.exec(INDEX)
+  try {
+    db.exec('PRAGMA journal_mode = WAL')
+    db.exec('PRAGMA synchronous = NORMAL')
+    db.exec(SCHEMA)
+    db.exec(INDEX)
+  } catch {
+    db.close()
+    return createMemoryFallback()
+  }
 
   const getStmt = db.prepare('SELECT data FROM registry_cache WHERE package = ? AND expires_at > ?')
   const setStmt = db.prepare(
@@ -55,7 +61,12 @@ export function createSqliteCache(): Cache {
 
   return {
     get(key: string): PackageData | undefined {
-      const row = getStmt.get(key, Date.now()) as { data: string } | undefined
+      let row: { data: string } | undefined
+      try {
+        row = getStmt.get(key, Date.now()) as { data: string } | undefined
+      } catch (error) {
+        throw new CacheError(`Failed to read cache entry for ${key}`, { cause: error })
+      }
       if (row) {
         try {
           const parsed = JSON.parse(row.data)
@@ -73,23 +84,44 @@ export function createSqliteCache(): Cache {
 
     set(key: string, data: PackageData, ttl: number): void {
       const now = Date.now()
-      setStmt.run(key, JSON.stringify(data), now, now + ttl)
+      try {
+        setStmt.run(key, JSON.stringify(data), now, now + ttl)
+      } catch (error) {
+        throw new CacheError(`Failed to write cache entry for ${key}`, { cause: error })
+      }
     },
 
     has(key: string): boolean {
-      return !!hasStmt.get(key, Date.now())
+      try {
+        return !!hasStmt.get(key, Date.now())
+      } catch (error) {
+        throw new CacheError(`Failed to check cache entry for ${key}`, { cause: error })
+      }
     },
 
     clear(): void {
-      clearStmt.run()
+      try {
+        clearStmt.run()
+      } catch (error) {
+        throw new CacheError('Failed to clear cache', { cause: error })
+      }
     },
 
     close(): void {
-      db.close()
+      try {
+        db.close()
+      } catch (error) {
+        throw new CacheError('Failed to close cache database', { cause: error })
+      }
     },
 
     stats() {
-      const row = countStmt.get(Date.now()) as { count: number }
+      let row: { count: number }
+      try {
+        row = countStmt.get(Date.now()) as { count: number }
+      } catch (error) {
+        throw new CacheError('Failed to read cache stats', { cause: error })
+      }
       return { hits, misses, size: row.count }
     },
   }

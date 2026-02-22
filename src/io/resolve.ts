@@ -8,7 +8,6 @@ import type {
   PackageData,
   PackageMeta,
   ProvenanceLevel,
-  RangeMode,
   RawDep,
   ResolvedDepChange,
 } from '../types'
@@ -21,6 +20,7 @@ import {
   resolveTargetVersion,
 } from '../utils/versions'
 import { fetchPackageData } from './registry'
+import { getPackageMode } from './resolve-mode'
 
 export async function resolvePackage(
   pkg: PackageMeta,
@@ -28,6 +28,7 @@ export async function resolvePackage(
   externalCache?: Cache,
   externalNpmrc?: NpmrcConfig,
   privatePackages?: Set<string>,
+  onDependencyProcessed?: (pkg: PackageMeta, dep: RawDep) => void | Promise<void>,
 ): Promise<ResolvedDepChange[]> {
   const logger = createLogger(options.loglevel)
   const npmrc = externalNpmrc ?? loadNpmrc(options.cwd)
@@ -40,7 +41,13 @@ export async function resolvePackage(
       pkg.deps
         .filter((dep) => dep.update)
         .map((dep) =>
-          limit(() => resolveDependency(dep, options, cache, npmrc, logger, privatePackages)),
+          limit(async () => {
+            try {
+              return await resolveDependency(dep, options, cache, npmrc, logger, privatePackages)
+            } finally {
+              await onDependencyProcessed?.(pkg, dep)
+            }
+          }),
         ),
     )
 
@@ -158,45 +165,6 @@ async function resolveDependency(
   }
 }
 
-export function getPackageMode(
-  packageName: string,
-  packageMode: Record<string, RangeMode> | undefined,
-  defaultMode: RangeMode,
-): RangeMode {
-  if (!packageMode) return defaultMode
-
-  // Exact match first
-  if (packageMode[packageName]) {
-    return packageMode[packageName]
-  }
-
-  // Glob/pattern matching
-  for (const [pattern, mode] of Object.entries(packageMode)) {
-    // Skip exact keys already checked
-    if (pattern === packageName) continue
-
-    try {
-      const regex = patternToMatchRegex(pattern)
-      if (regex.test(packageName)) {
-        return mode
-      }
-    } catch {
-      // Skip invalid patterns
-    }
-  }
-
-  return defaultMode
-}
-
-function patternToMatchRegex(pattern: string): RegExp {
-  // Glob pattern: contains * but not regex metacharacters
-  if (pattern.includes('*') && !/[\^$[\]()\\|+?]/.test(pattern)) {
-    const escaped = pattern.replace(/[.@/]/g, '\\$&').replace(/\*/g, '[^/]*')
-    return new RegExp(`^${escaped}$`)
-  }
-  return new RegExp(pattern)
-}
-
 export function filterVersions(pkgData: PackageData, dep: RawDep, options?: BumpOptions): string[] {
   const currentPrerelease = semver.prerelease(dep.currentVersion)
   const currentChannel = currentPrerelease?.[0]
@@ -255,3 +223,5 @@ export function filterVersionsByMaturityPeriod(
   // If all versions were filtered out, return the original list as fallback
   return filtered.length > 0 ? filtered : versions
 }
+
+export { getPackageMode } from './resolve-mode'

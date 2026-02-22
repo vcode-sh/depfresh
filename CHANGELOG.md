@@ -2,6 +2,22 @@
 
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Semver because I'm not a psychopath.
 
+## [0.9.0] - 2026-02-22
+
+The "make it pretty and throw proper errors" release. Progress bars so you can watch your dependencies resolve in real time. CJK character width handling so the table doesn't fall apart when someone names their package in kanji. Terminal overflow so narrow terminals get truncated columns instead of broken layouts. And a typed error hierarchy because `catch (e: any)` was getting embarrassing. 19 new tests across 5 new test files. The kind of release that sounds cosmetic until you try using the tool in a 60-column tmux pane.
+
+### Added
+
+- **Multi-bar progress display** -- dual progress bars during dependency resolution. Top bar tracks packages, bottom bar tracks individual deps within the current package plus a running total. Updates in real-time as registry calls complete. Suppressed automatically for `--output json`, `--silent`, and non-TTY environments. Labels truncate on narrow terminals. Clears itself when done, leaving a clean terminal for the results table. Zero new dependencies.
+- **CJK / Unicode-aware column alignment** -- `visualLength()` handles double-width CJK characters (Hangul, CJK Unified Ideographs, fullwidth forms), zero-width combining marks, variation selectors, and control characters. Table columns now align correctly regardless of whether your package names contain ASCII, Japanese, Korean, or emoji. The `padEnd` and `padStart` utilities are Unicode-aware. `visualTruncate()` adds `…` at the correct visual boundary without splitting a wide character.
+- **Terminal overflow handling** -- table columns shrink to fit your terminal width. Priority order: name column first, then current version, then target version, then source. Minimum widths enforced so nothing collapses entirely. Only activates in TTY mode -- non-TTY output preserves full widths. `render-layout.ts` calculates optimal column widths, `render.ts` applies them. CJK-aware throughout.
+- **Error class hierarchy** -- `BumpError` base class with `code: string` for reliable branching. Five subclasses: `RegistryError` (HTTP failures, includes `.status` and `.url`), `CacheError` (SQLite issues), `ConfigError` (invalid patterns, bad config files), `WriteError` (file system failures), `ResolveError` (network timeouts, DNS failures). All include `.cause` for wrapping lower-level errors. Integrated into registry, config, write, cache, and pattern compilation paths. Exported from the public API for `instanceof` checks.
+- **Strict pattern validation** -- `parseDependencies()` now throws `ConfigError` for invalid `include`/`exclude` regex patterns instead of silently skipping them. The public `compilePatterns()` utility retains silent skip behaviour for backwards compatibility. Invalid `/regex/flags` syntax is caught and wrapped with the original error as `cause`.
+
+### Stats
+
+- 19 new tests across 5 new files (496 → 515 total, 24 → 29 test files). Progress bar rendering, terminal overflow truncation, CJK visual width, Unicode-aware padding/truncation, error class hierarchy, strict pattern validation. All passing. All colocated.
+
 ## [0.8.0] - 2026-02-22
 
 The "I built a TUI from scratch because Ink ships React" release. The interactive mode got evicted from its `@clack/prompts` flat-list apartment and moved into a custom readline penthouse with vim navigation, per-dependency version drill-down, viewport scrolling, and a keyboard help bar. Also replaced the config loader, wrote a docs site, and rewrote the README. 69 new tests because apparently I have a compulsion.
@@ -194,6 +210,7 @@ First release. Wrote it from scratch because waiting for PRs to get merged in ta
 - TTY detection. No spinners in your CI logs. `NO_COLOR` respected.
 - 54 tests. More than some production apps I've seen.
 
+[0.9.0]: https://github.com/vcode-sh/bump/releases/tag/v0.9.0
 [0.8.0]: https://github.com/vcode-sh/bump/releases/tag/v0.8.0
 [0.7.0]: https://github.com/vcode-sh/bump/releases/tag/v0.7.0
 [0.6.0]: https://github.com/vcode-sh/bump/releases/tag/v0.6.0

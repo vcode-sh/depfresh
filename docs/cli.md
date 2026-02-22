@@ -298,6 +298,38 @@ When writing global updates (`-gw`), bump runs the corresponding install command
 
 ---
 
+## Progress Display
+
+When resolving dependencies in a TTY, bump shows a dual progress bar:
+
+```
+Packages         [========----------------] 1/3
+Deps (my-app)    [================--------] 12/24  total 12/47
+```
+
+The top bar tracks packages processed, the bottom tracks individual dependency resolutions within the current package (plus a running total). Both update in real-time as registry calls complete.
+
+Progress is suppressed automatically when:
+- Output is `--output json` (machines don't need encouragement)
+- Log level is `--silent` (you asked for silence, you got it)
+- stdout is not a TTY (pipes, CI, AI agents)
+
+Labels truncate gracefully on narrow terminals. CJK package names are measured correctly (double-width characters get proper accounting). The progress bars clear themselves when resolution finishes, leaving a clean terminal for the results table.
+
+---
+
+## Table Rendering
+
+### Terminal Overflow
+
+Table columns adapt to your terminal width. On wide terminals, everything fits. On narrow terminals, bump progressively shrinks columns in priority order: package name first, then current version, then target version, then source. Minimum widths are enforced so nothing collapses entirely -- if your terminal is 40 columns wide, names truncate with `…` but remain readable.
+
+CJK characters and other double-width Unicode are measured correctly for column alignment. Combining marks and zero-width characters are handled. Package names like `@hanzi/测试` won't break the table layout.
+
+Overflow handling only activates in TTY mode. Non-TTY output (JSON, piped text) preserves full column widths regardless of any terminal width setting.
+
+---
+
 ## Interactive Mode
 
 `--interactive` (or `-I`) launches a custom terminal UI where you can browse, drill into, and cherry-pick which dependencies to update. No React. No Ink. Just readline and raw mode doing honest work.

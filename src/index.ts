@@ -1,5 +1,13 @@
 export { check } from './commands/check/index'
 export { resolveConfig } from './config'
+export {
+  BumpError,
+  CacheError,
+  ConfigError,
+  RegistryError,
+  ResolveError,
+  WriteError,
+} from './errors'
 export { parseDependencies } from './io/dependencies'
 export { loadGlobalPackages, writeGlobalPackage } from './io/global'
 export { loadPackages } from './io/packages'

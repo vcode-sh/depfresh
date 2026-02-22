@@ -246,8 +246,9 @@ Though `--loglevel silent` is redundant with `--output json` since JSON mode for
 ### TTY Detection
 
 bump auto-detects non-TTY environments:
-- Spinners and progress indicators are suppressed
-- Interactive prompts are skipped
+- Progress bars (package + dependency resolution) are suppressed
+- Interactive TUI falls back to `@clack/prompts` (or is skipped entirely if stdin isn't a TTY)
+- Table columns don't truncate (no terminal width to respect)
 - `ansis` respects the `NO_COLOR` environment variable
 
 So piping `bump` output into another process Just Works without extra flags.
