@@ -50,7 +50,7 @@
     "lint:fix": "biome check --write .",
     "format": "biome format --write .",
     "typecheck": "tsc --noEmit",
-    "prepublishOnly": "bun run build"
+    "prepublishOnly": "pnpm run build"
   },
   "dependencies": {
     "@clack/prompts": "^1.0.1",
