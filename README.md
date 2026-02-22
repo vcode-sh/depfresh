@@ -1,6 +1,6 @@
-# bump
+# upgr
 
-[![npm version](https://img.shields.io/npm/v/bump-cli)](https://www.npmjs.com/package/bump-cli)
+[![npm version](https://img.shields.io/npm/v/upgr)](https://www.npmjs.com/package/upgr)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9+-3178c6)](https://www.typescriptlang.org/)
 [![Node.js](https://img.shields.io/badge/Node.js-24+-339933)](https://nodejs.org/)
@@ -11,7 +11,7 @@ Spiritual successor to [taze](https://github.com/antfu/taze) by Anthony Fu - a t
 
 ## Features
 
-- **Zero-config dependency checking** -- run `bump` and it tells you what's outdated. No YAML. No PhD.
+- **Zero-config dependency checking** -- run `upgr` and it tells you what's outdated. No YAML. No PhD.
 - **Monorepo & workspace support** -- pnpm, bun, yarn, npm. Auto-detected. Catalog deps included.
 - **7 range modes** -- `default`, `major`, `minor`, `patch`, `latest`, `newest`, `next`. One flag, total control.
 - **Interactive cherry-picking** -- grouped multiselect with colour-coded severity. Pick what you want, ignore the rest.
@@ -35,48 +35,48 @@ Spiritual successor to [taze](https://github.com/antfu/taze) by Anthony Fu - a t
 
 Because `npm outdated` gives you a table and then abandons you. Because Renovate requires a PhD in YAML. Because your AI coding assistant should be able to update your deps without you holding its hand.
 
-bump checks every `package.json` in your project, tells you what's outdated, and optionally writes the updates. Monorepos, workspace catalogs, private registries - it handles all of it without a config file.
+upgr checks every `package.json` in your project, tells you what's outdated, and optionally writes the updates. Monorepos, workspace catalogs, private registries - it handles all of it without a config file.
 
 ## Install
 
 ```bash
-npm install -g bump-cli
+npm install -g upgr
 ```
 
 Or don't install globally. I'm not your parent.
 
 ```bash
-npx bump-cli
-pnpm dlx bump-cli
-bunx bump-cli
+npx upgr
+pnpm dlx upgr
+bunx upgr
 ```
 
 ## Usage
 
 ```bash
 # Check for outdated dependencies
-bump
+upgr
 
 # Actually update them
-bump --write
+upgr --write
 
 # Interactive mode -- pick what to update like a civilised person
-bump --interactive
+upgr --interactive
 
 # Only minor/patch updates (living cautiously)
-bump minor -w
+upgr minor -w
 
 # JSON output for scripts and AI agents
-bump --output json
+upgr --output json
 
 # Filter specific packages
-bump --include "react,vue" --exclude "eslint"
+upgr --include "react,vue" --exclude "eslint"
 
 # Verify each dep individually, revert failures
-bump -w --verify-command "pnpm test"
+upgr -w --verify-command "pnpm test"
 
 # CI: fail if anything is outdated
-bump --fail-on-outdated
+upgr --fail-on-outdated
 ```
 
 ## CLI Flags
@@ -103,10 +103,10 @@ The top flags to get you started. Full reference with all 27+ flags: **[docs/cli
 
 ## Config File
 
-Zero config works. But if you want it, create `bump.config.ts` (or `.bumprc`, or add a `bump` key to `package.json`):
+Zero config works. But if you want it, create `upgr.config.ts` (or `.upgrrc`, or add a `upgr` key to `package.json`):
 
 ```typescript
-import { defineConfig } from 'bump-cli'
+import { defineConfig } from 'upgr'
 
 export default defineConfig({
   mode: 'minor',
@@ -159,20 +159,20 @@ Full schema and field reference: **[docs/output-formats/](docs/output-formats/)*
 
 ## AI Agent Usage
 
-bump was designed to work with AI coding assistants out of the box. No special configuration needed.
+upgr was designed to work with AI coding assistants out of the box. No special configuration needed.
 
 ```bash
 # Check for updates, get structured output
-bump --output json --loglevel silent
+upgr --output json --loglevel silent
 
 # Apply all updates
-bump --write
+upgr --write
 
 # Apply only safe updates
-bump --write --mode patch
+upgr --write --mode patch
 
 # Selective update
-bump --write --include "typescript,vitest"
+upgr --write --include "typescript,vitest"
 ```
 
 **Exit codes are semantic:**
@@ -180,12 +180,12 @@ bump --write --include "typescript,vitest"
 - `1` -- updates available (with `--fail-on-outdated`)
 - `2` -- error
 
-**TTY detection** -- when stdout isn't a terminal (piped, captured by an agent), bump automatically suppresses spinners and interactive prompts. `NO_COLOR` is respected.
+**TTY detection** -- when stdout isn't a terminal (piped, captured by an agent), upgr automatically suppresses spinners and interactive prompts. `NO_COLOR` is respected.
 
 ## Programmatic API
 
 ```typescript
-import { check, resolveConfig } from 'bump-cli'
+import { check, resolveConfig } from 'upgr'
 
 const options = await resolveConfig({
   cwd: process.cwd(),
@@ -208,20 +208,20 @@ const exitCode = await check(options)
 
 ## Monorepo Support
 
-bump auto-detects workspace structures. No config needed.
+upgr auto-detects workspace structures. No config needed.
 
 | Package Manager | Workspaces | Catalogs |
 |----------------|------------|----------|
 | pnpm | `pnpm-workspace.yaml` | `catalog:` protocol |
 | Bun | `workspaces` in `package.json` | `workspaces.catalog` |
-| Yarn | `workspaces` in `package.json` | `yarn.config.cjs` catalogs |
+| Yarn | `workspaces` in `package.json` | `.yarnrc.yml` catalogs |
 | npm | `workspaces` in `package.json` | -- |
 
-Workspace catalogs are resolved and updated in-place. Your `pnpm-workspace.yaml` catalog entries get bumped alongside your `package.json` deps. No manual sync needed.
+Workspace catalogs are resolved and updated in-place. Your `pnpm-workspace.yaml` catalog entries get upgraded alongside your `package.json` deps. No manual sync needed.
 
 ## Private Registries
 
-bump reads `.npmrc` from your project and home directory. Scoped registries, auth tokens, proxies -- all respected.
+upgr reads `.npmrc` from your project and home directory. Scoped registries, auth tokens, proxies -- all respected.
 
 ```ini
 # .npmrc
@@ -235,7 +235,7 @@ This was broken in taze for 4+ years. I fixed it on day one. You're welcome.
 
 Not to throw shade at taze -- it served the community well for years. But some things needed fixing, and "PR welcome" only goes so far when the PRs sit open for months.
 
-| Problem | taze | bump |
+| Problem | taze | upgr |
 |---------|------|------|
 | `.npmrc` / private registries | Ignored | Full support |
 | Network retry | None | Exponential backoff |
@@ -264,7 +264,7 @@ The full docs, for people who read manuals before assembling furniture.
 
 ## Standing on the Shoulders of People Who Actually Did the Work
 
-bump wouldn't exist without [taze](https://github.com/antfu/taze). I rewrote everything from scratch, yes, but "from scratch" is easy when someone else already figured out what the thing should do. Every bug report, every feature PR, every typo fix in the taze repo was a free lesson in what users actually need. I just took notes and built a new house on someone else's blueprint.
+upgr wouldn't exist without [taze](https://github.com/antfu/taze). I rewrote everything from scratch, yes, but "from scratch" is easy when someone else already figured out what the thing should do. Every bug report, every feature PR, every typo fix in the taze repo was a free lesson in what users actually need. I just took notes and built a new house on someone else's blueprint.
 
 So here's to every contributor who opened a PR on taze. Some of you added features I shamelessly reimplemented. Some of you fixed bugs that taught me where the landmines were. Some of you fixed typos, and honestly, that's braver than any architecture decision I've ever made.
 

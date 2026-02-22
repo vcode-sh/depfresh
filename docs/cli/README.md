@@ -1,6 +1,6 @@
 # CLI Reference
 
-The complete field manual for `bump`. Every flag, every trick, every questionable life choice that led to this many options.
+The complete field manual for `upgr`. Every flag, every trick, every questionable life choice that led to this many options.
 
 ## Pages
 
@@ -14,20 +14,20 @@ The complete field manual for `bump`. Every flag, every trick, every questionabl
 
 ```bash
 # Check what's outdated
-bump
+upgr
 
 # Safe minor/patch updates
-bump minor -w
+upgr minor -w
 
 # Interactive cherry-picking
-bump -wI
+upgr -wI
 
 # CI pipeline
-bump --fail-on-outdated --output json
+upgr --fail-on-outdated --output json
 ```
 
 ## See Also
 
-- [Configuration](../configuration/) -- `.bumprc`, `bump.config.ts`, and `package.json#bump`
-- [Programmatic API](../api/) -- using bump as a library with callbacks
+- [Configuration](../configuration/) -- `.upgrrc`, `upgr.config.ts`, and `package.json#upgr`
+- [Programmatic API](../api/) -- using upgr as a library with callbacks
 - [Output Formats](../output-formats/) -- JSON and SARIF schemas

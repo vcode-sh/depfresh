@@ -1,14 +1,14 @@
 # Mode Reference
 
-The `--mode` flag controls how bump picks target versions. It's the philosophical core of the tool -- how aggressive do you want to be?
+The `--mode` flag controls how upgr picks target versions. It's the philosophical core of the tool -- how aggressive do you want to be?
 
 ## `default`
 
-Respects existing range prefixes. If your `package.json` says `^1.2.3`, bump finds the latest version that satisfies `^1.x.x`. If it says `~1.2.3`, you get the latest `1.2.x`. This is the polite, society-approved mode.
+Respects existing range prefixes. If your `package.json` says `^1.2.3`, upgr finds the latest version that satisfies `^1.x.x`. If it says `~1.2.3`, you get the latest `1.2.x`. This is the polite, society-approved mode.
 
 ## `major`
 
-Only shows major version bumps. Filters out minor and patch updates entirely. Use this when you're feeling brave and want to see what breaking changes await. `bump major` is the shorthand.
+Only shows major version updates. Filters out minor and patch updates entirely. Use this when you're feeling brave and want to see what breaking changes await. `upgr major` is the shorthand.
 
 ## `minor`
 
@@ -32,11 +32,11 @@ Resolves to whatever the `next` dist-tag points at. Useful for testing pre-relea
 
 ## `ignore`
 
-Not available via CLI flags -- this one's for the config file's `packageMode` option. Set a package to `ignore` and bump will skip it entirely. Useful for pinning a specific package while letting everything else update.
+Not available via CLI flags -- this one's for the config file's `packageMode` option. Set a package to `ignore` and upgr will skip it entirely. Useful for pinning a specific package while letting everything else update.
 
 ```json
 {
-  "bump": {
+  "upgr": {
     "packageMode": {
       "typescript": "minor",
       "react": "ignore"
@@ -51,7 +51,7 @@ Not available via CLI flags -- this one's for the config file's `packageMode` op
 |------|-------------|
 | `default` | Respects the existing semver range in your `package.json` |
 | `major` | Allows major version jumps. Brave. |
-| `minor` | Up to minor bumps. The sensible middle ground. |
+| `minor` | Up to minor updates. The sensible middle ground. |
 | `patch` | Patch updates only. Maximum conservatism. |
 | `latest` | Whatever the `latest` dist-tag points to. Living dangerously. |
 | `newest` | The most recently published version, regardless of dist-tags. Chaotic neutral. |

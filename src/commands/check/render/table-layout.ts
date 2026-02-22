@@ -1,5 +1,5 @@
 import c from 'ansis'
-import type { BumpOptions, DepFieldType, ResolvedDepChange } from '../../../types'
+import type { DepFieldType, ResolvedDepChange, UpgrOptions } from '../../../types'
 import { sortDeps } from '../../../utils/sort'
 import { fitCell, getTerminalWidth } from '../render-layout'
 import { renderRows } from './table-rows'
@@ -20,7 +20,7 @@ export const DEP_SOURCE_SHORT_NAMES: Record<DepFieldType, string> = {
 export function renderTable(
   packageName: string,
   updates: ResolvedDepChange[],
-  options: BumpOptions,
+  options: UpgrOptions,
 ): void {
   // biome-ignore lint/suspicious/noConsole: intentional output
   const log = console.log
@@ -45,7 +45,7 @@ export function renderTable(
 
 function renderGrouped(
   sorted: ResolvedDepChange[],
-  options: BumpOptions,
+  options: UpgrOptions,
   log: (...args: unknown[]) => void,
   terminalWidth?: number,
 ): void {
@@ -71,7 +71,7 @@ function renderGrouped(
 
 function renderFlat(
   sorted: ResolvedDepChange[],
-  options: BumpOptions,
+  options: UpgrOptions,
   log: (...args: unknown[]) => void,
   terminalWidth?: number,
 ): void {

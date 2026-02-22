@@ -2,12 +2,12 @@ import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import type { BumpOptions, CatalogSource } from '../../types'
+import type { CatalogSource, UpgrOptions } from '../../types'
 import { DEFAULT_OPTIONS } from '../../types'
 import { pnpmCatalogLoader } from './pnpm'
 
-const baseOptions: BumpOptions = {
-  ...(DEFAULT_OPTIONS as BumpOptions),
+const baseOptions: UpgrOptions = {
+  ...(DEFAULT_OPTIONS as UpgrOptions),
   cwd: '/tmp',
   loglevel: 'silent',
 }
@@ -15,7 +15,7 @@ const baseOptions: BumpOptions = {
 let testDir: string
 
 beforeEach(() => {
-  testDir = join(tmpdir(), `bump-pnpm-test-${Date.now()}-${Math.random().toString(36).slice(2)}`)
+  testDir = join(tmpdir(), `upgr-pnpm-test-${Date.now()}-${Math.random().toString(36).slice(2)}`)
   mkdirSync(testDir, { recursive: true })
 })
 

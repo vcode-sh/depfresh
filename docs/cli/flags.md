@@ -1,37 +1,37 @@
 # CLI Flags
 
-Every flag bump accepts. All 27+ of them. I counted so you don't have to.
+Every flag upgr accepts. All 27+ of them. I counted so you don't have to.
 
 ## Quick Start
 
 ```bash
 # Check what's outdated
-bump
+upgr
 
 # Check only major updates
-bump major
+upgr major
 
 # Write minor/patch updates to disk
-bump --write --mode minor
+upgr --write --mode minor
 
 # Interactive cherry-picking
-bump -wI
+upgr -wI
 
 # The full chaos
-bump latest -wI --explain --long --verify-command "pnpm test"
+upgr latest -wI --explain --long --verify-command "pnpm test"
 ```
 
 ## Positional Arguments
 
-`bump <mode>` is shorthand for `bump --mode <mode>`. Because typing `--mode` every time is a tax on the human spirit.
+`upgr <mode>` is shorthand for `upgr --mode <mode>`. Because typing `--mode` every time is a tax on the human spirit.
 
 ```bash
-bump major     # same as bump --mode major
-bump minor     # same as bump --mode minor
-bump patch     # same as bump --mode patch
-bump latest    # same as bump --mode latest
-bump newest    # same as bump --mode newest
-bump next      # same as bump --mode next
+upgr major     # same as upgr --mode major
+upgr minor     # same as upgr --mode minor
+upgr patch     # same as upgr --mode patch
+upgr latest    # same as upgr --mode latest
+upgr newest    # same as upgr --mode newest
+upgr next      # same as upgr --mode next
 ```
 
 Valid modes: `default`, `major`, `minor`, `patch`, `latest`, `newest`, `next`. Anything else gets ignored and the default mode kicks in. No errors, no drama.
@@ -42,9 +42,9 @@ Valid modes: `default`, `major`, `minor`, `patch`, `latest`, `newest`, `next`. A
 
 | Flag | Alias | Type | Default | Description |
 |------|-------|------|---------|-------------|
-| `--cwd <path>` | `-C` | string | `process.cwd()` | Working directory. Point bump at a different project without leaving your comfortable terminal. |
+| `--cwd <path>` | `-C` | string | `process.cwd()` | Working directory. Point upgr at a different project without leaving your comfortable terminal. |
 | `--recursive` | `-r` | boolean | `true` | Recursively search for `package.json` files in subdirectories. Enabled by default because monorepos are inevitable. |
-| `--write` | `-w` | boolean | `false` | Actually write the updated versions to your package files. Without this, bump is just showing you what *could* be. |
+| `--write` | `-w` | boolean | `false` | Actually write the updated versions to your package files. Without this, upgr is just showing you what *could* be. |
 | `--interactive` | `-I` | boolean | `false` | Interactive mode -- a grouped multiselect for hand-picking which deps to update. Requires a TTY, obviously. |
 | `--mode <mode>` | `-m` | string | `default` | Version range mode. See [Mode Reference](./modes.md) for the full existential breakdown. |
 | `--force` | `-f` | boolean | `false` | Force update even when the current version satisfies the range. For when you want to live dangerously. |
@@ -73,7 +73,7 @@ Valid modes: `default`, `major`, `minor`, `patch`, `latest`, `newest`, `next`. A
 | `--timediff` | `-T` | boolean | `true` | Show how long ago each target version was published. Useful for spotting suspiciously fresh packages. Disable with `--no-timediff`. |
 | `--nodecompat` | -- | boolean | `true` | Show Node.js engine compatibility for target versions. Warns you before you install something that hates your runtime. Disable with `--no-nodecompat`. |
 | `--long` | `-L` | boolean | `false` | Show extra details per package -- currently the homepage URL. For when you need to rage-read a changelog. |
-| `--explain` | `-E` | boolean | `false` | Show human-readable explanations for update types in interactive mode. Tells you *why* a version bump matters. Only works with `--interactive`. |
+| `--explain` | `-E` | boolean | `false` | Show human-readable explanations for update types in interactive mode. Tells you *why* a version upgr matters. Only works with `--interactive`. |
 | `--loglevel <level>` | -- | string | `info` | Log level: `silent`, `info`, or `debug`. `silent` suppresses everything except output. `debug` tells you things you didn't ask to know. |
 
 ## Post-Write
@@ -92,7 +92,7 @@ These flags only do anything when `--write` is also present. Without `--write`, 
 | Flag | Alias | Type | Default | Description |
 |------|-------|------|---------|-------------|
 | `--fail-on-outdated` | -- | boolean | `false` | Exit with code `1` when outdated dependencies are found (without `--write`). Built for CI pipelines. See [CI Usage](#ci-usage). |
-| `--ignore-other-workspaces` | -- | boolean | `true` | Skip packages that belong to nested or separate workspaces. Prevents bump from trampling someone else's monorepo-within-a-monorepo. |
+| `--ignore-other-workspaces` | -- | boolean | `true` | Skip packages that belong to nested or separate workspaces. Prevents upgr from trampling someone else's monorepo-within-a-monorepo. |
 | `--concurrency <n>` | `-c` | string | `16` | Maximum concurrent registry requests. Crank it up if you have faith in your network. Crank it down if the registry starts returning 429s. |
 
 ---
@@ -118,24 +118,24 @@ The `--sort` flag accepts six strategies. Default is `diff-asc`.
 
 ```bash
 # Check global packages
-bump -g
+upgr -g
 
 # Update all global packages
-bump -gw
+upgr -gw
 
 # Interactive global update
-bump -gwI
+upgr -gwI
 ```
 
 Supported package managers: **npm**, **pnpm**, **bun**. Yarn global packages are not supported (yarn has deprecated `yarn global` anyway).
 
-Detection order: if `pnpm` is installed, it checks pnpm globals. Then `bun`. Falls back to `npm`. bump runs the appropriate list command for each:
+Detection order: if `pnpm` is installed, it checks pnpm globals. Then `bun`. Falls back to `npm`. upgr runs the appropriate list command for each:
 
 - npm: `npm list -g --depth=0 --json`
 - pnpm: `pnpm list -g --json`
 - bun: `bun pm ls -g`
 
-When writing global updates (`-gw`), bump runs the corresponding install command:
+When writing global updates (`-gw`), upgr runs the corresponding install command:
 
 - npm: `npm install -g <pkg>@<version>`
 - pnpm: `pnpm add -g <pkg>@<version>`
@@ -149,10 +149,10 @@ When writing global updates (`-gw`), bump runs the corresponding install command
 
 ```bash
 # Update each dep one at a time, run tests, revert failures
-bump -w --verify-command "pnpm test"
+upgr -w --verify-command "pnpm test"
 
 # Type-check after each update
-bump -w -V "pnpm typecheck"
+upgr -w -V "pnpm typecheck"
 ```
 
 The flow for each dependency:
@@ -170,17 +170,17 @@ This is slower (one command per dep), but it means you end up with only the upda
 
 ### Fail on Outdated
 
-`--fail-on-outdated` makes bump exit with code `1` when outdated dependencies are found *without* `--write`. This turns bump into a CI check.
+`--fail-on-outdated` makes upgr exit with code `1` when outdated dependencies are found *without* `--write`. This turns upgr into a CI check.
 
 ```bash
 # CI: fail if anything is outdated
-bump --fail-on-outdated
+upgr --fail-on-outdated
 
 # CI: fail if any major updates exist
-bump major --fail-on-outdated
+upgr major --fail-on-outdated
 
 # CI: check and output JSON for parsing
-bump --fail-on-outdated --output json
+upgr --fail-on-outdated --output json
 ```
 
 ### Exit Codes
@@ -197,7 +197,7 @@ Combine `--output json` with `--fail-on-outdated` for CI pipelines that need to 
 
 ```bash
 # GitHub Actions example
-bump --output json --fail-on-outdated > bump-report.json
+upgr --output json --fail-on-outdated > upgr-report.json
 ```
 
 The JSON output includes a `summary` object with counts by diff type, plus full package-level detail. See [Output Formats](../output-formats/) for the schema.

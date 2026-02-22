@@ -1,7 +1,7 @@
 import type { DepFieldType, RangeMode, ResolvedDepChange, SortOption } from './dependencies'
 import type { OutputFormat, PackageMeta } from './package'
 
-export interface BumpOptions {
+export interface UpgrOptions {
   cwd: string
   recursive: boolean
   mode: RangeMode
@@ -59,7 +59,7 @@ export interface BumpOptions {
   afterPackagesEnd?: (pkgs: PackageMeta[]) => void | Promise<void>
 }
 
-export const DEFAULT_OPTIONS: Partial<BumpOptions> = {
+export const DEFAULT_OPTIONS: Partial<UpgrOptions> = {
   cwd: '.',
   recursive: true,
   mode: 'default',

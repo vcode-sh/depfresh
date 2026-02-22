@@ -1,6 +1,6 @@
 # Output Formats
 
-Because apparently "printing text to a terminal" needs a whole document now. bump supports three output formats. Well, two and a half -- one of them doesn't exist yet.
+Because apparently "printing text to a terminal" needs a whole document now. upgr supports three output formats. Well, two and a half -- one of them doesn't exist yet.
 
 ## Pages
 
@@ -18,12 +18,12 @@ Because apparently "printing text to a terminal" needs a whole document now. bum
 | `1`  | Outdated dependencies found (only when `--fail-on-outdated` is set, without `--write`) |
 | `2`  | Something went wrong -- network error, parse failure, registry timeout, etc. |
 
-The `--fail-on-outdated` flag is designed for CI pipelines. Without it, finding outdated deps still exits `0` because I'm not here to break your build over a patch bump.
+The `--fail-on-outdated` flag is designed for CI pipelines. Without it, finding outdated deps still exits `0` because I'm not here to break your build over a patch upgr.
 
 ## Quick Reference
 
 ```bash
-bump --output table   # default -- for humans
-bump --output json    # for machines, scripts, and AI agents
-bump --output sarif   # for... eventually
+upgr --output table   # default -- for humans
+upgr --output json    # for machines, scripts, and AI agents
+upgr --output sarif   # for... eventually
 ```

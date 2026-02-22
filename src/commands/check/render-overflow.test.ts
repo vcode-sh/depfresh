@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { BumpOptions, ResolvedDepChange } from '../../types'
+import type { ResolvedDepChange, UpgrOptions } from '../../types'
 import { DEFAULT_OPTIONS } from '../../types'
 import { stripAnsi, visualLength } from '../../utils/format'
 import { renderTable } from './render'
 
-const baseOptions = { ...DEFAULT_OPTIONS, group: false } as BumpOptions
+const baseOptions = { ...DEFAULT_OPTIONS, group: false } as UpgrOptions
 
 function makeUpdate(overrides: Partial<ResolvedDepChange> = {}): ResolvedDepChange {
   return {

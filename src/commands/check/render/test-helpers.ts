@@ -1,7 +1,7 @@
-import type { BumpOptions, ResolvedDepChange } from '../../../types'
+import type { ResolvedDepChange, UpgrOptions } from '../../../types'
 import { DEFAULT_OPTIONS } from '../../../types'
 
-export const defaultOpts = { ...DEFAULT_OPTIONS } as BumpOptions
+export const defaultOpts = { ...DEFAULT_OPTIONS } as UpgrOptions
 
 export function makeUpdate(overrides: Partial<ResolvedDepChange> = {}): ResolvedDepChange {
   return {

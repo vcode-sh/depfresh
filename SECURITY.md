@@ -34,11 +34,11 @@ If I go silent, follow up. I'm one person with a keyboard, not a 24/7 SOC team.
 
 So you don't have to:
 
-- **SQLite cache with WAL mode** -- no corruption from concurrent access. Your cache is safe even if you run bump from 5 terminals simultaneously. Don't ask me how I know.
+- **SQLite cache with WAL mode** -- no corruption from concurrent access. Your cache is safe even if you run upgr from 5 terminals simultaneously. Don't ask me how I know.
 - **Auth token handling** -- `.npmrc` tokens are used for registry requests but never logged, cached, or written anywhere. Debug mode redacts them. I'm not trying to end up on HackerNews.
 - **Exponential backoff** -- prevents request amplification. I won't accidentally DDoS npm. You're welcome, Isaac.
 - **AbortController timeouts** -- every request has a timeout. No hanging connections, no resource leaks, no "why is my process still running" at 3am.
-- **No arbitrary code execution** -- bump reads JSON and fetches metadata. That's it. No install scripts, no postinstall hooks, no eval(). Boring by design.
+- **No arbitrary code execution** -- upgr reads JSON and fetches metadata. That's it. No install scripts, no postinstall hooks, no eval(). Boring by design.
 
 ## Disclosure
 

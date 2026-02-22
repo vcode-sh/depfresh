@@ -3,9 +3,9 @@
 The default format. A colourful table that makes your outdated dependencies look like a traffic light system for poor life choices.
 
 ```bash
-bump --output table   # default -- for humans with eyeballs
+upgr --output table   # default -- for humans with eyeballs
 # or just:
-bump
+upgr
 ```
 
 ## Columns
@@ -88,9 +88,9 @@ In the interactive detail view (`-I`), shows human-readable explanations next to
 
 ## Contextual Tips
 
-When updates exist, bump helpfully reminds you of things you probably already know:
+When updates exist, upgr helpfully reminds you of things you probably already know:
 
-- If you're in `default` mode: *"Run `bump major` to check for major updates"*
+- If you're in `default` mode: *"Run `upgr major` to check for major updates"*
 - If you haven't written: *"Add `-w` to write changes to package files"*
 
 These only appear in table output. JSON users are assumed to know what they're doing.

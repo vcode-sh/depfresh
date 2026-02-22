@@ -1,15 +1,15 @@
 # Full Options Reference
 
-Every option from the `BumpOptions` interface. I documented all of them because I'm a better person than whoever wrote your last dependency tool.
+Every option from the `UpgrOptions` interface. I documented all of them because I'm a better person than whoever wrote your last dependency tool.
 
 ## Core
 
 | Option | Type | Default | Description |
 |---|---|---|---|
-| `cwd` | `string` | `'.'` | Working directory. Where bump starts looking for packages. |
+| `cwd` | `string` | `'.'` | Working directory. Where upgr starts looking for packages. |
 | `recursive` | `boolean` | `true` | Search for `package.json` files in subdirectories. |
 | `mode` | `RangeMode` | `'default'` | Global version resolution strategy. See [Modes](../cli/modes.md) for all modes. |
-| `write` | `boolean` | `false` | Actually update the files. Without this, bump is just a very opinionated reporter. |
+| `write` | `boolean` | `false` | Actually update the files. Without this, upgr is just a very opinionated reporter. |
 | `interactive` | `boolean` | `false` | Launch the TUI for cherry-picking updates. Vim keys, version drill-down, the works. Falls back to `@clack/prompts` in non-TTY. |
 | `force` | `boolean` | `false` | Include packages even when they're already up to date. |
 | `includeLocked` | `boolean` | `false` | Check packages that are pinned to exact versions. |
@@ -38,7 +38,7 @@ Every option from the `BumpOptions` interface. I documented all of them because 
 | Option | Type | Default | Description |
 |---|---|---|---|
 | `output` | `'table' \| 'json' \| 'sarif'` | `'table'` | Output format. `json` for machines, `sarif` for security tooling, `table` for humans who enjoy ASCII art. |
-| `loglevel` | `'silent' \| 'info' \| 'debug'` | `'info'` | How chatty bump should be. `debug` for when you need to file a bug report. |
+| `loglevel` | `'silent' \| 'info' \| 'debug'` | `'info'` | How chatty upgr should be. `debug` for when you need to file a bug report. |
 | `peer` | `boolean` | `false` | Show peer dependency hints. |
 | `global` | `boolean` | `false` | Check globally installed packages instead of project dependencies. |
 
@@ -81,7 +81,7 @@ These only matter when `write: true`.
 
 ## Callbacks
 
-For the programmatic API. These do nothing in config files -- they're for when you `import { check } from 'bump-cli'` and want to micromanage everything.
+For the programmatic API. These do nothing in config files -- they're for when you `import { check } from 'upgr'` and want to micromanage everything.
 
 | Callback | Signature | When it fires |
 |---|---|---|
@@ -102,8 +102,8 @@ See the [API docs](../api/) for usage examples.
 The real power move. `packageMode` lets you set different version strategies per package using exact names, glob patterns, or regex.
 
 ```typescript
-// bump.config.ts
-import { defineConfig } from 'bump-cli'
+// upgr.config.ts
+import { defineConfig } from 'upgr'
 
 export default defineConfig({
   mode: 'minor', // global default
@@ -132,7 +132,7 @@ export default defineConfig({
 2. **Glob patterns** -- standard glob syntax (`*`, `**`, `?`)
 3. **Regex** -- strings starting with `/` are treated as regular expressions
 
-If nothing matches, the global `mode` applies. If you set a package to `'ignore'`, bump pretends it doesn't exist. Sometimes that's the healthiest option.
+If nothing matches, the global `mode` applies. If you set a package to `'ignore'`, upgr pretends it doesn't exist. Sometimes that's the healthiest option.
 
 ### Available modes
 
@@ -140,7 +140,7 @@ If nothing matches, the global `mode` applies. If you set a package to `'ignore'
 |---|---|
 | `default` | Respects the existing semver range in your `package.json` |
 | `major` | Allows major version jumps. Brave. |
-| `minor` | Up to minor bumps. The sensible middle ground. |
+| `minor` | Up to minor updates. The sensible middle ground. |
 | `patch` | Patch updates only. Maximum conservatism. |
 | `latest` | Whatever the `latest` dist-tag points to. Living dangerously. |
 | `newest` | The most recently published version, regardless of dist-tags. Chaotic neutral. |
@@ -149,10 +149,10 @@ If nothing matches, the global `mode` applies. If you set a package to `'ignore'
 
 ## depFields
 
-Control which dependency types bump checks. By default, everything is checked. Set fields to `false` to exclude them.
+Control which dependency types upgr checks. By default, everything is checked. Set fields to `false` to exclude them.
 
 ```typescript
-import { defineConfig } from 'bump-cli'
+import { defineConfig } from 'upgr'
 
 export default defineConfig({
   depFields: {

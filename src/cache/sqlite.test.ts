@@ -126,7 +126,7 @@ describe('corrupt JSON data handling', () => {
     const { homedir } = await import('node:os')
     const { join } = await import('pathe')
 
-    const cacheDir = join(homedir(), '.bump')
+    const cacheDir = join(homedir(), '.upgr')
     mkdirSync(cacheDir, { recursive: true })
 
     // Directly insert corrupt data into the DB

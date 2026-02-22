@@ -100,7 +100,7 @@ describe('defineConfig', () => {
     expect(config).toEqual({})
   })
 
-  it('preserves all BumpOptions fields', () => {
+  it('preserves all UpgrOptions fields', () => {
     const config = defineConfig({
       cwd: '/my/project',
       recursive: false,

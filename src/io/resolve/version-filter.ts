@@ -1,7 +1,7 @@
 import * as semver from 'semver'
-import type { BumpOptions, PackageData, RawDep } from '../../types'
+import type { PackageData, RawDep, UpgrOptions } from '../../types'
 
-export function filterVersions(pkgData: PackageData, dep: RawDep, options?: BumpOptions): string[] {
+export function filterVersions(pkgData: PackageData, dep: RawDep, options?: UpgrOptions): string[] {
   const currentPrerelease = semver.prerelease(dep.currentVersion)
   const currentChannel = currentPrerelease?.[0]
 

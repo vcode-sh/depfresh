@@ -2,17 +2,17 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { BumpOptions } from '../../types'
+import type { UpgrOptions } from '../../types'
 import { DEFAULT_OPTIONS } from '../../types'
 import { loadPackages } from './discovery'
 
-const baseOptions = { ...DEFAULT_OPTIONS } as BumpOptions
+const baseOptions = { ...DEFAULT_OPTIONS } as UpgrOptions
 
 describe('loadPackages', () => {
   let tmpDir: string
 
   beforeEach(() => {
-    tmpDir = mkdtempSync(join(tmpdir(), 'bump-packages-'))
+    tmpDir = mkdtempSync(join(tmpdir(), 'upgr-packages-'))
   })
 
   afterEach(() => {

@@ -1,10 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
-  BumpError,
   CacheError,
   ConfigError,
   RegistryError,
   ResolveError,
+  UpgrError,
   WriteError,
 } from './errors'
 import type { NpmrcConfig } from './types'
@@ -16,7 +16,7 @@ const npmrc: NpmrcConfig = {
 }
 
 describe('error hierarchy', () => {
-  it('all typed errors extend BumpError with stable codes', () => {
+  it('all typed errors extend UpgrError with stable codes', () => {
     const errors = [
       new CacheError('cache'),
       new ConfigError('config'),
@@ -26,7 +26,7 @@ describe('error hierarchy', () => {
     ]
 
     for (const err of errors) {
-      expect(err).toBeInstanceOf(BumpError)
+      expect(err).toBeInstanceOf(UpgrError)
       expect(err.code).toMatch(/^ERR_/)
     }
   })

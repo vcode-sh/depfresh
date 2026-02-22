@@ -1,14 +1,14 @@
 import pLimit from 'p-limit'
 import type { Cache } from '../../cache/index'
 import { createSqliteCache } from '../../cache/index'
-import type { BumpOptions, NpmrcConfig, PackageMeta, RawDep, ResolvedDepChange } from '../../types'
+import type { NpmrcConfig, PackageMeta, RawDep, ResolvedDepChange, UpgrOptions } from '../../types'
 import { createLogger } from '../../utils/logger'
 import { loadNpmrc } from '../../utils/npmrc'
 import { resolveDependency } from './resolve-dependency'
 
 export async function resolvePackage(
   pkg: PackageMeta,
-  options: BumpOptions,
+  options: UpgrOptions,
   externalCache?: Cache,
   externalNpmrc?: NpmrcConfig,
   privatePackages?: Set<string>,

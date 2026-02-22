@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { ConfigError } from '../../errors'
-import type { BumpOptions } from '../../types'
+import type { UpgrOptions } from '../../types'
 import { DEFAULT_OPTIONS } from '../../types'
 import { parseDependencies } from './index'
 
-const baseOptions = { ...DEFAULT_OPTIONS } as BumpOptions
+const baseOptions = { ...DEFAULT_OPTIONS } as UpgrOptions
 
 describe('parseDependencies pattern errors', () => {
   it('throws ConfigError for invalid include patterns', () => {

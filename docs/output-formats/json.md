@@ -1,9 +1,9 @@
 # JSON Output
 
 ```bash
-bump --output json
+upgr --output json
 # or the short version:
-bump -o json
+upgr -o json
 ```
 
 Spits out a single JSON envelope to stdout. All log output is automatically suppressed -- `--output json` forces log level to `silent`, so your JSON won't have random info messages photobombing the payload.
@@ -88,7 +88,7 @@ Spits out a single JSON envelope to stdout. All log output is automatically supp
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `cwd` | `string` | Working directory bump ran in |
+| `cwd` | `string` | Working directory upgr ran in |
 | `mode` | `string` | Range mode used: `default`, `major`, `minor`, `patch`, `latest`, `newest`, `next` |
 | `timestamp` | `string` | ISO 8601 timestamp of when the check ran |
 
@@ -100,51 +100,51 @@ Spits out a single JSON envelope to stdout. All log output is automatically supp
 
 ## AI Agent Integration
 
-bump was built with AI agents in mind. Not because I think they'll replace us -- just because parsing ANSI escape codes is nobody's idea of a good time.
+upgr was built with AI agents in mind. Not because I think they'll replace us -- just because parsing ANSI escape codes is nobody's idea of a good time.
 
 ### Recommended Flags
 
 ```bash
-bump --output json --loglevel silent
+upgr --output json --loglevel silent
 ```
 
 Though `--loglevel silent` is redundant with `--output json` since JSON mode forces silent anyway. But explicit is fine. I respect the paranoia.
 
 ### TTY Detection
 
-bump auto-detects non-TTY environments:
+upgr auto-detects non-TTY environments:
 - Progress bars (package + dependency resolution) are suppressed
 - Interactive TUI falls back to `@clack/prompts` (or is skipped entirely if stdin isn't a TTY)
 - Table columns don't truncate (no terminal width to respect)
 - `ansis` respects the `NO_COLOR` environment variable
 
-So piping `bump` output into another process Just Works without extra flags.
+So piping `upgr` output into another process Just Works without extra flags.
 
 ### Common Workflows
 
 **Check and parse:**
 ```bash
-bump --output json | jq '.summary'
+upgr --output json | jq '.summary'
 ```
 
 **Safe update -- minor and patch only:**
 ```bash
-bump --write --mode minor
+upgr --write --mode minor
 ```
 
 **Selective update -- specific packages:**
 ```bash
-bump --write --include "typescript,vitest"
+upgr --write --include "typescript,vitest"
 ```
 
 **Full update -- everything to latest:**
 ```bash
-bump --write --mode latest
+upgr --write --mode latest
 ```
 
 **CI gate -- fail if anything is outdated:**
 ```bash
-bump --fail-on-outdated --output json
+upgr --fail-on-outdated --output json
 # exits 1 if updates found, 0 if all current
 ```
 
@@ -153,7 +153,7 @@ bump --fail-on-outdated --output json
 If flags aren't enough, the library export gives you callbacks for surgical control:
 
 ```typescript
-import { check } from 'bump-cli'
+import { check } from 'upgr'
 
 await check({
   cwd: process.cwd(),

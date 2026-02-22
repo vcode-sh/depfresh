@@ -1,4 +1,4 @@
-import type { BumpOptions, CatalogSource } from '../../types'
+import type { CatalogSource, UpgrOptions } from '../../types'
 
 /**
  * Unified catalog interface.
@@ -6,11 +6,11 @@ import type { BumpOptions, CatalogSource } from '../../types'
  */
 export interface CatalogLoader {
   detect(cwd: string): Promise<boolean>
-  load(cwd: string, options: BumpOptions): Promise<CatalogSource[]>
+  load(cwd: string, options: UpgrOptions): Promise<CatalogSource[]>
   write(catalog: CatalogSource, changes: Map<string, string>): void
 }
 
-export async function loadCatalogs(cwd: string, options: BumpOptions): Promise<CatalogSource[]> {
+export async function loadCatalogs(cwd: string, options: UpgrOptions): Promise<CatalogSource[]> {
   const catalogs: CatalogSource[] = []
 
   // Load all catalogs in parallel

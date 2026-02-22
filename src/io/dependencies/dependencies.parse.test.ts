@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import type { BumpOptions } from '../../types'
+import type { UpgrOptions } from '../../types'
 import { DEFAULT_OPTIONS } from '../../types'
 import { isDepFieldEnabled, parseDependencies } from './index'
 
-const baseOptions = { ...DEFAULT_OPTIONS } as BumpOptions
+const baseOptions = { ...DEFAULT_OPTIONS } as UpgrOptions
 
 describe('parseDependencies', () => {
   it('parses standard dependency fields', () => {

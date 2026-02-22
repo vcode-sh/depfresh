@@ -1,4 +1,4 @@
-import type { BumpOptions, OutputFormat, RangeMode, SortOption } from '../types'
+import type { OutputFormat, RangeMode, SortOption, UpgrOptions } from '../types'
 
 const VALID_MODES = new Set<string>([
   'default',
@@ -10,7 +10,7 @@ const VALID_MODES = new Set<string>([
   'next',
 ])
 
-export async function normalizeArgs(args: Record<string, unknown>): Promise<BumpOptions> {
+export async function normalizeArgs(args: Record<string, unknown>): Promise<UpgrOptions> {
   const { resolveConfig } = await import('../config')
 
   const depFields: Record<string, boolean> = {}
@@ -25,7 +25,7 @@ export async function normalizeArgs(args: Record<string, unknown>): Promise<Bump
     depFields.optionalDependencies = false
   }
 
-  // Positional mode arg: `bump major` is shorthand for `bump --mode major`
+  // Positional mode arg: `upgr major` is shorthand for `upgr --mode major`
   const mode =
     args.mode_arg && VALID_MODES.has(args.mode_arg as string)
       ? (args.mode_arg as RangeMode)

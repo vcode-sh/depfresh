@@ -1,10 +1,10 @@
 # Exported Types
 
-The full type catalogue. Every interface, union, and enum that bump exports. Import what you need, ignore the rest.
+The full type catalogue. Every interface, union, and enum that upgr exports. Import what you need, ignore the rest.
 
 | Type | What it is |
 |------|-----------|
-| `BumpOptions` | The full options object. Every flag, callback, and setting lives here |
+| `UpgrOptions` | The full options object. Every flag, callback, and setting lives here |
 | `CatalogSource` | A workspace catalog entry (pnpm/bun/yarn) with its deps and file path |
 | `DepFieldType` | Union of dependency field names: `'dependencies'`, `'devDependencies'`, `'overrides'`, etc. |
 | `DiffType` | Version diff classification: `'major'` \| `'minor'` \| `'patch'` \| `'none'` \| `'error'` |

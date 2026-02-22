@@ -7,8 +7,8 @@ Found a bug? Want a feature? Just feel like improving something on a Sunday afte
 ## Setup
 
 ```bash
-git clone https://github.com/vcode-sh/bump.git
-cd bump
+git clone https://github.com/vcode-sh/upgr.git
+cd upgr
 pnpm install
 ```
 

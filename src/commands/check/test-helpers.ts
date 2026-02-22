@@ -1,5 +1,5 @@
 import { vi } from 'vitest'
-import type { BumpOptions, PackageMeta, ResolvedDepChange } from '../../types'
+import type { PackageMeta, ResolvedDepChange, UpgrOptions } from '../../types'
 import { DEFAULT_OPTIONS } from '../../types'
 
 vi.mock('../../io/packages', () => ({
@@ -47,8 +47,8 @@ vi.mock('../../io/global', () => ({
   writeGlobalPackage: vi.fn(),
 }))
 
-export const baseOptions: BumpOptions = {
-  ...(DEFAULT_OPTIONS as BumpOptions),
+export const baseOptions: UpgrOptions = {
+  ...(DEFAULT_OPTIONS as UpgrOptions),
   cwd: '/tmp/test',
   loglevel: 'silent',
 }

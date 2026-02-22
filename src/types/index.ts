@@ -7,7 +7,7 @@ export type {
   SortOption,
   UpdateScore,
 } from './dependencies'
-export type { BumpOptions } from './options'
+export type { UpgrOptions } from './options'
 export { DEFAULT_OPTIONS } from './options'
 export type {
   CatalogSource,

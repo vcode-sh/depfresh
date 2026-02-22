@@ -2,12 +2,12 @@ import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import type { BumpOptions } from '../../types'
+import type { UpgrOptions } from '../../types'
 import { DEFAULT_OPTIONS } from '../../types'
 import { bunCatalogLoader } from './bun'
 
-const baseOptions: BumpOptions = {
-  ...(DEFAULT_OPTIONS as BumpOptions),
+const baseOptions: UpgrOptions = {
+  ...(DEFAULT_OPTIONS as UpgrOptions),
   cwd: '/tmp',
   loglevel: 'silent',
 }
@@ -19,7 +19,7 @@ function writePackageJson(dir: string, content: Record<string, unknown>): void {
 }
 
 beforeEach(() => {
-  testDir = join(tmpdir(), `bump-bun-test-${Date.now()}-${Math.random().toString(36).slice(2)}`)
+  testDir = join(tmpdir(), `upgr-bun-test-${Date.now()}-${Math.random().toString(36).slice(2)}`)
   mkdirSync(testDir, { recursive: true })
 })
 

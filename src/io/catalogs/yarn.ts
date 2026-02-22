@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync } from 'node:fs'
 import { findUpSync } from 'find-up-simple'
 import YAML from 'yaml'
-import type { BumpOptions, CatalogSource, RawDep } from '../../types'
+import type { CatalogSource, RawDep, UpgrOptions } from '../../types'
 import { isLocked } from '../../utils/versions'
 import type { CatalogLoader } from './index'
 
@@ -11,7 +11,7 @@ export const yarnCatalogLoader: CatalogLoader = {
     return !!rcFile
   },
 
-  async load(cwd: string, options: BumpOptions): Promise<CatalogSource[]> {
+  async load(cwd: string, options: UpgrOptions): Promise<CatalogSource[]> {
     const filepath = findUpSync('.yarnrc.yml', { cwd })
     if (!filepath) return []
 

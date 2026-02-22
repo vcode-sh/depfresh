@@ -5,7 +5,7 @@ import './signals'
 
 const main = defineCommand({
   meta: {
-    name: 'bump',
+    name: 'upgr',
     version,
     description: 'Keep your npm dependencies fresh',
   },

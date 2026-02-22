@@ -70,7 +70,7 @@ describe('writePackage CRLF without trailing newline', () => {
   let tmpDir: string
 
   beforeEach(() => {
-    tmpDir = mkdtempSync(join(tmpdir(), 'bump-crlf-notail-'))
+    tmpDir = mkdtempSync(join(tmpdir(), 'upgr-crlf-notail-'))
   })
 
   afterEach(() => {
@@ -103,7 +103,7 @@ describe('writePackage CRLF with multiple sources', () => {
   let tmpDir: string
 
   beforeEach(() => {
-    tmpDir = mkdtempSync(join(tmpdir(), 'bump-crlf-multi-'))
+    tmpDir = mkdtempSync(join(tmpdir(), 'upgr-crlf-multi-'))
   })
 
   afterEach(() => {
@@ -137,7 +137,7 @@ describe('writePackage CRLF preservation', () => {
   let tmpDir: string
 
   beforeEach(() => {
-    tmpDir = mkdtempSync(join(tmpdir(), 'bump-crlf-'))
+    tmpDir = mkdtempSync(join(tmpdir(), 'upgr-crlf-'))
   })
 
   afterEach(() => {

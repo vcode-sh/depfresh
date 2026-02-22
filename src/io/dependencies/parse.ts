@@ -1,4 +1,4 @@
-import type { BumpOptions, DepFieldType, RawDep } from '../../types'
+import type { DepFieldType, RawDep, UpgrOptions } from '../../types'
 import { isLocked } from '../../utils/versions'
 import { flattenOverrides, getNestedField } from './overrides'
 import { compilePatternsStrict } from './patterns'
@@ -13,7 +13,7 @@ export const DEP_FIELDS: DepFieldType[] = [
 
 export const OVERRIDE_FIELDS: DepFieldType[] = ['overrides', 'resolutions', 'pnpm.overrides']
 
-export function isDepFieldEnabled(field: DepFieldType, options: BumpOptions): boolean {
+export function isDepFieldEnabled(field: DepFieldType, options: UpgrOptions): boolean {
   if (options.depFields?.[field] === false) return false
   if (field === 'peerDependencies' && !options.peer) return false
   return true
@@ -22,7 +22,7 @@ export function isDepFieldEnabled(field: DepFieldType, options: BumpOptions): bo
 export function shouldSkipDependency(
   name: string,
   version: string,
-  options: BumpOptions,
+  options: UpgrOptions,
   includePatterns: RegExp[] = [],
   excludePatterns: RegExp[] = [],
 ): boolean {
@@ -46,7 +46,7 @@ export function shouldSkipDependency(
   return false
 }
 
-export function parseDependencies(raw: Record<string, unknown>, options: BumpOptions): RawDep[] {
+export function parseDependencies(raw: Record<string, unknown>, options: UpgrOptions): RawDep[] {
   const deps: RawDep[] = []
   const includePatterns = options.include?.length ? compilePatternsStrict(options.include) : []
   const excludePatterns = options.exclude?.length ? compilePatternsStrict(options.exclude) : []

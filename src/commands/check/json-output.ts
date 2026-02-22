@@ -1,4 +1,4 @@
-import type { BumpOptions, DiffType, ResolvedDepChange } from '../../types'
+import type { DiffType, ResolvedDepChange, UpgrOptions } from '../../types'
 
 export interface JsonPackage {
   name: string
@@ -46,7 +46,7 @@ export function buildJsonPackage(name: string, updates: ResolvedDepChange[]): Js
   }
 }
 
-export function outputJsonEnvelope(packages: JsonPackage[], options: BumpOptions): void {
+export function outputJsonEnvelope(packages: JsonPackage[], options: UpgrOptions): void {
   const allUpdates = packages.flatMap((p) => p.updates)
   const count = (diff: DiffType) => allUpdates.filter((u) => u.diff === diff).length
 

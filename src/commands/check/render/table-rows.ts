@@ -1,5 +1,5 @@
 import c from 'ansis'
-import type { BumpOptions, ResolvedDepChange } from '../../../types'
+import type { ResolvedDepChange, UpgrOptions } from '../../../types'
 import {
   arrow,
   colorDiff,
@@ -12,7 +12,7 @@ import { buildColumnLayout, type ColumnLayout, fitCell, totalRowWidth } from '..
 
 export function renderRows(
   deps: ResolvedDepChange[],
-  options: BumpOptions,
+  options: UpgrOptions,
   log: (...args: unknown[]) => void,
   showSource: boolean,
   terminalWidth?: number,
