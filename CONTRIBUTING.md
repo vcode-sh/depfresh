@@ -31,26 +31,29 @@ pnpm install
 
 ```
 src/
-  cli.ts              # CLI entry (citty)
-  index.ts            # Library exports
-  config.ts           # Config resolution (unconfig + defu)
-  types.ts            # All the types
-  commands/check/     # Check command, interactive mode, rendering
+  cli.ts                  # CLI entry (citty)
+  index.ts                # Library exports
+  config.ts               # Config resolution (unconfig + defu)
+  config.test.ts          # Tests live next to source. Like adults.
+  types.ts                # All the types
+  commands/check/         # Check command, interactive mode, rendering
   io/
-    packages.ts       # Package discovery and parsing
-    dependencies.ts   # Dep extraction (overrides, protocols, the works)
-    resolve.ts        # Registry resolution with concurrency control
-    registry.ts       # npm/JSR fetching with retry
-    write.ts          # Writes updates, preserves formatting
-    catalogs/         # Workspace catalog loaders (pnpm, bun, yarn)
+    packages.ts           # Package discovery and parsing
+    dependencies.ts       # Dep extraction (overrides, protocols, the works)
+    resolve.ts            # Registry resolution with concurrency control
+    registry.ts           # npm/JSR fetching with retry
+    write.ts              # Writes updates, preserves formatting
+    catalogs/             # Workspace catalog loaders (pnpm, bun, yarn)
   cache/
-    sqlite.ts         # SQLite cache, WAL mode, memory fallback
+    sqlite.ts             # SQLite cache, WAL mode, memory fallback
   utils/
-    versions.ts       # Semver logic, range detection, diff calc
-    npmrc.ts          # .npmrc parsing, scoped registries, auth
-    format.ts         # ANSI colour helpers
-    logger.ts         # Levelled logger (use this, not console.log)
+    versions.ts           # Semver logic, range detection, diff calc
+    npmrc.ts              # .npmrc parsing, scoped registries, auth
+    format.ts             # ANSI colour helpers
+    logger.ts             # Levelled logger (use this, not console.log)
 ```
+
+Tests are colocated — `foo.ts` gets `foo.test.ts` in the same directory. No separate `test/` folder. It's not 2017.
 
 ## The Rules
 
