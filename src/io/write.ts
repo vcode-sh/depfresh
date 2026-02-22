@@ -2,6 +2,9 @@ import { readFileSync, writeFileSync } from 'node:fs'
 import detectIndent from 'detect-indent'
 import type { PackageMeta, ResolvedDepChange } from '../types'
 import { createLogger } from '../utils/logger'
+import { bunCatalogLoader } from './catalogs/bun'
+import { pnpmCatalogLoader } from './catalogs/pnpm'
+import { yarnCatalogLoader } from './catalogs/yarn'
 
 /**
  * Single-writer architecture: reads once, applies all mutations, writes once.
@@ -18,10 +21,9 @@ export function writePackage(
 
   if (pkg.type === 'package.json') {
     writePackageJson(pkg, changes, logger)
+  } else if (pkg.catalogs?.length) {
+    writeCatalogPackage(pkg, changes, logger)
   }
-
-  // TODO: package.yaml writer
-  // TODO: catalog writers (pnpm, bun, yarn)
 }
 
 function writePackageJson(
@@ -95,4 +97,39 @@ function rebuildVersion(original: string, newVersion: string): string {
   if (jsrMatch) return `${jsrMatch[1]}${newVersion}`
 
   return newVersion
+}
+
+const catalogWriters = {
+  pnpm: pnpmCatalogLoader,
+  bun: bunCatalogLoader,
+  yarn: yarnCatalogLoader,
+}
+
+function writeCatalogPackage(
+  pkg: PackageMeta,
+  changes: ResolvedDepChange[],
+  logger: ReturnType<typeof createLogger>,
+): void {
+  if (!pkg.catalogs?.length) return
+
+  for (const catalog of pkg.catalogs) {
+    // Build a map of name → new version for this catalog's changes
+    const changeMap = new Map<string, string>()
+    for (const change of changes) {
+      // Only include changes for deps that exist in this catalog
+      if (catalog.deps.some((d) => d.name === change.name)) {
+        changeMap.set(change.name, change.targetVersion)
+      }
+    }
+
+    if (changeMap.size === 0) continue
+
+    const writer = catalogWriters[catalog.type]
+    if (writer) {
+      writer.write(catalog, changeMap)
+      logger.success(
+        `Updated ${catalog.type} catalog "${catalog.name}" (${changeMap.size} changes)`,
+      )
+    }
+  }
 }

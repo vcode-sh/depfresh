@@ -1,12 +1,12 @@
 import * as p from '@clack/prompts'
 import c from 'ansis'
 import type { ResolvedDepChange } from '../../types'
-import { arrow, colorDiff, colorVersion } from '../../utils/format'
+import { arrow, colorDiff, colorizeVersionDiff } from '../../utils/format'
 
 export async function runInteractive(updates: ResolvedDepChange[]): Promise<ResolvedDepChange[]> {
   const options = updates.map((dep) => ({
     value: dep.name,
-    label: `${dep.name}  ${dep.currentVersion}${arrow()}${colorVersion(dep.targetVersion, dep.diff)}  ${colorDiff(dep.diff)}`,
+    label: `${dep.name}  ${dep.currentVersion}${arrow()}${colorizeVersionDiff(dep.currentVersion, dep.targetVersion, dep.diff)}  ${colorDiff(dep.diff)}`,
     hint: dep.deprecated ? c.red('deprecated') : undefined,
   }))
 

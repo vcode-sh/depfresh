@@ -14,12 +14,34 @@ export function compilePatterns(patterns: string[]): RegExp[] {
   const compiled: RegExp[] = []
   for (const p of patterns) {
     try {
-      compiled.push(new RegExp(p))
+      compiled.push(patternToRegex(p))
     } catch {
-      // Skip invalid regex patterns silently
+      // Skip invalid patterns silently
     }
   }
   return compiled
+}
+
+function isGlob(pattern: string): boolean {
+  // A glob contains * but not regex metacharacters like ^ $ [ ] ( ) | + ?
+  return pattern.includes('*') && !/[\^$[\]()\\|+?]/.test(pattern)
+}
+
+function patternToRegex(pattern: string): RegExp {
+  // Support /regex/flags syntax
+  const slashMatch = pattern.match(/^\/(.+)\/([gimsuy]*)$/)
+  if (slashMatch) {
+    return new RegExp(slashMatch[1]!, slashMatch[2])
+  }
+
+  if (isGlob(pattern)) {
+    // Convert glob to regex: escape special regex chars, then convert * to [^/]*
+    const escaped = pattern.replace(/[.@/]/g, '\\$&').replace(/\*/g, '[^/]*')
+    return new RegExp(`^${escaped}$`)
+  }
+
+  // Plain regex
+  return new RegExp(pattern)
 }
 
 export function isDepFieldEnabled(field: DepFieldType, options: BumpOptions): boolean {

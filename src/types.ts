@@ -1,6 +1,22 @@
-export type RangeMode = 'default' | 'major' | 'minor' | 'patch' | 'latest' | 'newest' | 'next'
+export type RangeMode =
+  | 'default'
+  | 'major'
+  | 'minor'
+  | 'patch'
+  | 'latest'
+  | 'newest'
+  | 'next'
+  | 'ignore'
 
 export type DiffType = 'major' | 'minor' | 'patch' | 'none' | 'error'
+
+export type SortOption =
+  | 'diff-asc'
+  | 'diff-desc'
+  | 'time-asc'
+  | 'time-desc'
+  | 'name-asc'
+  | 'name-desc'
 
 export type DepFieldType =
   | 'dependencies'
@@ -120,6 +136,13 @@ export interface BumpOptions {
 
   ignorePaths: string[]
 
+  // Display options
+  all: boolean
+  group: boolean
+  sort: SortOption
+  timediff: boolean
+  cooldown: number
+
   // Callbacks
   beforePackageStart?: (pkg: PackageMeta) => void | Promise<void>
   onDependencyResolved?: (pkg: PackageMeta, dep: ResolvedDepChange) => void | Promise<void>
@@ -161,4 +184,9 @@ export const DEFAULT_OPTIONS: Partial<BumpOptions> = {
   peer: false,
   global: false,
   ignorePaths: ['**/node_modules/**', '**/dist/**', '**/coverage/**', '**/.git/**'],
+  all: false,
+  group: true,
+  sort: 'diff-asc',
+  timediff: true,
+  cooldown: 0,
 }

@@ -1,10 +1,27 @@
 import c from 'ansis'
-import type { ResolvedDepChange } from '../../types'
-import { arrow, colorDiff, colorVersion, padEnd } from '../../utils/format'
+import type { BumpOptions, DepFieldType, ResolvedDepChange } from '../../types'
+import { arrow, colorDiff, colorizeVersionDiff, padEnd, timeDifference } from '../../utils/format'
+import { sortDeps } from '../../utils/sort'
 
 // ansis auto-detects TTY and respects NO_COLOR env var — no manual stripping needed
 
-export function renderTable(packageName: string, updates: ResolvedDepChange[]): void {
+const DEP_SOURCE_SHORT_NAMES: Record<DepFieldType, string> = {
+  dependencies: 'dependencies',
+  devDependencies: 'devDependencies',
+  peerDependencies: 'peerDependencies',
+  optionalDependencies: 'optionalDependencies',
+  overrides: 'overrides',
+  resolutions: 'resolutions',
+  'pnpm.overrides': 'pnpm.overrides',
+  catalog: 'catalog',
+  packageManager: 'packageManager',
+}
+
+export function renderTable(
+  packageName: string,
+  updates: ResolvedDepChange[],
+  options: BumpOptions,
+): void {
   // biome-ignore lint/suspicious/noConsole: intentional output
   const log = console.log
 
@@ -12,40 +29,14 @@ export function renderTable(packageName: string, updates: ResolvedDepChange[]): 
   log(c.cyan.bold(packageName))
   log()
 
-  // Calculate column widths
-  const nameWidth = Math.max(...updates.map((u) => u.name.length), 4)
-  const sourceWidth = Math.max(...updates.map((u) => u.source.length), 6)
-  const currentWidth = Math.max(...updates.map((u) => u.currentVersion.length), 7)
-  const targetWidth = Math.max(...updates.map((u) => u.targetVersion.length), 6)
+  const showTimediff = options.timediff
+  const sorted = sortDeps(updates, options.sort)
 
-  // Header
-  log(
-    `  ${padEnd(c.gray('name'), nameWidth + 2)}  ` +
-      `${padEnd(c.gray('source'), sourceWidth)}  ` +
-      `${padEnd(c.gray('current'), currentWidth)}  ` +
-      `   ${padEnd(c.gray('target'), targetWidth)}  ` +
-      `${c.gray('diff')}`,
-  )
-  log(c.gray(`  ${'-'.repeat(nameWidth + sourceWidth + currentWidth + targetWidth + 20)}`))
-
-  // Sort: major first, then minor, then patch
-  const sorted = [...updates].sort((a, b) => {
-    const order = { major: 0, minor: 1, patch: 2, error: 3, none: 4 }
-    return (order[a.diff] ?? 4) - (order[b.diff] ?? 4)
-  })
-
-  for (const dep of sorted) {
-    const name = padEnd(dep.name, nameWidth + 2)
-    const source = padEnd(c.gray(dep.source), sourceWidth)
-    const current = padEnd(dep.currentVersion, currentWidth)
-    const target = padEnd(colorVersion(dep.targetVersion, dep.diff), targetWidth)
-    const diff = colorDiff(dep.diff)
-    const deprecated = dep.deprecated ? c.red(' (deprecated)') : ''
-
-    log(`  ${name}  ${source}  ${current}${arrow()}${target}  ${diff}${deprecated}`)
+  if (options.group) {
+    renderGrouped(sorted, showTimediff, log)
+  } else {
+    renderFlat(sorted, showTimediff, log)
   }
-
-  log()
 
   // Summary
   const major = updates.filter((u) => u.diff === 'major').length
@@ -59,4 +50,99 @@ export function renderTable(packageName: string, updates: ResolvedDepChange[]): 
 
   log(`  ${parts.join(c.gray(' | '))}  ${c.gray(`(${updates.length} total)`)}`)
   log()
+}
+
+function renderGrouped(
+  sorted: ResolvedDepChange[],
+  showTimediff: boolean,
+  log: (...args: unknown[]) => void,
+): void {
+  // Group by source
+  const groups = new Map<string, ResolvedDepChange[]>()
+  for (const dep of sorted) {
+    const source = dep.source
+    const existing = groups.get(source)
+    if (existing) {
+      existing.push(dep)
+    } else {
+      groups.set(source, [dep])
+    }
+  }
+
+  for (const [source, deps] of groups) {
+    const label = DEP_SOURCE_SHORT_NAMES[source as DepFieldType] ?? source
+    log(c.gray(`  ${label}`))
+    renderRows(deps, showTimediff, log, false)
+    log()
+  }
+}
+
+function renderFlat(
+  sorted: ResolvedDepChange[],
+  showTimediff: boolean,
+  log: (...args: unknown[]) => void,
+): void {
+  renderRows(sorted, showTimediff, log, true)
+  log()
+}
+
+function renderRows(
+  deps: ResolvedDepChange[],
+  showTimediff: boolean,
+  log: (...args: unknown[]) => void,
+  showSource: boolean,
+): void {
+  // Calculate column widths
+  const nameWidth = Math.max(...deps.map((u) => u.name.length), 4)
+  const currentWidth = Math.max(...deps.map((u) => u.currentVersion.length), 7)
+  const targetWidth = Math.max(...deps.map((u) => u.targetVersion.length), 6)
+
+  // Conditionally include source column
+  const sourceWidth = showSource ? Math.max(...deps.map((u) => u.source.length), 6) : 0
+
+  // Build header
+  let header = `    ${padEnd(c.gray('name'), nameWidth + 2)}  `
+  if (showSource) header += `${padEnd(c.gray('source'), sourceWidth)}  `
+  header += `${padEnd(c.gray('current'), currentWidth)}  `
+  header += `   ${padEnd(c.gray('target'), targetWidth)}  `
+  header += c.gray('diff')
+  if (showTimediff) header += `  ${c.gray('age')}`
+
+  log(header)
+
+  const separatorLen =
+    nameWidth +
+    currentWidth +
+    targetWidth +
+    18 +
+    (showSource ? sourceWidth + 2 : 0) +
+    (showTimediff ? 10 : 0)
+  log(c.gray(`    ${'-'.repeat(separatorLen)}`))
+
+  for (const dep of deps) {
+    const name = padEnd(dep.name, nameWidth + 2)
+    const current = padEnd(dep.currentVersion, currentWidth)
+    const target = padEnd(
+      colorizeVersionDiff(dep.currentVersion, dep.targetVersion, dep.diff),
+      targetWidth,
+    )
+    const diff = colorDiff(dep.diff)
+    const deprecated = dep.deprecated ? c.red(' (deprecated)') : ''
+
+    let line = `    ${name}  `
+    if (showSource) line += `${padEnd(c.gray(dep.source), sourceWidth)}  `
+    line += `${current}${arrow()}${target}  ${diff}`
+
+    if (showTimediff) {
+      const td = timeDifference(dep.publishedAt)
+      if (td) {
+        const colorFn = td.color === 'green' ? c.green : td.color === 'yellow' ? c.yellow : c.red
+        line += `  ${padEnd(colorFn(td.text), 8)}`
+      }
+    }
+
+    line += deprecated
+
+    log(line)
+  }
 }

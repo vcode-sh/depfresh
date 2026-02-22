@@ -194,4 +194,133 @@ describe('compilePatterns', () => {
   it('returns empty array for empty input', () => {
     expect(compilePatterns([])).toEqual([])
   })
+
+  // Glob pattern support (Task 1.9)
+
+  it('converts @types/* glob to regex that matches scoped packages', () => {
+    const patterns = compilePatterns(['@types/*'])
+    expect(patterns).toHaveLength(1)
+    expect(patterns[0]!.test('@types/node')).toBe(true)
+    expect(patterns[0]!.test('@types/react')).toBe(true)
+    expect(patterns[0]!.test('@types/lodash')).toBe(true)
+    expect(patterns[0]!.test('react')).toBe(false)
+    expect(patterns[0]!.test('@scope/types')).toBe(false)
+  })
+
+  it('converts eslint-* glob to regex', () => {
+    const patterns = compilePatterns(['eslint-*'])
+    expect(patterns).toHaveLength(1)
+    expect(patterns[0]!.test('eslint-plugin-foo')).toBe(true)
+    expect(patterns[0]!.test('eslint-config-bar')).toBe(true)
+    expect(patterns[0]!.test('eslint')).toBe(false)
+    expect(patterns[0]!.test('prettier')).toBe(false)
+  })
+
+  it('converts @scope/* glob to regex', () => {
+    const patterns = compilePatterns(['@vue/*'])
+    expect(patterns).toHaveLength(1)
+    expect(patterns[0]!.test('@vue/compiler-core')).toBe(true)
+    expect(patterns[0]!.test('@vue/reactivity')).toBe(true)
+    expect(patterns[0]!.test('@react/core')).toBe(false)
+  })
+
+  it('treats exact package names as regex (no glob)', () => {
+    const patterns = compilePatterns(['react'])
+    expect(patterns).toHaveLength(1)
+    // regex 'react' matches anything containing 'react'
+    expect(patterns[0]!.test('react')).toBe(true)
+    expect(patterns[0]!.test('react-dom')).toBe(true)
+  })
+
+  it('supports /regex/flags syntax', () => {
+    const patterns = compilePatterns(['/^react$/i'])
+    expect(patterns).toHaveLength(1)
+    expect(patterns[0]!.test('react')).toBe(true)
+    expect(patterns[0]!.test('React')).toBe(true)
+    expect(patterns[0]!.test('react-dom')).toBe(false)
+  })
+
+  it('supports /regex/ without flags', () => {
+    const patterns = compilePatterns(['/^lodash$/'])
+    expect(patterns).toHaveLength(1)
+    expect(patterns[0]!.test('lodash')).toBe(true)
+    expect(patterns[0]!.test('lodash-es')).toBe(false)
+  })
+
+  it('distinguishes regex metacharacters from globs', () => {
+    // Pattern with ^ and $ is clearly regex, not glob even if it contains *
+    const regexPatterns = compilePatterns(['^react'])
+    expect(regexPatterns).toHaveLength(1)
+    expect(regexPatterns[0]!.test('react-dom')).toBe(true)
+    expect(regexPatterns[0]!.test('lodash')).toBe(false)
+  })
+
+  it('handles glob with dots (escapes . to literal)', () => {
+    // Dots in globs are escaped so they match literal dots, not any char
+    const patterns = compilePatterns(['@babel/plugin.*'])
+    expect(patterns).toHaveLength(1)
+    expect(patterns[0]!.test('@babel/plugin.transform')).toBe(true)
+    // Dot is literal, not regex wildcard — won't match arbitrary chars in place of dot
+    expect(patterns[0]!.test('@babel/pluginXtransform')).toBe(false)
+  })
+
+  it('mixes globs and regex in the same array', () => {
+    const patterns = compilePatterns(['@types/*', '^react', '/^vue$/i'])
+    expect(patterns).toHaveLength(3)
+
+    // Glob: @types/*
+    expect(patterns[0]!.test('@types/node')).toBe(true)
+    expect(patterns[0]!.test('react')).toBe(false)
+
+    // Regex: ^react
+    expect(patterns[1]!.test('react')).toBe(true)
+    expect(patterns[1]!.test('react-dom')).toBe(true)
+
+    // /regex/flags: /^vue$/i
+    expect(patterns[2]!.test('vue')).toBe(true)
+    expect(patterns[2]!.test('Vue')).toBe(true)
+    expect(patterns[2]!.test('vue-router')).toBe(false)
+  })
+})
+
+describe('glob patterns in include/exclude', () => {
+  it('include with glob @types/* filters correctly', () => {
+    const raw = {
+      dependencies: {
+        '@types/node': '^20.0.0',
+        '@types/react': '^18.0.0',
+        lodash: '^4.17.21',
+        react: '^18.0.0',
+      },
+    }
+
+    const deps = parseDependencies(raw, { ...baseOptions, include: ['@types/*'] })
+    expect(deps).toHaveLength(2)
+    expect(deps.map((d) => d.name).sort()).toEqual(['@types/node', '@types/react'])
+  })
+
+  it('exclude with glob eslint-* filters correctly', () => {
+    const raw = {
+      devDependencies: {
+        'eslint-plugin-foo': '^1.0.0',
+        'eslint-config-bar': '^2.0.0',
+        vitest: '^3.0.0',
+        prettier: '^3.0.0',
+      },
+    }
+
+    const deps = parseDependencies(raw, { ...baseOptions, exclude: ['eslint-*'] })
+    expect(deps).toHaveLength(2)
+    expect(deps.map((d) => d.name).sort()).toEqual(['prettier', 'vitest'])
+  })
+
+  it('include with /regex/i flag syntax works', () => {
+    const raw = {
+      dependencies: { React: '^18.0.0', react: '^18.0.0', lodash: '^4.0.0' },
+    }
+
+    const deps = parseDependencies(raw, { ...baseOptions, include: ['/^react$/i'] })
+    expect(deps).toHaveLength(2)
+    expect(deps.map((d) => d.name).sort()).toEqual(['React', 'react'])
+  })
 })

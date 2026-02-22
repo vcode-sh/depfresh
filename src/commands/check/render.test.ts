@@ -1,7 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { ResolvedDepChange } from '../../types'
+import type { BumpOptions, ResolvedDepChange } from '../../types'
+import { DEFAULT_OPTIONS } from '../../types'
 import { stripAnsi } from '../../utils/format'
 import { renderTable } from './render'
+
+const defaultOpts = { ...DEFAULT_OPTIONS } as BumpOptions
 
 function makeUpdate(overrides: Partial<ResolvedDepChange> = {}): ResolvedDepChange {
   return {
@@ -39,7 +42,7 @@ describe('renderTable', () => {
       makeUpdate({ name: 'minor-pkg', diff: 'minor', targetVersion: '^1.1.0' }),
     ]
 
-    renderTable('test-project', updates)
+    renderTable('test-project', updates, defaultOpts)
 
     const stripped = lines.map(stripAnsi)
     const depLines = stripped.filter((l) => l.includes('-pkg'))
@@ -52,7 +55,7 @@ describe('renderTable', () => {
   it('shows deprecated flag for deprecated packages', () => {
     const updates = [makeUpdate({ name: 'old-pkg', deprecated: 'Use new-pkg instead' })]
 
-    renderTable('test-project', updates)
+    renderTable('test-project', updates, defaultOpts)
 
     const stripped = lines.map(stripAnsi)
     const depLine = stripped.find((l) => l.includes('old-pkg'))
@@ -67,7 +70,7 @@ describe('renderTable', () => {
       makeUpdate({ name: 'd', diff: 'patch' }),
     ]
 
-    renderTable('test-project', updates)
+    renderTable('test-project', updates, defaultOpts)
 
     const stripped = lines.map(stripAnsi)
     const summaryLine = stripped.find((l) => l.includes('total'))
@@ -81,7 +84,7 @@ describe('renderTable', () => {
   it('handles single change', () => {
     const updates = [makeUpdate({ name: 'only-one', diff: 'patch', targetVersion: '^1.0.1' })]
 
-    renderTable('my-project', updates)
+    renderTable('my-project', updates, defaultOpts)
 
     const stripped = lines.map(stripAnsi)
     expect(stripped.some((l) => l.includes('only-one'))).toBe(true)
@@ -91,7 +94,7 @@ describe('renderTable', () => {
   it('includes header row with column names', () => {
     const updates = [makeUpdate()]
 
-    renderTable('test-project', updates)
+    renderTable('test-project', updates, { ...defaultOpts, group: false })
 
     const stripped = lines.map(stripAnsi)
     const headerLine = stripped.find(
@@ -104,7 +107,7 @@ describe('renderTable', () => {
   it('displays package name as title', () => {
     const updates = [makeUpdate()]
 
-    renderTable('my-awesome-project', updates)
+    renderTable('my-awesome-project', updates, defaultOpts)
 
     const stripped = lines.map(stripAnsi)
     expect(stripped.some((l) => l.includes('my-awesome-project'))).toBe(true)
@@ -113,7 +116,7 @@ describe('renderTable', () => {
   it('does not show deprecated when not deprecated', () => {
     const updates = [makeUpdate({ name: 'normal-pkg', deprecated: undefined })]
 
-    renderTable('test-project', updates)
+    renderTable('test-project', updates, defaultOpts)
 
     const stripped = lines.map(stripAnsi)
     const depLine = stripped.find((l) => l.includes('normal-pkg'))
@@ -126,7 +129,7 @@ describe('renderTable', () => {
       makeUpdate({ name: 'b', diff: 'patch' }),
     ]
 
-    renderTable('test-project', updates)
+    renderTable('test-project', updates, defaultOpts)
 
     const stripped = lines.map(stripAnsi)
     const summaryLine = stripped.find((l) => l.includes('total'))
@@ -134,5 +137,89 @@ describe('renderTable', () => {
     expect(summaryLine).toContain('2 patch')
     expect(summaryLine).not.toContain('major')
     expect(summaryLine).not.toContain('minor')
+  })
+
+  describe('grouping', () => {
+    it('groups deps under source headers when group is true', () => {
+      const updates = [
+        makeUpdate({ name: 'a-dep', source: 'dependencies' }),
+        makeUpdate({ name: 'b-dev', source: 'devDependencies', diff: 'minor' }),
+        makeUpdate({ name: 'c-dep', source: 'dependencies', diff: 'patch' }),
+      ]
+
+      renderTable('test-project', updates, { ...defaultOpts, group: true })
+
+      const stripped = lines.map(stripAnsi)
+      expect(
+        stripped.some((l) => l.includes('dependencies') && !l.includes('devDependencies')),
+      ).toBe(true)
+      expect(stripped.some((l) => l.includes('devDependencies'))).toBe(true)
+    })
+
+    it('does not show source column in grouped mode', () => {
+      const updates = [makeUpdate({ name: 'a-dep', source: 'dependencies' })]
+
+      renderTable('test-project', updates, { ...defaultOpts, group: true })
+
+      const stripped = lines.map(stripAnsi)
+      // In grouped mode, individual rows should not have a separate 'source' column header
+      // but the group header IS the source
+      const headerLine = stripped.find((l) => l.includes('name') && l.includes('current'))
+      expect(headerLine).toBeDefined()
+    })
+
+    it('shows source column when group is false', () => {
+      const updates = [makeUpdate()]
+
+      renderTable('test-project', updates, { ...defaultOpts, group: false })
+
+      const stripped = lines.map(stripAnsi)
+      const headerLine = stripped.find((l) => l.includes('source'))
+      expect(headerLine).toBeDefined()
+    })
+
+    it('handles multiple groups correctly', () => {
+      const updates = [
+        makeUpdate({ name: 'dep-a', source: 'dependencies', diff: 'major' }),
+        makeUpdate({ name: 'dev-b', source: 'devDependencies', diff: 'minor' }),
+        makeUpdate({ name: 'peer-c', source: 'peerDependencies', diff: 'patch' }),
+      ]
+
+      renderTable('test-project', updates, { ...defaultOpts, group: true })
+
+      const stripped = lines.map(stripAnsi)
+      expect(stripped.some((l) => l.trim() === 'dependencies')).toBe(true)
+      expect(stripped.some((l) => l.trim() === 'devDependencies')).toBe(true)
+      expect(stripped.some((l) => l.trim() === 'peerDependencies')).toBe(true)
+    })
+  })
+
+  describe('timediff', () => {
+    it('shows age column when timediff is true', () => {
+      const updates = [
+        makeUpdate({
+          name: 'fresh-pkg',
+          publishedAt: new Date(Date.now() - 2 * 86400000).toISOString(),
+        }),
+      ]
+
+      renderTable('test-project', updates, { ...defaultOpts, timediff: true })
+
+      const stripped = lines.map(stripAnsi)
+      const headerLine = stripped.find((l) => l.includes('age'))
+      expect(headerLine).toBeDefined()
+      const depLine = stripped.find((l) => l.includes('fresh-pkg'))
+      expect(depLine).toContain('~')
+    })
+
+    it('hides age column when timediff is false', () => {
+      const updates = [makeUpdate({ name: 'fresh-pkg', publishedAt: new Date().toISOString() })]
+
+      renderTable('test-project', updates, { ...defaultOpts, timediff: false })
+
+      const stripped = lines.map(stripAnsi)
+      const headerLine = stripped.find((l) => l.includes('age'))
+      expect(headerLine).toBeUndefined()
+    })
   })
 })

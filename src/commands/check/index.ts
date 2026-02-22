@@ -1,3 +1,4 @@
+import c from 'ansis'
 import { createSqliteCache } from '../../cache/index'
 import { loadPackages } from '../../io/packages'
 import { resolvePackage } from '../../io/resolve'
@@ -16,6 +17,7 @@ interface JsonPackage {
     diff: string
     source: string
     deprecated?: string | boolean
+    publishedAt?: string
   }>
 }
 
@@ -58,23 +60,52 @@ export async function check(options: BumpOptions): Promise<number> {
     const cache = createSqliteCache()
     const npmrc = loadNpmrc(options.cwd)
 
+    // Collect workspace package names to skip private/internal deps
+    const workspacePackageNames = new Set(packages.map((p) => p.name).filter(Boolean))
+
+    // Progress indicator — only in TTY mode with table output
+    const showProgress =
+      process.stdout.isTTY && options.output !== 'json' && options.loglevel !== 'silent'
+    const totalDeps = packages.reduce((sum, p) => sum + p.deps.filter((d) => d.update).length, 0)
+    let resolvedCount = 0
+
+    // Preserve any existing user callback
+    const userOnResolved = options.onDependencyResolved
+    if (showProgress && totalDeps > 0) {
+      options.onDependencyResolved = (pkg, dep) => {
+        resolvedCount++
+        process.stdout.write(`\rResolving dependencies... ${resolvedCount}/${totalDeps}`)
+        return userOnResolved?.(pkg, dep)
+      }
+    }
+
     try {
       for (const pkg of packages) {
         options.beforePackageStart?.(pkg)
 
         // Resolve all dependencies
-        pkg.resolved = await resolvePackage(pkg, options, cache, npmrc)
+        pkg.resolved = await resolvePackage(pkg, options, cache, npmrc, workspacePackageNames)
 
         const updates = pkg.resolved.filter((d) => d.diff !== 'none' && d.diff !== 'error')
 
-        if (updates.length === 0) continue
+        if (updates.length === 0) {
+          // --all: show packages even when up to date
+          if (options.all) {
+            if (options.output === 'json') {
+              jsonPackages.push(buildJsonPackage(pkg.name, []))
+            } else {
+              renderUpToDate(pkg.name)
+            }
+          }
+          continue
+        }
         hasUpdates = true
 
         // Collect JSON output for later
         if (options.output === 'json') {
           jsonPackages.push(buildJsonPackage(pkg.name, updates))
         } else {
-          renderTable(pkg.name, updates)
+          renderTable(pkg.name, updates, options)
         }
 
         // Interactive mode
@@ -99,6 +130,13 @@ export async function check(options: BumpOptions): Promise<number> {
         }
       }
     } finally {
+      // Clear progress line
+      if (showProgress && totalDeps > 0) {
+        process.stdout.write(`\r${' '.repeat(40)}\r`)
+        // Restore the original callback
+        options.onDependencyResolved = userOnResolved
+      }
+
       const stats = cache.stats()
       cache.close()
       logger.debug(`Cache stats: ${stats.hits} hits, ${stats.misses} misses, ${stats.size} entries`)
@@ -111,6 +149,16 @@ export async function check(options: BumpOptions): Promise<number> {
 
     if (!hasUpdates) {
       logger.success('All dependencies are up to date')
+    }
+
+    // Contextual tips (table output only)
+    if (hasUpdates && options.output === 'table') {
+      if (options.mode === 'default') {
+        logger.info(c.gray('Tip: Run `bump major` to check for major updates'))
+      }
+      if (!options.write) {
+        logger.info(c.gray('Tip: Add `-w` to write changes to package files'))
+      }
     }
 
     return hasUpdates && !options.write ? 1 : 0
@@ -131,6 +179,7 @@ function buildJsonPackage(name: string, updates: ResolvedDepChange[]): JsonPacka
       diff: u.diff,
       source: u.source,
       ...(u.deprecated ? { deprecated: u.deprecated } : {}),
+      ...(u.publishedAt ? { publishedAt: u.publishedAt } : {}),
     })),
   }
 }
@@ -158,4 +207,13 @@ function outputJsonEnvelope(packages: JsonPackage[], options: BumpOptions): void
 
   // biome-ignore lint/suspicious/noConsole: intentional JSON output
   console.log(JSON.stringify(output, null, 2))
+}
+
+function renderUpToDate(packageName: string): void {
+  // biome-ignore lint/suspicious/noConsole: intentional output
+  const log = console.log
+  log()
+  log(c.cyan.bold(packageName))
+  log(`  ${c.green('All dependencies are up to date')}`)
+  log()
 }

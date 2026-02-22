@@ -1,5 +1,9 @@
 export { check } from './commands/check/index'
 export { resolveConfig } from './config'
+export { parseDependencies } from './io/dependencies'
+export { loadPackages } from './io/packages'
+export { resolvePackage } from './io/resolve'
+export { writePackage } from './io/write'
 export type {
   BumpOptions,
   CatalogSource,
@@ -16,6 +20,11 @@ export type {
   RawDep,
   RegistryConfig,
   ResolvedDepChange,
+  SortOption,
   UpdateScore,
 } from './types'
 export { DEFAULT_OPTIONS } from './types'
+
+export function defineConfig(options: Partial<import('./types').BumpOptions>) {
+  return options
+}

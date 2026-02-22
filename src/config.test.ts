@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { resolveConfig } from './config'
+import { defineConfig } from './index'
 
 describe('resolveConfig', () => {
   it('returns default options when no config file', async () => {
@@ -24,5 +25,41 @@ describe('resolveConfig', () => {
 
     expect(config.mode).toBe('latest')
     expect(config.concurrency).toBe(32)
+  })
+})
+
+describe('defineConfig', () => {
+  it('returns the config object as-is', () => {
+    const config = defineConfig({ mode: 'major', concurrency: 8 })
+
+    expect(config.mode).toBe('major')
+    expect(config.concurrency).toBe(8)
+  })
+
+  it('returns an empty object when called with empty', () => {
+    const config = defineConfig({})
+    expect(config).toEqual({})
+  })
+
+  it('preserves all BumpOptions fields', () => {
+    const config = defineConfig({
+      cwd: '/my/project',
+      recursive: false,
+      write: true,
+      interactive: true,
+      mode: 'latest',
+      include: ['react', 'typescript'],
+      exclude: ['@types/*'],
+      force: true,
+      peer: true,
+      loglevel: 'debug',
+    })
+
+    expect(config.cwd).toBe('/my/project')
+    expect(config.recursive).toBe(false)
+    expect(config.write).toBe(true)
+    expect(config.mode).toBe('latest')
+    expect(config.include).toEqual(['react', 'typescript'])
+    expect(config.loglevel).toBe('debug')
   })
 })

@@ -1,6 +1,30 @@
 import { defineCommand, runMain } from 'citty'
 import { version } from '../package.json' with { type: 'json' }
-import type { OutputFormat, RangeMode } from './types'
+import type { OutputFormat, RangeMode, SortOption } from './types'
+
+const VALID_MODES = new Set<string>([
+  'default',
+  'major',
+  'minor',
+  'patch',
+  'latest',
+  'newest',
+  'next',
+])
+
+function restoreCursor() {
+  process.stdout.write('\x1B[?25h')
+}
+
+process.on('SIGINT', () => {
+  restoreCursor()
+  process.exit(130)
+})
+process.on('SIGTERM', () => {
+  restoreCursor()
+  process.exit(143)
+})
+process.on('exit', restoreCursor)
 
 const main = defineCommand({
   meta: {
@@ -9,6 +33,11 @@ const main = defineCommand({
     description: 'Keep your npm dependencies fresh',
   },
   args: {
+    mode_arg: {
+      type: 'positional',
+      description: 'Version range mode shorthand (major, minor, patch, latest, newest, next)',
+      required: false,
+    },
     recursive: {
       type: 'boolean',
       alias: 'r',
@@ -94,6 +123,35 @@ const main = defineCommand({
       description: 'Only check devDependencies',
       default: false,
     },
+    all: {
+      type: 'boolean',
+      alias: 'a',
+      description: 'Show all packages including up-to-date ones',
+      default: false,
+    },
+    group: {
+      type: 'boolean',
+      alias: 'G',
+      description: 'Group output by dependency source',
+      default: true,
+    },
+    sort: {
+      type: 'string',
+      alias: 's',
+      description: 'Sort order: diff-asc, diff-desc, time-asc, time-desc, name-asc, name-desc',
+      default: 'diff-asc',
+    },
+    timediff: {
+      type: 'boolean',
+      alias: 'T',
+      description: 'Show time since version was published',
+      default: true,
+    },
+    cooldown: {
+      type: 'string',
+      description: 'Skip versions published less than N days ago (0 = disabled)',
+      default: '0',
+    },
   },
   async run({ args }) {
     try {
@@ -112,12 +170,18 @@ const main = defineCommand({
         depFields.optionalDependencies = false
       }
 
+      // Positional mode arg: `bump major` is shorthand for `bump --mode major`
+      const mode =
+        args.mode_arg && VALID_MODES.has(args.mode_arg)
+          ? (args.mode_arg as RangeMode)
+          : (args.mode as RangeMode)
+
       const options = await resolveConfig({
         cwd: process.cwd(),
         recursive: args.recursive,
         write: args.write,
         interactive: args.interactive,
-        mode: args.mode as RangeMode,
+        mode,
         include: args.include?.split(',').map((s) => s.trim()),
         exclude: args.exclude?.split(',').map((s) => s.trim()),
         force: args.force,
@@ -128,6 +192,11 @@ const main = defineCommand({
         concurrency: Number.parseInt(args.concurrency, 10),
         loglevel: args.loglevel as 'silent' | 'info' | 'debug',
         depFields,
+        all: args.all,
+        group: args.group,
+        sort: args.sort as SortOption,
+        timediff: args.timediff,
+        cooldown: Number.parseInt(args.cooldown, 10),
       })
 
       const exitCode = await check(options)

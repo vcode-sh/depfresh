@@ -4,6 +4,7 @@ import { dirname } from 'pathe'
 import { glob } from 'tinyglobby'
 import type { BumpOptions, PackageManagerName, PackageMeta } from '../types'
 import { createLogger } from '../utils/logger'
+import { loadCatalogs } from './catalogs/index'
 import { parseDependencies } from './dependencies'
 
 export async function loadPackages(options: BumpOptions): Promise<PackageMeta[]> {
@@ -47,8 +48,37 @@ export async function loadPackages(options: BumpOptions): Promise<PackageMeta[]>
     }
   }
 
-  // TODO: yaml packages, workspace catalogs
-  // These will be added as we port the catalog loaders
+  // Load workspace catalogs (pnpm, bun, yarn)
+  try {
+    const catalogs = await loadCatalogs(options.cwd, options)
+    for (const catalog of catalogs) {
+      const catalogTypeName =
+        catalog.type === 'pnpm'
+          ? 'pnpm-workspace'
+          : catalog.type === 'bun'
+            ? 'bun-workspace'
+            : 'yarn-workspace'
+
+      const displayName =
+        catalog.name === 'default'
+          ? `${catalog.type} catalog`
+          : `${catalog.type} catalog:${catalog.name}`
+
+      packages.push({
+        name: displayName,
+        type: catalogTypeName,
+        filepath: catalog.filepath,
+        deps: catalog.deps,
+        resolved: [],
+        raw: catalog.raw,
+        indent: catalog.indent,
+        catalogs: [catalog],
+      })
+      logger.debug(`Loaded catalog ${displayName} (${catalog.deps.length} deps)`)
+    }
+  } catch (error) {
+    logger.warn('Failed to load workspace catalogs:', error)
+  }
 
   logger.info(
     `Found ${packages.length} packages with ${packages.reduce((sum, p) => sum + p.deps.length, 0)} dependencies`,

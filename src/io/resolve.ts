@@ -7,6 +7,7 @@ import type {
   NpmrcConfig,
   PackageData,
   PackageMeta,
+  RangeMode,
   RawDep,
   ResolvedDepChange,
 } from '../types'
@@ -25,6 +26,7 @@ export async function resolvePackage(
   options: BumpOptions,
   externalCache?: Cache,
   externalNpmrc?: NpmrcConfig,
+  privatePackages?: Set<string>,
 ): Promise<ResolvedDepChange[]> {
   const logger = createLogger(options.loglevel)
   const npmrc = externalNpmrc ?? loadNpmrc(options.cwd)
@@ -36,7 +38,9 @@ export async function resolvePackage(
     const results = await Promise.allSettled(
       pkg.deps
         .filter((dep) => dep.update)
-        .map((dep) => limit(() => resolveDependency(dep, options, cache, npmrc, logger))),
+        .map((dep) =>
+          limit(() => resolveDependency(dep, options, cache, npmrc, logger, privatePackages)),
+        ),
     )
 
     const resolved: ResolvedDepChange[] = []
@@ -66,8 +70,24 @@ async function resolveDependency(
   cache: Cache,
   npmrc: ReturnType<typeof loadNpmrc>,
   logger: ReturnType<typeof createLogger>,
+  privatePackages?: Set<string>,
 ): Promise<ResolvedDepChange | null> {
   const packageName = dep.aliasName ?? dep.name
+
+  // Skip private workspace packages — no point hitting the registry for local deps
+  if (privatePackages?.has(packageName)) {
+    logger.debug(`Skipping private workspace package: ${packageName}`)
+    return null
+  }
+
+  // Resolve the mode — check packageMode globs before falling back to global mode
+  const mode = getPackageMode(packageName, options.packageMode, options.mode)
+
+  // Skip if mode is 'ignore'
+  if (mode === 'ignore') {
+    logger.debug(`Ignoring ${packageName} (mode: ignore)`)
+    return null
+  }
 
   // Check cache
   let pkgData = cache.get(packageName)
@@ -92,11 +112,10 @@ async function resolveDependency(
     }
   }
 
-  // Filter out deprecated versions unless current is deprecated
-  const versions = filterVersions(pkgData, dep)
+  // Filter out deprecated, immature, and wrong-channel prerelease versions
+  const versions = filterVersions(pkgData, dep, options)
 
   // Resolve the target version based on mode
-  const mode = options.packageMode?.[packageName] ?? options.mode
   const targetVersion = resolveTargetVersion(dep.currentVersion, versions, pkgData.distTags, mode)
 
   if (!targetVersion) {
@@ -123,16 +142,100 @@ async function resolveDependency(
   }
 }
 
-function filterVersions(pkgData: PackageData, dep: RawDep): string[] {
-  return pkgData.versions.filter((v) => {
+export function getPackageMode(
+  packageName: string,
+  packageMode: Record<string, RangeMode> | undefined,
+  defaultMode: RangeMode,
+): RangeMode {
+  if (!packageMode) return defaultMode
+
+  // Exact match first
+  if (packageMode[packageName]) {
+    return packageMode[packageName]
+  }
+
+  // Glob/pattern matching
+  for (const [pattern, mode] of Object.entries(packageMode)) {
+    // Skip exact keys already checked
+    if (pattern === packageName) continue
+
+    try {
+      const regex = patternToMatchRegex(pattern)
+      if (regex.test(packageName)) {
+        return mode
+      }
+    } catch {
+      // Skip invalid patterns
+    }
+  }
+
+  return defaultMode
+}
+
+function patternToMatchRegex(pattern: string): RegExp {
+  // Glob pattern: contains * but not regex metacharacters
+  if (pattern.includes('*') && !/[\^$[\]()\\|+?]/.test(pattern)) {
+    const escaped = pattern.replace(/[.@/]/g, '\\$&').replace(/\*/g, '[^/]*')
+    return new RegExp(`^${escaped}$`)
+  }
+  return new RegExp(pattern)
+}
+
+export function filterVersions(pkgData: PackageData, dep: RawDep, options?: BumpOptions): string[] {
+  const currentPrerelease = semver.prerelease(dep.currentVersion)
+  const currentChannel = currentPrerelease?.[0]
+
+  let filtered = pkgData.versions.filter((v) => {
     // Skip deprecated unless current version is also deprecated
     if (pkgData.deprecated?.[v] && !pkgData.deprecated?.[dep.currentVersion]) {
       return false
     }
-    // Skip prerelease unless current is prerelease
-    if (semver.prerelease(v)?.length && !semver.prerelease(dep.currentVersion)?.length) {
+
+    const vPrerelease = semver.prerelease(v)
+
+    // If current is not prerelease, skip all prereleases
+    if (vPrerelease?.length && !currentPrerelease?.length) {
       return false
     }
+
+    // If current IS prerelease and candidate is also prerelease,
+    // only allow same channel (e.g., rc → rc, beta → beta)
+    if (vPrerelease?.length && currentPrerelease?.length) {
+      const vChannel = vPrerelease[0]
+      if (typeof currentChannel === 'string' && typeof vChannel === 'string') {
+        if (vChannel !== currentChannel) {
+          return false
+        }
+      }
+    }
+
     return true
   })
+
+  // Apply cooldown / maturity period filter
+  if (options?.cooldown && options.cooldown > 0) {
+    filtered = filterVersionsByMaturityPeriod(filtered, pkgData.time, options.cooldown)
+  }
+
+  return filtered
+}
+
+export function filterVersionsByMaturityPeriod(
+  versions: string[],
+  time: Record<string, string> | undefined,
+  days: number,
+): string[] {
+  if (!time || days <= 0) return versions
+
+  const cutoff = Date.now() - days * 86_400_000
+
+  const filtered = versions.filter((v) => {
+    const published = time[v]
+    // If no time data for this version, keep it (don't filter what we can't verify)
+    if (!published) return true
+    return new Date(published).getTime() <= cutoff
+  })
+
+  // If all versions were filtered out, return the original list as fallback
+  return filtered.length > 0 ? filtered : versions
 }

@@ -5,6 +5,24 @@ import type { BumpOptions, CatalogSource, RawDep } from '../../types'
 import { isLocked } from '../../utils/versions'
 import type { CatalogLoader } from './index'
 
+function parseCatalogDeps(
+  catalog: Record<string, string>,
+  parentPath: string,
+  options: BumpOptions,
+): RawDep[] {
+  const deps: RawDep[] = []
+  for (const [name, version] of Object.entries(catalog)) {
+    deps.push({
+      name,
+      currentVersion: version,
+      source: 'catalog',
+      update: !isLocked(version) || options.includeLocked,
+      parents: [parentPath],
+    })
+  }
+  return deps
+}
+
 export const bunCatalogLoader: CatalogLoader = {
   async detect(cwd: string): Promise<boolean> {
     const pkgPath = join(cwd, 'package.json')
@@ -12,7 +30,7 @@ export const bunCatalogLoader: CatalogLoader = {
 
     try {
       const raw = JSON.parse(readFileSync(pkgPath, 'utf-8'))
-      return !!raw.workspaces?.catalog
+      return !!raw.workspaces?.catalog || !!raw.workspaces?.catalogs
     } catch {
       return false
     }
@@ -24,31 +42,37 @@ export const bunCatalogLoader: CatalogLoader = {
     const raw = JSON.parse(content)
     const indent = detectIndent(content).indent || '  '
 
-    if (!raw.workspaces?.catalog) return []
+    const sources: CatalogSource[] = []
 
-    const deps: RawDep[] = []
-    const catalog = raw.workspaces.catalog as Record<string, string>
-
-    for (const [name, version] of Object.entries(catalog)) {
-      deps.push({
-        name,
-        currentVersion: version,
-        source: 'catalog',
-        update: !isLocked(version) || options.includeLocked,
-        parents: ['workspaces.catalog'],
-      })
-    }
-
-    return [
-      {
+    // Default catalog (singular): workspaces.catalog
+    if (raw.workspaces?.catalog) {
+      const catalog = raw.workspaces.catalog as Record<string, string>
+      sources.push({
         type: 'bun',
         name: 'default',
         filepath,
-        deps,
+        deps: parseCatalogDeps(catalog, 'workspaces.catalog', options),
         raw,
         indent,
-      },
-    ]
+      })
+    }
+
+    // Named catalogs (plural): workspaces.catalogs
+    if (raw.workspaces?.catalogs) {
+      const catalogs = raw.workspaces.catalogs as Record<string, Record<string, string>>
+      for (const [catalogName, catalog] of Object.entries(catalogs)) {
+        sources.push({
+          type: 'bun',
+          name: catalogName,
+          filepath,
+          deps: parseCatalogDeps(catalog, `workspaces.catalogs.${catalogName}`, options),
+          raw,
+          indent,
+        })
+      }
+    }
+
+    return sources
   },
 
   write(catalog: CatalogSource, changes: Map<string, string>): void {
@@ -57,7 +81,14 @@ export const bunCatalogLoader: CatalogLoader = {
     const raw = JSON.parse(content)
     const indent = detectIndent(content).indent || catalog.indent
 
-    const section = raw.workspaces?.catalog as Record<string, string> | undefined
+    let section: Record<string, string> | undefined
+
+    if (catalog.name === 'default') {
+      section = raw.workspaces?.catalog as Record<string, string> | undefined
+    } else {
+      section = raw.workspaces?.catalogs?.[catalog.name] as Record<string, string> | undefined
+    }
+
     if (!section) return
 
     for (const [name, version] of changes) {
