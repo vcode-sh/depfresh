@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import detectIndent from 'detect-indent'
 import { join } from 'pathe'
-import type { CatalogSource, RawDep, UpgrOptions } from '../../types'
+import type { CatalogSource, depfreshOptions, RawDep } from '../../types'
 import { isLocked } from '../../utils/versions'
 import { detectLineEnding } from '../write'
 import type { CatalogLoader } from './index'
@@ -9,7 +9,7 @@ import type { CatalogLoader } from './index'
 function parseCatalogDeps(
   catalog: Record<string, string>,
   parentPath: string,
-  options: UpgrOptions,
+  options: depfreshOptions,
 ): RawDep[] {
   const deps: RawDep[] = []
   for (const [name, version] of Object.entries(catalog)) {
@@ -37,7 +37,7 @@ export const bunCatalogLoader: CatalogLoader = {
     }
   },
 
-  async load(cwd: string, options: UpgrOptions): Promise<CatalogSource[]> {
+  async load(cwd: string, options: depfreshOptions): Promise<CatalogSource[]> {
     const filepath = join(cwd, 'package.json')
     const content = readFileSync(filepath, 'utf-8')
     const raw = JSON.parse(content)

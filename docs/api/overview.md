@@ -1,13 +1,13 @@
 # API Overview
 
-I exposed the internals. On purpose. You can `import` from `upgr` and do whatever you want with your dependency graph. Build a dashboard. Wire it into your CI. Pipe it to `/dev/null` for all I care.
+I exposed the internals. On purpose. You can `import` from `depfresh` and do whatever you want with your dependency graph. Build a dashboard. Wire it into your CI. Pipe it to `/dev/null` for all I care.
 
 ESM-only, obviously. It's not 2019.
 
 ## Quick Start
 
 ```ts
-import { check, resolveConfig } from 'upgr'
+import { check, resolveConfig } from 'depfresh'
 
 const options = await resolveConfig({
   mode: 'minor',
@@ -22,10 +22,10 @@ That's it. You've just built a worse version of the CLI. Congratulations.
 
 ## `DEFAULT_OPTIONS`
 
-The defaults that ship with upgr. Everything you don't override gets these values.
+The defaults that ship with depfresh. Everything you don't override gets these values.
 
 ```ts
-import { DEFAULT_OPTIONS } from 'upgr'
+import { DEFAULT_OPTIONS } from 'depfresh'
 ```
 
 ```ts
@@ -71,10 +71,10 @@ import { DEFAULT_OPTIONS } from 'upgr'
 
 ### Custom CLI Wrapper
 
-Build your own opinionated wrapper around upgr. Because the existing CLI is apparently not opinionated enough.
+Build your own opinionated wrapper around depfresh. Because the existing CLI is apparently not opinionated enough.
 
 ```ts
-import { check, resolveConfig } from 'upgr'
+import { check, resolveConfig } from 'depfresh'
 
 async function safeUpdate() {
   const options = await resolveConfig({
@@ -104,7 +104,7 @@ safeUpdate()
 Parse the structured output without the CLI layer.
 
 ```ts
-import { loadPackages, resolvePackage, resolveConfig } from 'upgr'
+import { loadPackages, resolvePackage, resolveConfig } from 'depfresh'
 
 async function getOutdatedReport() {
   const options = await resolveConfig({ mode: 'latest', loglevel: 'silent' })
@@ -139,7 +139,7 @@ async function getOutdatedReport() {
 Different update strategies for different dependencies. Because not all packages deserve the same level of trust.
 
 ```ts
-import { check, resolveConfig } from 'upgr'
+import { check, resolveConfig } from 'depfresh'
 
 const options = await resolveConfig({
   mode: 'minor',

@@ -1,4 +1,4 @@
-import type { PackageMeta, UpgrOptions } from '../../types'
+import type { depfreshOptions, PackageMeta } from '../../types'
 import { visualLength, visualTruncate } from '../../utils/format'
 
 const BAR_WIDTH = 24
@@ -23,7 +23,7 @@ interface ProgressState {
 }
 
 export function createCheckProgress(
-  options: UpgrOptions,
+  options: depfreshOptions,
   packages: PackageMeta[],
 ): CheckProgress | null {
   if (!shouldRenderProgress(options)) {
@@ -69,7 +69,7 @@ export function createCheckProgress(
   return progress
 }
 
-function shouldRenderProgress(options: UpgrOptions): boolean {
+function shouldRenderProgress(options: depfreshOptions): boolean {
   return process.stdout.isTTY && options.output === 'table' && options.loglevel !== 'silent'
 }
 

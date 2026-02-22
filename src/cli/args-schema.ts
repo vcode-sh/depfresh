@@ -9,7 +9,7 @@ export const args: ArgsDef = {
   cwd: {
     type: 'string',
     alias: 'C',
-    description: 'Working directory for upgr to run in',
+    description: 'Working directory for depfresh to run in',
   },
   recursive: {
     type: 'boolean',

@@ -7,8 +7,8 @@ Found a bug? Want a feature? Just feel like improving something on a Sunday afte
 ## Setup
 
 ```bash
-git clone https://github.com/vcode-sh/upgr.git
-cd upgr
+git clone https://github.com/vcode-sh/depfresh.git
+cd depfresh
 pnpm install
 ```
 

@@ -1,6 +1,6 @@
 # CLI Reference
 
-The complete field manual for `upgr`. Every flag, every trick, every questionable life choice that led to this many options.
+The complete field manual for `depfresh`. Every flag, every trick, every questionable life choice that led to this many options.
 
 ## Pages
 
@@ -14,20 +14,20 @@ The complete field manual for `upgr`. Every flag, every trick, every questionabl
 
 ```bash
 # Check what's outdated
-upgr
+depfresh
 
 # Safe minor/patch updates
-upgr minor -w
+depfresh minor -w
 
 # Interactive cherry-picking
-upgr -wI
+depfresh -wI
 
 # CI pipeline
-upgr --fail-on-outdated --output json
+depfresh --fail-on-outdated --output json
 ```
 
 ## See Also
 
-- [Configuration](../configuration/) -- `.upgrrc`, `upgr.config.ts`, and `package.json#upgr`
-- [Programmatic API](../api/) -- using upgr as a library with callbacks
+- [Configuration](../configuration/) -- `.depfreshrc`, `depfresh.config.ts`, and `package.json#depfresh`
+- [Programmatic API](../api/) -- using depfresh as a library with callbacks
 - [Output Formats](../output-formats/) -- JSON and SARIF schemas

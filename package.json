@@ -1,5 +1,5 @@
 {
-  "name": "upgr",
+  "name": "depfresh",
   "version": "0.9.2",
   "description": "Keep your npm dependencies fresh. Fast, correct, zero-config.",
   "type": "module",
@@ -7,12 +7,12 @@
   "author": "Vibe Code <hello@vcode.sh> (https://vcode.sh)",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/vcode-sh/upgr.git"
+    "url": "git+https://github.com/vcode-sh/depfresh.git"
   },
   "bugs": {
-    "url": "https://github.com/vcode-sh/upgr/issues"
+    "url": "https://github.com/vcode-sh/depfresh/issues"
   },
-  "homepage": "https://github.com/vcode-sh/upgr#readme",
+  "homepage": "https://github.com/vcode-sh/depfresh#readme",
   "keywords": [
     "npm",
     "dependencies",
@@ -22,11 +22,11 @@
     "workspace",
     "cli",
     "taze",
-    "upgr"
+    "depfresh"
   ],
   "sideEffects": false,
   "bin": {
-    "upgr": "dist/cli.mjs"
+    "depfresh": "dist/cli.mjs"
   },
   "main": "./dist/index.mjs",
   "module": "./dist/index.mjs",

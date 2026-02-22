@@ -3,9 +3,9 @@ export { resolveConfig } from './config'
 export {
   CacheError,
   ConfigError,
+  depfreshError,
   RegistryError,
   ResolveError,
-  UpgrError,
   WriteError,
 } from './errors'
 export { parseDependencies } from './io/dependencies'
@@ -17,6 +17,7 @@ export type {
   CatalogSource,
   DepFieldType,
   DiffType,
+  depfreshOptions,
   NpmrcConfig,
   OutputFormat,
   PackageData,
@@ -31,10 +32,9 @@ export type {
   ResolvedDepChange,
   SortOption,
   UpdateScore,
-  UpgrOptions,
 } from './types'
 export { DEFAULT_OPTIONS } from './types'
 
-export function defineConfig(options: Partial<import('./types').UpgrOptions>) {
+export function defineConfig(options: Partial<import('./types').depfreshOptions>) {
   return options
 }

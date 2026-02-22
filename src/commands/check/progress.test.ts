@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { PackageMeta, UpgrOptions } from '../../types'
+import type { depfreshOptions, PackageMeta } from '../../types'
 import { DEFAULT_OPTIONS } from '../../types'
 import { createCheckProgress } from './progress'
 
-const baseOptions = { ...DEFAULT_OPTIONS, output: 'table', loglevel: 'info' } as UpgrOptions
+const baseOptions = { ...DEFAULT_OPTIONS, output: 'table', loglevel: 'info' } as depfreshOptions
 
 function makePkg(name: string, depCount: number): PackageMeta {
   return {

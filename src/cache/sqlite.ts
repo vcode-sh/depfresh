@@ -8,7 +8,7 @@ import type { Cache } from './index'
 
 // TODO: Auto-detect Bun runtime and use bun:sqlite for 3-6x faster cache operations
 
-const CACHE_DIR = join(homedir(), '.upgr')
+const CACHE_DIR = join(homedir(), '.depfresh')
 const CACHE_DB = join(CACHE_DIR, 'cache.db')
 
 const SCHEMA = `

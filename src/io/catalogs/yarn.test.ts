@@ -2,12 +2,12 @@ import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import type { CatalogSource, UpgrOptions } from '../../types'
+import type { CatalogSource, depfreshOptions } from '../../types'
 import { DEFAULT_OPTIONS } from '../../types'
 import { yarnCatalogLoader } from './yarn'
 
-const baseOptions: UpgrOptions = {
-  ...(DEFAULT_OPTIONS as UpgrOptions),
+const baseOptions: depfreshOptions = {
+  ...(DEFAULT_OPTIONS as depfreshOptions),
   cwd: '/tmp',
   loglevel: 'silent',
 }
@@ -15,7 +15,10 @@ const baseOptions: UpgrOptions = {
 let testDir: string
 
 beforeEach(() => {
-  testDir = join(tmpdir(), `upgr-yarn-test-${Date.now()}-${Math.random().toString(36).slice(2)}`)
+  testDir = join(
+    tmpdir(),
+    `depfresh-yarn-test-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+  )
   mkdirSync(testDir, { recursive: true })
 })
 

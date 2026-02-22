@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "upgr",
+      "name": "depfresh",
       "dependencies": {
         "@clack/prompts": "^1.0.1",
         "ansis": "^4.2.0",

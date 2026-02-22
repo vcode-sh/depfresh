@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Cache } from '../../cache/index'
-import type { NpmrcConfig, PackageData, PackageMeta, RawDep, UpgrOptions } from '../../types'
+import type { depfreshOptions, NpmrcConfig, PackageData, PackageMeta, RawDep } from '../../types'
 import { filterVersionsByMaturityPeriod } from './index'
 
 vi.mock('../registry', () => ({
@@ -26,7 +26,7 @@ function makeDep(overrides: Partial<RawDep> = {}): RawDep {
   }
 }
 
-function makeOptions(overrides: Partial<UpgrOptions> = {}): UpgrOptions {
+function makeOptions(overrides: Partial<depfreshOptions> = {}): depfreshOptions {
   return {
     cwd: '/tmp/test',
     recursive: true,

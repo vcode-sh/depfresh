@@ -26,7 +26,7 @@ describe('backupPackageFiles', () => {
   let tmpDir: string
 
   beforeEach(() => {
-    tmpDir = mkdtempSync(join(tmpdir(), 'upgr-backup-'))
+    tmpDir = mkdtempSync(join(tmpdir(), 'depfresh-backup-'))
   })
 
   afterEach(() => {
@@ -81,7 +81,7 @@ describe('restorePackageFiles', () => {
   let tmpDir: string
 
   beforeEach(() => {
-    tmpDir = mkdtempSync(join(tmpdir(), 'upgr-restore-'))
+    tmpDir = mkdtempSync(join(tmpdir(), 'depfresh-restore-'))
   })
 
   afterEach(() => {

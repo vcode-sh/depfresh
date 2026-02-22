@@ -1,7 +1,7 @@
 import type { DepFieldType, RangeMode, ResolvedDepChange, SortOption } from './dependencies'
 import type { OutputFormat, PackageMeta } from './package'
 
-export interface UpgrOptions {
+export interface depfreshOptions {
   cwd: string
   recursive: boolean
   mode: RangeMode
@@ -59,7 +59,7 @@ export interface UpgrOptions {
   afterPackagesEnd?: (pkgs: PackageMeta[]) => void | Promise<void>
 }
 
-export const DEFAULT_OPTIONS: Partial<UpgrOptions> = {
+export const DEFAULT_OPTIONS: Partial<depfreshOptions> = {
   cwd: '.',
   recursive: true,
   mode: 'default',

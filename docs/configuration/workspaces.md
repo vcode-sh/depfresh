@@ -1,10 +1,10 @@
 # Workspace Configuration
 
-Monorepos, catalogs, and the art of scanning too many directories. This page covers everything workspace-related in upgr's config.
+Monorepos, catalogs, and the art of scanning too many directories. This page covers everything workspace-related in depfresh's config.
 
 ## Recursive Scanning
 
-`recursive` (default: `true`) tells upgr to scan subdirectories for `package.json` files. It respects `ignorePaths`, which defaults to:
+`recursive` (default: `true`) tells depfresh to scan subdirectories for `package.json` files. It respects `ignorePaths`, which defaults to:
 
 ```
 **/node_modules/**
@@ -16,7 +16,7 @@ Monorepos, catalogs, and the art of scanning too many directories. This page cov
 Set `recursive: false` if you only want the root package. Override `ignorePaths` if your project structure is... creative.
 
 ```typescript
-import { defineConfig } from 'upgr'
+import { defineConfig } from 'depfresh'
 
 export default defineConfig({
   recursive: true,
@@ -32,17 +32,17 @@ export default defineConfig({
 
 ## Nested Workspace Detection
 
-`ignoreOtherWorkspaces` (default: `true`) detects when a subdirectory belongs to a separate workspace and skips it. upgr looks for these markers:
+`ignoreOtherWorkspaces` (default: `true`) detects when a subdirectory belongs to a separate workspace and skips it. depfresh looks for these markers:
 
 - `pnpm-workspace.yaml`
 - `.yarnrc.yml`
 - `workspaces` field in `package.json`
 - `.git` directories between the package and your root
 
-This prevents upgr from double-processing packages in monorepo-within-monorepo setups. If you genuinely want to scan everything, set it to `false`. But you probably don't.
+This prevents depfresh from double-processing packages in monorepo-within-monorepo setups. If you genuinely want to scan everything, set it to `false`. But you probably don't.
 
 ```typescript
-import { defineConfig } from 'upgr'
+import { defineConfig } from 'depfresh'
 
 export default defineConfig({
   ignoreOtherWorkspaces: false, // scan ALL the things
@@ -51,7 +51,7 @@ export default defineConfig({
 
 ## Workspace Catalogs
 
-upgr understands workspace catalogs for **pnpm**, **bun**, and **yarn**. These are centralised version declarations that individual packages reference instead of specifying versions directly.
+depfresh understands workspace catalogs for **pnpm**, **bun**, and **yarn**. These are centralised version declarations that individual packages reference instead of specifying versions directly.
 
 ### pnpm
 
@@ -101,16 +101,16 @@ catalog:
 
 ### How catalogs are updated
 
-Catalog dependencies are resolved and updated alongside regular dependencies. When writing (`--write`), upgr updates both the catalog source file and any `package.json` files that reference it. The catalog protocol references (`catalog:`, `catalog:<name>`) are preserved -- upgr only changes the version in the source file.
+Catalog dependencies are resolved and updated alongside regular dependencies. When writing (`--write`), depfresh updates both the catalog source file and any `package.json` files that reference it. The catalog protocol references (`catalog:`, `catalog:<name>`) are preserved -- depfresh only changes the version in the source file.
 
 ## Workspace Protocol
 
-`includeWorkspace` (default: `true`) controls whether `workspace:*` and `workspace:^` dependencies are included in the check. These are inter-package references within a monorepo. Usually you want them included so upgr can show you if a workspace package's version constraint is outdated relative to the actual published version.
+`includeWorkspace` (default: `true`) controls whether `workspace:*` and `workspace:^` dependencies are included in the check. These are inter-package references within a monorepo. Usually you want them included so depfresh can show you if a workspace package's version constraint is outdated relative to the actual published version.
 
 Set to `false` if workspace references aren't meaningful in your setup:
 
 ```typescript
-import { defineConfig } from 'upgr'
+import { defineConfig } from 'depfresh'
 
 export default defineConfig({
   includeWorkspace: false,

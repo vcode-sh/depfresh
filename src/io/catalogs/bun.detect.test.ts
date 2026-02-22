@@ -11,7 +11,7 @@ function writePackageJson(dir: string, content: Record<string, unknown>): void {
 }
 
 beforeEach(() => {
-  testDir = join(tmpdir(), `upgr-bun-test-${Date.now()}-${Math.random().toString(36).slice(2)}`)
+  testDir = join(tmpdir(), `depfresh-bun-test-${Date.now()}-${Math.random().toString(36).slice(2)}`)
   mkdirSync(testDir, { recursive: true })
 })
 

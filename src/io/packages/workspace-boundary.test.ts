@@ -8,7 +8,7 @@ describe('belongsToNestedWorkspace', () => {
   let tmpDir: string
 
   beforeEach(() => {
-    tmpDir = mkdtempSync(join(tmpdir(), 'upgr-nested-ws-'))
+    tmpDir = mkdtempSync(join(tmpdir(), 'depfresh-nested-ws-'))
   })
 
   afterEach(() => {

@@ -1,6 +1,6 @@
 import * as semver from 'semver'
 import type { Cache } from '../../cache/index'
-import type { ProvenanceLevel, RawDep, ResolvedDepChange, UpgrOptions } from '../../types'
+import type { depfreshOptions, ProvenanceLevel, RawDep, ResolvedDepChange } from '../../types'
 import type { createLogger } from '../../utils/logger'
 import type { loadNpmrc } from '../../utils/npmrc'
 import {
@@ -15,7 +15,7 @@ import { filterVersions } from './version-filter'
 
 export async function resolveDependency(
   dep: RawDep,
-  options: UpgrOptions,
+  options: depfreshOptions,
   cache: Cache,
   npmrc: ReturnType<typeof loadNpmrc>,
   logger: ReturnType<typeof createLogger>,

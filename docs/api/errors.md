@@ -1,25 +1,25 @@
 # Error Classes
 
-All errors thrown by upgr extend `UpgrError`, which gives you a stable `code` string for branching and an optional `cause` for wrapping underlying failures. Import them directly:
+All errors thrown by depfresh extend `depfreshError`, which gives you a stable `code` string for branching and an optional `cause` for wrapping underlying failures. Import them directly:
 
 ```ts
 import {
-  UpgrError,
+  depfreshError,
   RegistryError,
   CacheError,
   ConfigError,
   WriteError,
   ResolveError,
-} from 'upgr'
+} from 'depfresh'
 ```
 
 ## Error Reference
 
 | Class | Code | When it fires |
 |-------|------|---------------|
-| `UpgrError` | (base) | Abstract base. Use `instanceof UpgrError` to catch everything upgr throws. |
+| `depfreshError` | (base) | Abstract base. Use `instanceof depfreshError` to catch everything depfresh throws. |
 | `RegistryError` | `ERR_REGISTRY` | HTTP errors from the npm/JSR registry. Has `.status` (number) and `.url` (string). 4xx errors don't retry. 5xx errors do. |
-| `CacheError` | `ERR_CACHE` | SQLite failures, corrupt entries, connection issues. upgr logs and falls back to memory cache -- you'll only see this if you're using the cache API directly. |
+| `CacheError` | `ERR_CACHE` | SQLite failures, corrupt entries, connection issues. depfresh logs and falls back to memory cache -- you'll only see this if you're using the cache API directly. |
 | `ConfigError` | `ERR_CONFIG` | Invalid config file, malformed regex patterns in `include`/`exclude`, bad `packageMode` entries. Thrown during `resolveConfig()` or `parseDependencies()`. |
 | `WriteError` | `ERR_WRITE` | File system failures during package writes. Permission denied, disk full, the usual suspects. |
 | `ResolveError` | `ERR_RESOLVE` | Network timeouts, DNS failures, fetch errors that aren't HTTP status codes. The "something went wrong between you and the registry" bucket. |
@@ -27,7 +27,7 @@ import {
 ## Usage
 
 ```ts
-import { check, resolveConfig, RegistryError, ConfigError } from 'upgr'
+import { check, resolveConfig, RegistryError, ConfigError } from 'depfresh'
 
 try {
   const options = await resolveConfig({ mode: 'latest' })

@@ -2,14 +2,14 @@ import { readFileSync } from 'node:fs'
 import detectIndent from 'detect-indent'
 import { dirname, resolve } from 'pathe'
 import { glob } from 'tinyglobby'
-import type { PackageMeta, UpgrOptions } from '../../types'
+import type { depfreshOptions, PackageMeta } from '../../types'
 import { createLogger } from '../../utils/logger'
 import { loadCatalogs } from '../catalogs/index'
 import { parseDependencies } from '../dependencies'
 import { parsePackageManagerField } from './package-manager-field'
 import { belongsToNestedWorkspace } from './workspace-boundary'
 
-export async function loadPackages(options: UpgrOptions): Promise<PackageMeta[]> {
+export async function loadPackages(options: depfreshOptions): Promise<PackageMeta[]> {
   const logger = createLogger(options.loglevel)
 
   // Global packages mode — skip filesystem scan
