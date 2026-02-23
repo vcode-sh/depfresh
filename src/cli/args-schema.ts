@@ -1,4 +1,5 @@
 import type { ArgsDef } from 'citty'
+import { migrationParityArgs } from './migration-flags'
 
 export const args: ArgsDef = {
   mode_arg: {
@@ -14,7 +15,8 @@ export const args: ArgsDef = {
   recursive: {
     type: 'boolean',
     alias: 'r',
-    description: 'Recursively search for package.json in subdirectories',
+    description:
+      'Recursively search for package manifests (package.json, package.yaml) in subdirectories',
     default: true,
   },
   write: {
@@ -54,7 +56,12 @@ export const args: ArgsDef = {
   global: {
     type: 'boolean',
     alias: 'g',
-    description: 'Check global packages',
+    description: 'Check global packages for one detected package manager',
+    default: false,
+  },
+  'global-all': {
+    type: 'boolean',
+    description: 'Check global packages across npm, pnpm, and bun with deduped names',
     default: false,
   },
   peer: {
@@ -184,4 +191,5 @@ export const args: ArgsDef = {
     description: 'Skip packages that belong to nested/separate workspaces',
     default: true,
   },
+  ...migrationParityArgs,
 }

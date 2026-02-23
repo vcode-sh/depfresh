@@ -4,7 +4,7 @@ Things went wrong. Shocking, I know.
 
 ## "No packages found"
 
-The most popular cry for help. depfresh scans for `package.json` files using glob patterns, and if it finds nothing, it tells you — bluntly.
+The most popular cry for help. depfresh scans for package manifests (`package.json`, `package.yaml`) using glob patterns, and if it finds nothing, it tells you — bluntly.
 
 **Check your working directory.** depfresh defaults to `cwd: '.'`, which means wherever you ran it from. If you're in the wrong folder, that's a you problem. Pass `--cwd /path/to/project` to point it somewhere useful.
 
@@ -17,10 +17,10 @@ The most popular cry for help. depfresh scans for `package.json` files using glo
 **/.git/**
 ```
 
-If your package.json lives somewhere exotic that matches one of these patterns, depfresh will politely pretend it doesn't exist. Override with `ignorePaths` in your `.depfreshrc` config.
+If your package manifest lives somewhere exotic that matches one of these patterns, depfresh will politely pretend it doesn't exist. Override with `ignorePaths` in your `.depfreshrc` config.
 
 **Recursive is on by default.** `recursive: true` means depfresh walks subdirectories. If you only want the root package, set `--no-recursive`. If you DO want subdirectories and still see nothing — re-read the ignorePaths section. I'll wait.
-In non-recursive mode, depfresh only checks the root `package.json` and skips workspace catalog files.
+In non-recursive mode, depfresh only checks root manifest files (`package.json`, `package.yaml`) and skips workspace catalog files.
 
 **Nested workspace detection.** `--ignore-other-workspaces` defaults to `true`. If your monorepo contains _other_ monorepos (congrats on that life choice), depfresh skips packages belonging to nested workspaces. It detects these by looking for `pnpm-workspace.yaml`, `.yarnrc.yml`, `workspaces` fields, or `.git` directories between the package and your root. Disable with `--no-ignore-other-workspaces` if you actually want to scan everything.
 
@@ -179,7 +179,7 @@ All errors include `.cause` when wrapping a lower-level failure. If you're debug
 
 ## Known limitations
 
-**Yarn global packages.** `--global` supports npm, pnpm, and bun. Yarn global is not supported. I don't make the rules. Actually I do, and I chose not to support it.
+**Yarn global packages.** `--global` and `--global-all` support npm, pnpm, and bun. Yarn global is not supported. I don't make the rules. Actually I do, and I chose not to support it.
 
 **JSR registry.** Works, but metadata is sparser than npm. Some features like provenance tracking or detailed time data may be incomplete.
 

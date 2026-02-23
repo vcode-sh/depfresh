@@ -1,21 +1,19 @@
-import { readFileSync } from 'node:fs'
-import detectIndent from 'detect-indent'
-import { dirname, resolve } from 'pathe'
+import { resolve } from 'pathe'
 import { glob } from 'tinyglobby'
 import type { depfreshOptions, PackageMeta } from '../../types'
 import { createLogger } from '../../utils/logger'
 import { loadCatalogs } from '../catalogs/index'
-import { parseDependencies } from '../dependencies'
-import { parsePackageManagerField } from './package-manager-field'
+import { loadPackage } from './load-package'
+import { dedupeManifestsByDirectory } from './manifest-priority'
 import { belongsToNestedWorkspace } from './workspace-boundary'
 
 export async function loadPackages(options: depfreshOptions): Promise<PackageMeta[]> {
   const logger = createLogger(options.loglevel)
 
   // Global packages mode — skip filesystem scan
-  if (options.global) {
-    const { loadGlobalPackages } = await import('../global')
-    const packages = loadGlobalPackages()
+  if (options.global || options.globalAll) {
+    const { loadGlobalPackages, loadGlobalPackagesAll } = await import('../global')
+    const packages = options.globalAll ? loadGlobalPackagesAll() : loadGlobalPackages()
     logger.info(
       `Found ${packages.length} packages with ${packages.reduce((sum, p) => sum + p.deps.length, 0)} dependencies`,
     )
@@ -24,11 +22,12 @@ export async function loadPackages(options: depfreshOptions): Promise<PackageMet
 
   const packages: PackageMeta[] = []
 
-  // Find all package files
-  // TODO: Add yaml package support in the future
-  const packagePatterns = options.recursive ? ['**/package.json'] : ['package.json']
+  // Find all package manifests
+  const packagePatterns = options.recursive
+    ? ['**/package.json', '**/package.yaml']
+    : ['package.json', 'package.yaml']
 
-  let jsonFiles = await glob(packagePatterns, {
+  let packageFiles = await glob(packagePatterns, {
     cwd: options.cwd,
     ignore: options.ignorePaths,
     absolute: true,
@@ -37,38 +36,21 @@ export async function loadPackages(options: depfreshOptions): Promise<PackageMet
   // Filter out packages belonging to nested/separate workspaces
   if (options.ignoreOtherWorkspaces) {
     const rootDir = resolve(options.cwd)
-    const before = jsonFiles.length
-    jsonFiles = jsonFiles.filter((f) => !belongsToNestedWorkspace(f, rootDir))
-    const skipped = before - jsonFiles.length
+    const before = packageFiles.length
+    packageFiles = packageFiles.filter((f) => !belongsToNestedWorkspace(f, rootDir))
+    const skipped = before - packageFiles.length
     if (skipped > 0) {
       logger.debug(`Skipped ${skipped} package(s) from nested workspaces`)
     }
   }
 
-  for (const filepath of jsonFiles) {
+  packageFiles = dedupeManifestsByDirectory(packageFiles)
+
+  for (const filepath of packageFiles) {
     try {
-      const content = readFileSync(filepath, 'utf-8')
-      const raw = JSON.parse(content)
-      const indent = detectIndent(content).indent || '  '
-
-      const deps = parseDependencies(raw, options)
-      const meta: PackageMeta = {
-        name: raw.name ?? dirname(filepath),
-        type: 'package.json',
-        filepath,
-        deps,
-        resolved: [],
-        raw,
-        indent,
-      }
-
-      // Parse packageManager field
-      if (raw.packageManager && typeof raw.packageManager === 'string') {
-        meta.packageManager = parsePackageManagerField(raw.packageManager)
-      }
-
+      const meta = loadPackage(filepath, options)
       packages.push(meta)
-      logger.debug(`Loaded ${filepath} (${deps.length} deps)`)
+      logger.debug(`Loaded ${filepath} (${meta.deps.length} deps)`)
     } catch (error) {
       logger.warn(`Failed to load ${filepath}:`, error)
     }

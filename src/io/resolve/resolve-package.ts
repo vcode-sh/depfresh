@@ -46,7 +46,7 @@ export async function resolvePackage(
     for (const result of results) {
       if (result.status === 'fulfilled' && result.value) {
         resolved.push(result.value)
-        options.onDependencyResolved?.(pkg, result.value)
+        await options.onDependencyResolved?.(pkg, result.value)
       } else if (result.status === 'rejected') {
         logger.debug(`Resolution failed: ${result.reason}`)
       }

@@ -1,4 +1,5 @@
 import c from 'ansis'
+import { createAddonLifecycle } from '../../addons'
 import { createSqliteCache } from '../../cache/index'
 import { loadPackages } from '../../io/packages'
 import type { depfreshOptions, ResolvedDepChange } from '../../types'
@@ -20,10 +21,21 @@ import { renderTable } from './render'
 
 export async function check(options: depfreshOptions): Promise<number> {
   const logLevel = options.output === 'json' ? 'silent' : options.loglevel
+  const addonOptions: depfreshOptions = {
+    ...options,
+    loglevel: logLevel,
+  }
   const logger = createLogger(logLevel)
+  const addons = createAddonLifecycle(addonOptions)
+  const runtimeOptions: depfreshOptions = {
+    ...addonOptions,
+    onDependencyResolved: (pkg, dep) => addons.onDependencyResolved(pkg, dep),
+  }
 
   try {
-    const packages = await loadPackages(options)
+    await addons.setup()
+
+    const packages = await loadPackages(runtimeOptions)
     const executionState: JsonExecutionState = {
       scannedPackages: packages.length,
       packagesWithUpdates: 0,
@@ -42,7 +54,7 @@ export async function check(options: depfreshOptions): Promise<number> {
       return 0
     }
 
-    await options.afterPackagesLoaded?.(packages)
+    await addons.afterPackagesLoaded(packages)
 
     let hasUpdates = false
     let didWrite = false
@@ -57,10 +69,15 @@ export async function check(options: depfreshOptions): Promise<number> {
     try {
       for (const pkg of packages) {
         progress?.onPackageStart(pkg)
-        await processPackage(pkg, options, {
+        await processPackage(pkg, runtimeOptions, {
           cache,
           npmrc,
           workspacePackageNames,
+          beforePackageStart: (currentPkg) => addons.beforePackageStart(currentPkg),
+          beforePackageWrite: (currentPkg, changes) =>
+            addons.beforePackageWrite(currentPkg, changes),
+          afterPackageWrite: (currentPkg, changes) => addons.afterPackageWrite(currentPkg, changes),
+          afterPackageEnd: (currentPkg) => addons.afterPackageEnd(currentPkg),
           onDependencyProcessed: () => progress?.onDependencyProcessed(),
           onHasUpdates: (updates: ResolvedDepChange[]) => {
             hasUpdates = true
@@ -106,7 +123,7 @@ export async function check(options: depfreshOptions): Promise<number> {
         })
         progress?.onPackageEnd()
       }
-      await options.afterPackagesEnd?.(packages)
+      await addons.afterPackagesEnd(packages)
     } finally {
       progress?.done()
       const stats = cache.stats()

@@ -126,4 +126,41 @@ describe('belongsToNestedWorkspace', () => {
       false,
     )
   })
+
+  it('returns false for package.yaml at root', () => {
+    writeFileSync(join(tmpDir, 'package.yaml'), 'name: root\n')
+    expect(belongsToNestedWorkspace(join(tmpDir, 'package.yaml'), tmpDir)).toBe(false)
+  })
+
+  it('detects nested workspace via package.yaml with workspaces field', () => {
+    mkdirSync(join(tmpDir, 'nested-yaml', 'packages', 'k'), { recursive: true })
+    writeFileSync(
+      join(tmpDir, 'nested-yaml', 'package.yaml'),
+      ['name: nested-yaml', 'workspaces:', '  - packages/*', ''].join('\n'),
+    )
+    writeFileSync(join(tmpDir, 'nested-yaml', 'packages', 'k', 'package.yaml'), 'name: k\n')
+
+    expect(
+      belongsToNestedWorkspace(
+        join(tmpDir, 'nested-yaml', 'packages', 'k', 'package.yaml'),
+        tmpDir,
+      ),
+    ).toBe(true)
+  })
+
+  it('detects nested parent package.yaml when child is package.json', () => {
+    mkdirSync(join(tmpDir, 'mixed', 'packages', 'm'), { recursive: true })
+    writeFileSync(
+      join(tmpDir, 'mixed', 'package.yaml'),
+      ['name: mixed', 'workspaces:', '  - packages/*', ''].join('\n'),
+    )
+    writeFileSync(
+      join(tmpDir, 'mixed', 'packages', 'm', 'package.json'),
+      JSON.stringify({ name: 'm' }, null, 2),
+    )
+
+    expect(
+      belongsToNestedWorkspace(join(tmpDir, 'mixed', 'packages', 'm', 'package.json'), tmpDir),
+    ).toBe(true)
+  })
 })

@@ -1,6 +1,7 @@
 import { ConfigError } from '../errors'
 import type { depfreshOptions, OutputFormat, RangeMode, SortOption } from '../types'
 import { VALID_LOG_LEVELS, VALID_MODES, VALID_OUTPUTS, VALID_SORT_OPTIONS } from './arg-values'
+import { parseCommaSeparatedArg } from './parse-list-arg'
 
 function validateEnum<T extends string>(
   value: unknown,
@@ -17,6 +18,7 @@ function validateEnum<T extends string>(
 
 export async function normalizeArgs(args: Record<string, unknown>): Promise<depfreshOptions> {
   const { resolveConfig } = await import('../config')
+  const globalAll = args['global-all'] as boolean
 
   const depFields: Record<string, boolean> = {}
   if (args['deps-only']) {
@@ -37,10 +39,10 @@ export async function normalizeArgs(args: Record<string, unknown>): Promise<depf
   const sort = validateEnum(args.sort, '--sort', VALID_SORT_OPTIONS) as SortOption
   const loglevel = validateEnum(args.loglevel, '--loglevel', VALID_LOG_LEVELS)
 
-  const include =
-    typeof args.include === 'string' ? args.include.split(',').map((s) => s.trim()) : undefined
-  const exclude =
-    typeof args.exclude === 'string' ? args.exclude.split(',').map((s) => s.trim()) : undefined
+  const include = parseCommaSeparatedArg(args.include)
+  const exclude = parseCommaSeparatedArg(args.exclude)
+  const ignorePaths = parseCommaSeparatedArg(args['ignore-paths'])
+  const refreshCache = Boolean(args['refresh-cache'] || args['no-cache'])
 
   return resolveConfig({
     cwd: (args.cwd as string) || process.cwd(),
@@ -50,8 +52,11 @@ export async function normalizeArgs(args: Record<string, unknown>): Promise<depf
     mode,
     include,
     exclude,
+    ignorePaths,
     force: args.force as boolean,
-    global: args.global as boolean,
+    refreshCache,
+    global: (args.global as boolean) || globalAll,
+    globalAll,
     peer: args.peer as boolean,
     includeLocked: args['include-locked'] as boolean,
     output,

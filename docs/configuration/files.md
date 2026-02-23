@@ -9,11 +9,12 @@ depfresh ships with sensible defaults. Here's what you get for free:
 | Option | Default | What it means |
 |---|---|---|
 | `mode` | `'default'` | Respects existing semver ranges |
-| `recursive` | `true` | Finds all `package.json` files in your project |
+| `recursive` | `true` | Finds all package manifests (`package.json`, `package.yaml`) in your project |
 | `concurrency` | `16` | Registry requests in parallel |
 | `timeout` | `10000` | 10 seconds per request before giving up |
 | `retries` | `2` | Retry failed requests twice |
 | `cacheTTL` | `1800000` | 30 minutes. Your registry isn't changing that fast. |
+| `refreshCache` | `false` | Use cache by default. Set `true` to force fresh metadata fetches. |
 | `output` | `'table'` | Pretty tables for humans |
 | `loglevel` | `'info'` | Normal amount of talking |
 | `sort` | `'diff-asc'` | Patch updates first, majors last |
@@ -159,6 +160,9 @@ import { defineConfig } from 'depfresh'
 export default defineConfig({
   // Cache for 1 hour
   cacheTTL: 60 * 60 * 1000,
+
+  // Force fresh fetches for every run
+  // refreshCache: true,
 
   // Or disable caching entirely
   // cacheTTL: 0,

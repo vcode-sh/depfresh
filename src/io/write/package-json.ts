@@ -4,6 +4,7 @@ import { WriteError } from '../../errors'
 import type { PackageMeta, ResolvedDepChange } from '../../types'
 import type { createLogger } from '../../utils/logger'
 import { detectLineEnding } from './text'
+import { rebuildVersion } from './version-utils'
 
 export function writePackageJson(
   pkg: PackageMeta,
@@ -82,15 +83,4 @@ function getSection(raw: Record<string, unknown>, source: string): Record<string
     return current as Record<string, string> | null
   }
   return (raw[source] as Record<string, string>) ?? null
-}
-
-function rebuildVersion(original: string, newVersion: string): string {
-  // Preserve protocol prefixes like npm:@scope/name@
-  const npmMatch = original.match(/^(npm:.+@)/)
-  if (npmMatch) return `${npmMatch[1]}${newVersion}`
-
-  const jsrMatch = original.match(/^(jsr:.+@)/)
-  if (jsrMatch) return `${jsrMatch[1]}${newVersion}`
-
-  return newVersion
 }

@@ -102,4 +102,52 @@ describe('loadPackages with ignoreOtherWorkspaces', () => {
     const names = packages.map((p) => p.name).sort()
     expect(names).toEqual(['root'])
   })
+
+  it('filters nested npm workspaces defined by package.yaml', async () => {
+    writeFileSync(join(tmpDir, 'package.yaml'), 'name: root\n')
+
+    mkdirSync(join(tmpDir, 'external', 'yaml-lib', 'packages', 'd'), { recursive: true })
+    writeFileSync(
+      join(tmpDir, 'external', 'yaml-lib', 'package.yaml'),
+      ['name: yaml-lib', 'workspaces:', '  - packages/*', ''].join('\n'),
+    )
+    writeFileSync(
+      join(tmpDir, 'external', 'yaml-lib', 'packages', 'd', 'package.yaml'),
+      ['name: d', 'dependencies:', '  lodash: ^4.17.21', ''].join('\n'),
+    )
+
+    const packages = await loadPackages({
+      ...baseOptions,
+      cwd: tmpDir,
+      ignoreOtherWorkspaces: true,
+      loglevel: 'silent',
+    })
+
+    const names = packages.map((p) => p.name).sort()
+    expect(names).toEqual(['root'])
+  })
+
+  it('keeps nested package.yaml workspaces when filtering is disabled', async () => {
+    writeFileSync(join(tmpDir, 'package.yaml'), 'name: root\n')
+
+    mkdirSync(join(tmpDir, 'external', 'yaml-lib', 'packages', 'd'), { recursive: true })
+    writeFileSync(
+      join(tmpDir, 'external', 'yaml-lib', 'package.yaml'),
+      ['name: yaml-lib', 'workspaces:', '  - packages/*', ''].join('\n'),
+    )
+    writeFileSync(
+      join(tmpDir, 'external', 'yaml-lib', 'packages', 'd', 'package.yaml'),
+      ['name: d', 'dependencies:', '  lodash: ^4.17.21', ''].join('\n'),
+    )
+
+    const packages = await loadPackages({
+      ...baseOptions,
+      cwd: tmpDir,
+      ignoreOtherWorkspaces: false,
+      loglevel: 'silent',
+    })
+
+    const names = packages.map((p) => p.name).sort()
+    expect(names).toEqual(['d', 'root', 'yaml-lib'])
+  })
 })

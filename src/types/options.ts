@@ -1,3 +1,4 @@
+import type { depfreshAddon } from '../addons/types'
 import type { DepFieldType, RangeMode, ResolvedDepChange, SortOption } from './dependencies'
 import type { OutputFormat, PackageMeta } from './package'
 
@@ -21,11 +22,13 @@ export interface depfreshOptions {
   timeout: number
   retries: number
   cacheTTL: number
+  refreshCache?: boolean
 
   output: OutputFormat
   loglevel: 'silent' | 'info' | 'debug'
   peer: boolean
   global: boolean
+  globalAll?: boolean
 
   ignorePaths: string[]
   ignoreOtherWorkspaces: boolean
@@ -48,6 +51,9 @@ export interface depfreshOptions {
   update: boolean
   execute?: string
   verifyCommand?: string
+
+  // Addons
+  addons?: depfreshAddon[]
 
   // Callbacks
   beforePackageStart?: (pkg: PackageMeta) => void | Promise<void>
@@ -72,10 +78,12 @@ export const DEFAULT_OPTIONS: Partial<depfreshOptions> = {
   timeout: 10_000,
   retries: 2,
   cacheTTL: 30 * 60 * 1000,
+  refreshCache: false,
   output: 'table',
   loglevel: 'info',
   peer: false,
   global: false,
+  globalAll: false,
   ignorePaths: ['**/node_modules/**', '**/dist/**', '**/coverage/**', '**/.git/**'],
   ignoreOtherWorkspaces: true,
   all: false,

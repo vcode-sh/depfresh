@@ -82,12 +82,13 @@ The output includes supported flags, defaults, valid enum values, and exit-code 
 | Flag | Alias | Type | Default | Description |
 |------|-------|------|---------|-------------|
 | `--cwd <path>` | `-C` | string | `process.cwd()` | Working directory. Point depfresh at a different project without leaving your comfortable terminal. |
-| `--recursive` | `-r` | boolean | `true` | Recursively search for `package.json` files in subdirectories. Enabled by default because monorepos are inevitable. |
+| `--recursive` | `-r` | boolean | `true` | Recursively search for package manifests (`package.json`, `package.yaml`) in subdirectories. Enabled by default because monorepos are inevitable. |
 | `--write` | `-w` | boolean | `false` | Actually write the updated versions to your package files. Without this, depfresh is just showing you what *could* be. |
 | `--interactive` | `-I` | boolean | `false` | Interactive mode -- a grouped multiselect for hand-picking which deps to update. Requires a TTY, obviously. |
 | `--mode <mode>` | `-m` | string | `default` | Version range mode. See [Mode Reference](./modes.md) for the full existential breakdown. |
-| `--force` | `-f` | boolean | `false` | Force update even when the current version satisfies the range. For when you want to live dangerously. |
-| `--global` | `-g` | boolean | `false` | Check globally installed packages instead of local ones. See [Global Packages](#global-packages). |
+| `--force` | `-f` | boolean | `false` | Force update even when the current version satisfies the range. Does not bypass cache reads. |
+| `--global` | `-g` | boolean | `false` | Check globally installed packages for one detected package manager. See [Global Packages](#global-packages). |
+| `--global-all` | -- | boolean | `false` | Check globals across npm, pnpm, and bun in one pass, deduplicated by package name. |
 
 ## Filtering
 
@@ -95,6 +96,7 @@ The output includes supported flags, defaults, valid enum values, and exit-code 
 |------|-------|------|---------|-------------|
 | `--include <patterns>` | `-n` | string | -- | Only include packages matching these regex patterns (comma-separated). Everything else gets ghosted. |
 | `--exclude <patterns>` | `-x` | string | -- | Exclude packages matching these regex patterns (comma-separated). Pretend they don't exist. |
+| `--ignore-paths <patterns>` | -- | string | -- | Additional ignore glob patterns (comma-separated) merged with default ignore paths. Useful for skipping specific folders during recursive scan. |
 | `--deps-only` | -- | boolean | `false` | Only check `dependencies`. Ignores devDependencies, peerDependencies, and optionalDependencies. |
 | `--dev-only` | -- | boolean | `false` | Only check `devDependencies`. The inverse of `--deps-only`. Using both simultaneously is not recommended unless you enjoy empty results. |
 | `--peer` | `-P` | boolean | `false` | Include peer dependencies in the check. Off by default because peer deps are a diplomatic minefield. |
@@ -134,6 +136,8 @@ These flags only do anything when `--write` is also present. Without `--write`, 
 |------|-------|------|---------|-------------|
 | `--fail-on-outdated` | -- | boolean | `false` | Exit with code `1` when outdated dependencies are found (without `--write`). Built for CI pipelines. See [CI Usage](#ci-usage). |
 | `--ignore-other-workspaces` | -- | boolean | `true` | Skip packages that belong to nested or separate workspaces. Prevents depfresh from trampling someone else's monorepo-within-a-monorepo. |
+| `--refresh-cache` | -- | boolean | `false` | Bypass cache reads for this run and fetch fresh registry metadata. Cache is repopulated unless `cacheTTL=0`. |
+| `--no-cache` | -- | boolean | `false` | Alias for `--refresh-cache` for migration compatibility. |
 | `--concurrency <n>` | `-c` | string | `16` | Maximum concurrent registry requests. Crank it up if you have faith in your network. Crank it down if the registry starts returning 429s. |
 
 ---
@@ -155,14 +159,22 @@ The `--sort` flag accepts six strategies. Default is `diff-asc`.
 
 ## Global Packages
 
-`--global` checks globally installed packages instead of local project dependencies.
+`--global` checks globally installed packages for one detected package manager.
+
+`--global-all` checks globals across npm, pnpm, and bun in one run. Results are deduplicated by package name, and writes target every manager where that package was found.
 
 ```bash
 # Check global packages
 depfresh -g
 
+# Check all global package managers at once
+depfresh --global-all
+
 # Update all global packages
 depfresh -gw
+
+# Update all detected global managers in one run
+depfresh --global-all -w
 
 # Interactive global update
 depfresh -gwI
@@ -170,7 +182,11 @@ depfresh -gwI
 
 Supported package managers: **npm**, **pnpm**, **bun**. Yarn global packages are not supported (yarn has deprecated `yarn global` anyway).
 
-Detection order: if `pnpm` is installed, it checks pnpm globals. Then `bun`. Falls back to `npm`. depfresh runs the appropriate list command for each:
+`--global` detection order: if `pnpm` is installed, it checks pnpm globals. Then `bun`. Falls back to `npm`.
+
+`--global-all` always scans all three managers and deduplicates by package name. The version shown for duplicates comes from first-seen manager order: npm, then pnpm, then bun.
+
+depfresh runs the appropriate list command for each:
 
 - npm: `npm list -g --depth=0 --json`
 - pnpm: `pnpm list -g --json`

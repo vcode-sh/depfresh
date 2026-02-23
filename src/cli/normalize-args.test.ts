@@ -23,8 +23,12 @@ function makeRawArgs(overrides: Record<string, unknown> = {}): Record<string, un
     mode: 'default',
     include: undefined,
     exclude: undefined,
+    'ignore-paths': undefined,
     force: false,
+    'refresh-cache': false,
+    'no-cache': false,
     global: false,
+    'global-all': false,
     peer: false,
     'include-locked': false,
     output: 'table',
@@ -105,5 +109,48 @@ describe('normalizeArgs enum validation', () => {
     expect(resolvedOptions.output).toBe('json')
     expect(resolvedOptions.sort).toBe('name-desc')
     expect(resolvedOptions.loglevel).toBe('debug')
+  })
+})
+
+describe('normalizeArgs parity flags', () => {
+  beforeEach(() => {
+    resolveConfigMock.mockClear()
+  })
+
+  it('normalizes ignore-paths into ignorePaths array', async () => {
+    await normalizeArgs(makeRawArgs({ 'ignore-paths': '**/tmp/**,**/.cache/**' }))
+
+    const resolvedOptions = resolveConfigMock.mock.calls[0]?.[0] as depfreshOptions
+    expect(resolvedOptions.ignorePaths).toEqual(['**/tmp/**', '**/.cache/**'])
+  })
+
+  it('enables refreshCache for --refresh-cache', async () => {
+    await normalizeArgs(makeRawArgs({ 'refresh-cache': true }))
+
+    const resolvedOptions = resolveConfigMock.mock.calls[0]?.[0] as depfreshOptions
+    expect(resolvedOptions.refreshCache).toBe(true)
+  })
+
+  it('treats --no-cache as refresh cache alias', async () => {
+    await normalizeArgs(makeRawArgs({ 'no-cache': true }))
+
+    const resolvedOptions = resolveConfigMock.mock.calls[0]?.[0] as depfreshOptions
+    expect(resolvedOptions.refreshCache).toBe(true)
+  })
+
+  it('maps --global-all and enables global mode automatically', async () => {
+    await normalizeArgs(makeRawArgs({ global: false, 'global-all': true }))
+
+    const resolvedOptions = resolveConfigMock.mock.calls[0]?.[0] as depfreshOptions
+    expect(resolvedOptions.global).toBe(true)
+    expect(resolvedOptions.globalAll).toBe(true)
+  })
+
+  it('keeps globalAll false when only --global is used', async () => {
+    await normalizeArgs(makeRawArgs({ global: true, 'global-all': false }))
+
+    const resolvedOptions = resolveConfigMock.mock.calls[0]?.[0] as depfreshOptions
+    expect(resolvedOptions.global).toBe(true)
+    expect(resolvedOptions.globalAll).toBe(false)
   })
 })

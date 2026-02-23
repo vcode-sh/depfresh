@@ -55,8 +55,8 @@ function loadNpmrcFile(filepath: string, config: NpmrcConfig): void {
       continue
     }
 
-    if (key === 'strict-ssl' && typeof value === 'string') {
-      config.strictSsl = value !== 'false'
+    if (key === 'strict-ssl') {
+      config.strictSsl = parseStrictSsl(value, config.strictSsl)
       continue
     }
 
@@ -135,4 +135,14 @@ export function getRegistryForPackage(name: string, config: NpmrcConfig): Regist
 
 function ensureTrailingSlash(url: string): string {
   return url.endsWith('/') ? url : `${url}/`
+}
+
+function parseStrictSsl(value: unknown, fallback: boolean): boolean {
+  if (typeof value === 'boolean') {
+    return value
+  }
+  if (typeof value === 'string') {
+    return value.toLowerCase() !== 'false'
+  }
+  return fallback
 }

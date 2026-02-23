@@ -66,7 +66,7 @@ Spits out a single JSON envelope to stdout. All log output is automatically supp
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `name` | `string` | Package name (from `package.json` `name` field) |
+| `name` | `string` | Package name (from manifest `name` field in `package.json` or `package.yaml`) |
 | `updates` | `array` | List of outdated dependencies in this package |
 
 ### `packages[].updates[]`

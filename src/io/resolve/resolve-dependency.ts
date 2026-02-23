@@ -11,6 +11,7 @@ import {
 } from '../../utils/versions'
 import { fetchPackageData } from '../registry'
 import { getPackageMode } from '../resolve-mode'
+import { getResolveCachePolicy } from './cache-policy'
 import { filterVersions } from './version-filter'
 
 export async function resolveDependency(
@@ -38,8 +39,8 @@ export async function resolveDependency(
     return null
   }
 
-  // Check cache
-  let pkgData = cache.get(packageName)
+  const cachePolicy = getResolveCachePolicy(options)
+  let pkgData = cachePolicy.bypassRead ? undefined : cache.get(packageName)
 
   if (!pkgData) {
     try {
@@ -49,7 +50,9 @@ export async function resolveDependency(
         retries: options.retries,
         logger,
       })
-      cache.set(packageName, pkgData, options.cacheTTL)
+      if (cachePolicy.shouldWrite) {
+        cache.set(packageName, pkgData, options.cacheTTL)
+      }
     } catch (error) {
       logger.debug(`Failed to fetch ${packageName}: ${error}`)
       return {

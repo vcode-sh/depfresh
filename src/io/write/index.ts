@@ -2,6 +2,7 @@ import type { PackageMeta, ResolvedDepChange } from '../../types'
 import { createLogger } from '../../utils/logger'
 import { writeCatalogPackage } from './catalog'
 import { writePackageJson } from './package-json'
+import { writePackageYaml } from './package-yaml'
 
 export type { FileBackup } from './backup'
 export { backupPackageFiles, restorePackageFiles } from './backup'
@@ -22,6 +23,8 @@ export function writePackage(
 
   if (pkg.type === 'package.json') {
     writePackageJson(pkg, changes, logger)
+  } else if (pkg.type === 'package.yaml') {
+    writePackageYaml(pkg, changes, logger)
   } else if (pkg.catalogs?.length) {
     writeCatalogPackage(pkg, changes, logger)
   }

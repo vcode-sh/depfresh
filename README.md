@@ -18,7 +18,7 @@ Spiritual successor to [taze](https://github.com/antfu/taze) by Anthony Fu -- a 
 - **Per-package modes** -- `packageMode` lets you set exact, glob, or regex patterns per dependency.
 - **Write safely** -- `--write` updates files. `--verify-command` tests each dep individually and reverts failures.
 - **Post-write hooks** -- `--execute`, `--install`, `--update`. Chain commands after writing.
-- **Global packages** -- `--global` checks npm, pnpm, and bun globals.
+- **Global packages** -- `--global` checks one detected manager, `--global-all` scans npm + pnpm + bun with deduped package names.
 - **Private registries** -- full `.npmrc` support. Scoped registries, auth tokens, env vars. Fixed from day one.
 - **JSON output** -- structured envelope for scripts and AI agents. No ANSI noise.
 - **CI mode** -- `--fail-on-outdated` exits with code 1. Plug it into your pipeline.
@@ -29,13 +29,15 @@ Spiritual successor to [taze](https://github.com/antfu/taze) by Anthony Fu -- a 
 - **Sorting** -- 6 strategies: by diff severity, publish time, or name.
 - **CRLF preservation** -- Windows line endings survive the write. You're welcome.
 - **Nested workspace detection** -- auto-skips monorepos inside monorepos.
-- **Programmatic API** -- 9 exported functions, 7 lifecycle callbacks, full type safety.
+- **Programmatic API** -- lifecycle callbacks + addon system for custom workflows.
 
 ## Why
 
 Because `npm outdated` gives you a table and then abandons you. Because Renovate requires a PhD in YAML. Because your AI coding assistant should be able to update your deps without you holding its hand.
 
-depfresh checks every `package.json` in your project, tells you what's outdated, and optionally writes the updates. Monorepos, workspace catalogs, private registries - it handles all of it without a config file.
+depfresh checks every package manifest (`package.json`, `package.yaml`) in your project, tells you what's outdated, and optionally writes the updates. Monorepos, workspace catalogs, private registries - it handles all of it without a config file.
+
+If both `package.yaml` and `package.json` exist in the same directory, depfresh uses `package.yaml` and skips the sibling `package.json` to avoid duplicate package entries.
 
 ## Install
 
@@ -85,6 +87,16 @@ depfresh -w --verify-command "pnpm test"
 
 # CI: fail if anything is outdated
 depfresh --fail-on-outdated
+
+# Skip specific directories from recursive scan
+depfresh --ignore-paths "apps/legacy/**,examples/**"
+
+# Bypass cache for one run (same behavior)
+depfresh --refresh-cache
+depfresh --no-cache
+
+# Check globals across npm + pnpm + bun (deduped names)
+depfresh --global-all
 ```
 
 ## CLI Flags
@@ -93,14 +105,18 @@ The top flags to get you started. Full reference with all 27+ flags: **[docs/cli
 
 | Flag | Alias | Default | Description |
 |------|-------|---------|-------------|
-| `--recursive` | `-r` | `true` | Recursively search for package.json files |
+| `--recursive` | `-r` | `true` | Recursively search for package manifests (`package.json`, `package.yaml`) |
 | `--write` | `-w` | `false` | Write updated versions to package files |
 | `--interactive` | `-I` | `false` | Select which deps to update |
 | `--mode` | `-m` | `default` | Range mode: `default` `major` `minor` `patch` `latest` `newest` `next` |
 | `--include` | `-n` | -- | Only include packages matching regex (comma-separated) |
 | `--exclude` | `-x` | -- | Exclude packages matching regex (comma-separated) |
-| `--force` | `-f` | `false` | Force update even if version is satisfied |
-| `--global` | `-g` | `false` | Check global packages |
+| `--ignore-paths` | -- | -- | Extra ignore globs (comma-separated), merged with default ignored paths |
+| `--force` | `-f` | `false` | Force update even if version is satisfied (does not bypass cache) |
+| `--refresh-cache` | -- | `false` | Bypass cache reads and fetch fresh metadata for this run |
+| `--no-cache` | -- | `false` | Alias for `--refresh-cache` |
+| `--global` | `-g` | `false` | Check global packages for one detected package manager |
+| `--global-all` | -- | `false` | Check global packages across npm, pnpm, and bun with deduped package names |
 | `--output` | `-o` | `table` | Output format: `table` `json` |
 | `--execute` | `-e` | -- | Run command after writing (e.g. `"pnpm test"`) |
 | `--verify-command` | `-V` | -- | Run command per dep, revert on failure |
@@ -124,6 +140,22 @@ export default defineConfig({
     '/^@types/': 'patch',
   },
 })
+```
+
+Addon example (programmatic API):
+
+```typescript
+import { check, resolveConfig, type depfreshAddon } from 'depfresh'
+
+const addon: depfreshAddon = {
+  name: 'audit-log',
+  afterPackageWrite(_ctx, pkg, changes) {
+    console.log(`updated ${pkg.name}: ${changes.length} changes`)
+  },
+}
+
+const options = await resolveConfig({ write: true, addons: [addon] })
+await check(options)
 ```
 
 Full options reference: **[docs/configuration/](docs/configuration/)**
@@ -244,7 +276,7 @@ const options = await resolveConfig({
 const exitCode = await check(options)
 ```
 
-9 exported functions, 7 lifecycle callbacks, 16+ types. Full API reference: **[docs/api/](docs/api/)**
+Programmatic API with lifecycle callbacks, addon plugins, and full typed exports. Full reference: **[docs/api/](docs/api/)**
 
 ## Monorepo Support
 
@@ -253,11 +285,11 @@ depfresh auto-detects workspace structures. No config needed.
 | Package Manager | Workspaces | Catalogs |
 |----------------|------------|----------|
 | pnpm | `pnpm-workspace.yaml` | `catalog:` protocol |
-| Bun | `workspaces` in `package.json` | `workspaces.catalog` |
-| Yarn | `workspaces` in `package.json` | `.yarnrc.yml` catalogs |
-| npm | `workspaces` in `package.json` | -- |
+| Bun | `workspaces` in `package.json` or `package.yaml` | `workspaces.catalog` |
+| Yarn | `workspaces` in `package.json` or `package.yaml` | `.yarnrc.yml` catalogs |
+| npm | `workspaces` in `package.json` or `package.yaml` | -- |
 
-Workspace catalogs are resolved and updated in-place. Your `pnpm-workspace.yaml` catalog entries get depfreshaded alongside your `package.json` deps. No manual sync needed.
+Workspace catalogs are resolved and updated in-place. Your `pnpm-workspace.yaml` catalog entries get depfreshaded alongside your manifest deps (`package.json` / `package.yaml`). No manual sync needed.
 
 ## Private Registries
 
@@ -271,22 +303,59 @@ depfresh reads `.npmrc` from your project and home directory. Scoped registries,
 
 This was broken in taze for 4+ years. I fixed it on day one. You're welcome.
 
-## What I Fixed from taze
+## depfresh vs taze
 
-Not to throw shade at taze -- it served the community well for years. But some things needed fixing, and "PR welcome" only goes so far when the PRs sit open for months.
+Verified against taze v19.9.2 (commit `31c6fe8`, 2026-01-20). Not marketing. Real code inspection, runtime test runs, CLI smoke checks on actual repos.
 
-| Problem | taze | depfresh |
-|---------|------|------|
-| `.npmrc` / private registries | Ignored | Full support |
-| Network retry | None | Exponential backoff |
-| Write clobber (bun catalogs) | Data loss | Single-writer architecture |
-| Version resolution ordering | Assumed sorted arrays | Explicit semver comparison |
-| Interactive mode | Flickery | @clack/prompts |
-| JSON output | None | Structured envelope |
-| Dep type filtering | None | `--deps-only` / `--dev-only` |
-| Config merging | deepmerge (CJS) | defu (ESM) |
-| npm config loading | @npmcli/config (heavy, hacky) | Direct ini parsing |
-| Cache | JSON file (race conditions) | SQLite with WAL mode |
+### Feature parity (both have it)
+
+| Feature | taze | depfresh | Notes |
+|---------|------|----------|-------|
+| 7 range modes | yes | yes | |
+| Include/exclude filters | yes | yes | depfresh adds glob patterns alongside regex |
+| Interactive TUI | yes | yes | Both have vim keys + per-version selection |
+| `--cwd` | yes | yes | |
+| `--fail-on-outdated` | yes | yes | |
+| `package.yaml` support | yes | yes | |
+| Addon/plugin API | yes | yes | |
+| pnpm catalogs | yes | yes | |
+| Yarn catalogs | yes | yes | |
+| CRLF preservation | yes | yes | |
+| CJK width handling | yes | yes | |
+
+### Where depfresh is ahead
+
+| Feature | taze | depfresh |
+|---------|------|----------|
+| JSON output envelope | no ([#201](https://github.com/antfu-collective/taze/issues/201) open) | Structured envelope with schema version |
+| Machine-readable CLI contract | no | `--help-json` with workflows, flag relationships, schema |
+| `--deps-only` / `--dev-only` | no ([#101](https://github.com/antfu-collective/taze/issues/101) open) | yes |
+| `packageMode` precedence | buggy ([#91](https://github.com/antfu-collective/taze/issues/91) open) | Deterministic |
+| Global package breadth | npm + pnpm | npm + pnpm + bun (`--global-all`) |
+| Bun catalog writes | Bug history, data loss risk | Single-writer architecture, tested |
+| `.npmrc` / private registries | Ignored for years | Full support from day one |
+| `.npmrc` transport (proxy/TLS/CA) | Parsed, not applied | Applied via `undici` transport adapter |
+| Network retry | None | Exponential backoff, non-transient errors fail fast |
+| Cache | JSON file (race conditions) | SQLite WAL mode, memory fallback |
+| Verify + rollback | no | `--verify-command` tests each dep, reverts failures |
+| Typed error hierarchy | Limited | Structured subclasses with `.code` and `.cause` |
+| Structured JSON errors | no | JSON error envelope with `error.code`, `error.retryable` |
+| Explicit cache bypass | no | `--refresh-cache` / `--no-cache` |
+
+### Where taze is ahead
+
+| Area | Why |
+|------|-----|
+| Ecosystem adoption | 4,061 stars, years of trust, larger user base |
+| npm config edge cases | `@npmcli/config` may cover obscure auth patterns we haven't hit yet |
+
+### Numbers
+
+| Metric | taze v19.9.2 | depfresh v0.11.0 |
+|--------|-------------:|------------------:|
+| Test files | 13 | 77 |
+| Passing tests | 55 | 598 |
+| CLI flags | 24 | 36 |
 
 ## Documentation
 
@@ -294,7 +363,7 @@ The full docs, for people who read manuals before assembling furniture.
 
 - **[CLI Reference](docs/cli/)** -- all 27+ flags, modes, sorting, filtering, hooks, interactive, CI, workspaces
 - **[Configuration](docs/configuration/)** -- config files, every option, packageMode, depFields, private registries, cache
-- **[Programmatic API](docs/api/)** -- exported functions, lifecycle callbacks, types, workflow examples
+- **[Programmatic API](docs/api/)** -- exported functions, lifecycle callbacks, addon plugins, types, workflow examples
 - **[Output Formats](docs/output-formats/)** -- table, JSON, exit codes, AI agent integration
 - **[Agent Workflows](docs/agents/README.md)** -- copy-paste quickstarts for Codex, Claude Code, and Gemini CLI
 - **[Integrations](docs/integrations/README.md)** -- GitHub Actions and thin MCP wrapper guidance

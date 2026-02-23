@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
+  AddonError,
   CacheError,
   ConfigError,
   depfreshError,
@@ -20,6 +21,7 @@ describe('error hierarchy', () => {
     const errors = [
       new CacheError('cache'),
       new ConfigError('config'),
+      new AddonError('addon', 'test-addon', 'setup'),
       new RegistryError('registry', 404, 'https://registry.npmjs.org/pkg'),
       new ResolveError('resolve'),
       new WriteError('write'),

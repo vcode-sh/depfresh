@@ -84,3 +84,58 @@ describe('loadNpmrc npm_config_userconfig', () => {
     expect(config.defaultRegistry).toBeDefined()
   })
 })
+
+describe('loadNpmrc strict-ssl parsing', () => {
+  const savedEnv = {
+    npm_config_userconfig: process.env.npm_config_userconfig,
+    npm_config_registry: process.env.npm_config_registry,
+    NPM_CONFIG_REGISTRY: process.env.NPM_CONFIG_REGISTRY,
+    HTTP_PROXY: process.env.HTTP_PROXY,
+    http_proxy: process.env.http_proxy,
+    HTTPS_PROXY: process.env.HTTPS_PROXY,
+    https_proxy: process.env.https_proxy,
+  }
+
+  afterEach(() => {
+    for (const [key, value] of Object.entries(savedEnv)) {
+      if (value === undefined) {
+        delete process.env[key]
+      } else {
+        process.env[key] = value
+      }
+    }
+  })
+
+  it('parses strict-ssl=false and related transport fields from .npmrc', () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), 'npmrc-test-'))
+    writeFileSync(
+      join(tmpDir, '.npmrc'),
+      [
+        'registry=https://registry.npmjs.org/',
+        'proxy=http://proxy.local:8080',
+        'https-proxy=http://secure-proxy.local:8443',
+        'strict-ssl=false',
+        'cafile=./ca.pem',
+      ].join('\n'),
+    )
+
+    // biome-ignore lint/performance/noDelete: must actually remove env var
+    delete process.env.npm_config_registry
+    // biome-ignore lint/performance/noDelete: must actually remove env var
+    delete process.env.NPM_CONFIG_REGISTRY
+    // biome-ignore lint/performance/noDelete: must actually remove env var
+    delete process.env.HTTP_PROXY
+    // biome-ignore lint/performance/noDelete: must actually remove env var
+    delete process.env.http_proxy
+    // biome-ignore lint/performance/noDelete: must actually remove env var
+    delete process.env.HTTPS_PROXY
+    // biome-ignore lint/performance/noDelete: must actually remove env var
+    delete process.env.https_proxy
+
+    const config = loadNpmrc(tmpDir)
+    expect(config.strictSsl).toBe(false)
+    expect(config.proxy).toBe('http://proxy.local:8080')
+    expect(config.httpsProxy).toBe('http://secure-proxy.local:8443')
+    expect(config.cafile).toBe(join(tmpDir, 'ca.pem'))
+  })
+})

@@ -6,7 +6,7 @@ You're here because defaults offend you. Fair enough. depfresh works perfectly f
 
 - **[Config Files](./files.md)** -- Supported file formats (`depfresh.config.ts`, `.depfreshrc`, `package.json#depfresh`), zero-config defaults, private registries, `.npmrc` handling, and cache settings. Start here.
 
-- **[Options Reference](./options.md)** -- Every option from the `depfreshOptions` interface, organised by category. Core, filtering, performance, output, paths, display, post-write, and callbacks. The exhaustive list.
+- **[Options Reference](./options.md)** -- Every option from the `depfreshOptions` interface, organised by category. Core, filtering, performance, output, paths, display, post-write, addons, and callbacks. The exhaustive list.
 
 - **[Workspaces](./workspaces.md)** -- Recursive scanning, nested workspace detection, workspace catalogs (pnpm, bun, yarn), and the `workspace:` protocol. For the monorepo crowd.
 

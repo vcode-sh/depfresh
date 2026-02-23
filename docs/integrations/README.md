@@ -2,6 +2,15 @@
 
 Reference patterns for running depfresh in CI and tool ecosystems.
 
+Need proof that registry handling survives the real world (with mocked registries, not wishful thinking)?
+
+- [Registry Integration Proof (depfresh vs taze)](./registry-integration-vs-taze.md)
+- [Edge-Case Proof (empty monorepo, 120 deps, corrupt cache)](./edge-case-proof-vs-taze.md)
+
+Want a ready-made workflow instead of copy-paste therapy?
+
+- Repository workflow: `/Users/tomrobak/_code_/depfresh/.github/workflows/dependency-freshness.yml`
+
 ## GitHub Actions
 
 Minimal workflow that runs depfresh in gate mode and uploads the JSON report as an artifact.
