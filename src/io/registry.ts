@@ -33,7 +33,7 @@ async function fetchNpmPackage(
   const url = `${registry.url}${encodedName}`
 
   const headers: Record<string, string> = {
-    accept: 'application/vnd.npm.install-v1+json',
+    accept: 'application/json',
   }
 
   if (registry.token) {
@@ -57,7 +57,11 @@ async function fetchNpmPackage(
     if (data.deprecated) {
       deprecated[ver] = String(data.deprecated)
     }
-    provenance[ver] = data.hasSignatures ? 'attested' : 'none'
+    const dist = data.dist as Record<string, unknown> | undefined
+    const hasSignatures =
+      data.hasSignatures ||
+      (Array.isArray(dist?.signatures) && (dist.signatures as unknown[]).length > 0)
+    provenance[ver] = hasSignatures ? 'attested' : 'none'
     const enginesObj = data.engines as Record<string, string> | undefined
     if (enginesObj?.node) {
       engines[ver] = enginesObj.node

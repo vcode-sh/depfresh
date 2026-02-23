@@ -8,6 +8,9 @@ A few real-world incantations for the copy-paste inclined.
 # The basics: what's outdated?
 depfresh
 
+# Full CLI help and all flags
+depfresh help
+
 # Safe minor/patch updates, written to disk
 depfresh minor -w
 

@@ -5,9 +5,9 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9+-3178c6)](https://www.typescriptlang.org/)
 [![Node.js](https://img.shields.io/badge/Node.js-24+-339933)](https://nodejs.org/)
 
-Keep your npm dependencies fresh. Fast, correct, zero-config.
+Keep your npm dependencies fresh. Fast, correct, zero-config. Your AI agent already knows how to use this. You don't even need to read this README -- it did.
 
-Spiritual successor to [taze](https://github.com/antfu/taze) by Anthony Fu - a tool that did the job well until maintenance slowed and issues piled up. I took the best ideas, rewrote everything from scratch, fixed the bugs that sat open for years, and made it work for humans and AI agents alike. Credit where it's due.
+Spiritual successor to [taze](https://github.com/antfu/taze) by Anthony Fu -- a tool that did the job well until maintenance slowed and issues piled up. I took the best ideas, rewrote everything from scratch, fixed the bugs that sat open for years, and made it work for humans and AI agents alike. Credit where it's due.
 
 ## Features
 
@@ -51,11 +51,19 @@ pnpm dlx depfresh
 bunx depfresh
 ```
 
+Lost? `depfresh help` prints every flag and mode. `depfresh --help-json` spits out the full CLI contract as JSON for the robots. Between the two of them, there's no excuse for not knowing what this thing does.
+
 ## Usage
 
 ```bash
 # Check for outdated dependencies
 depfresh
+
+# Lost? This prints everything.
+depfresh help
+
+# Same thing but for machines and AI agents who can't read tables
+depfresh --help-json
 
 # Actually update them
 depfresh --write
@@ -140,6 +148,14 @@ Full options reference: **[docs/configuration/](docs/configuration/)**
       ]
     }
   ],
+  "errors": [
+    {
+      "name": "some-private-pkg",
+      "source": "dependencies",
+      "currentVersion": "^1.0.0",
+      "message": "Failed to resolve from registry"
+    }
+  ],
   "summary": {
     "total": 12,
     "major": 1,
@@ -167,31 +183,44 @@ Full schema and field reference: **[docs/output-formats/](docs/output-formats/)*
 
 ## AI Agent Usage
 
-depfresh was designed to work with AI coding assistants out of the box. No special configuration needed.
+depfresh was designed to work with AI coding assistants out of the box. No special configuration needed. Run it blind and it tells you what to do next.
+
+**Auto-discovery** -- when stdout isn't a TTY (piped, captured by an agent), depfresh prints a hint to stderr: `Tip: Use --output json for structured output. Run --help-json for CLI capabilities.` Agents are stateless. They don't remember your last hint.
+
+**`--help-json`** returns a full machine-readable contract: version, flags, enums, exit codes, plus:
+- `workflows` -- 4 copy-paste agent recipes (`checkOnly`, `safeUpdate`, `fullUpdate`, `selective`)
+- `flagRelationships` -- which flags require or conflict with others
+- `configFiles` -- every supported config file pattern
+- `jsonOutputSchema` -- field descriptions of the JSON envelope
 
 ```bash
-# Check for updates, get structured output
-depfresh --output json --loglevel silent
+# First run -- just see what happens (agents get the stderr hint)
+depfresh
 
-# Discover the CLI contract for automation
+# Discover the full CLI contract
 depfresh --help-json
 
-# Apply all updates
-depfresh --write
+# Check for updates, get structured output
+depfresh --output json
 
 # Apply only safe updates
-depfresh --write --mode patch
+depfresh --write --mode minor --output json
 
 # Selective update
-depfresh --write --include "typescript,vitest"
+depfresh --write --include "typescript,vitest" --output json
+
+# Full send
+depfresh --write --mode latest --output json
 ```
 
 **Exit codes are semantic:**
 - `0` -- all deps up to date (or updates were written)
 - `1` -- updates available (with `--fail-on-outdated`)
-- `2` -- error
+- `2` -- error (structured JSON error envelope when `--output json` is active)
 
-**TTY detection** -- when stdout isn't a terminal (piped, captured by an agent), depfresh automatically suppresses spinners and interactive prompts. `NO_COLOR` is respected.
+**Structured errors** -- when `--output json` is active and something fails, you get a JSON error envelope with `error.code`, `error.message`, and `error.retryable` instead of plaintext stderr. Resolution failures for individual deps appear in the `errors[]` array of the normal envelope.
+
+**TTY detection** -- when stdout isn't a terminal, depfresh automatically suppresses spinners and interactive prompts. `NO_COLOR` is respected.
 
 ## Programmatic API
 

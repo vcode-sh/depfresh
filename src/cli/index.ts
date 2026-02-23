@@ -1,6 +1,7 @@
 import { defineCommand, runMain } from 'citty'
 import { version } from '../../package.json' with { type: 'json' }
 import { args } from './args-schema'
+import { normalizeCliRawArgs } from './raw-args'
 import './signals'
 
 const main = defineCommand({
@@ -50,4 +51,6 @@ const main = defineCommand({
   },
 })
 
-runMain(main)
+runMain(main, {
+  rawArgs: normalizeCliRawArgs(process.argv.slice(2)),
+})
