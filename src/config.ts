@@ -10,7 +10,7 @@ import { createLogger } from './utils/logger'
 const TS_RE = /\.[mc]?ts$/
 const JS_RE = /\.[mc]?js$/
 
-const CONFIG_FILES = [
+export const CONFIG_FILES = [
   'depfresh.config.ts',
   'depfresh.config.mts',
   'depfresh.config.cts',

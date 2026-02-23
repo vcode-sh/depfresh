@@ -35,6 +35,14 @@ const main = defineCommand({
       const exitCode = await check(options)
       process.exit(exitCode)
     } catch (error) {
+      if (args.output === 'json') {
+        const { outputJsonError } = await import('../commands/check/json-output')
+        outputJsonError(error, {
+          cwd: typeof args.cwd === 'string' ? args.cwd : process.cwd(),
+          mode: typeof args.mode === 'string' ? args.mode : 'default',
+        })
+        process.exit(2)
+      }
       // biome-ignore lint/suspicious/noConsole: intentional error output
       console.error('Fatal error:', error instanceof Error ? error.message : String(error))
       process.exit(2)

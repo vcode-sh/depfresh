@@ -14,6 +14,13 @@ export interface JsonPackage {
   }>
 }
 
+export interface JsonError {
+  name: string
+  source: string
+  currentVersion: string
+  message: string
+}
+
 export interface JsonExecutionState {
   scannedPackages: number
   packagesWithUpdates: number
@@ -26,6 +33,7 @@ export interface JsonExecutionState {
 
 interface JsonOutput {
   packages: JsonPackage[]
+  errors: JsonError[]
   summary: {
     total: number
     major: number
@@ -48,6 +56,22 @@ interface JsonOutput {
   }
 }
 
+interface JsonErrorOutput {
+  error: {
+    code: string
+    message: string
+    retryable: boolean
+  }
+  meta: {
+    schemaVersion: number
+    cwd: string
+    mode: string
+    timestamp: string
+  }
+}
+
+const RETRYABLE_CODES = new Set(['ERR_REGISTRY', 'ERR_CACHE'])
+
 export function buildJsonPackage(name: string, updates: ResolvedDepChange[]): JsonPackage {
   return {
     name,
@@ -68,12 +92,14 @@ export function outputJsonEnvelope(
   packages: JsonPackage[],
   options: depfreshOptions,
   executionState: JsonExecutionState,
+  errors: JsonError[] = [],
 ): void {
   const allUpdates = packages.flatMap((p) => p.updates)
   const count = (diff: DiffType) => allUpdates.filter((u) => u.diff === diff).length
 
   const output: JsonOutput = {
     packages,
+    errors,
     summary: {
       total: allUpdates.length,
       major: count('major'),
@@ -97,5 +123,28 @@ export function outputJsonEnvelope(
   }
 
   // biome-ignore lint/suspicious/noConsole: intentional JSON output
+  console.log(JSON.stringify(output, null, 2))
+}
+
+export function outputJsonError(error: unknown, options: { cwd: string; mode: string }): void {
+  const code =
+    error instanceof Error && 'code' in error ? (error as { code: string }).code : 'ERR_UNKNOWN'
+  const message = error instanceof Error ? error.message : String(error)
+
+  const output: JsonErrorOutput = {
+    error: {
+      code,
+      message,
+      retryable: RETRYABLE_CODES.has(code),
+    },
+    meta: {
+      schemaVersion: 1,
+      cwd: options.cwd,
+      mode: options.mode,
+      timestamp: new Date().toISOString(),
+    },
+  }
+
+  // biome-ignore lint/suspicious/noConsole: intentional JSON error output
   console.log(JSON.stringify(output, null, 2))
 }

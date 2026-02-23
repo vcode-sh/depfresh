@@ -109,3 +109,79 @@ describe('contextual tips', () => {
     consoleSpy.mockRestore()
   })
 })
+
+describe('non-TTY stderr hint', () => {
+  let mocks: CheckMocks
+
+  beforeEach(async () => {
+    vi.clearAllMocks()
+    mocks = await setupMocks()
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('outputs stderr hint when stdout is not a TTY and output is table', async () => {
+    const pkg = makePkg('my-app')
+    mocks.loadPackagesMock.mockResolvedValue([pkg])
+    mocks.resolvePackageMock.mockResolvedValue([makeResolved({ diff: 'none' })])
+
+    const originalIsTTY = process.stdout.isTTY
+    Object.defineProperty(process.stdout, 'isTTY', { value: undefined, configurable: true })
+
+    const stderrSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    const { check } = await import('./index')
+    await check({ ...baseOptions, output: 'table' })
+
+    const stderrOutput = stderrSpy.mock.calls.map((c) => String(c.join(' '))).join('\n')
+    expect(stderrOutput).toContain('--output json')
+    expect(stderrOutput).toContain('--help-json')
+
+    Object.defineProperty(process.stdout, 'isTTY', { value: originalIsTTY, configurable: true })
+    stderrSpy.mockRestore()
+  })
+
+  it('does not output stderr hint when output is json', async () => {
+    const pkg = makePkg('my-app')
+    mocks.loadPackagesMock.mockResolvedValue([pkg])
+    mocks.resolvePackageMock.mockResolvedValue([makeResolved({ diff: 'none' })])
+
+    const originalIsTTY = process.stdout.isTTY
+    Object.defineProperty(process.stdout, 'isTTY', { value: undefined, configurable: true })
+
+    const stderrSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const stdoutSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+
+    const { check } = await import('./index')
+    await check({ ...baseOptions, output: 'json' })
+
+    const stderrOutput = stderrSpy.mock.calls.map((c) => String(c.join(' '))).join('\n')
+    expect(stderrOutput).not.toContain('--output json')
+
+    Object.defineProperty(process.stdout, 'isTTY', { value: originalIsTTY, configurable: true })
+    stderrSpy.mockRestore()
+    stdoutSpy.mockRestore()
+  })
+
+  it('does not output stderr hint when stdout is a TTY', async () => {
+    const pkg = makePkg('my-app')
+    mocks.loadPackagesMock.mockResolvedValue([pkg])
+    mocks.resolvePackageMock.mockResolvedValue([makeResolved({ diff: 'none' })])
+
+    const originalIsTTY = process.stdout.isTTY
+    Object.defineProperty(process.stdout, 'isTTY', { value: true, configurable: true })
+
+    const stderrSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    const { check } = await import('./index')
+    await check({ ...baseOptions, output: 'table' })
+
+    const stderrOutput = stderrSpy.mock.calls.map((c) => String(c.join(' '))).join('\n')
+    expect(stderrOutput).not.toContain('--output json')
+
+    Object.defineProperty(process.stdout, 'isTTY', { value: originalIsTTY, configurable: true })
+    stderrSpy.mockRestore()
+  })
+})

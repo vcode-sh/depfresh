@@ -22,7 +22,12 @@
     "workspace",
     "cli",
     "taze",
-    "depfresh"
+    "depfresh",
+    "ai",
+    "agent",
+    "machine-readable",
+    "json",
+    "automation"
   ],
   "sideEffects": false,
   "bin": {
