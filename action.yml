@@ -1,0 +1,163 @@
+name: 'depfresh - Dependency Freshness Check'
+description: 'Check npm dependencies for available updates with structured JSON output'
+author: 'Vibe Code'
+
+branding:
+  icon: 'package'
+  color: 'green'
+
+inputs:
+  mode:
+    description: 'Version range mode: default, major, minor, patch, latest, newest, next'
+    required: false
+    default: 'default'
+  write:
+    description: 'Write updated versions to package files'
+    required: false
+    default: 'false'
+  fail-on-outdated:
+    description: 'Exit 1 if outdated dependencies are found (ignored when write is true)'
+    required: false
+    default: 'true'
+  include:
+    description: 'Comma-separated list of package name patterns to include'
+    required: false
+    default: ''
+  exclude:
+    description: 'Comma-separated list of package name patterns to exclude'
+    required: false
+    default: ''
+  recursive:
+    description: 'Recursively scan workspace packages'
+    required: false
+    default: 'true'
+  working-directory:
+    description: 'Directory to run depfresh in'
+    required: false
+    default: '.'
+  node-version:
+    description: 'Node.js version to use'
+    required: false
+    default: '24'
+  extra-args:
+    description: 'Additional CLI flags passed directly to depfresh'
+    required: false
+    default: ''
+
+outputs:
+  json:
+    description: 'Full JSON output from depfresh'
+    value: ${{ steps.parse.outputs.json }}
+  outdated-count:
+    description: 'Number of outdated dependencies found'
+    value: ${{ steps.parse.outputs.outdated-count }}
+  exit-code:
+    description: 'Raw exit code from depfresh (0=up-to-date, 1=outdated, 2=error)'
+    value: ${{ steps.run.outputs.exit-code }}
+  has-updates:
+    description: 'Whether outdated dependencies were found (true/false)'
+    value: ${{ steps.parse.outputs.has-updates }}
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.node-version }}
+
+    - name: Install depfresh
+      shell: bash
+      run: npm install -g depfresh
+
+    - name: Run depfresh
+      id: run
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        DEPFRESH_ARGS="--output json"
+
+        if [ "${{ inputs.mode }}" != "default" ]; then
+          DEPFRESH_ARGS="$DEPFRESH_ARGS --mode ${{ inputs.mode }}"
+        fi
+
+        if [ "${{ inputs.write }}" = "true" ]; then
+          DEPFRESH_ARGS="$DEPFRESH_ARGS --write"
+        fi
+
+        if [ "${{ inputs.fail-on-outdated }}" = "true" ] && [ "${{ inputs.write }}" != "true" ]; then
+          DEPFRESH_ARGS="$DEPFRESH_ARGS --fail-on-outdated"
+        fi
+
+        if [ "${{ inputs.recursive }}" = "false" ]; then
+          DEPFRESH_ARGS="$DEPFRESH_ARGS --no-recursive"
+        fi
+
+        if [ -n "${{ inputs.include }}" ]; then
+          DEPFRESH_ARGS="$DEPFRESH_ARGS --include ${{ inputs.include }}"
+        fi
+
+        if [ -n "${{ inputs.exclude }}" ]; then
+          DEPFRESH_ARGS="$DEPFRESH_ARGS --exclude ${{ inputs.exclude }}"
+        fi
+
+        if [ -n "${{ inputs.extra-args }}" ]; then
+          DEPFRESH_ARGS="$DEPFRESH_ARGS ${{ inputs.extra-args }}"
+        fi
+
+        DEPFRESH_OUTPUT=$(mktemp)
+        EXIT_CODE=0
+
+        depfresh $DEPFRESH_ARGS > "$DEPFRESH_OUTPUT" || EXIT_CODE=$?
+
+        echo "exit-code=$EXIT_CODE" >> "$GITHUB_OUTPUT"
+        echo "output-file=$DEPFRESH_OUTPUT" >> "$GITHUB_OUTPUT"
+
+        if [ "$EXIT_CODE" -eq 2 ]; then
+          echo "::error::depfresh encountered a fatal error (exit code 2)"
+          cat "$DEPFRESH_OUTPUT"
+          exit 2
+        fi
+
+    - name: Parse outputs
+      id: parse
+      shell: bash
+      run: |
+        OUTPUT_FILE="${{ steps.run.outputs.output-file }}"
+        EXIT_CODE="${{ steps.run.outputs.exit-code }}"
+
+        if [ ! -s "$OUTPUT_FILE" ]; then
+          echo "json={}" >> "$GITHUB_OUTPUT"
+          echo "outdated-count=0" >> "$GITHUB_OUTPUT"
+          echo "has-updates=false" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+
+        JSON_CONTENT=$(cat "$OUTPUT_FILE")
+
+        # Store JSON output (escape for GitHub Actions)
+        {
+          echo "json<<DEPFRESH_JSON_EOF"
+          echo "$JSON_CONTENT"
+          echo "DEPFRESH_JSON_EOF"
+        } >> "$GITHUB_OUTPUT"
+
+        # Extract outdated count from summary.total
+        OUTDATED_COUNT=$(echo "$JSON_CONTENT" | jq -r '.summary.total // 0')
+        echo "outdated-count=$OUTDATED_COUNT" >> "$GITHUB_OUTPUT"
+
+        if [ "$OUTDATED_COUNT" -gt 0 ]; then
+          echo "has-updates=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "has-updates=false" >> "$GITHUB_OUTPUT"
+        fi
+
+        # Clean up temp file
+        rm -f "$OUTPUT_FILE"
+
+    - name: Handle fail-on-outdated
+      if: ${{ steps.run.outputs.exit-code == '1' && inputs.fail-on-outdated == 'true' && inputs.write != 'true' }}
+      shell: bash
+      run: |
+        echo "::warning::depfresh found ${{ steps.parse.outputs.outdated-count }} outdated dependencies"
+        exit 1

@@ -9,6 +9,7 @@ Need proof that registry handling survives the real world (with mocked registrie
 
 Want a ready-made workflow instead of copy-paste therapy?
 
+- **[GitHub Action](./github-action.md)** -- Composite action for CI with structured JSON output and 4 workflow recipes.
 - Repository workflow: `/Users/tomrobak/_code_/depfresh/.github/workflows/dependency-freshness.yml`
 
 ## GitHub Actions
