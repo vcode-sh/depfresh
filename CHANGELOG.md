@@ -2,6 +2,23 @@
 
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Semver because I'm not a psychopath.
 
+## [0.10.1] - 2026-02-23
+
+The "your age column was a decoration" patch. Turns out npm's abbreviated metadata endpoint doesn't return the `time` field, so the age column was rendering headers with no data like a restaurant menu with no prices. Switched to full metadata. The cache means you pay the bandwidth once per TTL, cry about it never.
+
+### Added
+
+- **`depfresh help` command alias** -- `help` is now normalized to `--help`, so `depfresh help` prints the same full usage and flag list as `depfresh -h` / `depfresh --help` instead of failing enum validation as an invalid mode.
+
+### Fixed
+
+- **Empty age column** -- registry fetcher was using abbreviated metadata (`application/vnd.npm.install-v1+json`) which doesn't include per-version publish timestamps. Switched to full metadata (`application/json`). The `time` field now actually exists in responses, so `publishedAt`, `currentVersionTime`, and the age column work as intended. The SQLite cache absorbs the extra payload size.
+- **Provenance detection for full metadata** -- abbreviated metadata uses `hasSignatures` on version objects, full metadata uses `dist.signatures[]`. Now checks both formats so provenance tracking works regardless of registry response shape.
+
+### Stats
+
+- 538 tests passing. Build, typecheck, lint clean.
+
 ## [0.10.0] - 2026-02-23
 
 The "contracts are contracts, not vibes" release. Tightened CLI behavior so invalid inputs fail fast, made machine output explicit enough for automation that doesn't enjoy guesswork, and stopped pretending SARIF existed when it didn't. Then went back and made the whole thing properly agent-friendly because half-measures are for people who commit on Fridays.
@@ -279,6 +296,7 @@ First release. Wrote it from scratch because waiting for PRs to get merged in ta
 - TTY detection. No spinners in your CI logs. `NO_COLOR` respected.
 - 54 tests. More than some production apps I've seen.
 
+[0.10.1]: https://github.com/vcode-sh/depfresh/releases/tag/v0.10.1
 [0.10.0]: https://github.com/vcode-sh/depfresh/releases/tag/v0.10.0
 [0.9.2]: https://github.com/vcode-sh/depfresh/releases/tag/v0.9.2
 [0.9.1]: https://github.com/vcode-sh/depfresh/releases/tag/v0.9.1

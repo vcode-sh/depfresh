@@ -21,6 +21,19 @@ depfresh -wI
 depfresh latest -wI --explain --long --verify-command "pnpm test"
 ```
 
+## Help
+
+```bash
+# Human-readable usage and all flags
+depfresh help
+depfresh -h
+depfresh --help
+
+# Machine-readable CLI contract (JSON)
+depfresh --help-json
+depfresh capabilities --json
+```
+
 ## Positional Arguments
 
 `depfresh <mode>` is shorthand for `depfresh --mode <mode>`. Because typing `--mode` every time is a tax on the human spirit.

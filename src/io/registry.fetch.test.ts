@@ -55,7 +55,7 @@ describe('fetchPackageData', () => {
       'https://registry.npmjs.org/lodash',
       expect.objectContaining({
         headers: expect.objectContaining({
-          accept: 'application/vnd.npm.install-v1+json',
+          accept: 'application/json',
         }),
       }),
     )
@@ -98,7 +98,7 @@ describe('fetchPackageData', () => {
     )
   })
 
-  it('sends correct Accept header for abbreviated metadata', async () => {
+  it('sends correct Accept header for full metadata', async () => {
     const npmResponse = {
       versions: { '1.0.0': {} },
       'dist-tags': { latest: '1.0.0' },
@@ -110,7 +110,7 @@ describe('fetchPackageData', () => {
 
     const fetchCall = vi.mocked(globalThis.fetch).mock.calls[0]!
     const headers = (fetchCall[1] as RequestInit).headers as Record<string, string>
-    expect(headers.accept).toBe('application/vnd.npm.install-v1+json')
+    expect(headers.accept).toBe('application/json')
   })
 
   it('includes auth header for registries with tokens', async () => {
@@ -176,6 +176,27 @@ describe('fetchPackageData', () => {
 
     const { fetchPackageData } = await import('./registry')
     const result = await fetchPackageData('signed-pkg', defaultOptions)
+
+    expect(result.provenance).toEqual({
+      '1.0.0': 'attested',
+      '2.0.0': 'none',
+      '3.0.0': 'none',
+    })
+  })
+
+  it('extracts provenance from dist.signatures in full metadata', async () => {
+    const npmResponse = {
+      versions: {
+        '1.0.0': { dist: { signatures: [{ sig: 'abc' }] } },
+        '2.0.0': { dist: { signatures: [] } },
+        '3.0.0': { dist: {} },
+      },
+      'dist-tags': { latest: '3.0.0' },
+    }
+    globalThis.fetch = mockFetchResponse(npmResponse)
+
+    const { fetchPackageData } = await import('./registry')
+    const result = await fetchPackageData('full-meta-pkg', defaultOptions)
 
     expect(result.provenance).toEqual({
       '1.0.0': 'attested',
