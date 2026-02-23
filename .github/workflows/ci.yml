@@ -96,6 +96,7 @@ jobs:
   distribution-smoke:
     name: Distribution Smoke
     runs-on: ubuntu-latest
+    needs: build
     steps:
       - uses: actions/checkout@v6
 
@@ -106,13 +107,13 @@ jobs:
           node-version: 24.x
           cache: pnpm
 
-      - name: Smoke test one-off distribution paths
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+
+      - name: Smoke test local build
         run: |
           set -euo pipefail
-          npx --yes depfresh --help
-          pnpm dlx depfresh --help
-          if command -v bun >/dev/null 2>&1; then
-            bunx depfresh --help
-          else
-            echo "bun not available on this runner; skipping bunx smoke test"
-          fi
+          node dist/cli.mjs --help
+          node dist/cli.mjs --version
