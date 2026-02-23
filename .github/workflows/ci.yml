@@ -92,3 +92,27 @@ jobs:
 
       - name: Lint
         run: pnpm lint
+
+  distribution-smoke:
+    name: Distribution Smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24.x
+          cache: pnpm
+
+      - name: Smoke test one-off distribution paths
+        run: |
+          set -euo pipefail
+          npx --yes depfresh --help
+          pnpm dlx depfresh --help
+          if command -v bun >/dev/null 2>&1; then
+            bunx depfresh --help
+          else
+            echo "bun not available on this runner; skipping bunx smoke test"
+          fi
