@@ -41,17 +41,37 @@ If both `package.yaml` and `package.json` exist in the same directory, depfresh 
 
 ## Install
 
+### Global CLI install
+
 ```bash
 npm install -g depfresh
+pnpm add -g depfresh
+bun add -g depfresh
 ```
 
-Or don't install globally. I'm not your parent.
+### One-off run (no install)
 
 ```bash
 npx depfresh
 pnpm dlx depfresh
 bunx depfresh
 ```
+
+### Local project install (recommended for team + CI pinning)
+
+```bash
+npm install -D depfresh
+pnpm add -D depfresh
+bun add -d depfresh
+```
+
+### Which install mode should I use?
+
+| If you want... | Use this mode | Example command |
+| --- | --- | --- |
+| Run depfresh once in any repo | One-off run | `npx depfresh` |
+| Keep depfresh available on your machine | Global CLI install | `pnpm add -g depfresh` |
+| Pin depfresh in a project for consistent team/CI runs | Local devDependency | `npm install -D depfresh` |
 
 Lost? `depfresh help` prints every flag and mode. `depfresh --help-json` spits out the full CLI contract as JSON for the robots. Between the two of them, there's no excuse for not knowing what this thing does.
 
