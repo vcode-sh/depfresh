@@ -19,8 +19,8 @@ Every option from the `depfreshOptions` interface. I documented all of them beca
 
 | Option | Type | Default | Description |
 |---|---|---|---|
-| `include` | `string[]` | `undefined` | Only check these packages. Supports exact names. |
-| `exclude` | `string[]` | `undefined` | Skip these packages. For that one dependency you're not ready to deal with. |
+| `include` | `string[]` | `undefined` | Only check packages matching these patterns. Supports regex, `/regex/flags`, and glob syntax. |
+| `exclude` | `string[]` | `undefined` | Skip packages matching these patterns. Supports regex, `/regex/flags`, and glob syntax. |
 | `depFields` | `Partial<Record<DepFieldType, boolean>>` | `undefined` | Control which dependency types are checked. See [depFields](#depfields). |
 | `packageMode` | `Record<string, RangeMode>` | `undefined` | Per-package version strategies. See [packageMode](#packagemode). |
 
@@ -61,7 +61,7 @@ Every option from the `depfreshOptions` interface. I documented all of them beca
 | `timediff` | `boolean` | `true` | Show time since last publish. Guilt-trip yourself into updating. |
 | `cooldown` | `number` | `0` | Minimum age in days before suggesting an update. Wait for the early adopters to find the bugs first. |
 | `nodecompat` | `boolean` | `true` | Check Node engine compatibility and warn about incompatible updates. |
-| `long` | `boolean` | `false` | Extended display with homepage, description, and repository links. |
+| `long` | `boolean` | `false` | Extended display with the package homepage URL. |
 | `explain` | `boolean` | `false` | Show human-readable explanations in the interactive detail view. "Breaking change." for majors, "Bug fixes only." for patches. Only does anything with `interactive: true`. |
 
 ## Exit Behavior

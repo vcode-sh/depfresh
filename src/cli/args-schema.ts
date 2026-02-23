@@ -40,12 +40,12 @@ export const args: ArgsDef = {
   include: {
     type: 'string',
     alias: 'n',
-    description: 'Only include packages matching this regex (comma-separated)',
+    description: 'Only include packages matching these regex/glob patterns (comma-separated)',
   },
   exclude: {
     type: 'string',
     alias: 'x',
-    description: 'Exclude packages matching this regex (comma-separated)',
+    description: 'Exclude packages matching these regex/glob patterns (comma-separated)',
   },
   force: {
     type: 'boolean',

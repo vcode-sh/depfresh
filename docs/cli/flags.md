@@ -1,6 +1,6 @@
 # CLI Flags
 
-Every flag depfresh accepts. All 27+ of them. I counted so you don't have to.
+Every flag depfresh accepts. All of them. I counted so you don't have to.
 
 ## Quick Start
 
@@ -94,8 +94,8 @@ The output includes supported flags, defaults, valid enum values, and exit-code 
 
 | Flag | Alias | Type | Default | Description |
 |------|-------|------|---------|-------------|
-| `--include <patterns>` | `-n` | string | -- | Only include packages matching these regex patterns (comma-separated). Everything else gets ghosted. |
-| `--exclude <patterns>` | `-x` | string | -- | Exclude packages matching these regex patterns (comma-separated). Pretend they don't exist. |
+| `--include <patterns>` | `-n` | string | -- | Only include packages matching these regex/glob patterns (comma-separated). Everything else gets ghosted. |
+| `--exclude <patterns>` | `-x` | string | -- | Exclude packages matching these regex/glob patterns (comma-separated). Pretend they don't exist. |
 | `--ignore-paths <patterns>` | -- | string | -- | Additional ignore glob patterns (comma-separated) merged with default ignore paths. Useful for skipping specific folders during recursive scan. |
 | `--deps-only` | -- | boolean | `false` | Only check `dependencies`. Ignores devDependencies, peerDependencies, and optionalDependencies. |
 | `--dev-only` | -- | boolean | `false` | Only check `devDependencies`. The inverse of `--deps-only`. Using both simultaneously is not recommended unless you enjoy empty results. |

@@ -2,6 +2,7 @@ import { defineCommand, runMain } from 'citty'
 import { version } from '../../package.json' with { type: 'json' }
 import { args } from './args-schema'
 import { normalizeCliRawArgs } from './raw-args'
+import { showUsageWithLinks } from './usage'
 import './signals'
 
 const main = defineCommand({
@@ -59,4 +60,5 @@ const main = defineCommand({
 
 runMain(main, {
   rawArgs: normalizeCliRawArgs(process.argv.slice(2)),
+  showUsage: showUsageWithLinks,
 })
