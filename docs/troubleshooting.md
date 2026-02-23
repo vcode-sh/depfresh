@@ -20,6 +20,7 @@ The most popular cry for help. depfresh scans for `package.json` files using glo
 If your package.json lives somewhere exotic that matches one of these patterns, depfresh will politely pretend it doesn't exist. Override with `ignorePaths` in your `.depfreshrc` config.
 
 **Recursive is on by default.** `recursive: true` means depfresh walks subdirectories. If you only want the root package, set `--no-recursive`. If you DO want subdirectories and still see nothing — re-read the ignorePaths section. I'll wait.
+In non-recursive mode, depfresh only checks the root `package.json` and skips workspace catalog files.
 
 **Nested workspace detection.** `--ignore-other-workspaces` defaults to `true`. If your monorepo contains _other_ monorepos (congrats on that life choice), depfresh skips packages belonging to nested workspaces. It detects these by looking for `pnpm-workspace.yaml`, `.yarnrc.yml`, `workspaces` fields, or `.git` directories between the package and your root. Disable with `--no-ignore-other-workspaces` if you actually want to scan everything.
 
@@ -32,6 +33,18 @@ You ran depfresh. It found updates. It showed you a lovely table. And then... no
 **Is `--interactive` on?** In interactive mode, you pick which deps to update. If you selected nothing (or hit Ctrl+C), nothing gets written. That's the deal.
 
 **Did `beforePackageWrite` return false?** If you're using the programmatic API with a `beforePackageWrite` callback that returns `false`, depfresh skips writing that package. Check your own code. I'm not debugging your callbacks for you.
+
+## "Invalid value for --mode/--output/--sort/--loglevel"
+
+depfresh validates enum flags strictly and exits with code `2` for invalid values. There is no fallback to defaults for these flags.
+
+```bash
+# invalid
+depfresh --sort ascending
+
+# valid
+depfresh --sort name-asc
+```
 
 ## Private registry auth fails
 
@@ -165,8 +178,6 @@ All errors include `.cause` when wrapping a lower-level failure. If you're debug
 ---
 
 ## Known limitations
-
-**SARIF output.** The type exists in the codebase. The implementation doesn't. Yet.
 
 **Yarn global packages.** `--global` supports npm, pnpm, and bun. Yarn global is not supported. I don't make the rules. Actually I do, and I chose not to support it.
 

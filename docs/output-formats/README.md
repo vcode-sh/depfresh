@@ -1,14 +1,12 @@
 # Output Formats
 
-Because apparently "printing text to a terminal" needs a whole document now. depfresh supports three output formats. Well, two and a half -- one of them doesn't exist yet.
+Because apparently "printing text to a terminal" needs a whole document now. depfresh supports two output formats.
 
 ## Pages
 
 - **[Table](./table.md)** -- The default. Colourful tables, colour-coded diffs, sorting options, and display flags. For humans with eyeballs.
 
 - **[JSON](./json.md)** -- Machine-readable envelope with packages, summary, and metadata. Plus AI agent integration notes. For scripts, CI, and robots.
-
-- **[SARIF](./sarif.md)** -- Static Analysis Results Interchange Format. Coming eventually. The type exists. The implementation doesn't.
 
 ## Exit Codes
 
@@ -25,5 +23,4 @@ The `--fail-on-outdated` flag is designed for CI pipelines. Without it, finding 
 ```bash
 depfresh --output table   # default -- for humans
 depfresh --output json    # for machines, scripts, and AI agents
-depfresh --output sarif   # for... eventually
 ```

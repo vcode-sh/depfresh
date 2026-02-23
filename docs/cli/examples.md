@@ -53,6 +53,9 @@ depfresh --fail-on-outdated --output json
 # JSON output for parsing
 depfresh --output json | jq '.summary'
 
+# Machine-discoverability contract
+depfresh --help-json
+
 # Safe update for automation
 depfresh --write --mode minor
 ```
@@ -224,6 +227,8 @@ Requires a TTY. If you're piping output, running in CI, or inside a non-interact
 **/coverage/**
 **/.git/**
 ```
+
+Set `--no-recursive` to restrict discovery to the root `package.json` only. In non-recursive mode, workspace catalog files are not loaded.
 
 ### Nested Workspaces
 

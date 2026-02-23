@@ -4,7 +4,7 @@ import type { depfreshOptions, PackageMeta, ResolvedDepChange } from '../../type
 import type { Logger } from '../../utils/logger'
 import type { loadNpmrc } from '../../utils/npmrc'
 import { selectInteractiveUpdates } from './post-write-actions'
-import { applyPackageWrite } from './write-flow'
+import { applyPackageWrite, type PackageWriteResult } from './write-flow'
 
 export interface ProcessPackageHooks {
   cache: ReturnType<typeof createSqliteCache>
@@ -13,6 +13,8 @@ export interface ProcessPackageHooks {
   onDependencyProcessed: () => void
   onHasUpdates: (updates: ResolvedDepChange[]) => void
   onAllModeNoUpdates: () => void
+  onPlannedUpdates: (count: number) => void
+  onWriteResult: (result: PackageWriteResult) => void
   onDidWrite: () => void
   logger: Logger
 }
@@ -50,7 +52,12 @@ export async function processPackage(
     const shouldWrite = (await options.beforePackageWrite?.(pkg)) ?? true
     if (!shouldWrite) return
 
-    if (await applyPackageWrite(pkg, selected, options, hooks.logger)) {
+    hooks.onPlannedUpdates(selected.length)
+
+    const writeResult = await applyPackageWrite(pkg, selected, options, hooks.logger)
+    hooks.onWriteResult(writeResult)
+
+    if (writeResult.didWrite) {
       hooks.onDidWrite()
     }
     await options.afterPackageWrite?.(pkg)

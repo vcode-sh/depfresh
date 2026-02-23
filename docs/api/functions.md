@@ -81,7 +81,7 @@ export default defineConfig({
 
 ## `loadPackages(options)`
 
-Finds and parses `package.json` files in your project. Respects `recursive`, `ignorePaths`, `ignoreOtherWorkspaces`. Also loads workspace catalogs (pnpm, bun, yarn) and global packages if `global: true`.
+Finds and parses `package.json` files in your project. Respects `recursive`, `ignorePaths`, `ignoreOtherWorkspaces`. Loads workspace catalogs (pnpm, bun, yarn) only when `recursive: true`, and supports global packages when `global: true`.
 
 ```ts
 function loadPackages(options: depfreshOptions): Promise<PackageMeta[]>

@@ -2,7 +2,7 @@ import type { RawDep, ResolvedDepChange } from './dependencies'
 
 export type PackageManagerName = 'npm' | 'pnpm' | 'yarn' | 'bun'
 
-export type OutputFormat = 'table' | 'json' | 'sarif'
+export type OutputFormat = 'table' | 'json'
 
 export interface PackageManagerField {
   name: PackageManagerName

@@ -22,9 +22,12 @@ Everything I know about depfresh is in here, split into files so you can pretend
   - [Types](./api/types.md) -- the type catalogue
   - [Errors](./api/errors.md) -- structured error classes
 
-- **[Output Formats](./output-formats/)** -- Table, JSON, SARIF, exit codes, and AI agent integration. Machines deserve documentation too. They're doing most of the work anyway.
+- **[Output Formats](./output-formats/)** -- Table, JSON, exit codes, and AI agent integration. Machines deserve documentation too. They're doing most of the work anyway.
   - [Table](./output-formats/table.md) -- the default, colourful output
   - [JSON](./output-formats/json.md) -- machine-readable envelope
-  - [SARIF](./output-formats/sarif.md) -- coming eventually
+
+- **[Agent Workflows](./agents/README.md)** -- quickstarts for Codex, Claude Code, and Gemini CLI with copy-paste command patterns.
+
+- **[Integrations](./integrations/README.md)** -- GitHub Actions usage and a thin MCP wrapper reference for tool ecosystems.
 
 - **[Troubleshooting](./troubleshooting.md)** -- Common issues, workspace gotchas, and known limitations. The page you'll find via Google at 2 AM after everything breaks. I've been there. The kettle's already on.

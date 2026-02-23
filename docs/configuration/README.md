@@ -32,4 +32,4 @@ That's everything. If you've read this far, you're either building something ser
 
 - [CLI Reference](../cli/) -- all the flags
 - [Programmatic API](../api/) -- using depfresh as a library
-- [Output Formats](../output-formats/) -- JSON and SARIF schemas
+- [Output Formats](../output-formats/) -- JSON schema and table output behavior

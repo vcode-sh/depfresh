@@ -30,4 +30,4 @@ depfresh --fail-on-outdated --output json
 
 - [Configuration](../configuration/) -- `.depfreshrc`, `depfresh.config.ts`, and `package.json#depfresh`
 - [Programmatic API](../api/) -- using depfresh as a library with callbacks
-- [Output Formats](../output-formats/) -- JSON and SARIF schemas
+- [Output Formats](../output-formats/) -- JSON schema and table output behavior

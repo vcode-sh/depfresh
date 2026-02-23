@@ -4,7 +4,12 @@ import { loadPackages } from '../../io/packages'
 import type { depfreshOptions, ResolvedDepChange } from '../../types'
 import { createLogger } from '../../utils/logger'
 import { loadNpmrc } from '../../utils/npmrc'
-import { buildJsonPackage, type JsonPackage, outputJsonEnvelope } from './json-output'
+import {
+  buildJsonPackage,
+  type JsonExecutionState,
+  type JsonPackage,
+  outputJsonEnvelope,
+} from './json-output'
 import { runInstall, runUpdate } from './package-manager'
 import { renderUpToDate, runExecute } from './post-write-actions'
 import { processPackage } from './process-package'
@@ -17,11 +22,20 @@ export async function check(options: depfreshOptions): Promise<number> {
 
   try {
     const packages = await loadPackages(options)
+    const executionState: JsonExecutionState = {
+      scannedPackages: packages.length,
+      packagesWithUpdates: 0,
+      plannedUpdates: 0,
+      appliedUpdates: 0,
+      revertedUpdates: 0,
+      noPackagesFound: packages.length === 0,
+      didWrite: false,
+    }
 
     if (packages.length === 0) {
       logger.warn('No packages found')
       if (options.output === 'json') {
-        outputJsonEnvelope([], options)
+        outputJsonEnvelope([], options, executionState)
       }
       return 0
     }
@@ -47,6 +61,7 @@ export async function check(options: depfreshOptions): Promise<number> {
           onDependencyProcessed: () => progress?.onDependencyProcessed(),
           onHasUpdates: (updates: ResolvedDepChange[]) => {
             hasUpdates = true
+            executionState.packagesWithUpdates += 1
             if (options.output === 'json') {
               jsonPackages.push(buildJsonPackage(pkg.name, updates))
             } else {
@@ -61,8 +76,16 @@ export async function check(options: depfreshOptions): Promise<number> {
               renderUpToDate(pkg.name)
             }
           },
+          onPlannedUpdates: (count: number) => {
+            executionState.plannedUpdates += count
+          },
+          onWriteResult: (result) => {
+            executionState.appliedUpdates += result.applied
+            executionState.revertedUpdates += result.reverted
+          },
           onDidWrite: () => {
             didWrite = true
+            executionState.didWrite = true
           },
           logger,
         })
@@ -89,7 +112,7 @@ export async function check(options: depfreshOptions): Promise<number> {
     }
 
     if (options.output === 'json') {
-      outputJsonEnvelope(jsonPackages, options)
+      outputJsonEnvelope(jsonPackages, options, executionState)
     }
 
     if (!hasUpdates) {

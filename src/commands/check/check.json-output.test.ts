@@ -55,9 +55,17 @@ describe('JSON output', () => {
     expect(output.summary.major).toBe(1)
     expect(output.summary.minor).toBe(1)
     expect(output.summary.packages).toBe(1)
+    expect(output.summary.scannedPackages).toBe(1)
+    expect(output.summary.packagesWithUpdates).toBe(1)
+    expect(output.summary.plannedUpdates).toBe(0)
+    expect(output.summary.appliedUpdates).toBe(0)
+    expect(output.summary.revertedUpdates).toBe(0)
+    expect(output.meta.schemaVersion).toBe(1)
     expect(output.meta.cwd).toBe('/tmp/test')
     expect(output.meta.mode).toBeDefined()
     expect(output.meta.timestamp).toBeDefined()
+    expect(output.meta.noPackagesFound).toBe(false)
+    expect(output.meta.didWrite).toBe(false)
 
     consoleSpy.mockRestore()
   })
@@ -129,6 +137,79 @@ describe('JSON output', () => {
     const output = JSON.parse(jsonCall![0] as string)
     const update = output.packages[0].updates[0]
     expect(update.currentVersionTime).toBeUndefined()
+
+    consoleSpy.mockRestore()
+  })
+
+  it('reports noPackagesFound state in JSON envelope', async () => {
+    mocks.loadPackagesMock.mockResolvedValue([])
+
+    const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+
+    const { check } = await import('./index')
+    await check({ ...baseOptions, output: 'json' })
+
+    const jsonCall = consoleSpy.mock.calls.find((call) => {
+      try {
+        const parsed = JSON.parse(call[0] as string)
+        return parsed.packages !== undefined
+      } catch {
+        return false
+      }
+    })
+
+    expect(jsonCall).toBeDefined()
+    const output = JSON.parse(jsonCall![0] as string)
+    expect(output.packages).toEqual([])
+    expect(output.summary.scannedPackages).toBe(0)
+    expect(output.summary.packagesWithUpdates).toBe(0)
+    expect(output.summary.plannedUpdates).toBe(0)
+    expect(output.summary.appliedUpdates).toBe(0)
+    expect(output.summary.revertedUpdates).toBe(0)
+    expect(output.meta.noPackagesFound).toBe(true)
+    expect(output.meta.didWrite).toBe(false)
+
+    consoleSpy.mockRestore()
+  })
+
+  it('reports planned/applied/reverted counters for verify-command writes', async () => {
+    const pkg = makePkg('my-app')
+    const dep = makeResolved({
+      name: 'lodash',
+      diff: 'major',
+      currentVersion: '^4.0.0',
+      targetVersion: '^5.0.0',
+    })
+    mocks.loadPackagesMock.mockResolvedValue([pkg])
+    mocks.resolvePackageMock.mockResolvedValue([dep])
+    mocks.execSyncMock.mockImplementation(() => {
+      throw new Error('verify failed')
+    })
+
+    const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+
+    const { check } = await import('./index')
+    await check({ ...baseOptions, output: 'json', write: true, verifyCommand: 'npm test' })
+
+    const jsonCall = consoleSpy.mock.calls.find((call) => {
+      try {
+        const parsed = JSON.parse(call[0] as string)
+        return parsed.packages !== undefined
+      } catch {
+        return false
+      }
+    })
+
+    expect(jsonCall).toBeDefined()
+    const output = JSON.parse(jsonCall![0] as string)
+    expect(output.summary.total).toBe(1)
+    expect(output.summary.scannedPackages).toBe(1)
+    expect(output.summary.packagesWithUpdates).toBe(1)
+    expect(output.summary.plannedUpdates).toBe(1)
+    expect(output.summary.appliedUpdates).toBe(0)
+    expect(output.summary.revertedUpdates).toBe(1)
+    expect(output.meta.noPackagesFound).toBe(false)
+    expect(output.meta.didWrite).toBe(false)
 
     consoleSpy.mockRestore()
   })
