@@ -124,7 +124,8 @@ async function runLargeDependencyScenario() {
 
   await rm(root, { recursive: true, force: true })
 
-  const depfreshProcessed = (depfresh.parsedJson?.summary?.total ?? 0) + (depfresh.parsedJson?.errors?.length ?? 0)
+  const depfreshProcessed =
+    (depfresh.parsedJson?.summary?.total ?? 0) + (depfresh.parsedJson?.errors?.length ?? 0)
 
   return {
     id: scenarioId,
@@ -204,13 +205,7 @@ async function runCorruptCacheScenario() {
   }
 }
 
-async function runDepfresh({
-  cwd,
-  home,
-  args,
-  env = {},
-  artifactDir,
-}) {
+async function runDepfresh({ cwd, home, args, env = {}, artifactDir }) {
   const result = await runCommand({
     command: 'node',
     args: ['--import', 'tsx', join(repoRoot, 'src/cli/index.ts'), '--cwd', cwd, ...args],
@@ -273,7 +268,7 @@ function summarizeTaze(run) {
 
 function tryParseJson(raw) {
   const trimmed = raw.trim()
-  if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) {
+  if (!(trimmed.startsWith('{') || trimmed.startsWith('['))) {
     return null
   }
   try {
@@ -345,7 +340,9 @@ async function getDepfreshVersion() {
 }
 
 async function fetchNpmPackageNames(count) {
-  const response = await fetch('https://registry.npmjs.org/-/v1/search?text=keywords:javascript&size=250')
+  const response = await fetch(
+    'https://registry.npmjs.org/-/v1/search?text=keywords:javascript&size=250',
+  )
   if (!response.ok) {
     throw new Error(`Failed to fetch npm package sample: HTTP ${response.status}`)
   }
