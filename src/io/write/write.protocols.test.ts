@@ -111,4 +111,28 @@ describe('writePackage protocol preservation', () => {
     expect(result).toContain('\r\n')
     expect(result).not.toMatch(/[^\r]\n/)
   })
+
+  it('preserves npm: and jsr: protocols in package.yaml', () => {
+    const filepath = join(tmpDir, 'package.yaml')
+    const content = [
+      'name: test',
+      'dependencies:',
+      '  my-lodash: npm:lodash@^1.0.0',
+      '  my-pkg: jsr:@scope/name@^1.0.0',
+      '',
+    ].join('\n')
+    writeFileSync(filepath, content)
+
+    const pkg = makePkg(filepath, {}, { type: 'package.yaml' })
+    const changes = [
+      makeChange({ name: 'my-lodash', source: 'dependencies', targetVersion: '^2.0.0' }),
+      makeChange({ name: 'my-pkg', source: 'dependencies', targetVersion: '^3.0.0' }),
+    ]
+
+    writePackage(pkg, changes, 'silent')
+
+    const result = readFileSync(filepath, 'utf-8')
+    expect(result).toContain('my-lodash: npm:lodash@^2.0.0')
+    expect(result).toContain('my-pkg: jsr:@scope/name@^3.0.0')
+  })
 })

@@ -69,8 +69,14 @@ depfresh --write --mode minor
 # Global package audit
 depfresh -g --all
 
+# Global audit across npm + pnpm + bun (deduped names)
+depfresh --global-all --all
+
 # Update all global packages
 depfresh -gw
+
+# Update all global package managers in one run
+depfresh --global-all -w
 ```
 
 ## Monorepos
@@ -222,7 +228,7 @@ Requires a TTY. If you're piping output, running in CI, or inside a non-interact
 
 ### Recursive Scanning
 
-`--recursive` (on by default) scans subdirectories for `package.json` files. It respects the `ignorePaths` config option, which defaults to:
+`--recursive` (on by default) scans subdirectories for package manifests (`package.json`, `package.yaml`). It respects the `ignorePaths` config option, which defaults to:
 
 ```
 **/node_modules/**
@@ -231,13 +237,29 @@ Requires a TTY. If you're piping output, running in CI, or inside a non-interact
 **/.git/**
 ```
 
-Set `--no-recursive` to restrict discovery to the root `package.json` only. In non-recursive mode, workspace catalog files are not loaded.
+Set `--no-recursive` to restrict discovery to root manifest files only (`package.json`, `package.yaml`). In non-recursive mode, workspace catalog files are not loaded.
+
+Use `--ignore-paths` to add extra skip rules without editing config:
+
+```bash
+depfresh --ignore-paths "apps/legacy/**,examples/**"
+```
 
 ### Nested Workspaces
 
 `--ignore-other-workspaces` (on by default) detects when a subdirectory belongs to a separate workspace (has its own workspace root) and skips it. This prevents depfresh from double-processing packages in monorepo-within-monorepo setups.
 
 Disable with `--no-ignore-other-workspaces` if you genuinely want to process everything.
+
+### Cache Refresh
+
+Force fresh registry metadata for one run:
+
+```bash
+depfresh --refresh-cache
+# alias:
+depfresh --no-cache
+```
 
 ### Catalog Support
 
@@ -247,4 +269,4 @@ depfresh understands workspace catalogs for **pnpm**, **bun**, and **yarn**:
 - **bun**: Reads catalog entries from `bunfig.toml`
 - **yarn**: Reads catalog entries from `.yarnrc.yml`
 
-Catalog dependencies are resolved and updated alongside regular dependencies. When writing, depfresh updates both the catalog source file and any `package.json` files that reference it.
+Catalog dependencies are resolved and updated alongside regular dependencies. When writing, depfresh updates both the catalog source file and any package manifests that reference it.

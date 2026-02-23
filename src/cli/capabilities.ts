@@ -90,7 +90,7 @@ const FLAG_RELATIONSHIPS: Record<string, FlagRelationship> = {
 
 const JSON_OUTPUT_SCHEMA: Record<string, string> = {
   'packages[]': 'Array of scanned packages with their updates',
-  'packages[].name': 'Package name from package.json',
+  'packages[].name': 'Package name from package manifest',
   'packages[].updates[]': 'Array of dependencies with available updates',
   'packages[].updates[].name': 'Dependency name',
   'packages[].updates[].current': 'Current version range',

@@ -7,11 +7,11 @@ Every option from the `depfreshOptions` interface. I documented all of them beca
 | Option | Type | Default | Description |
 |---|---|---|---|
 | `cwd` | `string` | `'.'` | Working directory. Where depfresh starts looking for packages. |
-| `recursive` | `boolean` | `true` | Search for `package.json` files in subdirectories. |
+| `recursive` | `boolean` | `true` | Search for package manifests (`package.json`, `package.yaml`) in subdirectories. |
 | `mode` | `RangeMode` | `'default'` | Global version resolution strategy. See [Modes](../cli/modes.md) for all modes. |
 | `write` | `boolean` | `false` | Actually update the files. Without this, depfresh is just a very opinionated reporter. |
 | `interactive` | `boolean` | `false` | Launch the TUI for cherry-picking updates. Vim keys, version drill-down, the works. Falls back to `@clack/prompts` in non-TTY. |
-| `force` | `boolean` | `false` | Include packages even when they're already up to date. |
+| `force` | `boolean` | `false` | Include packages even when they're already up to date. Does not bypass cache reads. |
 | `includeLocked` | `boolean` | `false` | Check packages that are pinned to exact versions. |
 | `includeWorkspace` | `boolean` | `true` | Include workspace protocol (`workspace:*`) dependencies. |
 
@@ -32,6 +32,7 @@ Every option from the `depfreshOptions` interface. I documented all of them beca
 | `timeout` | `number` | `10000` | Request timeout in milliseconds. 10 seconds is generous. |
 | `retries` | `number` | `2` | Retry count for failed requests. Because networks are unreliable and life is pain. |
 | `cacheTTL` | `number` | `1800000` | Cache lifetime in milliseconds. 30 minutes by default. Set to `0` to disable. |
+| `refreshCache` | `boolean` | `false` | Bypass cache reads for this run and fetch fresh registry metadata. Cache writes still happen unless `cacheTTL=0`. |
 
 ## Output
 
@@ -40,7 +41,8 @@ Every option from the `depfreshOptions` interface. I documented all of them beca
 | `output` | `'table' \| 'json'` | `'table'` | Output format. `json` for machines, `table` for humans who enjoy ASCII art. |
 | `loglevel` | `'silent' \| 'info' \| 'debug'` | `'info'` | How chatty depfresh should be. `debug` for when you need to file a bug report. |
 | `peer` | `boolean` | `false` | Show peer dependency hints. |
-| `global` | `boolean` | `false` | Check globally installed packages instead of project dependencies. |
+| `global` | `boolean` | `false` | Check globally installed packages for one detected package manager. |
+| `globalAll` | `boolean` | `false` | Scan npm, pnpm, and bun globals together and deduplicate by package name. |
 
 ## Paths
 
@@ -78,6 +80,14 @@ These only matter when `write: true`.
 | `update` | `boolean` | `false` | Run package manager update after writing. Slightly different from install, depending on your package manager's mood. |
 | `execute` | `string` | `undefined` | Shell command to run after updates are written. `'npm test'`, `'make coffee'`, whatever you need. |
 | `verifyCommand` | `string` | `undefined` | Command to run after each package update to verify nothing is broken. If it exits non-zero, the update is rolled back. Safety nets are underrated. |
+
+## Addons
+
+Addons are first-class plugins for the programmatic API and TypeScript config files. They run alongside callbacks and can hook the full check lifecycle.
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `addons` | `depfreshAddon[]` | `undefined` | Ordered addon list. Each addon can hook setup, package lifecycle, dependency resolution, and write phases. |
 
 ## Callbacks
 

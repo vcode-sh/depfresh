@@ -46,6 +46,19 @@ describe('backupPackageFiles', () => {
     expect(backups[0]!.content).toBe(content)
   })
 
+  it('captures package.yaml main file content', () => {
+    const filepath = join(tmpDir, 'package.yaml')
+    const content = 'name: test\nversion: 1.0.0\n'
+    writeFileSync(filepath, content)
+
+    const pkg = makePkg(filepath, { name: 'test' }, { type: 'package.yaml' })
+    const backups = backupPackageFiles(pkg)
+
+    expect(backups).toHaveLength(1)
+    expect(backups[0]!.filepath).toBe(filepath)
+    expect(backups[0]!.content).toBe(content)
+  })
+
   it('captures catalog files when present', () => {
     const filepath = join(tmpDir, 'package.json')
     const catalogPath = join(tmpDir, 'pnpm-workspace.yaml')

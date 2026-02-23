@@ -4,7 +4,7 @@ The `--mode` flag controls how depfresh picks target versions. It's the philosop
 
 ## `default`
 
-Respects existing range prefixes. If your `package.json` says `^1.2.3`, depfresh finds the latest version that satisfies `^1.x.x`. If it says `~1.2.3`, you get the latest `1.2.x`. This is the polite, society-approved mode.
+Respects existing range prefixes. If your manifest says `^1.2.3`, depfresh finds the latest version that satisfies `^1.x.x`. If it says `~1.2.3`, you get the latest `1.2.x`. This is the polite, society-approved mode.
 
 ## `major`
 
@@ -49,7 +49,7 @@ Not available via CLI flags -- this one's for the config file's `packageMode` op
 
 | Mode | What it does |
 |------|-------------|
-| `default` | Respects the existing semver range in your `package.json` |
+| `default` | Respects the existing semver range in your manifest |
 | `major` | Allows major version jumps. Brave. |
 | `minor` | Up to minor updates. The sensible middle ground. |
 | `patch` | Patch updates only. Maximum conservatism. |

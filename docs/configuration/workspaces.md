@@ -4,7 +4,7 @@ Monorepos, catalogs, and the art of scanning too many directories. This page cov
 
 ## Recursive Scanning
 
-`recursive` (default: `true`) tells depfresh to scan subdirectories for `package.json` files. It respects `ignorePaths`, which defaults to:
+`recursive` (default: `true`) tells depfresh to scan subdirectories for package manifests (`package.json`, `package.yaml`). It respects `ignorePaths`, which defaults to:
 
 ```
 **/node_modules/**
@@ -13,7 +13,9 @@ Monorepos, catalogs, and the art of scanning too many directories. This page cov
 **/.git/**
 ```
 
-Set `recursive: false` if you only want the root `package.json`. In non-recursive mode, depfresh does not load workspace catalogs. Override `ignorePaths` if your project structure is... creative.
+Set `recursive: false` if you only want root manifest files (`package.json`, `package.yaml`). In non-recursive mode, depfresh does not load workspace catalogs. Override `ignorePaths` if your project structure is... creative.
+
+If both `package.yaml` and `package.json` exist in the same directory, depfresh prefers `package.yaml`.
 
 ```typescript
 import { defineConfig } from 'depfresh'
@@ -36,7 +38,7 @@ export default defineConfig({
 
 - `pnpm-workspace.yaml`
 - `.yarnrc.yml`
-- `workspaces` field in `package.json`
+- `workspaces` field in `package.json` or `package.yaml`
 - `.git` directories between the package and your root
 
 This prevents depfresh from double-processing packages in monorepo-within-monorepo setups. If you genuinely want to scan everything, set it to `false`. But you probably don't.
@@ -101,7 +103,7 @@ catalog:
 
 ### How catalogs are updated
 
-Catalog dependencies are resolved and updated alongside regular dependencies. When writing (`--write`), depfresh updates both the catalog source file and any `package.json` files that reference it. The catalog protocol references (`catalog:`, `catalog:<name>`) are preserved -- depfresh only changes the version in the source file.
+Catalog dependencies are resolved and updated alongside regular dependencies. When writing (`--write`), depfresh updates both the catalog source file and any manifest files that reference it. The catalog protocol references (`catalog:`, `catalog:<name>`) are preserved -- depfresh only changes the version in the source file.
 
 ## Workspace Protocol
 

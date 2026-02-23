@@ -52,3 +52,14 @@ export class ResolveError extends depfreshError {
     super(message, 'ERR_RESOLVE', options)
   }
 }
+
+export class AddonError extends depfreshError {
+  readonly addon: string
+  readonly hook: string
+
+  constructor(message: string, addon: string, hook: string, options: depfreshErrorOptions = {}) {
+    super(message, 'ERR_ADDON', options)
+    this.addon = addon
+    this.hook = hook
+  }
+}

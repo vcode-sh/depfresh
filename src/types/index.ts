@@ -1,3 +1,4 @@
+export type { AddonContext, AddonHookName, depfreshAddon } from '../addons/types'
 export type {
   DepFieldType,
   DiffType,

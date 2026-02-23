@@ -10,6 +10,10 @@ export interface ProcessPackageHooks {
   cache: ReturnType<typeof createSqliteCache>
   npmrc: ReturnType<typeof loadNpmrc>
   workspacePackageNames: Set<string>
+  beforePackageStart: (pkg: PackageMeta) => void | Promise<void>
+  beforePackageWrite: (pkg: PackageMeta, changes: ResolvedDepChange[]) => boolean | Promise<boolean>
+  afterPackageWrite: (pkg: PackageMeta, changes: ResolvedDepChange[]) => void | Promise<void>
+  afterPackageEnd: (pkg: PackageMeta) => void | Promise<void>
   onDependencyProcessed: () => void
   onHasUpdates: (updates: ResolvedDepChange[]) => void
   onErrorDeps: (errors: ResolvedDepChange[]) => void
@@ -25,7 +29,7 @@ export async function processPackage(
   options: depfreshOptions,
   hooks: ProcessPackageHooks,
 ): Promise<void> {
-  await options.beforePackageStart?.(pkg)
+  await hooks.beforePackageStart(pkg)
   try {
     pkg.resolved = await resolvePackage(
       pkg,
@@ -55,7 +59,7 @@ export async function processPackage(
 
     if (!options.write || selected.length === 0) return
 
-    const shouldWrite = (await options.beforePackageWrite?.(pkg)) ?? true
+    const shouldWrite = await hooks.beforePackageWrite(pkg, selected)
     if (!shouldWrite) return
 
     hooks.onPlannedUpdates(selected.length)
@@ -66,8 +70,8 @@ export async function processPackage(
     if (writeResult.didWrite) {
       hooks.onDidWrite()
     }
-    await options.afterPackageWrite?.(pkg)
+    await hooks.afterPackageWrite(pkg, selected)
   } finally {
-    await options.afterPackageEnd?.(pkg)
+    await hooks.afterPackageEnd(pkg)
   }
 }

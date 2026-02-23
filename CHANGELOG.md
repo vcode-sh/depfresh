@@ -2,6 +2,32 @@
 
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Semver because I'm not a psychopath.
 
+## [0.11.0] - 2026-02-23
+
+The "close every gap or shut up" release. Ran a full codebase audit against taze, found 5 gaps, closed all 5 in one pass. Verified with real code inspection, runtime test runs, and CLI smoke checks on actual repos. Not vibes. Not a roadmap. Shipped code with 598 passing tests.
+
+### Added
+
+- **Addon/plugin system** -- first-class `addons` with deterministic lifecycle ordering, async hooks, and per-package write veto. Failures surface as `AddonError` (`ERR_ADDON`) with addon name + hook metadata. Debugging no longer requires telepathy.
+- **`package.yaml` support** -- full pipeline: discovery, resolve, write. Both `package.json` and `package.yaml` load, with deterministic same-directory precedence (YAML wins). Overrides, `pnpm.overrides`, `packageManager`, protocol-preserving rewrites, CRLF/trailing-newline preservation -- all work. Workspace-boundary parity included.
+- **`--global-all`** -- scans npm + pnpm + bun global packages in one run. Dedupes by package name, maps write targets back to every matching manager. `--global` still works for single-manager mode.
+- **`--ignore-paths`** -- exclude directories from package discovery. The flag taze had that we didn't. Now we do.
+- **`--refresh-cache` / `--no-cache`** -- explicit cache bypass without overloading `--force` semantics. Fresh registry metadata, no guessing.
+
+### Fixed
+
+- **`.npmrc` transport fidelity** -- registry requests now actually use `proxy`, `https-proxy`, `strict-ssl`, and `cafile` via `undici` transport. Previously parsed, politely ignored. HTTPS prefers `https-proxy`, HTTP prefers `proxy`, CA bundles loaded once and reused.
+- **Non-transient transport failures fail fast** -- broken `cafile` paths no longer waste retry attempts. `ResolveError` immediately. You're welcome.
+- **JSON output cleaned** -- `--output json` forces silent logging. No ANSI cursor restore leaking into stdout in non-TTY. Machine-parseable means machine-parseable.
+
+### Changed
+
+- **Docs parity** -- all new flags documented in README, CLI reference, and configuration docs. No "added the flag, forgot the docs" energy.
+
+### Stats
+
+- 60 new tests (538 -> 598). 77 test files. Build, typecheck, lint clean. Verified against taze v19.9.2 (55 tests, 13 test files). The numbers speak.
+
 ## [0.10.1] - 2026-02-23
 
 The "your age column was a decoration" patch. Turns out npm's abbreviated metadata endpoint doesn't return the `time` field, so the age column was rendering headers with no data like a restaurant menu with no prices. Switched to full metadata. The cache means you pay the bandwidth once per TTL, cry about it never.
@@ -296,6 +322,7 @@ First release. Wrote it from scratch because waiting for PRs to get merged in ta
 - TTY detection. No spinners in your CI logs. `NO_COLOR` respected.
 - 54 tests. More than some production apps I've seen.
 
+[0.11.0]: https://github.com/vcode-sh/depfresh/releases/tag/v0.11.0
 [0.10.1]: https://github.com/vcode-sh/depfresh/releases/tag/v0.10.1
 [0.10.0]: https://github.com/vcode-sh/depfresh/releases/tag/v0.10.0
 [0.9.2]: https://github.com/vcode-sh/depfresh/releases/tag/v0.9.2

@@ -1,11 +1,6 @@
 import { execSync } from 'node:child_process'
 import { backupPackageFiles, restorePackageFiles, writePackage } from '../../io/write'
-import type {
-  depfreshOptions,
-  PackageManagerName,
-  PackageMeta,
-  ResolvedDepChange,
-} from '../../types'
+import type { depfreshOptions, PackageMeta, ResolvedDepChange } from '../../types'
 import type { Logger } from '../../utils/logger'
 
 export interface PackageWriteResult {
@@ -71,16 +66,24 @@ export async function applyPackageWrite(
   }
 
   if (pkg.type === 'global') {
-    const { writeGlobalPackage } = await import('../../io/global')
-    const pmName = pkg.filepath.replace('global:', '') as PackageManagerName
+    const { getGlobalWriteTargets, writeGlobalPackage } = await import('../../io/global')
+    let applied = 0
     for (const change of changes) {
-      writeGlobalPackage(pmName, change.name, change.targetVersion)
+      const targets = getGlobalWriteTargets(pkg, change.name)
+      if (targets.length === 0) {
+        logger.warn(`Skipped global update for ${change.name}: no package manager target found`)
+        continue
+      }
+      for (const pmName of targets) {
+        writeGlobalPackage(pmName, change.name, change.targetVersion)
+      }
+      applied++
     }
     return {
       planned: changes.length,
-      applied: changes.length,
+      applied,
       reverted: 0,
-      didWrite: true,
+      didWrite: applied > 0,
     }
   }
 

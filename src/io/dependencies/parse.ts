@@ -61,7 +61,9 @@ export function parseDependencies(
     const section = raw[field]
     if (!section || typeof section !== 'object') continue
 
-    for (const [name, version] of Object.entries(section as Record<string, string>)) {
+    for (const [name, rawVersion] of Object.entries(section as Record<string, unknown>)) {
+      if (typeof rawVersion !== 'string') continue
+      const version = rawVersion
       if (shouldSkipDependency(name, version, options, includePatterns, excludePatterns)) continue
 
       const protocol = parseProtocol(version)

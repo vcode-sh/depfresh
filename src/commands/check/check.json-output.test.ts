@@ -71,6 +71,20 @@ describe('JSON output', () => {
     consoleSpy.mockRestore()
   })
 
+  it('forces silent runtime log level in json mode', async () => {
+    mocks.loadPackagesMock.mockResolvedValue([])
+
+    const { check } = await import('./index')
+    await check({ ...baseOptions, output: 'json', loglevel: 'info' })
+
+    expect(mocks.loadPackagesMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        output: 'json',
+        loglevel: 'silent',
+      }),
+    )
+  })
+
   it('includes currentVersionTime when present', async () => {
     const pkg = makePkg('my-app')
     mocks.loadPackagesMock.mockResolvedValue([pkg])

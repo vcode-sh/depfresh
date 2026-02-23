@@ -1,0 +1,44 @@
+# Dependency Freshness -- because "we'll update later" is not a strategy.
+name: Dependency Freshness
+
+on:
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: depfresh-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  depfresh:
+    name: Run depfresh
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24.x
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate depfresh JSON report
+        run: npx --yes depfresh --output json --fail-on-outdated > depfresh-report.json
+        continue-on-error: true
+
+      - name: Upload depfresh report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: depfresh-report
+          path: depfresh-report.json

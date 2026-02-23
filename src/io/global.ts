@@ -1,6 +1,11 @@
 import { execSync } from 'node:child_process'
 import type { PackageManagerName, PackageMeta, RawDep } from '../types'
 import { createLogger } from '../utils/logger'
+import {
+  dedupeGlobalPackageRecords,
+  GLOBAL_ALL_PACKAGE_MANAGERS,
+  getGlobalWriteTargets,
+} from './global-targets'
 
 export function detectGlobalPackageManager(pm?: string): PackageManagerName {
   if (pm && (pm === 'npm' || pm === 'pnpm' || pm === 'bun')) {
@@ -123,6 +128,43 @@ export function loadGlobalPackages(pm?: string): PackageMeta[] {
   ]
 }
 
+export function loadGlobalPackagesAll(): PackageMeta[] {
+  const records = GLOBAL_ALL_PACKAGE_MANAGERS.flatMap((manager) =>
+    listGlobalPackages(manager).map((pkg) => ({
+      manager,
+      name: pkg.name,
+      version: pkg.version,
+    })),
+  )
+
+  if (records.length === 0) {
+    return []
+  }
+
+  const deduped = dedupeGlobalPackageRecords(records)
+  const deps: RawDep[] = deduped.packages.map((pkg) => ({
+    name: pkg.name,
+    currentVersion: pkg.version,
+    source: 'dependencies' as const,
+    update: true,
+    parents: [],
+  }))
+
+  return [
+    {
+      name: 'Global packages',
+      type: 'global',
+      filepath: `global:${GLOBAL_ALL_PACKAGE_MANAGERS.join('+')}`,
+      deps,
+      resolved: [],
+      raw: {
+        managersByDependency: deduped.managersByDependency,
+      },
+      indent: '  ',
+    },
+  ]
+}
+
 export function writeGlobalPackage(pm: PackageManagerName, name: string, version: string): void {
   const logger = createLogger('info')
 
@@ -141,3 +183,5 @@ export function writeGlobalPackage(pm: PackageManagerName, name: string, version
       break
   }
 }
+
+export { getGlobalWriteTargets }

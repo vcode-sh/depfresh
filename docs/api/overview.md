@@ -46,6 +46,7 @@ import { DEFAULT_OPTIONS } from 'depfresh'
   loglevel: 'info',
   peer: false,
   global: false,
+  globalAll: false,
   ignorePaths: [
     '**/node_modules/**',
     '**/dist/**',
@@ -166,3 +167,4 @@ await check(options)
 - [Exported Types](./types.md) -- the full type catalogue
 - [Error Classes](./errors.md) -- structured error handling
 - [Lifecycle Callbacks](./functions.md#lifecycle-callbacks) -- hooks for fine-grained control
+- [Addons](./functions.md#addons) -- reusable plugin hooks for shared workflows

@@ -3,6 +3,7 @@ import { RegistryError, ResolveError } from '../errors'
 import type { NpmrcConfig, PackageData, ProvenanceLevel, RegistryConfig } from '../types'
 import type { Logger } from '../utils/logger'
 import { getRegistryForPackage } from '../utils/npmrc'
+import { getFetchTransportInit } from './transport'
 
 interface FetchOptions {
   npmrc: NpmrcConfig
@@ -110,9 +111,11 @@ async function fetchWithRetry(
   const timer = setTimeout(() => controller.abort(), options.timeout)
 
   try {
+    const transportInit = getFetchTransportInit(url, options.npmrc, options.logger)
     const response = await fetch(url, {
       headers,
       signal: controller.signal,
+      ...transportInit,
     })
 
     if (!response.ok) {
@@ -130,6 +133,11 @@ async function fetchWithRetry(
       throw error
     }
 
+    // Resolve failures from config/transport setup are not transient.
+    if (error instanceof ResolveError) {
+      throw error
+    }
+
     if (attempt < options.retries) {
       const delay = Math.min(1000 * 2 ** attempt, 5000)
       options.logger.debug(`Retry ${attempt + 1}/${options.retries} for ${url} in ${delay}ms`)
@@ -138,10 +146,6 @@ async function fetchWithRetry(
     }
 
     if (error instanceof RegistryError) {
-      throw error
-    }
-
-    if (error instanceof ResolveError) {
       throw error
     }
 

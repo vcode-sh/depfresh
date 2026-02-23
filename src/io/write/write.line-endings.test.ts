@@ -178,3 +178,32 @@ describe('writePackage CRLF preservation', () => {
     expect(result).toContain('"foo": "^2.0.0"')
   })
 })
+
+describe('writePackage package.yaml line ending preservation', () => {
+  let tmpDir: string
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), 'depfresh-crlf-yaml-'))
+  })
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true })
+  })
+
+  it('preserves CRLF and trailing newline for package.yaml', () => {
+    const filepath = join(tmpDir, 'package.yaml')
+    const content = 'name: test\r\ndependencies:\r\n  foo: ^1.0.0\r\n'
+    writeFileSync(filepath, content)
+
+    const pkg = makePkg(filepath, { name: 'test' }, { type: 'package.yaml' })
+    const changes = [makeChange({ name: 'foo', source: 'dependencies', targetVersion: '^2.0.0' })]
+
+    writePackage(pkg, changes, 'silent')
+
+    const result = readFileSync(filepath, 'utf-8')
+    expect(result).toContain('\r\n')
+    expect(result).not.toMatch(/[^\r]\n/)
+    expect(result.endsWith('\r\n')).toBe(true)
+    expect(result).toContain('foo: ^2.0.0')
+  })
+})

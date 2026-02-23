@@ -5,6 +5,7 @@ All errors thrown by depfresh extend `depfreshError`, which gives you a stable `
 ```ts
 import {
   depfreshError,
+  AddonError,
   RegistryError,
   CacheError,
   ConfigError,
@@ -20,6 +21,7 @@ import {
 | `depfreshError` | (base) | Abstract base. Use `instanceof depfreshError` to catch everything depfresh throws. |
 | `RegistryError` | `ERR_REGISTRY` | HTTP errors from the npm/JSR registry. Has `.status` (number) and `.url` (string). 4xx errors don't retry. 5xx errors do. |
 | `CacheError` | `ERR_CACHE` | SQLite failures, corrupt entries, connection issues. depfresh logs and falls back to memory cache -- you'll only see this if you're using the cache API directly. |
+| `AddonError` | `ERR_ADDON` | Addon hook failures. Includes `.addon` and `.hook` to identify the failing plugin and lifecycle stage. |
 | `ConfigError` | `ERR_CONFIG` | Invalid config file, malformed regex patterns in `include`/`exclude`, bad `packageMode` entries. Thrown during `resolveConfig()` or `parseDependencies()`. |
 | `WriteError` | `ERR_WRITE` | File system failures during package writes. Permission denied, disk full, the usual suspects. |
 | `ResolveError` | `ERR_RESOLVE` | Network timeouts, DNS failures, fetch errors that aren't HTTP status codes. The "something went wrong between you and the registry" bucket. |

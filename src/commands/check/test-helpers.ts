@@ -45,6 +45,21 @@ vi.mock('node:fs', () => ({
 
 vi.mock('../../io/global', () => ({
   writeGlobalPackage: vi.fn(),
+  getGlobalWriteTargets: vi.fn((pkg: { filepath: string; raw: unknown }, depName: string) => {
+    const raw = pkg.raw as { managersByDependency?: Record<string, string[]> }
+    const fromRaw = raw.managersByDependency?.[depName]
+    if (fromRaw && fromRaw.length > 0) {
+      return fromRaw
+    }
+    if (!pkg.filepath.startsWith('global:')) {
+      return []
+    }
+    return pkg.filepath
+      .slice('global:'.length)
+      .split('+')
+      .map((pm) => pm.trim())
+      .filter((pm) => pm.length > 0)
+  }),
 }))
 
 export const baseOptions: depfreshOptions = {

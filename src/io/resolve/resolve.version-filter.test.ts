@@ -44,6 +44,7 @@ function makeOptions(overrides: Partial<depfreshOptions> = {}): depfreshOptions 
     loglevel: 'silent',
     peer: false,
     global: false,
+    globalAll: false,
     ignorePaths: [],
     ignoreOtherWorkspaces: true,
     all: false,

@@ -81,7 +81,9 @@ export default defineConfig({
 
 ## `loadPackages(options)`
 
-Finds and parses `package.json` files in your project. Respects `recursive`, `ignorePaths`, `ignoreOtherWorkspaces`. Loads workspace catalogs (pnpm, bun, yarn) only when `recursive: true`, and supports global packages when `global: true`.
+Finds and parses package manifests (`package.json`, `package.yaml`) in your project. Respects `recursive`, `ignorePaths`, `ignoreOtherWorkspaces`. Loads workspace catalogs (pnpm, bun, yarn) only when `recursive: true`, and supports global packages when `global: true` (single detected manager) or `globalAll: true` (npm + pnpm + bun).
+
+When both `package.yaml` and `package.json` exist in a directory, `package.yaml` is selected.
 
 ```ts
 function loadPackages(options: depfreshOptions): Promise<PackageMeta[]>
@@ -139,7 +141,7 @@ for (const pkg of packages) {
 
 ## `parseDependencies(raw, options)`
 
-Extracts dependencies from a parsed `package.json` object. Handles all standard fields, overrides, resolutions, nested overrides, protocols (`npm:`, `jsr:`), include/exclude filters, and locked version detection.
+Extracts dependencies from a parsed package manifest object (JSON or YAML). Handles all standard fields, overrides, resolutions, nested overrides, protocols (`npm:`, `jsr:`), include/exclude filters, and locked version detection.
 
 ```ts
 function parseDependencies(
@@ -152,7 +154,7 @@ function parseDependencies(
 import { parseDependencies, resolveConfig } from 'depfresh'
 
 const options = await resolveConfig()
-const raw = JSON.parse(fs.readFileSync('package.json', 'utf-8'))
+const raw = JSON.parse(fs.readFileSync('package.json', 'utf-8')) // package.yaml works too after YAML parsing
 const deps = parseDependencies(raw, options)
 
 console.log(`Found ${deps.length} dependencies`)
@@ -163,7 +165,7 @@ console.log(`${deps.filter(d => d.update).length} will be checked`)
 
 ## `writePackage(pkg, changes, loglevel?)`
 
-Writes resolved changes back to the package file. Preserves indentation, line endings (CRLF too, you're welcome Windows users), and key order. Handles both regular `package.json` and workspace catalog files.
+Writes resolved changes back to the package file. Preserves indentation, line endings (CRLF too, you're welcome Windows users), and key order. Handles regular manifest files (`package.json`, `package.yaml`) and workspace catalog files.
 
 ```ts
 function writePackage(
@@ -189,7 +191,7 @@ writePackage(pkg, minorOnly, 'silent')
 
 ## `loadGlobalPackages(pm?)`
 
-Lists globally installed packages for a given package manager. Auto-detects which PM is available if you don't specify (tries pnpm, then bun, then npm).
+Lists globally installed packages for one package manager. Auto-detects which PM is available if you don't specify (tries pnpm, then bun, then npm).
 
 ```ts
 function loadGlobalPackages(pm?: string): PackageMeta[]
@@ -203,6 +205,25 @@ for (const pkg of packages) {
   for (const dep of pkg.deps) {
     console.log(`${dep.name}@${dep.currentVersion}`)
   }
+}
+```
+
+---
+
+## `loadGlobalPackagesAll()`
+
+Lists globally installed packages across npm, pnpm, and bun in one pass. Results are deduplicated by package name. If a package exists in multiple managers, write mode targets every matching manager.
+
+```ts
+function loadGlobalPackagesAll(): PackageMeta[]
+```
+
+```ts
+import { loadGlobalPackagesAll } from 'depfresh'
+
+const packages = loadGlobalPackagesAll()
+for (const dep of packages[0]?.deps ?? []) {
+  console.log(`${dep.name}@${dep.currentVersion}`)
 }
 ```
 
@@ -232,6 +253,8 @@ writeGlobalPackage('npm', 'typescript', '5.7.0')
 ## Lifecycle Callbacks
 
 Seven hooks. Called in order. All optional. All async-compatible. Wire them into `depfreshOptions` and `check()` will call them at the right moment.
+
+If you need reusable behavior across projects, use `options.addons` with `depfreshAddon` objects. Callbacks stay project-local; addons are composable plugins.
 
 ### Call Order
 
@@ -333,6 +356,35 @@ const options = await resolveConfig({
     process.stdout.write('\n')
     console.log('Done.')
   },
+})
+
+await check(options)
+```
+
+### Addons
+
+Addons are executed in array order (`options.addons`). For each lifecycle event, depfresh calls:
+1. The legacy callback (if present)
+2. Each addon hook in order
+
+For `beforePackageWrite`, returning `false` from any callback/addon skips writing that package.
+
+```ts
+import { check, resolveConfig, type depfreshAddon } from 'depfresh'
+
+const metricsAddon: depfreshAddon = {
+  name: 'metrics',
+  setup(ctx) {
+    console.log(`run ${ctx.runId} started at ${ctx.startedAt.toISOString()}`)
+  },
+  afterPackageWrite(_ctx, pkg, changes) {
+    console.log(`${pkg.name}: ${changes.length} updates written`)
+  },
+}
+
+const options = await resolveConfig({
+  write: true,
+  addons: [metricsAddon],
 })
 
 await check(options)
