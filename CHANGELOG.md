@@ -2,6 +2,14 @@
 
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Semver because I'm not a psychopath.
 
+## [0.11.1] - 2026-02-23
+
+The "your help command wasn't helping" patch. `bunx depfresh help` blew up with a mode validation error because `help` leaked through as a positional arg. The raw-args normalization works fine in node, works fine in bun direct — but `bunx` had other plans. Belt-and-suspenders fix: if `help` survives past normalization and lands as `mode_arg`, the run handler catches it and shows usage instead of screaming about invalid enums. Two layers of defence because trusting one code path is how you got here.
+
+### Fixed
+
+- **`bunx depfresh help` crash** — `help` as positional arg now caught in the run handler as a fallback when raw-args normalization is bypassed. Shows usage and exits cleanly instead of throwing `Invalid value for --mode: "help"`.
+
 ## [0.11.0] - 2026-02-23
 
 The "close every gap or shut up" release. Ran a full codebase audit against taze, found 5 gaps, closed all 5 in one pass. Verified with real code inspection, runtime test runs, and CLI smoke checks on actual repos. Not vibes. Not a roadmap. Shipped code with 598 passing tests.
