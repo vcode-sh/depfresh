@@ -6,9 +6,11 @@ import { createLogger } from '../../utils/logger'
 import { loadNpmrc } from '../../utils/npmrc'
 import {
   buildJsonPackage,
+  type JsonError,
   type JsonExecutionState,
   type JsonPackage,
   outputJsonEnvelope,
+  outputJsonError,
 } from './json-output'
 import { runInstall, runUpdate } from './package-manager'
 import { renderUpToDate, runExecute } from './post-write-actions'
@@ -45,6 +47,7 @@ export async function check(options: depfreshOptions): Promise<number> {
     let hasUpdates = false
     let didWrite = false
     const jsonPackages: JsonPackage[] = []
+    const jsonErrors: JsonError[] = []
     const progress = createCheckProgress(options, packages)
 
     const cache = createSqliteCache()
@@ -66,6 +69,18 @@ export async function check(options: depfreshOptions): Promise<number> {
               jsonPackages.push(buildJsonPackage(pkg.name, updates))
             } else {
               renderTable(pkg.name, updates, options)
+            }
+          },
+          onErrorDeps: (errors: ResolvedDepChange[]) => {
+            if (options.output === 'json') {
+              for (const dep of errors) {
+                jsonErrors.push({
+                  name: dep.name,
+                  source: dep.source,
+                  currentVersion: dep.currentVersion,
+                  message: 'Failed to resolve from registry',
+                })
+              }
             }
           },
           onAllModeNoUpdates: () => {
@@ -112,7 +127,7 @@ export async function check(options: depfreshOptions): Promise<number> {
     }
 
     if (options.output === 'json') {
-      outputJsonEnvelope(jsonPackages, options, executionState)
+      outputJsonEnvelope(jsonPackages, options, executionState, jsonErrors)
     }
 
     if (!hasUpdates) {
@@ -128,9 +143,20 @@ export async function check(options: depfreshOptions): Promise<number> {
       }
     }
 
+    if (!process.stdout.isTTY && options.output === 'table') {
+      // biome-ignore lint/suspicious/noConsole: intentional stderr hint for non-TTY environments
+      console.error(
+        'Tip: Use --output json for structured output. Run --help-json for CLI capabilities.',
+      )
+    }
+
     return hasUpdates && !options.write && options.failOnOutdated ? 1 : 0
   } catch (error) {
-    logger.error('Check failed:', error instanceof Error ? error.message : String(error))
+    if (options.output === 'json') {
+      outputJsonError(error, { cwd: options.cwd, mode: options.mode })
+    } else {
+      logger.error('Check failed:', error instanceof Error ? error.message : String(error))
+    }
     return 2
   }
 }

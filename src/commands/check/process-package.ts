@@ -12,6 +12,7 @@ export interface ProcessPackageHooks {
   workspacePackageNames: Set<string>
   onDependencyProcessed: () => void
   onHasUpdates: (updates: ResolvedDepChange[]) => void
+  onErrorDeps: (errors: ResolvedDepChange[]) => void
   onAllModeNoUpdates: () => void
   onPlannedUpdates: (count: number) => void
   onWriteResult: (result: PackageWriteResult) => void
@@ -34,6 +35,11 @@ export async function processPackage(
       hooks.workspacePackageNames,
       hooks.onDependencyProcessed,
     )
+
+    const errorDeps = pkg.resolved.filter((d) => d.diff === 'error')
+    if (errorDeps.length > 0) {
+      hooks.onErrorDeps(errorDeps)
+    }
 
     const updates = pkg.resolved.filter((d) => d.diff !== 'none' && d.diff !== 'error')
     if (updates.length === 0) {

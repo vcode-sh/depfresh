@@ -4,7 +4,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Semver
 
 ## [0.10.0] - 2026-02-23
 
-The "contracts are contracts, not vibes" release. Tightened CLI behavior so invalid inputs fail fast, made machine output explicit enough for automation that doesn't enjoy guesswork, and stopped pretending SARIF existed when it didn't.
+The "contracts are contracts, not vibes" release. Tightened CLI behavior so invalid inputs fail fast, made machine output explicit enough for automation that doesn't enjoy guesswork, and stopped pretending SARIF existed when it didn't. Then went back and made the whole thing properly agent-friendly because half-measures are for people who commit on Fridays.
 
 ### Breaking
 
@@ -24,6 +24,15 @@ The "contracts are contracts, not vibes" release. Tightened CLI behavior so inva
   - `summary.appliedUpdates`
   - `summary.revertedUpdates`
   This removes ambiguity between "no packages", "up to date", and "planned updates reverted by verify-command".
+- **Non-TTY stderr breadcrumb** -- when stdout isn't a TTY and output is `table`, depfresh now prints `Tip: Use --output json for structured output. Run --help-json for CLI capabilities.` to stderr. Agents are stateless. They don't remember your last hint. This fires every time, goes to stderr so it never pollutes piped stdout, and stays silent in JSON mode because that would be insulting.
+- **Structured JSON errors** -- when `--output json` is active and something explodes, you now get a proper JSON error envelope instead of a plaintext stderr scream. Includes `error.code`, `error.message`, `error.retryable`, and the usual `meta` block. Works in both the check command catch and the CLI top-level catch. Because an agent parsing `"Fatal error: something"` from stderr is not "machine-readable", it's "machine-suffering".
+- **Resolution errors surfaced in JSON envelope** -- deps that fail registry resolution (diff: `error`) were silently filtered out. Now they appear in the `errors[]` array with `name`, `source`, `currentVersion`, and `message`. Your agent can see what broke instead of wondering why a dependency vanished from the output.
+- **Enhanced capabilities schema** -- `--help-json` now includes:
+  - `version` -- CLI version from package.json, so agents know what they're talking to
+  - `workflows` -- 4 pre-built agent recipes: `checkOnly`, `safeUpdate`, `fullUpdate`, `selective`. Copy-paste commands, no guesswork
+  - `flagRelationships` -- which flags require or conflict with others (`install` requires `write`, `deps-only` conflicts with `dev-only`). Agents stop generating invalid flag combinations
+  - `configFiles` -- every supported config file pattern so agents know where to look
+  - `jsonOutputSchema` -- concise field descriptions of the JSON envelope shape. A schema for the schema. We've gone full meta
 - **Agent and integration docs** -- added quickstarts for Codex/Claude Code/Gemini CLI (`docs/agents/README.md`) plus GitHub Actions and thin MCP wrapper guidance (`docs/integrations/README.md`).
 
 ### Fixed
@@ -33,10 +42,11 @@ The "contracts are contracts, not vibes" release. Tightened CLI behavior so inva
 ### Changed
 
 - **Docs/runtime parity sweep** -- CLI, configuration, API, troubleshooting, and output docs now match actual runtime behavior (strict enum validation, JSON schema v1 fields, capabilities endpoint, no SARIF claims).
+- **package.json keywords** -- added `ai`, `agent`, `machine-readable`, `json`, `automation`. SEO for robots, by robots.
 
 ### Stats
 
-- 10 new contract-focused tests. Total suite now 525 passing tests. Build, typecheck, lint clean.
+- 22 new tests. Total suite now 537 passing tests. Build, typecheck, lint clean.
 
 ## [0.9.2] - 2026-02-22
 

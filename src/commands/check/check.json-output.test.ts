@@ -51,6 +51,7 @@ describe('JSON output', () => {
     expect(output.packages).toHaveLength(1)
     expect(output.packages[0].name).toBe('my-app')
     expect(output.packages[0].updates).toHaveLength(2)
+    expect(output.errors).toEqual([])
     expect(output.summary.total).toBe(2)
     expect(output.summary.major).toBe(1)
     expect(output.summary.minor).toBe(1)
@@ -210,6 +211,151 @@ describe('JSON output', () => {
     expect(output.summary.revertedUpdates).toBe(1)
     expect(output.meta.noPackagesFound).toBe(false)
     expect(output.meta.didWrite).toBe(false)
+
+    consoleSpy.mockRestore()
+  })
+})
+
+describe('JSON error envelope', () => {
+  let mocks: CheckMocks
+
+  beforeEach(async () => {
+    vi.clearAllMocks()
+    mocks = await setupMocks()
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('outputs structured JSON error when check throws in json mode', async () => {
+    mocks.loadPackagesMock.mockRejectedValue(new Error('Something went wrong'))
+
+    const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+
+    const { check } = await import('./index')
+    const exitCode = await check({ ...baseOptions, output: 'json' })
+
+    expect(exitCode).toBe(2)
+
+    const jsonCall = consoleSpy.mock.calls.find((call) => {
+      try {
+        const parsed = JSON.parse(call[0] as string)
+        return parsed.error !== undefined
+      } catch {
+        return false
+      }
+    })
+
+    expect(jsonCall).toBeDefined()
+    const output = JSON.parse(jsonCall![0] as string)
+    expect(output.error.code).toBe('ERR_UNKNOWN')
+    expect(output.error.message).toBe('Something went wrong')
+    expect(output.error.retryable).toBe(false)
+    expect(output.meta.schemaVersion).toBe(1)
+
+    consoleSpy.mockRestore()
+  })
+
+  it('marks registry errors as retryable', async () => {
+    const { RegistryError } = await import('../../errors')
+    mocks.loadPackagesMock.mockRejectedValue(
+      new RegistryError('timeout', 503, 'https://registry.npmjs.org/foo'),
+    )
+
+    const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+
+    const { check } = await import('./index')
+    const exitCode = await check({ ...baseOptions, output: 'json' })
+
+    expect(exitCode).toBe(2)
+
+    const jsonCall = consoleSpy.mock.calls.find((call) => {
+      try {
+        const parsed = JSON.parse(call[0] as string)
+        return parsed.error !== undefined
+      } catch {
+        return false
+      }
+    })
+
+    expect(jsonCall).toBeDefined()
+    const output = JSON.parse(jsonCall![0] as string)
+    expect(output.error.code).toBe('ERR_REGISTRY')
+    expect(output.error.retryable).toBe(true)
+
+    consoleSpy.mockRestore()
+  })
+
+  it('does not output JSON error in table mode', async () => {
+    mocks.loadPackagesMock.mockRejectedValue(new Error('Something went wrong'))
+
+    const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+
+    const { check } = await import('./index')
+    const exitCode = await check({ ...baseOptions, output: 'table' })
+
+    expect(exitCode).toBe(2)
+
+    const jsonCall = consoleSpy.mock.calls.find((call) => {
+      try {
+        const parsed = JSON.parse(call[0] as string)
+        return parsed.error !== undefined
+      } catch {
+        return false
+      }
+    })
+
+    expect(jsonCall).toBeUndefined()
+
+    consoleSpy.mockRestore()
+  })
+
+  it('surfaces resolution errors in JSON envelope', async () => {
+    const pkg = makePkg('my-app')
+    mocks.loadPackagesMock.mockResolvedValue([pkg])
+    mocks.resolvePackageMock.mockResolvedValue([
+      makeResolved({
+        name: 'good-dep',
+        diff: 'minor',
+        currentVersion: '^1.0.0',
+        targetVersion: '^1.1.0',
+      }),
+      makeResolved({
+        name: 'bad-dep',
+        diff: 'error',
+        currentVersion: '^1.0.0',
+        targetVersion: '^1.0.0',
+        source: 'dependencies',
+      }),
+    ])
+
+    const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+
+    const { check } = await import('./index')
+    await check({ ...baseOptions, output: 'json' })
+
+    const jsonCall = consoleSpy.mock.calls.find((call) => {
+      try {
+        const parsed = JSON.parse(call[0] as string)
+        return parsed.packages !== undefined
+      } catch {
+        return false
+      }
+    })
+
+    expect(jsonCall).toBeDefined()
+    const output = JSON.parse(jsonCall![0] as string)
+
+    expect(output.packages).toHaveLength(1)
+    expect(output.packages[0].updates).toHaveLength(1)
+    expect(output.packages[0].updates[0].name).toBe('good-dep')
+
+    expect(output.errors).toHaveLength(1)
+    expect(output.errors[0].name).toBe('bad-dep')
+    expect(output.errors[0].source).toBe('dependencies')
+    expect(output.errors[0].currentVersion).toBe('^1.0.0')
+    expect(output.errors[0].message).toBeDefined()
 
     consoleSpy.mockRestore()
   })
