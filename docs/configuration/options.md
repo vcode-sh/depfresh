@@ -37,7 +37,7 @@ Every option from the `depfreshOptions` interface. I documented all of them beca
 
 | Option | Type | Default | Description |
 |---|---|---|---|
-| `output` | `'table' \| 'json' \| 'sarif'` | `'table'` | Output format. `json` for machines, `sarif` for security tooling, `table` for humans who enjoy ASCII art. |
+| `output` | `'table' \| 'json'` | `'table'` | Output format. `json` for machines, `table` for humans who enjoy ASCII art. |
 | `loglevel` | `'silent' \| 'info' \| 'debug'` | `'info'` | How chatty depfresh should be. `debug` for when you need to file a bug report. |
 | `peer` | `boolean` | `false` | Show peer dependency hints. |
 | `global` | `boolean` | `false` | Check globally installed packages instead of project dependencies. |

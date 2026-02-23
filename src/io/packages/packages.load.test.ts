@@ -49,6 +49,30 @@ describe('loadPackages', () => {
     expect(names).toEqual(['root', 'sub-pkg'])
   })
 
+  it('loads only root package.json when recursive=false', async () => {
+    writeFileSync(join(tmpDir, 'package.json'), JSON.stringify({ name: 'root' }, null, 2))
+    mkdirSync(join(tmpDir, 'packages', 'sub'), { recursive: true })
+    writeFileSync(
+      join(tmpDir, 'packages', 'sub', 'package.json'),
+      JSON.stringify({ name: 'sub-pkg' }, null, 2),
+    )
+
+    writeFileSync(
+      join(tmpDir, 'pnpm-workspace.yaml'),
+      'catalog:\n  lodash: "^4.17.21"\npackages:\n  - "packages/*"\n',
+    )
+
+    const packages = await loadPackages({
+      ...baseOptions,
+      cwd: tmpDir,
+      recursive: false,
+      loglevel: 'silent',
+    })
+
+    expect(packages).toHaveLength(1)
+    expect(packages[0]?.name).toBe('root')
+  })
+
   it('respects ignorePaths (skips node_modules)', async () => {
     writeFileSync(join(tmpDir, 'package.json'), JSON.stringify({ name: 'root' }, null, 2))
     mkdirSync(join(tmpDir, 'node_modules', 'some-pkg'), { recursive: true })

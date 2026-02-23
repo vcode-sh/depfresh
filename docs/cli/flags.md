@@ -34,7 +34,33 @@ depfresh newest    # same as depfresh --mode newest
 depfresh next      # same as depfresh --mode next
 ```
 
-Valid modes: `default`, `major`, `minor`, `patch`, `latest`, `newest`, `next`. Anything else gets ignored and the default mode kicks in. No errors, no drama.
+Valid modes: `default`, `major`, `minor`, `patch`, `latest`, `newest`, `next`. Invalid values fail fast with exit code `2`.
+Machine-discoverability command: `depfresh capabilities --json`.
+
+---
+
+## Validation Rules
+
+depfresh validates enum flags strictly. Invalid values are rejected with exit code `2`:
+
+- `--mode`
+- `--output`
+- `--sort`
+- `--loglevel`
+
+This applies to both normal flag usage and positional mode shorthand (`depfresh <mode>`).
+
+## Machine Discoverability
+
+For AI agents and other automation, depfresh exposes a JSON capability endpoint:
+
+```bash
+depfresh --help-json
+# or
+depfresh capabilities --json
+```
+
+The output includes supported flags, defaults, valid enum values, and exit-code semantics.
 
 ---
 
@@ -66,7 +92,7 @@ Valid modes: `default`, `major`, `minor`, `patch`, `latest`, `newest`, `next`. A
 
 | Flag | Alias | Type | Default | Description |
 |------|-------|------|---------|-------------|
-| `--output <format>` | `-o` | string | `table` | Output format: `table`, `json`, or `sarif`. See [Output Formats](../output-formats/). |
+| `--output <format>` | `-o` | string | `table` | Output format: `table` or `json`. See [Output Formats](../output-formats/). |
 | `--all` | `-a` | boolean | `false` | Show all packages, including the ones that are already up to date. For completionists and auditors. |
 | `--group` | `-G` | boolean | `true` | Group output by dependency source (dependencies, devDependencies, etc.). Disable with `--no-group` if you prefer chaos. |
 | `--sort <strategy>` | `-s` | string | `diff-asc` | Sort order for the output table. See [Sorting](#sorting). |
@@ -75,6 +101,8 @@ Valid modes: `default`, `major`, `minor`, `patch`, `latest`, `newest`, `next`. A
 | `--long` | `-L` | boolean | `false` | Show extra details per package -- currently the homepage URL. For when you need to rage-read a changelog. |
 | `--explain` | `-E` | boolean | `false` | Show human-readable explanations for update types in interactive mode. Tells you *why* a version depfresh matters. Only works with `--interactive`. |
 | `--loglevel <level>` | -- | string | `info` | Log level: `silent`, `info`, or `debug`. `silent` suppresses everything except output. `debug` tells you things you didn't ask to know. |
+| `--help-json` | -- | boolean | `false` | Print machine-readable CLI capabilities (flags, enums, defaults, exit codes) as JSON. |
+| `--json` | -- | boolean | `false` | JSON mode for the `depfresh capabilities` discoverability command. |
 
 ## Post-Write
 

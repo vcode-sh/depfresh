@@ -8,6 +8,13 @@ import type {
 } from '../../types'
 import type { Logger } from '../../utils/logger'
 
+export interface PackageWriteResult {
+  planned: number
+  applied: number
+  reverted: number
+  didWrite: boolean
+}
+
 export async function verifyAndWrite(
   pkg: PackageMeta,
   changes: ResolvedDepChange[],
@@ -42,13 +49,25 @@ export async function applyPackageWrite(
   changes: ResolvedDepChange[],
   options: depfreshOptions,
   logger: Logger,
-): Promise<boolean> {
-  if (changes.length === 0) return false
+): Promise<PackageWriteResult> {
+  if (changes.length === 0) {
+    return {
+      planned: 0,
+      applied: 0,
+      reverted: 0,
+      didWrite: false,
+    }
+  }
 
   if (options.verifyCommand) {
     const result = await verifyAndWrite(pkg, changes, options.verifyCommand, logger)
     logger.info(`  Verify: ${result.applied} applied, ${result.reverted} reverted`)
-    return result.applied > 0
+    return {
+      planned: changes.length,
+      applied: result.applied,
+      reverted: result.reverted,
+      didWrite: result.applied > 0,
+    }
   }
 
   if (pkg.type === 'global') {
@@ -57,9 +76,19 @@ export async function applyPackageWrite(
     for (const change of changes) {
       writeGlobalPackage(pmName, change.name, change.targetVersion)
     }
-    return true
+    return {
+      planned: changes.length,
+      applied: changes.length,
+      reverted: 0,
+      didWrite: true,
+    }
   }
 
   writePackage(pkg, changes, options.loglevel)
-  return true
+  return {
+    planned: changes.length,
+    applied: changes.length,
+    reverted: 0,
+    didWrite: true,
+  }
 }

@@ -1,14 +1,19 @@
+import { ConfigError } from '../errors'
 import type { depfreshOptions, OutputFormat, RangeMode, SortOption } from '../types'
+import { VALID_LOG_LEVELS, VALID_MODES, VALID_OUTPUTS, VALID_SORT_OPTIONS } from './arg-values'
 
-const VALID_MODES = new Set<string>([
-  'default',
-  'major',
-  'minor',
-  'patch',
-  'latest',
-  'newest',
-  'next',
-])
+function validateEnum<T extends string>(
+  value: unknown,
+  flagName: string,
+  validValues: readonly T[],
+): T {
+  if (typeof value !== 'string' || !validValues.includes(value as T)) {
+    throw new ConfigError(
+      `Invalid value for ${flagName}: "${String(value)}". Expected one of: ${validValues.join(', ')}.`,
+    )
+  }
+  return value as T
+}
 
 export async function normalizeArgs(args: Record<string, unknown>): Promise<depfreshOptions> {
   const { resolveConfig } = await import('../config')
@@ -26,10 +31,11 @@ export async function normalizeArgs(args: Record<string, unknown>): Promise<depf
   }
 
   // Positional mode arg: `depfresh major` is shorthand for `depfresh --mode major`
-  const mode =
-    args.mode_arg && VALID_MODES.has(args.mode_arg as string)
-      ? (args.mode_arg as RangeMode)
-      : (args.mode as RangeMode)
+  const modeValue = args.mode_arg ?? args.mode
+  const mode = validateEnum(modeValue, '--mode', VALID_MODES) as RangeMode
+  const output = validateEnum(args.output, '--output', VALID_OUTPUTS) as OutputFormat
+  const sort = validateEnum(args.sort, '--sort', VALID_SORT_OPTIONS) as SortOption
+  const loglevel = validateEnum(args.loglevel, '--loglevel', VALID_LOG_LEVELS)
 
   const include =
     typeof args.include === 'string' ? args.include.split(',').map((s) => s.trim()) : undefined
@@ -48,13 +54,13 @@ export async function normalizeArgs(args: Record<string, unknown>): Promise<depf
     global: args.global as boolean,
     peer: args.peer as boolean,
     includeLocked: args['include-locked'] as boolean,
-    output: args.output as OutputFormat,
+    output,
     concurrency: Number.parseInt(args.concurrency as string, 10),
-    loglevel: args.loglevel as 'silent' | 'info' | 'debug',
+    loglevel,
     depFields,
     all: args.all as boolean,
     group: args.group as boolean,
-    sort: args.sort as SortOption,
+    sort,
     timediff: args.timediff as boolean,
     cooldown: Number.parseInt(args.cooldown as string, 10),
     nodecompat: args.nodecompat as boolean,

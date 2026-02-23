@@ -14,6 +14,16 @@ export interface JsonPackage {
   }>
 }
 
+export interface JsonExecutionState {
+  scannedPackages: number
+  packagesWithUpdates: number
+  plannedUpdates: number
+  appliedUpdates: number
+  revertedUpdates: number
+  noPackagesFound: boolean
+  didWrite: boolean
+}
+
 interface JsonOutput {
   packages: JsonPackage[]
   summary: {
@@ -22,11 +32,19 @@ interface JsonOutput {
     minor: number
     patch: number
     packages: number
+    scannedPackages: number
+    packagesWithUpdates: number
+    plannedUpdates: number
+    appliedUpdates: number
+    revertedUpdates: number
   }
   meta: {
+    schemaVersion: number
     cwd: string
     mode: string
     timestamp: string
+    noPackagesFound: boolean
+    didWrite: boolean
   }
 }
 
@@ -46,7 +64,11 @@ export function buildJsonPackage(name: string, updates: ResolvedDepChange[]): Js
   }
 }
 
-export function outputJsonEnvelope(packages: JsonPackage[], options: depfreshOptions): void {
+export function outputJsonEnvelope(
+  packages: JsonPackage[],
+  options: depfreshOptions,
+  executionState: JsonExecutionState,
+): void {
   const allUpdates = packages.flatMap((p) => p.updates)
   const count = (diff: DiffType) => allUpdates.filter((u) => u.diff === diff).length
 
@@ -58,11 +80,19 @@ export function outputJsonEnvelope(packages: JsonPackage[], options: depfreshOpt
       minor: count('minor'),
       patch: count('patch'),
       packages: packages.length,
+      scannedPackages: executionState.scannedPackages,
+      packagesWithUpdates: executionState.packagesWithUpdates,
+      plannedUpdates: executionState.plannedUpdates,
+      appliedUpdates: executionState.appliedUpdates,
+      revertedUpdates: executionState.revertedUpdates,
     },
     meta: {
+      schemaVersion: 1,
       cwd: options.cwd,
       mode: options.mode,
       timestamp: new Date().toISOString(),
+      noPackagesFound: executionState.noPackagesFound,
+      didWrite: executionState.didWrite,
     },
   }
 

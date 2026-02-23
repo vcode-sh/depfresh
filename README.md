@@ -145,12 +145,20 @@ Full options reference: **[docs/configuration/](docs/configuration/)**
     "major": 1,
     "minor": 7,
     "patch": 4,
-    "packages": 3
+    "packages": 3,
+    "scannedPackages": 3,
+    "packagesWithUpdates": 3,
+    "plannedUpdates": 0,
+    "appliedUpdates": 0,
+    "revertedUpdates": 0
   },
   "meta": {
+    "schemaVersion": 1,
     "cwd": "/path/to/project",
     "mode": "default",
-    "timestamp": "2026-02-22T12:00:00.000Z"
+    "timestamp": "2026-02-22T12:00:00.000Z",
+    "noPackagesFound": false,
+    "didWrite": false
   }
 }
 ```
@@ -164,6 +172,9 @@ depfresh was designed to work with AI coding assistants out of the box. No speci
 ```bash
 # Check for updates, get structured output
 depfresh --output json --loglevel silent
+
+# Discover the CLI contract for automation
+depfresh --help-json
 
 # Apply all updates
 depfresh --write
@@ -255,7 +266,9 @@ The full docs, for people who read manuals before assembling furniture.
 - **[CLI Reference](docs/cli/)** -- all 27+ flags, modes, sorting, filtering, hooks, interactive, CI, workspaces
 - **[Configuration](docs/configuration/)** -- config files, every option, packageMode, depFields, private registries, cache
 - **[Programmatic API](docs/api/)** -- exported functions, lifecycle callbacks, types, workflow examples
-- **[Output Formats](docs/output-formats/)** -- table, JSON, SARIF, exit codes, AI agent integration
+- **[Output Formats](docs/output-formats/)** -- table, JSON, exit codes, AI agent integration
+- **[Agent Workflows](docs/agents/README.md)** -- copy-paste quickstarts for Codex, Claude Code, and Gemini CLI
+- **[Integrations](docs/integrations/README.md)** -- GitHub Actions and thin MCP wrapper guidance
 - **[Troubleshooting](docs/troubleshooting.md)** -- common issues, workspace gotchas, known limitations
 
 ## Requirements

@@ -26,7 +26,9 @@ export async function loadPackages(options: depfreshOptions): Promise<PackageMet
 
   // Find all package files
   // TODO: Add yaml package support in the future
-  let jsonFiles = await glob(['**/package.json'], {
+  const packagePatterns = options.recursive ? ['**/package.json'] : ['package.json']
+
+  let jsonFiles = await glob(packagePatterns, {
     cwd: options.cwd,
     ignore: options.ignorePaths,
     absolute: true,
@@ -72,36 +74,40 @@ export async function loadPackages(options: depfreshOptions): Promise<PackageMet
     }
   }
 
-  // Load workspace catalogs (pnpm, bun, yarn)
-  try {
-    const catalogs = await loadCatalogs(options.cwd, options)
-    for (const catalog of catalogs) {
-      const catalogTypeName =
-        catalog.type === 'pnpm'
-          ? 'pnpm-workspace'
-          : catalog.type === 'bun'
-            ? 'bun-workspace'
-            : 'yarn-workspace'
+  // Load workspace catalogs (pnpm, bun, yarn) only in recursive mode.
+  if (options.recursive) {
+    try {
+      const catalogs = await loadCatalogs(options.cwd, options)
+      for (const catalog of catalogs) {
+        const catalogTypeName =
+          catalog.type === 'pnpm'
+            ? 'pnpm-workspace'
+            : catalog.type === 'bun'
+              ? 'bun-workspace'
+              : 'yarn-workspace'
 
-      const displayName =
-        catalog.name === 'default'
-          ? `${catalog.type} catalog`
-          : `${catalog.type} catalog:${catalog.name}`
+        const displayName =
+          catalog.name === 'default'
+            ? `${catalog.type} catalog`
+            : `${catalog.type} catalog:${catalog.name}`
 
-      packages.push({
-        name: displayName,
-        type: catalogTypeName,
-        filepath: catalog.filepath,
-        deps: catalog.deps,
-        resolved: [],
-        raw: catalog.raw,
-        indent: catalog.indent,
-        catalogs: [catalog],
-      })
-      logger.debug(`Loaded catalog ${displayName} (${catalog.deps.length} deps)`)
+        packages.push({
+          name: displayName,
+          type: catalogTypeName,
+          filepath: catalog.filepath,
+          deps: catalog.deps,
+          resolved: [],
+          raw: catalog.raw,
+          indent: catalog.indent,
+          catalogs: [catalog],
+        })
+        logger.debug(`Loaded catalog ${displayName} (${catalog.deps.length} deps)`)
+      }
+    } catch (error) {
+      logger.warn('Failed to load workspace catalogs:', error)
     }
-  } catch (error) {
-    logger.warn('Failed to load workspace catalogs:', error)
+  } else {
+    logger.debug('Skipping workspace catalogs because recursive mode is disabled')
   }
 
   logger.info(

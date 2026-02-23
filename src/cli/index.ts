@@ -12,6 +12,22 @@ const main = defineCommand({
   args,
   async run({ args }) {
     try {
+      if (args['help-json']) {
+        const { outputCliCapabilities } = await import('./capabilities')
+        outputCliCapabilities()
+        process.exit(0)
+      }
+
+      if (args.mode_arg === 'capabilities') {
+        if (!args.json) {
+          throw new Error('`depfresh capabilities` requires `--json`.')
+        }
+
+        const { outputCliCapabilities } = await import('./capabilities')
+        outputCliCapabilities()
+        process.exit(0)
+      }
+
       const { normalizeArgs } = await import('./normalize-args')
       const { check } = await import('../commands/check/index')
 

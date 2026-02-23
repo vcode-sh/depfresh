@@ -13,7 +13,7 @@ Monorepos, catalogs, and the art of scanning too many directories. This page cov
 **/.git/**
 ```
 
-Set `recursive: false` if you only want the root package. Override `ignorePaths` if your project structure is... creative.
+Set `recursive: false` if you only want the root `package.json`. In non-recursive mode, depfresh does not load workspace catalogs. Override `ignorePaths` if your project structure is... creative.
 
 ```typescript
 import { defineConfig } from 'depfresh'

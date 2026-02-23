@@ -2,6 +2,42 @@
 
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Semver because I'm not a psychopath.
 
+## [0.10.0] - 2026-02-23
+
+The "contracts are contracts, not vibes" release. Tightened CLI behavior so invalid inputs fail fast, made machine output explicit enough for automation that doesn't enjoy guesswork, and stopped pretending SARIF existed when it didn't.
+
+### Breaking
+
+- **`--output sarif` removed from runtime contract** -- SARIF was advertised but not implemented. That's trust debt. `OutputFormat` now supports only `table` and `json`, and `--output sarif` is rejected with exit code `2` like any other invalid enum.
+- **Invalid enum flags now hard-fail** -- `--mode`, positional mode shorthand (`depfresh <mode>`), `--output`, `--sort`, and `--loglevel` no longer silently fall back. Invalid values now return exit code `2` with a clear error message.
+
+### Added
+
+- **Machine-discoverability endpoint** -- `depfresh --help-json` and `depfresh capabilities --json` now expose a JSON contract with flags, aliases, defaults, enum values, and exit-code semantics. AI agents can discover behavior without scraping prose docs like it's 2009.
+- **Versioned JSON envelope metadata** -- `meta.schemaVersion` added (`1`) so downstream automation can lock to a known contract.
+- **Explicit execution-state fields in JSON output** -- added:
+  - `meta.noPackagesFound`
+  - `meta.didWrite`
+  - `summary.scannedPackages`
+  - `summary.packagesWithUpdates`
+  - `summary.plannedUpdates`
+  - `summary.appliedUpdates`
+  - `summary.revertedUpdates`
+  This removes ambiguity between "no packages", "up to date", and "planned updates reverted by verify-command".
+- **Agent and integration docs** -- added quickstarts for Codex/Claude Code/Gemini CLI (`docs/agents/README.md`) plus GitHub Actions and thin MCP wrapper guidance (`docs/integrations/README.md`).
+
+### Fixed
+
+- **`recursive: false` now actually means root-only** -- discovery now loads only root `package.json` in non-recursive mode and skips workspace catalog loading there. Previously `recursive` was effectively ignored during package file discovery.
+
+### Changed
+
+- **Docs/runtime parity sweep** -- CLI, configuration, API, troubleshooting, and output docs now match actual runtime behavior (strict enum validation, JSON schema v1 fields, capabilities endpoint, no SARIF claims).
+
+### Stats
+
+- 10 new contract-focused tests. Total suite now 525 passing tests. Build, typecheck, lint clean.
+
 ## [0.9.2] - 2026-02-22
 
 The "fine, it's called depfresh now" release. Final naming cleanup, zero feature work.
@@ -233,6 +269,7 @@ First release. Wrote it from scratch because waiting for PRs to get merged in ta
 - TTY detection. No spinners in your CI logs. `NO_COLOR` respected.
 - 54 tests. More than some production apps I've seen.
 
+[0.10.0]: https://github.com/vcode-sh/depfresh/releases/tag/v0.10.0
 [0.9.2]: https://github.com/vcode-sh/depfresh/releases/tag/v0.9.2
 [0.9.1]: https://github.com/vcode-sh/depfresh/releases/tag/v0.9.1
 [0.9.0]: https://github.com/vcode-sh/depfresh/releases/tag/v0.9.0

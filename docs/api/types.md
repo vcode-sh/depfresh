@@ -9,7 +9,7 @@ The full type catalogue. Every interface, union, and enum that depfresh exports.
 | `DepFieldType` | Union of dependency field names: `'dependencies'`, `'devDependencies'`, `'overrides'`, etc. |
 | `DiffType` | Version diff classification: `'major'` \| `'minor'` \| `'patch'` \| `'none'` \| `'error'` |
 | `NpmrcConfig` | Parsed `.npmrc` -- registries, auth tokens, proxy settings |
-| `OutputFormat` | Output mode: `'table'` \| `'json'` \| `'sarif'` |
+| `OutputFormat` | Output mode: `'table'` \| `'json'` |
 | `PackageData` | Raw registry metadata for a package -- versions, dist-tags, timestamps, deprecations |
 | `PackageManagerField` | Parsed `packageManager` field from `package.json` (name, version, hash) |
 | `PackageManagerName` | `'npm'` \| `'pnpm'` \| `'yarn'` \| `'bun'` |

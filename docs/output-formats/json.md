@@ -42,12 +42,20 @@ Spits out a single JSON envelope to stdout. All log output is automatically supp
     "major": 0,
     "minor": 1,
     "patch": 1,
-    "packages": 1
+    "packages": 1,
+    "scannedPackages": 1,
+    "packagesWithUpdates": 1,
+    "plannedUpdates": 0,
+    "appliedUpdates": 0,
+    "revertedUpdates": 0
   },
   "meta": {
+    "schemaVersion": 1,
     "cwd": "/path/to/project",
     "mode": "default",
-    "timestamp": "2026-02-22T12:00:00.000Z"
+    "timestamp": "2026-02-22T12:00:00.000Z",
+    "noPackagesFound": false,
+    "didWrite": false
   }
 }
 ```
@@ -83,20 +91,32 @@ Spits out a single JSON envelope to stdout. All log output is automatically supp
 | `minor` | `number` | Count of minor updates |
 | `patch` | `number` | Count of patch updates |
 | `packages` | `number` | Number of packages in the output |
+| `scannedPackages` | `number` | Number of package files scanned in this run |
+| `packagesWithUpdates` | `number` | Number of scanned packages that had at least one available update |
+| `plannedUpdates` | `number` | Number of dependency updates planned for write attempts (`--write`) |
+| `appliedUpdates` | `number` | Number of planned updates successfully applied |
+| `revertedUpdates` | `number` | Number of planned updates reverted by `--verify-command` |
 
 ### `meta`
 
 | Field | Type | Description |
 |-------|------|-------------|
+| `schemaVersion` | `number` | JSON contract schema version (`1`) |
 | `cwd` | `string` | Working directory depfresh ran in |
 | `mode` | `string` | Range mode used: `default`, `major`, `minor`, `patch`, `latest`, `newest`, `next` |
 | `timestamp` | `string` | ISO 8601 timestamp of when the check ran |
+| `noPackagesFound` | `boolean` | `true` when no package files were discovered in the target workspace |
+| `didWrite` | `boolean` | `true` when at least one update was written and kept on disk |
 
 ## Notes
 
 - When `--all` is set, packages with zero updates still appear in the `packages` array with an empty `updates` list.
 - The `deprecated` field is only present when the target version is actually deprecated. Don't go looking for `"deprecated": false` -- it just won't be there.
 - Same for `publishedAt` and `currentVersionTime` -- they're omitted when the registry doesn't provide time data.
+- You can distinguish all major outcomes without guessing:
+  - `meta.noPackagesFound: true` means no package files were found.
+  - `meta.noPackagesFound: false` and `summary.total: 0` means packages were found but already up to date.
+  - `summary.plannedUpdates > 0` and `summary.appliedUpdates: 0` with `summary.revertedUpdates > 0` means verify-command reverted everything.
 
 ## AI Agent Integration
 
@@ -109,6 +129,12 @@ depfresh --output json --loglevel silent
 ```
 
 Though `--loglevel silent` is redundant with `--output json` since JSON mode forces silent anyway. But explicit is fine. I respect the paranoia.
+
+Discover supported flags/values before automation:
+
+```bash
+depfresh --help-json
+```
 
 ### TTY Detection
 

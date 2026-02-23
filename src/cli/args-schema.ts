@@ -72,8 +72,18 @@ export const args: ArgsDef = {
   output: {
     type: 'string',
     alias: 'o',
-    description: 'Output format: table, json, sarif',
+    description: 'Output format: table, json',
     default: 'table',
+  },
+  'help-json': {
+    type: 'boolean',
+    description: 'Print machine-readable CLI capabilities as JSON',
+    default: false,
+  },
+  json: {
+    type: 'boolean',
+    description: 'Print JSON output for machine-discoverability commands',
+    default: false,
   },
   concurrency: {
     type: 'string',
