@@ -6,6 +6,10 @@ import { isLocked } from '../../utils/versions'
 import { detectLineEnding } from '../write'
 import type { CatalogLoader } from './index'
 
+function isPeerScopedCatalog(name: string): boolean {
+  return name.trim().toLowerCase() === 'peers'
+}
+
 function parseCatalogDeps(
   catalog: Record<string, string>,
   parentPath: string,
@@ -62,6 +66,9 @@ export const bunCatalogLoader: CatalogLoader = {
     if (raw.workspaces?.catalogs) {
       const catalogs = raw.workspaces.catalogs as Record<string, Record<string, string>>
       for (const [catalogName, catalog] of Object.entries(catalogs)) {
+        if (!options.peer && isPeerScopedCatalog(catalogName)) {
+          continue
+        }
         sources.push({
           type: 'bun',
           name: catalogName,

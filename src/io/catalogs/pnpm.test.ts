@@ -99,6 +99,34 @@ describe('pnpmCatalogLoader.load', () => {
     expect(sources[1]!.deps[0]!.name).toBe('react')
   })
 
+  it('skips peers catalog by default when --peer is disabled', async () => {
+    writeFileSync(
+      join(testDir, 'pnpm-workspace.yaml'),
+      'packages:\n  - "packages/*"\ncatalogs:\n  peers:\n    react: ^18.0.0\n  tooling:\n    vitest: ^1.0.0\n',
+      'utf-8',
+    )
+
+    const sources = await pnpmCatalogLoader.load(testDir, { ...baseOptions, peer: false })
+
+    expect(sources).toHaveLength(1)
+    expect(sources[0]!.name).toBe('tooling')
+    expect(sources[0]!.deps.map((d) => d.name)).toEqual(['vitest'])
+  })
+
+  it('includes peers catalog when --peer is enabled', async () => {
+    writeFileSync(
+      join(testDir, 'pnpm-workspace.yaml'),
+      'packages:\n  - "packages/*"\ncatalogs:\n  peers:\n    react: ^18.0.0\n  tooling:\n    vitest: ^1.0.0\n',
+      'utf-8',
+    )
+
+    const sources = await pnpmCatalogLoader.load(testDir, { ...baseOptions, peer: true })
+
+    expect(sources).toHaveLength(2)
+    expect(sources.some((s) => s.name === 'peers')).toBe(true)
+    expect(sources.some((s) => s.name === 'tooling')).toBe(true)
+  })
+
   it('returns empty when no pnpm-workspace.yaml exists', async () => {
     const sources = await pnpmCatalogLoader.load(testDir, baseOptions)
     expect(sources).toHaveLength(0)

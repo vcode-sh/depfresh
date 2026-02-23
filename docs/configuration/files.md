@@ -39,7 +39,7 @@ depfresh loads config from multiple file formats. Priority order (highest wins):
 **TypeScript** (recommended if you have taste):
 
 ```typescript
-// depfresh.config.ts
+// depfresh.config.ts (also: .mts, .cts, .depfreshrc.ts)
 import { defineConfig } from 'depfresh'
 
 export default defineConfig({
@@ -56,7 +56,7 @@ export default defineConfig({
 **JavaScript**, if you must:
 
 ```javascript
-// depfresh.config.js / depfresh.config.mjs
+// depfresh.config.js (also: .mjs, .cjs, .depfreshrc.js)
 export default {
   mode: 'latest',
   write: true,
@@ -67,7 +67,7 @@ export default {
 **JSON**, for the minimalists:
 
 ```json
-// .depfreshrc
+// .depfreshrc (also: .depfreshrc.json, depfresh.config.json)
 {
   "mode": "minor",
   "recursive": false
@@ -124,6 +124,19 @@ These override anything in `.npmrc`:
 | `npm_config_registry` / `NPM_CONFIG_REGISTRY` | Default registry URL |
 | `npm_config_proxy` / `HTTP_PROXY` / `http_proxy` | HTTP proxy |
 | `npm_config_https_proxy` / `HTTPS_PROXY` / `https_proxy` | HTTPS proxy |
+
+### GitHub protocol dependencies
+
+For `github:owner/repo#tag` dependencies, depfresh resolves versions from the GitHub tags API.
+
+If you hit API rate limits, set one of these environment variables:
+
+| Variable | What it does |
+|---|---|
+| `GITHUB_TOKEN` | Preferred token for GitHub API auth |
+| `GH_TOKEN` | Fallback token name, also supported |
+
+No extra depfresh config is required. If either token is set, depfresh sends it as `Bearer` auth for GitHub API requests.
 
 ### Scoped registries
 

@@ -1,6 +1,6 @@
 {
   "name": "depfresh",
-  "version": "0.12.0",
+  "version": "1.0.0",
   "description": "Keep your npm dependencies fresh. Fast, correct, zero-config.",
   "type": "module",
   "license": "MIT",
@@ -55,6 +55,7 @@
     "lint:fix": "biome check --write .",
     "format": "biome format --write .",
     "typecheck": "tsc --noEmit",
+    "audit:coverage": "node scripts/audit/update-taze-coverage.mjs",
     "prepublishOnly": "pnpm run build"
   },
   "dependencies": {

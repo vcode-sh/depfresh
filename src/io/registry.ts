@@ -15,6 +15,11 @@ interface FetchOptions {
 export async function fetchPackageData(name: string, options: FetchOptions): Promise<PackageData> {
   const registry = getRegistryForPackage(name, options.npmrc)
 
+  // GitHub protocol
+  if (name.startsWith('github:')) {
+    return fetchGithubPackage(name.slice('github:'.length), options)
+  }
+
   // JSR protocol
   if (name.startsWith('jsr:')) {
     return fetchJsrPackage(name.slice(4), options)
@@ -42,7 +47,11 @@ async function fetchNpmPackage(
       registry.authType === 'basic' ? `Basic ${registry.token}` : `Bearer ${registry.token}`
   }
 
-  const json = await fetchWithRetry(url, headers, options)
+  const payload = await fetchWithRetry(url, headers, options)
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    throw new ResolveError(`Unexpected npm registry payload shape for ${url}`)
+  }
+  const json = payload as Record<string, unknown>
 
   const versionsObj = (json.versions ?? {}) as Record<string, Record<string, unknown>>
   const versions = Object.keys(versionsObj).filter((v) => semver.valid(v))
@@ -88,7 +97,11 @@ async function fetchNpmPackage(
 
 async function fetchJsrPackage(name: string, options: FetchOptions): Promise<PackageData> {
   const url = `https://jsr.io/${name}/meta.json`
-  const json = await fetchWithRetry(url, {}, options)
+  const payload = await fetchWithRetry(url, {}, options)
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    throw new ResolveError(`Unexpected JSR payload shape for ${url}`)
+  }
+  const json = payload as Record<string, unknown>
 
   const versionsObj = (json.versions ?? {}) as Record<string, unknown>
   const versions = Object.keys(versionsObj)
@@ -101,12 +114,81 @@ async function fetchJsrPackage(name: string, options: FetchOptions): Promise<Pac
   }
 }
 
+async function fetchGithubPackage(repository: string, options: FetchOptions): Promise<PackageData> {
+  const token = process.env.GITHUB_TOKEN ?? process.env.GH_TOKEN
+  const headers: Record<string, string> = {
+    accept: 'application/vnd.github+json',
+    'user-agent': 'depfresh',
+  }
+  if (token) {
+    headers.authorization = `Bearer ${token}`
+  }
+
+  const versions = new Set<string>()
+
+  // Fetch tags in pages to avoid missing satisfying versions in long-lived repos.
+  for (let page = 1; page <= 10; page++) {
+    const url = `https://api.github.com/repos/${repository}/tags?per_page=100&page=${page}`
+    const payload = await fetchWithRetry(url, headers, options)
+    if (!Array.isArray(payload)) {
+      throw new ResolveError(`Unexpected GitHub tags payload shape for ${url}`)
+    }
+
+    if (payload.length === 0) {
+      break
+    }
+
+    for (const item of payload) {
+      if (!item || typeof item !== 'object') continue
+      const tagName = (item as { name?: unknown }).name
+      if (typeof tagName !== 'string') continue
+      const normalized = normalizeGithubTag(tagName)
+      if (normalized) {
+        versions.add(normalized)
+      }
+    }
+
+    if (payload.length < 100) {
+      break
+    }
+  }
+
+  const sorted = Array.from(versions).sort(semver.compare)
+  const latest = sorted[sorted.length - 1]
+  if (!latest) {
+    throw new ResolveError(`No semver tags found for github:${repository}`)
+  }
+
+  const repositoryUrl = `https://github.com/${repository}`
+  return {
+    name: `github:${repository}`,
+    versions: sorted,
+    distTags: { latest },
+    repository: repositoryUrl,
+    homepage: repositoryUrl,
+  }
+}
+
+function normalizeGithubTag(tag: string): string | null {
+  const trimmed = tag.trim()
+  if (!trimmed) return null
+
+  const withoutTagPrefix = trimmed.startsWith('refs/tags/')
+    ? trimmed.slice('refs/tags/'.length)
+    : trimmed
+  const withoutVPrefix = withoutTagPrefix.startsWith('v')
+    ? withoutTagPrefix.slice(1)
+    : withoutTagPrefix
+
+  return semver.valid(withoutVPrefix)
+}
+
 async function fetchWithRetry(
   url: string,
   headers: Record<string, string>,
   options: FetchOptions,
   attempt = 0,
-): Promise<Record<string, unknown>> {
+): Promise<unknown> {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), options.timeout)
 
@@ -119,6 +201,9 @@ async function fetchWithRetry(
     })
 
     if (!response.ok) {
+      if (isGithubRateLimit(response, url)) {
+        throw createGithubRateLimitError(response, url)
+      }
       throw new RegistryError(
         `HTTP ${response.status}: ${response.statusText} for ${url}`,
         response.status,
@@ -126,7 +211,7 @@ async function fetchWithRetry(
       )
     }
 
-    return (await response.json()) as Record<string, unknown>
+    return await response.json()
   } catch (error) {
     // Never retry 4xx client errors — they won't resolve with retries
     if (error instanceof RegistryError && error.status >= 400 && error.status < 500) {
@@ -166,6 +251,33 @@ function isAbortError(error: unknown): boolean {
   if (!error || typeof error !== 'object') return false
   const named = error as { name?: string }
   return named.name === 'AbortError'
+}
+
+function isGithubRateLimit(response: Response, url: string): boolean {
+  if (!url.includes('api.github.com')) return false
+  if (response.status !== 403 && response.status !== 429) return false
+  return response.headers.get('x-ratelimit-remaining') === '0'
+}
+
+function createGithubRateLimitError(response: Response, url: string): ResolveError {
+  const resetRaw = response.headers.get('x-ratelimit-reset')
+  let resetHint = ''
+  if (resetRaw) {
+    const resetSeconds = Number.parseInt(resetRaw, 10)
+    if (Number.isFinite(resetSeconds)) {
+      resetHint = ` Resets at ${new Date(resetSeconds * 1000).toISOString()}.`
+    }
+  }
+
+  return new ResolveError(
+    `GitHub API rate limit exceeded for ${url}.${resetHint} Set GITHUB_TOKEN or GH_TOKEN.`,
+    {
+      cause: {
+        status: response.status,
+        statusText: response.statusText,
+      },
+    },
+  )
 }
 
 function sleep(ms: number): Promise<void> {

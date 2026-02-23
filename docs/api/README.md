@@ -6,7 +6,7 @@ I exposed the internals. On purpose. You can `import` from `depfresh` and do wha
 
 - **[Overview](./overview.md)** -- Quick start, defaults, workflow examples. The "just show me some code" page.
 
-- **[Functions](./functions.md)** -- Every exported function: `check`, `resolveConfig`, `loadPackages`, `resolvePackage`, `writePackage`, and the rest. Includes lifecycle callbacks and addon plugin hooks.
+- **[Functions](./functions.md)** -- Every exported function: `check`, `resolveConfig`, `loadPackages`, `resolvePackage`, `writePackage`, and the rest. Includes lifecycle callbacks, addon plugin hooks, and built-in addons.
 
 - **[Types](./types.md)** -- The full type catalogue. `depfreshOptions`, `depfreshAddon`, `PackageMeta`, `ResolvedDepChange`, and everything your editor wants to autocomplete.
 

@@ -34,9 +34,21 @@ function mockFetchResponse(body: unknown, status = 200, statusText = 'OK') {
 
 describe('fetchPackageData', () => {
   const originalFetch = globalThis.fetch
+  const originalGithubToken = process.env.GITHUB_TOKEN
+  const originalGhToken = process.env.GH_TOKEN
 
   afterEach(() => {
     globalThis.fetch = originalFetch
+    if (originalGithubToken === undefined) {
+      process.env.GITHUB_TOKEN = undefined
+    } else {
+      process.env.GITHUB_TOKEN = originalGithubToken
+    }
+    if (originalGhToken === undefined) {
+      process.env.GH_TOKEN = undefined
+    } else {
+      process.env.GH_TOKEN = originalGhToken
+    }
     vi.restoreAllMocks()
   })
 
@@ -80,6 +92,52 @@ describe('fetchPackageData', () => {
     )
     expect(result.name).toBe('jsr:@std/path')
     expect(result.distTags.latest).toBe('2.0.0')
+  })
+
+  it('routes github: packages to GitHub tags API and normalizes semver tags', async () => {
+    globalThis.fetch = mockFetchResponse([
+      { name: 'v2.0.0' },
+      { name: '1.5.0' },
+      { name: 'not-a-version' },
+    ])
+
+    const { fetchPackageData } = await import('./registry')
+    const result = await fetchPackageData('github:owner/repo', defaultOptions)
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      'https://api.github.com/repos/owner/repo/tags?per_page=100&page=1',
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          accept: 'application/vnd.github+json',
+          'user-agent': 'depfresh',
+        }),
+      }),
+    )
+    expect(result.name).toBe('github:owner/repo')
+    expect(result.versions).toEqual(['1.5.0', '2.0.0'])
+    expect(result.distTags.latest).toBe('2.0.0')
+  })
+
+  it('sends GitHub authorization header when token env var is set', async () => {
+    process.env.GITHUB_TOKEN = 'ghs_test_token'
+    process.env.GH_TOKEN = undefined
+    globalThis.fetch = mockFetchResponse([{ name: 'v1.0.0' }])
+
+    const { fetchPackageData } = await import('./registry')
+    await fetchPackageData('github:owner/repo', defaultOptions)
+
+    const fetchCall = vi.mocked(globalThis.fetch).mock.calls[0]!
+    const headers = (fetchCall[1] as RequestInit).headers as Record<string, string>
+    expect(headers.authorization).toBe('Bearer ghs_test_token')
+  })
+
+  it('throws resolve error when github repository has no semver tags', async () => {
+    globalThis.fetch = mockFetchResponse([{ name: 'latest' }, { name: 'dev' }])
+
+    const { fetchPackageData } = await import('./registry')
+    await expect(fetchPackageData('github:owner/repo', defaultOptions)).rejects.toThrow(
+      'No semver tags found for github:owner/repo',
+    )
   })
 
   it('encodes scoped package names correctly', async () => {

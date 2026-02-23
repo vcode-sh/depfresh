@@ -2,7 +2,7 @@ import type { DepFieldType, depfreshOptions, RawDep } from '../../types'
 import { isLocked } from '../../utils/versions'
 import { flattenOverrides, getNestedField } from './overrides'
 import { compilePatternsStrict } from './patterns'
-import { parseProtocol } from './protocols'
+import { parseGithubSpec, parseProtocol } from './protocols'
 
 export const DEP_FIELDS: DepFieldType[] = [
   'dependencies',
@@ -32,8 +32,13 @@ export function shouldSkipDependency(
   // Skip catalog: protocol
   if (version.startsWith('catalog:')) return true
 
+  if (version.startsWith('github:')) {
+    // Skip unsupported refs (commits/branches). We only resolve semver tags.
+    return !parseGithubSpec(version)
+  }
+
   // Skip link/file/git protocols
-  if (/^(link|file|git|github|https?):/.test(version)) return true
+  if (/^(link|file|git|https?):/.test(version)) return true
 
   // Include/exclude filters (use pre-compiled patterns)
   if (includePatterns.length && !includePatterns.some((re) => re.test(name))) {
@@ -70,6 +75,7 @@ export function parseDependencies(
       deps.push({
         name,
         currentVersion: protocol.currentVersion,
+        aliasName: protocol.aliasName,
         source: field,
         update: !isLocked(protocol.currentVersion) || options.includeLocked,
         parents: [],

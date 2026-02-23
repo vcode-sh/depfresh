@@ -26,10 +26,10 @@ Everything I know about depfresh is in here, split into files so you can pretend
   - [Table](./output-formats/table.md) -- the default, colourful output
   - [JSON](./output-formats/json.md) -- machine-readable envelope
 
-- **[Agent Workflows](./agents/README.md)** -- quickstarts for Codex, Claude Code, and Gemini CLI with copy-paste command patterns.
+- **[Agent Workflows](./agents/README.md)** -- quickstarts for AI coding agents with copy-paste command patterns.
 
 - **[Integrations](./integrations/README.md)** -- GitHub Actions usage and a thin MCP wrapper reference for tool ecosystems.
 
-- **[Compare](./compare/)** -- How depfresh stacks up. Migration guide, solved issues, receipts.
+- **[Compare](./compare/)** -- How depfresh stacks up. Coverage matrix, migration guide, solved issues, receipts.
 
 - **[Troubleshooting](./troubleshooting.md)** -- Common issues, workspace gotchas, and known limitations. The page you'll find via Google at 2 AM after everything breaks. I've been there. The kettle's already on.

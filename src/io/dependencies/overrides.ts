@@ -59,6 +59,7 @@ export function flattenOverrides(
       deps.push({
         name,
         currentVersion: protocol.currentVersion,
+        aliasName: protocol.aliasName,
         source,
         update: !isLocked(protocol.currentVersion) || options.includeLocked,
         parents: [...parents, key],

@@ -5,6 +5,10 @@ import type { CatalogSource, depfreshOptions, RawDep } from '../../types'
 import { isLocked } from '../../utils/versions'
 import type { CatalogLoader } from './index'
 
+function isPeerScopedCatalog(name: string): boolean {
+  return name.trim().toLowerCase() === 'peers'
+}
+
 export const pnpmCatalogLoader: CatalogLoader = {
   async detect(cwd: string): Promise<boolean> {
     return !!findUpSync('pnpm-workspace.yaml', { cwd })
@@ -27,6 +31,9 @@ export const pnpmCatalogLoader: CatalogLoader = {
     // Named catalogs
     if (schema.catalogs && typeof schema.catalogs === 'object') {
       for (const [name, deps] of Object.entries(schema.catalogs)) {
+        if (!options.peer && isPeerScopedCatalog(name)) {
+          continue
+        }
         catalogs.push(parseCatalogSection(deps, name, filepath, options, content))
       }
     }

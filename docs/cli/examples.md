@@ -266,7 +266,9 @@ depfresh --no-cache
 depfresh understands workspace catalogs for **pnpm**, **bun**, and **yarn**:
 
 - **pnpm**: Reads `catalog:` and `catalog:<name>` protocol references from `pnpm-workspace.yaml`
-- **bun**: Reads catalog entries from `bunfig.toml`
+- **bun**: Reads `workspaces.catalog` and `workspaces.catalogs` from root `package.json`
 - **yarn**: Reads catalog entries from `.yarnrc.yml`
 
 Catalog dependencies are resolved and updated alongside regular dependencies. When writing, depfresh updates both the catalog source file and any package manifests that reference it.
+
+Named `peers` catalogs are skipped unless `--peer` is enabled.

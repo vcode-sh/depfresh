@@ -99,7 +99,7 @@ The output includes supported flags, defaults, valid enum values, and exit-code 
 | `--ignore-paths <patterns>` | -- | string | -- | Additional ignore glob patterns (comma-separated) merged with default ignore paths. Useful for skipping specific folders during recursive scan. |
 | `--deps-only` | -- | boolean | `false` | Only check `dependencies`. Ignores devDependencies, peerDependencies, and optionalDependencies. |
 | `--dev-only` | -- | boolean | `false` | Only check `devDependencies`. The inverse of `--deps-only`. Using both simultaneously is not recommended unless you enjoy empty results. |
-| `--peer` | `-P` | boolean | `false` | Include peer dependencies in the check. Off by default because peer deps are a diplomatic minefield. |
+| `--peer` | `-P` | boolean | `false` | Include peer dependencies in the check. Also enables peer-scoped workspace catalogs (`catalog:peers` / `workspaces.catalogs.peers`) that are skipped by default. |
 | `--include-locked` | `-l` | boolean | `false` | Include pinned (locked) dependencies -- those without a range prefix like `^` or `~`. Normally skipped because someone pinned them for a reason. Probably. |
 | `--cooldown <days>` | -- | string | `0` | Skip versions published less than N days ago. A paranoia dial. Set to `7` if you prefer your packages slightly aged, like cheese. `0` disables it. |
 
@@ -114,7 +114,7 @@ The output includes supported flags, defaults, valid enum values, and exit-code 
 | `--timediff` | `-T` | boolean | `true` | Show how long ago each target version was published. Useful for spotting suspiciously fresh packages. Disable with `--no-timediff`. |
 | `--nodecompat` | -- | boolean | `true` | Show Node.js engine compatibility for target versions. Warns you before you install something that hates your runtime. Disable with `--no-nodecompat`. |
 | `--long` | `-L` | boolean | `false` | Show extra details per package -- currently the homepage URL. For when you need to rage-read a changelog. |
-| `--explain` | `-E` | boolean | `false` | Show human-readable explanations for update types in interactive mode. Tells you *why* a version depfresh matters. Only works with `--interactive`. |
+| `--explain` | `-E` | boolean | `false` | Show human-readable explanations for update types in interactive mode. Tells you *why* a version change matters. Only works with `--interactive`. |
 | `--loglevel <level>` | -- | string | `info` | Log level: `silent`, `info`, or `debug`. `silent` suppresses everything except output. `debug` tells you things you didn't ask to know. |
 | `--help-json` | -- | boolean | `false` | Print machine-readable CLI capabilities (flags, enums, defaults, exit codes) as JSON. |
 | `--json` | -- | boolean | `false` | JSON mode for the `depfresh capabilities` discoverability command. |
