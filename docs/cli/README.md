@@ -4,7 +4,7 @@ The complete field manual for `depfresh`. Every flag, every trick, every questio
 
 ## Pages
 
-- **[Flags](./flags.md)** -- All 27+ flags, sorted by category: core, filtering, display, post-write, and behavior. The reference you'll actually bookmark.
+- **[Flags](./flags.md)** -- All CLI flags, sorted by category: core, filtering, display, post-write, and behavior. The reference you'll actually bookmark.
 
 - **[Modes](./modes.md)** -- Version range modes explained: `default`, `major`, `minor`, `patch`, `latest`, `newest`, `next`, and `ignore`. The philosophical core of the tool.
 

@@ -138,7 +138,7 @@ depfresh maps auth tokens to registries by matching the hostname. If the token U
 
 ### Auth types
 
-depfresh supports both `bearer` and `basic` auth, detected from your `.npmrc`. The `_authToken` key maps to bearer tokens, which is what most private registries use. If you're on something exotic, it probably still works. If it doesn't, [file an issue](https://github.com/nicepkg/depfresh/issues).
+depfresh supports both `bearer` and `basic` auth, detected from your `.npmrc`. The `_authToken` key maps to bearer tokens, which is what most private registries use. If you're on something exotic, it probably still works. If it doesn't, [file an issue](https://github.com/vcode-sh/depfresh/issues).
 
 ## Cache
 

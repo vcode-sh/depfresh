@@ -6,7 +6,7 @@ Everything I know about depfresh is in here, split into files so you can pretend
 
 ## Table of Contents
 
-- **[CLI Reference](./cli/)** -- All 27+ flags, range modes, sorting, filtering, lifecycle hooks, interactive mode, CI usage, and workspace support. The one you'll actually read.
+- **[CLI Reference](./cli/)** -- All CLI flags, range modes, sorting, filtering, lifecycle hooks, interactive mode, CI usage, and workspace support. The one you'll actually read.
   - [Flags](./cli/flags.md) -- every flag, organised by category
   - [Modes](./cli/modes.md) -- version resolution strategies explained
   - [Examples](./cli/examples.md) -- real-world commands, interactive mode, workspaces

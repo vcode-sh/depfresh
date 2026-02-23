@@ -101,7 +101,7 @@ depfresh --global-all
 
 ## CLI Flags
 
-The top flags to get you started. Full reference with all 27+ flags: **[docs/cli/](docs/cli/)**
+The top flags to get you started. Full reference with all CLI flags: **[docs/cli/](docs/cli/)**
 
 | Flag | Alias | Default | Description |
 |------|-------|---------|-------------|
@@ -109,8 +109,8 @@ The top flags to get you started. Full reference with all 27+ flags: **[docs/cli
 | `--write` | `-w` | `false` | Write updated versions to package files |
 | `--interactive` | `-I` | `false` | Select which deps to update |
 | `--mode` | `-m` | `default` | Range mode: `default` `major` `minor` `patch` `latest` `newest` `next` |
-| `--include` | `-n` | -- | Only include packages matching regex (comma-separated) |
-| `--exclude` | `-x` | -- | Exclude packages matching regex (comma-separated) |
+| `--include` | `-n` | -- | Only include packages matching regex/glob patterns (comma-separated) |
+| `--exclude` | `-x` | -- | Exclude packages matching regex/glob patterns (comma-separated) |
 | `--ignore-paths` | -- | -- | Extra ignore globs (comma-separated), merged with default ignored paths |
 | `--force` | `-f` | `false` | Force update even if version is satisfied (does not bypass cache) |
 | `--refresh-cache` | -- | `false` | Bypass cache reads and fetch fresh metadata for this run |
@@ -361,7 +361,7 @@ Verified against taze v19.9.2 (commit `31c6fe8`, 2026-01-20). Not marketing. Rea
 
 The full docs, for people who read manuals before assembling furniture.
 
-- **[CLI Reference](docs/cli/)** -- all 27+ flags, modes, sorting, filtering, hooks, interactive, CI, workspaces
+- **[CLI Reference](docs/cli/)** -- all CLI flags, modes, sorting, filtering, hooks, interactive, CI, workspaces
 - **[Configuration](docs/configuration/)** -- config files, every option, packageMode, depFields, private registries, cache
 - **[Programmatic API](docs/api/)** -- exported functions, lifecycle callbacks, addon plugins, types, workflow examples
 - **[Output Formats](docs/output-formats/)** -- table, JSON, exit codes, AI agent integration
