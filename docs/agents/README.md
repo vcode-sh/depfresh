@@ -4,7 +4,7 @@ Quickstarts for AI coding agents that need deterministic, machine-readable depen
 
 ## Universal Workflows
 
-These commands work across Codex, Claude Code, and Gemini CLI.
+These commands work with any AI coding agent.
 
 ```bash
 # Check-only (read-only report)
@@ -20,61 +20,35 @@ depfresh --write --verify-command "pnpm test"
 depfresh --fail-on-outdated --output json
 ```
 
-## Codex Quickstart
+## Prompt Patterns
 
-Use this prompt pattern:
+Tell your agent what to do with the output. Here are some patterns that work well:
+
+**Read-only audit:**
 
 ```text
-Run depfresh in JSON mode, summarize summary/meta fields, then propose or apply safe updates.
+Run depfresh in JSON mode, summarize summary/meta fields, then propose safe updates.
 ```
-
-Suggested command:
 
 ```bash
 depfresh --output json
 ```
 
-For writes with verification:
-
-```bash
-depfresh --write --mode minor --verify-command "pnpm test"
-```
-
-## Claude Code Quickstart
-
-Use this prompt pattern:
+**Guarded writes:**
 
 ```text
 Check outdated dependencies with depfresh JSON output, group by diff severity, and apply minor/patch updates only.
 ```
 
-Suggested command:
-
-```bash
-depfresh --output json
-```
-
-For guarded writes:
-
 ```bash
 depfresh --write --mode minor --verify-command "pnpm test"
 ```
 
-## Gemini CLI Quickstart
-
-Use this prompt pattern:
+**CI enforcement:**
 
 ```text
 Run depfresh as a machine-readable check and return a change plan from JSON summary/meta fields.
 ```
-
-Suggested command:
-
-```bash
-depfresh --output json
-```
-
-For CI enforcement:
 
 ```bash
 depfresh --fail-on-outdated --output json

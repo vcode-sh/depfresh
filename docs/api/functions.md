@@ -141,7 +141,7 @@ for (const pkg of packages) {
 
 ## `parseDependencies(raw, options)`
 
-Extracts dependencies from a parsed package manifest object (JSON or YAML). Handles all standard fields, overrides, resolutions, nested overrides, protocols (`npm:`, `jsr:`), include/exclude filters, and locked version detection.
+Extracts dependencies from a parsed package manifest object (JSON or YAML). Handles all standard fields, overrides, resolutions, nested overrides, protocols (`npm:`, `jsr:`, `github:`), include/exclude filters, and locked version detection.
 
 ```ts
 function parseDependencies(
@@ -389,6 +389,23 @@ const options = await resolveConfig({
 
 await check(options)
 ```
+
+### Built-in Addons
+
+depfresh ships with one built-in addon:
+
+```ts
+import { createVSCodeAddon } from 'depfresh'
+
+const options = await resolveConfig({
+  write: true,
+  addons: [createVSCodeAddon()],
+})
+
+await check(options)
+```
+
+`createVSCodeAddon()` syncs the `engines.vscode` field with the `@types/vscode` version when writing updates. Niche, but if you're building VS Code extensions, it saves a manual step.
 
 **Conditional write -- skip specific packages:**
 

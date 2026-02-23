@@ -71,11 +71,21 @@ Note the trailing slashes. Note the `//` prefix. npm invented this syntax and I 
 
 **JSR packages.** depfresh supports `jsr:` protocol packages, but JSR metadata is more limited than npm's. Some fields may be missing.
 
+**GitHub dependencies.** depfresh supports `github:owner/repo#tag` when `tag` is semver-like (`v1.2.3`, `1.2.3`, `refs/tags/v1.2.3`). Branches, commits, and non-semver tags are skipped on purpose.
+
+If you hit GitHub API rate limits:
+
+- Set `GITHUB_TOKEN` or `GH_TOKEN` in your environment.
+- Retry after the reset time shown in the error.
+- Lower concurrency if you're scanning a lot of GitHub-sourced deps at once.
+
 ## Workspace issues
 
 ### Catalogs not updating
 
-depfresh handles workspace catalogs (pnpm, bun, yarn) by updating them in-place in their respective config files — `pnpm-workspace.yaml`, `bunfig.toml`, or `.yarnrc.yml`. If your catalog entries aren't updating, make sure `--write` is set and that depfresh actually detected the catalog. Check debug output with `--loglevel debug`.
+depfresh handles workspace catalogs (pnpm, bun, yarn) by updating them in-place in their respective source files — `pnpm-workspace.yaml`, root `package.json` (`workspaces.catalog` / `workspaces.catalogs`), or `.yarnrc.yml`. If your catalog entries aren't updating, make sure `--write` is set and that depfresh actually detected the catalog. Check debug output with `--loglevel debug`.
+
+Named `peers` catalogs are skipped unless `--peer` is enabled.
 
 ### Wrong packages showing up
 

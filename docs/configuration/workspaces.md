@@ -81,13 +81,40 @@ catalog:
 
 ### bun
 
-Reads catalog entries from `bunfig.toml`:
+Reads catalog entries from root `package.json`:
 
-```toml
-# bunfig.toml
-[install.catalog]
-typescript = "^5.7.0"
-vitest = "^2.1.0"
+```json
+{
+  "workspaces": {
+    "catalog": {
+      "typescript": "^5.7.0",
+      "vitest": "^2.1.0"
+    },
+    "catalogs": {
+      "ui": {
+        "react": "^19.0.0"
+      }
+    }
+  }
+}
+```
+
+`workspaces.catalog` is the default catalog. `workspaces.catalogs.<name>` are named catalogs.
+
+### Peer-scoped catalogs
+
+If you use a named catalog called `peers` (for example `catalog:peers` in pnpm, or `workspaces.catalogs.peers` in bun), depfresh treats it as peer-scoped:
+
+- default (`--peer` off): skipped
+- with `--peer`: included
+
+This keeps peer-only catalog entries aligned with how manifest `peerDependencies` are handled.
+
+```yaml
+# pnpm-workspace.yaml
+catalogs:
+  peers:
+    react: ^19.0.0
 ```
 
 ### yarn

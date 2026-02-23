@@ -43,6 +43,19 @@ describe('parseDependencies', () => {
     expect(deps).toHaveLength(1)
     expect(deps[0]?.protocol).toBe('npm')
     expect(deps[0]?.currentVersion).toBe('^4.0.0')
+    expect(deps[0]?.aliasName).toBe('lodash')
+  })
+
+  it('parses github: semver refs', () => {
+    const raw = {
+      dependencies: { 'uWebSockets.js': 'github:uNetworking/uWebSockets.js#v20.51.0' },
+    }
+
+    const deps = parseDependencies(raw, baseOptions)
+    expect(deps).toHaveLength(1)
+    expect(deps[0]?.protocol).toBe('github')
+    expect(deps[0]?.aliasName).toBe('github:uNetworking/uWebSockets.js')
+    expect(deps[0]?.currentVersion).toBe('20.51.0')
   })
 
   it('respects include filter', () => {

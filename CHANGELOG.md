@@ -2,6 +2,35 @@
 
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Semver because I'm not a psychopath.
 
+## [1.0.0] - 2026-02-23
+
+The "it's either 1.0 or therapy" release. Full taze backlog audit done, every claim backed by code and tests, 624 tests passing, docs rewritten by someone who's read them. If you've been waiting for the "stable enough to bet on" signal -- this is it. We stopped adding features and started proving the ones we have actually work.
+
+### Added
+
+- **GitHub dependency support** — `github:owner/repo#tag` dependencies resolve against GitHub tags, flow through check/write like first-class citizens, and preserve your `refs/tags/` and `v` prefix style on rewrite. Because someone had to finish what taze started.
+- **Coverage matrix** — every open taze issue and PR tracked with `shipped` / `partial` / `missing` status and evidence links. Receipts, not promises. See `docs/compare/coverage-matrix.md`.
+
+### Changed
+
+- **Peer catalog semantics** — `peers` catalogs in pnpm workspaces are now skipped by default. Pass `--peer` to include them. Previously they'd sneak in uninvited, like a dependency you didn't ask for at a party you didn't want to attend.
+- **Protocol parsing** — npm/jsr/github alias metadata now flows consistently through the entire pipeline, including overrides. The kind of fix you don't notice until the day it would've ruined your afternoon.
+- **Documentation overhaul** — Bun catalog docs corrected, taze comparisons consolidated into `docs/compare/`, README trimmed to something a human might actually read, and every doc page reviewed for accuracy and tone.
+
+### Fixed
+
+- **GitHub API rate limits** — explicit detection with reset-time hints and token guidance (`GITHUB_TOKEN`/`GH_TOKEN`) instead of cryptic retry failures that teach you nothing.
+- **GitHub ref writes** — protocol-preserving rewrites keep `refs/tags/` prefixes and `v` conventions intact. Your `github:` deps come back looking the same way they went in.
+
+### Breaking
+
+- Nothing. `1.0.0` marks stability, not a contract reset. Your `0.11.x` configs, flags, and workflows carry over unchanged.
+
+### Migration Notes
+
+- If you use `github:` dependencies and hit API rate limits, set `GITHUB_TOKEN` or `GH_TOKEN`.
+- If you keep peer-only versions in workspace catalogs, pass `--peer` to include them in checks and writes.
+
 ## [0.11.1] - 2026-02-23
 
 The "your help command wasn't helping" patch. `bunx depfresh help` blew up with a mode validation error because `help` leaked through as a positional arg. The raw-args normalization works fine in node, works fine in bun direct — but `bunx` had other plans. Belt-and-suspenders fix: if `help` survives past normalization and lands as `mode_arg`, the run handler catches it and shows usage instead of screaming about invalid enums. Two layers of defence because trusting one code path is how you got here.
@@ -330,6 +359,8 @@ First release. Wrote it from scratch because waiting for PRs to get merged in ta
 - TTY detection. No spinners in your CI logs. `NO_COLOR` respected.
 - 54 tests. More than some production apps I've seen.
 
+[1.0.0]: https://github.com/vcode-sh/depfresh/releases/tag/v1.0.0
+[0.11.1]: https://github.com/vcode-sh/depfresh/releases/tag/v0.11.1
 [0.11.0]: https://github.com/vcode-sh/depfresh/releases/tag/v0.11.0
 [0.10.1]: https://github.com/vcode-sh/depfresh/releases/tag/v0.10.1
 [0.10.0]: https://github.com/vcode-sh/depfresh/releases/tag/v0.10.0

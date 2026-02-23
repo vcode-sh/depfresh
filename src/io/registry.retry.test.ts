@@ -34,9 +34,21 @@ function mockFetchResponse(body: unknown, status = 200, statusText = 'OK') {
 
 describe('fetchWithRetry', () => {
   const originalFetch = globalThis.fetch
+  const originalGithubToken = process.env.GITHUB_TOKEN
+  const originalGhToken = process.env.GH_TOKEN
 
   afterEach(() => {
     globalThis.fetch = originalFetch
+    if (originalGithubToken === undefined) {
+      process.env.GITHUB_TOKEN = undefined
+    } else {
+      process.env.GITHUB_TOKEN = originalGithubToken
+    }
+    if (originalGhToken === undefined) {
+      process.env.GH_TOKEN = undefined
+    } else {
+      process.env.GH_TOKEN = originalGhToken
+    }
     vi.restoreAllMocks()
   })
 
@@ -173,4 +185,29 @@ describe('fetchWithRetry', () => {
 
     expect(globalThis.fetch).toHaveBeenCalledTimes(2)
   }, 10_000)
+
+  it('does NOT retry when GitHub API rate limit is exceeded', async () => {
+    process.env.GITHUB_TOKEN = 'ghs_test_token'
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 403,
+      statusText: 'Forbidden',
+      headers: {
+        get: (name: string) => {
+          if (name === 'x-ratelimit-remaining') return '0'
+          if (name === 'x-ratelimit-reset') return '1700000000'
+          return null
+        },
+      },
+      json: () => Promise.resolve({ message: 'API rate limit exceeded' }),
+    })
+
+    const { fetchPackageData } = await import('./registry')
+
+    await expect(fetchPackageData('github:owner/repo', defaultOptions)).rejects.toThrow(
+      'GitHub API rate limit exceeded',
+    )
+
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1)
+  })
 })

@@ -36,8 +36,18 @@ describe('shouldSkipDependency', () => {
     expect(shouldSkipDependency('pkg', 'git:https://github.com/user/repo', baseOptions)).toBe(true)
   })
 
-  it('skips github: protocol', () => {
+  it('skips github: refs that are not semver tags', () => {
     expect(shouldSkipDependency('pkg', 'github:user/repo', baseOptions)).toBe(true)
+    expect(shouldSkipDependency('pkg', 'github:user/repo#main', baseOptions)).toBe(true)
+    expect(shouldSkipDependency('pkg', 'github:user/repo#a1b2c3d', baseOptions)).toBe(true)
+  })
+
+  it('does not skip github: semver tags', () => {
+    expect(shouldSkipDependency('pkg', 'github:user/repo#v1.2.3', baseOptions)).toBe(false)
+    expect(shouldSkipDependency('pkg', 'github:user/repo#1.2.3', baseOptions)).toBe(false)
+    expect(shouldSkipDependency('pkg', 'github:user/repo#refs/tags/v1.2.3', baseOptions)).toBe(
+      false,
+    )
   })
 
   it('skips http:// URLs', () => {

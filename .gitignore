@@ -28,7 +28,8 @@ debug.log
 *.log
 
 # Internal docs
-audit/
+/audit/**
+!/audit/taze-open-backlog-*.json
 
 # AI
 .claude/

@@ -91,6 +91,58 @@ describe('writePackage protocol preservation', () => {
     expect(parsed.dependencies['my-pkg']).toBe('jsr:@scope/name@^3.0.0')
   })
 
+  it('preserves github: protocol with v-prefixed tag', () => {
+    const filepath = join(tmpDir, 'package.json')
+    const raw = {
+      name: 'test',
+      dependencies: { 'uWebSockets.js': 'github:uNetworking/uWebSockets.js#v20.51.0' },
+    }
+    const content = `${JSON.stringify(raw, null, 2)}\n`
+    writeFileSync(filepath, content)
+
+    const pkg = makePkg(filepath, raw)
+    const changes = [
+      makeChange({
+        name: 'uWebSockets.js',
+        source: 'dependencies',
+        currentVersion: '20.51.0',
+        targetVersion: '20.52.0',
+      }),
+    ]
+
+    writePackage(pkg, changes, 'silent')
+
+    const result = readFileSync(filepath, 'utf-8')
+    const parsed = JSON.parse(result)
+    expect(parsed.dependencies['uWebSockets.js']).toBe('github:uNetworking/uWebSockets.js#v20.52.0')
+  })
+
+  it('preserves github: refs/tags/ prefix', () => {
+    const filepath = join(tmpDir, 'package.json')
+    const raw = {
+      name: 'test',
+      dependencies: { foo: 'github:owner/repo#refs/tags/v1.2.3' },
+    }
+    const content = `${JSON.stringify(raw, null, 2)}\n`
+    writeFileSync(filepath, content)
+
+    const pkg = makePkg(filepath, raw)
+    const changes = [
+      makeChange({
+        name: 'foo',
+        source: 'dependencies',
+        currentVersion: '1.2.3',
+        targetVersion: '1.3.0',
+      }),
+    ]
+
+    writePackage(pkg, changes, 'silent')
+
+    const result = readFileSync(filepath, 'utf-8')
+    const parsed = JSON.parse(result)
+    expect(parsed.dependencies.foo).toBe('github:owner/repo#refs/tags/v1.3.0')
+  })
+
   it('preserves both CRLF and npm: protocol prefix', () => {
     const filepath = join(tmpDir, 'package.json')
     const content =
@@ -134,5 +186,31 @@ describe('writePackage protocol preservation', () => {
     const result = readFileSync(filepath, 'utf-8')
     expect(result).toContain('my-lodash: npm:lodash@^2.0.0')
     expect(result).toContain('my-pkg: jsr:@scope/name@^3.0.0')
+  })
+
+  it('preserves github: protocol in package.yaml', () => {
+    const filepath = join(tmpDir, 'package.yaml')
+    const content = [
+      'name: test',
+      'dependencies:',
+      '  uWebSockets.js: github:uNetworking/uWebSockets.js#v20.51.0',
+      '',
+    ].join('\n')
+    writeFileSync(filepath, content)
+
+    const pkg = makePkg(filepath, {}, { type: 'package.yaml' })
+    const changes = [
+      makeChange({
+        name: 'uWebSockets.js',
+        source: 'dependencies',
+        currentVersion: '20.51.0',
+        targetVersion: '20.52.0',
+      }),
+    ]
+
+    writePackage(pkg, changes, 'silent')
+
+    const result = readFileSync(filepath, 'utf-8')
+    expect(result).toContain('uWebSockets.js: github:uNetworking/uWebSockets.js#v20.52.0')
   })
 })
