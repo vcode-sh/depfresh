@@ -13,6 +13,12 @@ const main = defineCommand({
   args,
   async run({ args }) {
     try {
+      if (args.mode_arg === 'help') {
+        const { showUsage } = await import('citty')
+        await showUsage(main)
+        process.exit(0)
+      }
+
       if (args['help-json']) {
         const { outputCliCapabilities } = await import('./capabilities')
         outputCliCapabilities()
