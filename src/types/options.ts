@@ -2,6 +2,7 @@ import type { depfreshAddon } from '../addons/types'
 import type { DepFieldType, RangeMode, ResolvedDepChange, SortOption } from './dependencies'
 import type { OutputFormat, PackageMeta } from './package'
 
+/** Core configuration for depfresh check and update operations. */
 export interface depfreshOptions {
   cwd: string
   recursive: boolean
