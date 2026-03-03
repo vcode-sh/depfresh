@@ -14,7 +14,7 @@ concurrency:
 jobs:
   test:
     name: Test
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.event_name == 'pull_request' && 'ubuntu-latest' || fromJSON('["self-hosted", "linux", "x64", "vps"]') }}
     steps:
       - uses: actions/checkout@v6
 
@@ -43,7 +43,7 @@ jobs:
 
   build:
     name: Build
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.event_name == 'pull_request' && 'ubuntu-latest' || fromJSON('["self-hosted", "linux", "x64", "vps"]') }}
     needs: test
     steps:
       - uses: actions/checkout@v6
@@ -77,7 +77,7 @@ jobs:
 
   lint:
     name: Lint
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.event_name == 'pull_request' && 'ubuntu-latest' || fromJSON('["self-hosted", "linux", "x64", "vps"]') }}
     steps:
       - uses: actions/checkout@v6
 
@@ -95,7 +95,7 @@ jobs:
 
   distribution-smoke:
     name: Distribution Smoke
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.event_name == 'pull_request' && 'ubuntu-latest' || fromJSON('["self-hosted", "linux", "x64", "vps"]') }}
     needs: build
     steps:
       - uses: actions/checkout@v6
