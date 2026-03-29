@@ -19,7 +19,7 @@ describe('loadPackages with ignoreOtherWorkspaces', () => {
     rmSync(tmpDir, { recursive: true, force: true })
   })
 
-  it('filters out packages from nested pnpm workspaces', async () => {
+  it('keeps nested pnpm workspace roots while filtering out their descendants', async () => {
     writeFileSync(join(tmpDir, 'package.json'), JSON.stringify({ name: 'root' }, null, 2))
     mkdirSync(join(tmpDir, 'packages', 'a'), { recursive: true })
     writeFileSync(
@@ -49,7 +49,7 @@ describe('loadPackages with ignoreOtherWorkspaces', () => {
     })
 
     const names = packages.map((p) => p.name).sort()
-    expect(names).toEqual(['a', 'root'])
+    expect(names).toEqual(['a', 'other-mono', 'root'])
   })
 
   it('keeps nested workspace packages when disabled', async () => {
@@ -79,7 +79,7 @@ describe('loadPackages with ignoreOtherWorkspaces', () => {
     expect(names).toEqual(['b', 'other-mono', 'root'])
   })
 
-  it('filters nested npm workspaces (package.json with workspaces field)', async () => {
+  it('keeps nested npm workspace roots defined in package.json while filtering descendants', async () => {
     writeFileSync(join(tmpDir, 'package.json'), JSON.stringify({ name: 'root' }, null, 2))
 
     mkdirSync(join(tmpDir, 'external', 'lib', 'packages', 'c'), { recursive: true })
@@ -100,10 +100,10 @@ describe('loadPackages with ignoreOtherWorkspaces', () => {
     })
 
     const names = packages.map((p) => p.name).sort()
-    expect(names).toEqual(['root'])
+    expect(names).toEqual(['lib-root', 'root'])
   })
 
-  it('filters nested npm workspaces defined by package.yaml', async () => {
+  it('keeps nested npm workspace roots defined by package.yaml while filtering descendants', async () => {
     writeFileSync(join(tmpDir, 'package.yaml'), 'name: root\n')
 
     mkdirSync(join(tmpDir, 'external', 'yaml-lib', 'packages', 'd'), { recursive: true })
@@ -124,7 +124,7 @@ describe('loadPackages with ignoreOtherWorkspaces', () => {
     })
 
     const names = packages.map((p) => p.name).sort()
-    expect(names).toEqual(['root'])
+    expect(names).toEqual(['root', 'yaml-lib'])
   })
 
   it('keeps nested package.yaml workspaces when filtering is disabled', async () => {
@@ -149,5 +149,54 @@ describe('loadPackages with ignoreOtherWorkspaces', () => {
 
     const names = packages.map((p) => p.name).sort()
     expect(names).toEqual(['d', 'root', 'yaml-lib'])
+  })
+
+  it('keeps a nested pnpm workspace root while excluding its descendants', async () => {
+    mkdirSync(join(tmpDir, 'vendor', 'other-mono', 'packages', 'b'), { recursive: true })
+    writeFileSync(
+      join(tmpDir, 'vendor', 'other-mono', 'pnpm-workspace.yaml'),
+      'packages:\n  - packages/*\n',
+    )
+    writeFileSync(
+      join(tmpDir, 'vendor', 'other-mono', 'package.json'),
+      JSON.stringify({ name: 'other-mono' }, null, 2),
+    )
+    writeFileSync(
+      join(tmpDir, 'vendor', 'other-mono', 'packages', 'b', 'package.json'),
+      JSON.stringify({ name: 'b' }, null, 2),
+    )
+
+    const packages = await loadPackages({
+      ...baseOptions,
+      cwd: tmpDir,
+      ignoreOtherWorkspaces: true,
+      loglevel: 'silent',
+    })
+
+    const names = packages.map((p) => p.name).sort()
+    expect(names).toEqual(['other-mono'])
+  })
+
+  it('keeps a nested git repo root while excluding its descendants', async () => {
+    mkdirSync(join(tmpDir, 'vendor', 'nested-repo', '.git'), { recursive: true })
+    mkdirSync(join(tmpDir, 'vendor', 'nested-repo', 'packages', 'b'), { recursive: true })
+    writeFileSync(
+      join(tmpDir, 'vendor', 'nested-repo', 'package.json'),
+      JSON.stringify({ name: 'nested-repo' }, null, 2),
+    )
+    writeFileSync(
+      join(tmpDir, 'vendor', 'nested-repo', 'packages', 'b', 'package.json'),
+      JSON.stringify({ name: 'b' }, null, 2),
+    )
+
+    const packages = await loadPackages({
+      ...baseOptions,
+      cwd: tmpDir,
+      ignoreOtherWorkspaces: true,
+      loglevel: 'silent',
+    })
+
+    const names = packages.map((p) => p.name).sort()
+    expect(names).toEqual(['nested-repo'])
   })
 })

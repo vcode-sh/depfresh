@@ -120,6 +120,42 @@ describe('check', () => {
     expect(result).toBe(2)
   })
 
+  it('does not report all-up-to-date when every dependency fails to resolve', async () => {
+    const pkg = makePkg('broken-app')
+    mocks.loadPackagesMock.mockResolvedValue([pkg])
+    mocks.resolvePackageMock.mockResolvedValue([
+      makeResolved({
+        name: 'missing-pkg',
+        diff: 'error',
+        currentVersion: '^1.0.0',
+        targetVersion: '^1.0.0',
+      }),
+    ])
+
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    const { check } = await import('./index')
+    const result = await check({ ...baseOptions, loglevel: 'info' })
+
+    expect(result).toBe(0)
+    expect(
+      logSpy.mock.calls.some((call) =>
+        call.some((arg) => String(arg).includes('All dependencies are up to date')),
+      ),
+    ).toBe(false)
+    expect(
+      warnSpy.mock.calls.some((call) =>
+        call.some((arg) => String(arg).includes('failed to resolve')),
+      ),
+    ).toBe(true)
+
+    logSpy.mockRestore()
+    warnSpy.mockRestore()
+    errorSpy.mockRestore()
+  })
+
   it('calls writePackage when write=true and beforePackageWrite returns true', async () => {
     const pkg = makePkg('my-app')
     mocks.loadPackagesMock.mockResolvedValue([pkg])

@@ -49,6 +49,27 @@ describe('loadPackages', () => {
     expect(names).toEqual(['root', 'sub-pkg'])
   })
 
+  it('uses effectiveRoot for discovery when cwd points at a child directory', async () => {
+    writeFileSync(
+      join(tmpDir, 'package.json'),
+      JSON.stringify({ name: 'root', workspaces: ['packages/*'] }, null, 2),
+    )
+    mkdirSync(join(tmpDir, 'packages', 'sub', 'src'), { recursive: true })
+    writeFileSync(
+      join(tmpDir, 'packages', 'sub', 'package.json'),
+      JSON.stringify({ name: 'sub-pkg' }, null, 2),
+    )
+
+    const packages = await loadPackages({
+      ...baseOptions,
+      cwd: join(tmpDir, 'packages', 'sub', 'src'),
+      loglevel: 'silent',
+    })
+
+    const names = packages.map((p) => p.name).sort()
+    expect(names).toEqual(['root', 'sub-pkg'])
+  })
+
   it('loads only root package.json when recursive=false', async () => {
     writeFileSync(join(tmpDir, 'package.json'), JSON.stringify({ name: 'root' }, null, 2))
     mkdirSync(join(tmpDir, 'packages', 'sub'), { recursive: true })

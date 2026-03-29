@@ -2,6 +2,7 @@ import c from 'ansis'
 import { createAddonLifecycle } from '../../addons'
 import { createSqliteCache } from '../../cache/index'
 import { loadPackages } from '../../io/packages'
+import { resolveDiscoveryContext } from '../../io/packages/root-detection'
 import type { depfreshOptions, ResolvedDepChange } from '../../types'
 import { createLogger } from '../../utils/logger'
 import { loadNpmrc } from '../../utils/npmrc'
@@ -42,6 +43,7 @@ export async function check(options: depfreshOptions): Promise<number> {
       plannedUpdates: 0,
       appliedUpdates: 0,
       revertedUpdates: 0,
+      failedResolutions: 0,
       noPackagesFound: packages.length === 0,
       didWrite: false,
     }
@@ -63,7 +65,9 @@ export async function check(options: depfreshOptions): Promise<number> {
     const progress = createCheckProgress(options, packages)
 
     const cache = createSqliteCache()
-    const npmrc = loadNpmrc(options.cwd)
+    const executionRoot =
+      options.effectiveRoot ?? resolveDiscoveryContext(options.cwd).effectiveRoot
+    const npmrc = loadNpmrc(executionRoot)
     const workspacePackageNames = new Set(packages.map((p) => p.name).filter(Boolean))
 
     try {
@@ -89,6 +93,7 @@ export async function check(options: depfreshOptions): Promise<number> {
             }
           },
           onErrorDeps: (errors: ResolvedDepChange[]) => {
+            executionState.failedResolutions += errors.length
             if (options.output === 'json') {
               for (const dep of errors) {
                 jsonErrors.push({
@@ -98,6 +103,10 @@ export async function check(options: depfreshOptions): Promise<number> {
                   message: 'Failed to resolve from registry',
                 })
               }
+            } else {
+              logger.warn(
+                `${pkg.name}: failed to resolve ${errors.map((dep) => dep.name).join(', ')}`,
+              )
             }
           },
           onAllModeNoUpdates: () => {
@@ -132,14 +141,14 @@ export async function check(options: depfreshOptions): Promise<number> {
     }
 
     if (options.execute && options.write && didWrite) {
-      await runExecute(options.execute, options.cwd, logger)
+      await runExecute(options.execute, executionRoot, logger)
     }
 
     if (options.write && didWrite) {
       if (options.update) {
-        await runUpdate(options.cwd, packages, logger)
+        await runUpdate(executionRoot, packages, logger)
       } else if (options.install) {
-        await runInstall(options.cwd, packages, logger)
+        await runInstall(executionRoot, packages, logger)
       }
     }
 
@@ -147,8 +156,10 @@ export async function check(options: depfreshOptions): Promise<number> {
       outputJsonEnvelope(jsonPackages, options, executionState, jsonErrors)
     }
 
-    if (!hasUpdates) {
+    if (!hasUpdates && executionState.failedResolutions === 0) {
       logger.success('All dependencies are up to date')
+    } else if (executionState.failedResolutions > 0 && options.output === 'table') {
+      logger.warn(`${executionState.failedResolutions} dependencies failed to resolve`)
     }
 
     if (hasUpdates && options.output === 'table') {

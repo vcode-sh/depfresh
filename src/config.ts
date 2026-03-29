@@ -3,6 +3,7 @@ import { pathToFileURL } from 'node:url'
 import { defu } from 'defu'
 import { join } from 'pathe'
 import { ConfigError } from './errors'
+import { resolveDiscoveryContext } from './io/packages/root-detection'
 import type { depfreshOptions } from './types'
 import { DEFAULT_OPTIONS } from './types'
 import { createLogger } from './utils/logger'
@@ -93,9 +94,14 @@ async function loadConfigFile(cwd: string): Promise<Partial<depfreshOptions> | u
 export async function resolveConfig(
   overrides: Partial<depfreshOptions> = {},
 ): Promise<depfreshOptions> {
-  const cwd = overrides.cwd || process.cwd()
-  const fileConfig = await loadConfigFile(cwd)
+  const requestedCwd = overrides.cwd || process.cwd()
+  const discovery = resolveDiscoveryContext(requestedCwd)
+  const fileConfig = await loadConfigFile(discovery.effectiveRoot)
   const merged = defu(overrides, fileConfig ?? {}, DEFAULT_OPTIONS) as depfreshOptions
+  merged.cwd = discovery.inputCwd
+  merged.inputCwd = discovery.inputCwd
+  merged.effectiveRoot = discovery.effectiveRoot
+  merged.discoveryMode = discovery.discoveryMode
 
   const logger = createLogger(merged.loglevel)
   logger.debug('Config resolved:', JSON.stringify(merged, null, 2))

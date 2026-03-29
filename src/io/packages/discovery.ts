@@ -5,10 +5,12 @@ import { createLogger } from '../../utils/logger'
 import { loadCatalogs } from '../catalogs/index'
 import { loadPackage } from './load-package'
 import { dedupeManifestsByDirectory } from './manifest-priority'
+import { resolveDiscoveryContext } from './root-detection'
 import { belongsToNestedWorkspace } from './workspace-boundary'
 
 export async function loadPackages(options: depfreshOptions): Promise<PackageMeta[]> {
   const logger = createLogger(options.loglevel)
+  const discoveryRoot = options.effectiveRoot ?? resolveDiscoveryContext(options.cwd).effectiveRoot
 
   // Global packages mode — skip filesystem scan
   if (options.global || options.globalAll) {
@@ -28,14 +30,14 @@ export async function loadPackages(options: depfreshOptions): Promise<PackageMet
     : ['package.json', 'package.yaml']
 
   let packageFiles = await glob(packagePatterns, {
-    cwd: options.cwd,
+    cwd: discoveryRoot,
     ignore: options.ignorePaths,
     absolute: true,
   })
 
   // Filter out packages belonging to nested/separate workspaces
   if (options.ignoreOtherWorkspaces) {
-    const rootDir = resolve(options.cwd)
+    const rootDir = resolve(discoveryRoot)
     const before = packageFiles.length
     packageFiles = packageFiles.filter((f) => !belongsToNestedWorkspace(f, rootDir))
     const skipped = before - packageFiles.length
@@ -59,7 +61,7 @@ export async function loadPackages(options: depfreshOptions): Promise<PackageMet
   // Load workspace catalogs (pnpm, bun, yarn) only in recursive mode.
   if (options.recursive) {
     try {
-      const catalogs = await loadCatalogs(options.cwd, options)
+      const catalogs = await loadCatalogs(discoveryRoot, options)
       for (const catalog of catalogs) {
         const catalogTypeName =
           catalog.type === 'pnpm'

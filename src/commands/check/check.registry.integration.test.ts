@@ -49,12 +49,17 @@ interface JsonError {
 
 interface JsonSummary {
   total: number
+  failedResolutions?: number
 }
 
 interface JsonEnvelope {
   packages: JsonPackage[]
   errors: JsonError[]
   summary: JsonSummary
+  meta?: {
+    hadResolutionErrors?: boolean
+    effectiveRoot?: string
+  }
 }
 
 const TEST_ENV_KEYS = [
@@ -203,7 +208,7 @@ describe('check registry integration (mocked real registries)', () => {
     expect(registry.count('missing-pkg')).toBe(1)
   })
 
-  it('returns non-fatal JSON error entries when all deps fail to resolve', async () => {
+  it('returns JSON error entries and marks the run as having resolution errors when all deps fail', async () => {
     const registry = await startMockRegistry({})
     servers.push(registry.server)
 
@@ -220,8 +225,11 @@ describe('check registry integration (mocked real registries)', () => {
 
     expect(exitCode).toBe(0)
     expect(payload.summary.total).toBe(0)
+    expect(payload.summary.failedResolutions).toBe(1)
     expect(payload.errors).toHaveLength(1)
     expect(payload.errors[0]?.name).toBe('missing-only')
+    expect(payload.meta?.hadResolutionErrors).toBe(true)
+    expect(payload.meta?.effectiveRoot).toBe(cwd)
     expect(registry.count('missing-only')).toBe(1)
   })
 

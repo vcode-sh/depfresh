@@ -11,6 +11,7 @@ import YAML from 'yaml'
 export function belongsToNestedWorkspace(filepath: string, rootDir: string): boolean {
   const pkgDir = dirname(filepath)
   const normalizedRoot = resolve(rootDir)
+  const parentDir = dirname(pkgDir)
 
   // If the package is at the root, it never belongs to a nested workspace
   if (resolve(pkgDir) === normalizedRoot) return false
@@ -20,19 +21,15 @@ export function belongsToNestedWorkspace(filepath: string, rootDir: string): boo
   // so we filter results to only those NOT at our root.
 
   // Check for pnpm-workspace.yaml
-  const pnpmWs = findUpSync('pnpm-workspace.yaml', { cwd: pkgDir, stopAt: normalizedRoot })
+  const pnpmWs = findUpSync('pnpm-workspace.yaml', { cwd: parentDir, stopAt: normalizedRoot })
   if (pnpmWs && resolve(dirname(pnpmWs)) !== normalizedRoot) return true
 
   // Check for .yarnrc.yml
-  const yarnRc = findUpSync('.yarnrc.yml', { cwd: pkgDir, stopAt: normalizedRoot })
+  const yarnRc = findUpSync('.yarnrc.yml', { cwd: parentDir, stopAt: normalizedRoot })
   if (yarnRc && resolve(dirname(yarnRc)) !== normalizedRoot) return true
-
-  // Check if this manifest itself is a nested workspace root
-  if (hasWorkspaceField(filepath)) return true
 
   // Check for parent manifests with workspaces field.
   // Start from the parent of pkgDir to avoid matching the file itself.
-  const parentDir = dirname(pkgDir)
   if (resolve(parentDir) !== normalizedRoot) {
     const nestedJson = findUpSync('package.json', { cwd: parentDir, stopAt: normalizedRoot })
     const nestedYaml = findUpSync('package.yaml', { cwd: parentDir, stopAt: normalizedRoot })
@@ -49,7 +46,7 @@ export function belongsToNestedWorkspace(filepath: string, rootDir: string): boo
 
   // Check for .git directory (indicates a separate repo boundary)
   const gitDir = findUpSync('.git', {
-    cwd: pkgDir,
+    cwd: parentDir,
     stopAt: normalizedRoot,
     type: 'directory',
   })

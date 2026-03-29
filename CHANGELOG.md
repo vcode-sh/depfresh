@@ -2,6 +2,26 @@
 
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Semver because I'm not a psychopath.
 
+## [1.1.0] - Unreleased
+
+The "stop lying about where you are and what just failed" release. depfresh now understands project roots instead of blindly trusting the current directory, keeps nested workspace roots visible instead of pretending they don't exist, and stops reporting a clean run when every dependency resolution just exploded. First slice only. Still `Unreleased` until the full fix plan lands.
+
+### Added
+
+- **Project root auto-detection** — when you run depfresh from a child directory, it now resolves the effective project root instead of treating `cwd` as gospel. The runtime tracks both the input cwd and the derived root so discovery and config loading finally agree on where the project actually is.
+- **Root-detection test coverage** — dedicated regression tests for child-directory runs, parent-folder project discovery, nested workspace roots, and false-green resolution failures. The sort of tests you add after getting annoyed enough times.
+
+### Changed
+
+- **Nested workspace filtering semantics** — nested workspace and nested repo roots are now preserved while their descendants remain filtered by default. Previously depfresh could walk a parent folder full of real projects and conclude that absolutely nothing existed. Deeply philosophical. Also wrong.
+- **JSON execution metadata** — JSON output now includes `meta.effectiveRoot`, `meta.hadResolutionErrors`, and `summary.failedResolutions`. Machine consumers can now distinguish "clean", "updates available", and "resolution went sideways" without reading tea leaves.
+
+### Fixed
+
+- **False-green resolution failures** — depfresh no longer reports `All dependencies are up to date` when dependencies failed to resolve. Table output surfaces the failure state, and JSON output marks the run accordingly instead of pretending the absence of updates means success.
+- **Child-directory discovery misses** — running depfresh from paths like `packages/app/src` now resolves against the actual project root instead of returning `noPackagesFound` because you had the audacity to be one folder too deep.
+- **Parent-folder nested workspace misses** — scanning a parent directory that only contains nested monorepos or nested git repos now keeps those roots visible instead of filtering the entire tree into oblivion.
+
 ## [1.0.0] - 2026-02-23
 
 The "it's either 1.0 or therapy" release. Full taze backlog audit done, every claim backed by code and tests, 624 tests passing, docs rewritten by someone who's read them. If you've been waiting for the "stable enough to bet on" signal -- this is it. We stopped adding features and started proving the ones we have actually work.

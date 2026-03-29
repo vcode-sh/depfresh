@@ -4,6 +4,9 @@ import type { OutputFormat, PackageMeta } from './package'
 
 export interface depfreshOptions {
   cwd: string
+  inputCwd?: string
+  effectiveRoot?: string
+  discoveryMode?: 'direct-root' | 'inside-project' | 'parent-folder'
   recursive: boolean
   mode: RangeMode
   write: boolean

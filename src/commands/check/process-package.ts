@@ -47,7 +47,9 @@ export async function processPackage(
 
     const updates = pkg.resolved.filter((d) => d.diff !== 'none' && d.diff !== 'error')
     if (updates.length === 0) {
-      hooks.onAllModeNoUpdates()
+      if (errorDeps.length === 0) {
+        hooks.onAllModeNoUpdates()
+      }
       return
     }
 

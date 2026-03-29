@@ -61,11 +61,14 @@ describe('JSON output', () => {
     expect(output.summary.plannedUpdates).toBe(0)
     expect(output.summary.appliedUpdates).toBe(0)
     expect(output.summary.revertedUpdates).toBe(0)
+    expect(output.summary.failedResolutions).toBe(0)
     expect(output.meta.schemaVersion).toBe(1)
     expect(output.meta.cwd).toBe('/tmp/test')
+    expect(output.meta.effectiveRoot).toBe('/tmp/test')
     expect(output.meta.mode).toBeDefined()
     expect(output.meta.timestamp).toBeDefined()
     expect(output.meta.noPackagesFound).toBe(false)
+    expect(output.meta.hadResolutionErrors).toBe(false)
     expect(output.meta.didWrite).toBe(false)
 
     consoleSpy.mockRestore()
@@ -181,7 +184,9 @@ describe('JSON output', () => {
     expect(output.summary.plannedUpdates).toBe(0)
     expect(output.summary.appliedUpdates).toBe(0)
     expect(output.summary.revertedUpdates).toBe(0)
+    expect(output.summary.failedResolutions).toBe(0)
     expect(output.meta.noPackagesFound).toBe(true)
+    expect(output.meta.hadResolutionErrors).toBe(false)
     expect(output.meta.didWrite).toBe(false)
 
     consoleSpy.mockRestore()
@@ -223,8 +228,55 @@ describe('JSON output', () => {
     expect(output.summary.plannedUpdates).toBe(1)
     expect(output.summary.appliedUpdates).toBe(0)
     expect(output.summary.revertedUpdates).toBe(1)
+    expect(output.summary.failedResolutions).toBe(0)
     expect(output.meta.noPackagesFound).toBe(false)
+    expect(output.meta.hadResolutionErrors).toBe(false)
     expect(output.meta.didWrite).toBe(false)
+
+    consoleSpy.mockRestore()
+  })
+
+  it('reports failed resolution state without pretending the run is clean', async () => {
+    const pkg = makePkg('broken-app')
+    mocks.loadPackagesMock.mockResolvedValue([pkg])
+    mocks.resolvePackageMock.mockResolvedValue([
+      makeResolved({
+        name: 'missing-pkg',
+        diff: 'error',
+        currentVersion: '^1.0.0',
+        targetVersion: '^1.0.0',
+      }),
+    ])
+
+    const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+
+    const { check } = await import('./index')
+    await check({ ...baseOptions, output: 'json' })
+
+    const jsonCall = consoleSpy.mock.calls.find((call) => {
+      try {
+        const parsed = JSON.parse(call[0] as string)
+        return parsed.packages !== undefined
+      } catch {
+        return false
+      }
+    })
+
+    expect(jsonCall).toBeDefined()
+    const output = JSON.parse(jsonCall![0] as string)
+    expect(output.packages).toEqual([])
+    expect(output.errors).toEqual([
+      {
+        name: 'missing-pkg',
+        source: 'dependencies',
+        currentVersion: '^1.0.0',
+        message: 'Failed to resolve from registry',
+      },
+    ])
+    expect(output.summary.total).toBe(0)
+    expect(output.summary.failedResolutions).toBe(1)
+    expect(output.meta.noPackagesFound).toBe(false)
+    expect(output.meta.hadResolutionErrors).toBe(true)
 
     consoleSpy.mockRestore()
   })

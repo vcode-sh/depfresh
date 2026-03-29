@@ -27,6 +27,7 @@ export interface JsonExecutionState {
   plannedUpdates: number
   appliedUpdates: number
   revertedUpdates: number
+  failedResolutions: number
   noPackagesFound: boolean
   didWrite: boolean
 }
@@ -45,13 +46,16 @@ interface JsonOutput {
     plannedUpdates: number
     appliedUpdates: number
     revertedUpdates: number
+    failedResolutions: number
   }
   meta: {
     schemaVersion: number
     cwd: string
+    effectiveRoot: string
     mode: string
     timestamp: string
     noPackagesFound: boolean
+    hadResolutionErrors: boolean
     didWrite: boolean
   }
 }
@@ -111,13 +115,16 @@ export function outputJsonEnvelope(
       plannedUpdates: executionState.plannedUpdates,
       appliedUpdates: executionState.appliedUpdates,
       revertedUpdates: executionState.revertedUpdates,
+      failedResolutions: executionState.failedResolutions,
     },
     meta: {
       schemaVersion: 1,
       cwd: options.cwd,
+      effectiveRoot: options.effectiveRoot ?? options.cwd,
       mode: options.mode,
       timestamp: new Date().toISOString(),
       noPackagesFound: executionState.noPackagesFound,
+      hadResolutionErrors: executionState.failedResolutions > 0,
       didWrite: executionState.didWrite,
     },
   }

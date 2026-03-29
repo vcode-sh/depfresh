@@ -1,4 +1,7 @@
-import { describe, expect, it } from 'vitest'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { afterEach, describe, expect, it } from 'vitest'
 import { resolveConfig } from './config'
 import { defineConfig } from './index'
 
@@ -72,7 +75,9 @@ describe('cwd option', () => {
   it('falls back to default cwd when not provided', async () => {
     const config = await resolveConfig({ loglevel: 'silent' })
 
-    expect(config.cwd).toBe('.')
+    expect(config.cwd).toBe(process.cwd())
+    expect(config.inputCwd).toBe(process.cwd())
+    expect(config.effectiveRoot).toBe(process.cwd())
   })
 
   it('passes cwd through to config resolution', async () => {
@@ -84,6 +89,64 @@ describe('cwd option', () => {
 
     expect(config.cwd).toBe('/tmp/test-workspace')
     expect(config.mode).toBe('latest')
+  })
+})
+
+describe('root auto-detection in config resolution', () => {
+  let tmpDir: string
+
+  afterEach(() => {
+    if (tmpDir) {
+      rmSync(tmpDir, { recursive: true, force: true })
+    }
+  })
+
+  it('loads root package config when cwd is a child directory', async () => {
+    tmpDir = mkdtempSync(join(tmpdir(), 'depfresh-config-root-'))
+    mkdirSync(join(tmpDir, 'src', 'deep'), { recursive: true })
+    writeFileSync(
+      join(tmpDir, 'package.json'),
+      JSON.stringify({ name: 'root', depfresh: { mode: 'latest', concurrency: 4 } }, null, 2),
+    )
+
+    const config = await resolveConfig({
+      cwd: join(tmpDir, 'src', 'deep'),
+      loglevel: 'silent',
+    })
+
+    expect(config.cwd).toBe(join(tmpDir, 'src', 'deep'))
+    expect(config.inputCwd).toBe(join(tmpDir, 'src', 'deep'))
+    expect(config.effectiveRoot).toBe(tmpDir)
+    expect(config.discoveryMode).toBe('inside-project')
+    expect(config.mode).toBe('latest')
+    expect(config.concurrency).toBe(4)
+  })
+
+  it('prefers workspace root config over nested package roots', async () => {
+    tmpDir = mkdtempSync(join(tmpdir(), 'depfresh-config-workspace-root-'))
+    mkdirSync(join(tmpDir, 'packages', 'app', 'src'), { recursive: true })
+    writeFileSync(
+      join(tmpDir, 'package.json'),
+      JSON.stringify(
+        {
+          name: 'workspace-root',
+          workspaces: ['packages/*'],
+          depfresh: { mode: 'minor' },
+        },
+        null,
+        2,
+      ),
+    )
+    writeFileSync(join(tmpDir, 'packages', 'app', 'package.json'), JSON.stringify({ name: 'app' }))
+
+    const config = await resolveConfig({
+      cwd: join(tmpDir, 'packages', 'app', 'src'),
+      loglevel: 'silent',
+    })
+
+    expect(config.effectiveRoot).toBe(tmpDir)
+    expect(config.discoveryMode).toBe('inside-project')
+    expect(config.mode).toBe('minor')
   })
 })
 
