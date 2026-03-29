@@ -129,4 +129,28 @@ describe('loadPackages YAML manifests', () => {
     const depNames = packages[0]!.deps.map((dep) => `${dep.source}:${dep.name}`).sort()
     expect(depNames).toEqual(['dependencies:lodash', 'overrides:sharp', 'pnpm.overrides:esbuild'])
   })
+
+  it('uses root package.yaml workspaces to avoid scanning unrelated package trees', async () => {
+    writeFileSync(
+      join(tmpDir, 'package.yaml'),
+      ['name: root', 'workspaces:', '  - packages/*', ''].join('\n'),
+    )
+    mkdirSync(join(tmpDir, 'packages', 'sub'), { recursive: true })
+    writeFileSync(
+      join(tmpDir, 'packages', 'sub', 'package.yaml'),
+      ['name: sub-yaml', ''].join('\n'),
+    )
+    mkdirSync(join(tmpDir, 'examples', 'demo'), { recursive: true })
+    writeFileSync(join(tmpDir, 'examples', 'demo', 'package.yaml'), ['name: demo', ''].join('\n'))
+
+    const packages = await loadPackages({
+      ...baseOptions,
+      cwd: tmpDir,
+      recursive: true,
+      loglevel: 'silent',
+    })
+
+    const names = packages.map((p) => p.name).sort()
+    expect(names).toEqual(['root', 'sub-yaml'])
+  })
 })

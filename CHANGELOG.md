@@ -13,6 +13,7 @@ The "stop lying about where you are and what just failed" release. depfresh now 
 - **`--fail-on-resolution-errors`** — strict mode for CI and automation. If any dependency fails to resolve from the registry, depfresh now exits `2` instead of quietly carrying on like nothing happened.
 - **`--explain-discovery`** — discovery diagnostics on demand. depfresh can now tell you which root it picked, which manifests it matched, which ones it skipped, and which catalogs it loaded. Finally, a flag for people tired of reading source just to answer "why didn't it see my package?".
 - **`--fail-on-no-packages`** — strict mode for the other embarrassing CI case: wrong cwd, empty folder, or overly aggressive filters. depfresh can now fail loudly instead of smiling and pretending an empty scan was success.
+- **Workspace-aware manifest discovery** — when the effective root declares workspace package patterns, depfresh now uses those patterns to enumerate manifests before falling back to blind recursive globbing. Translation: fewer accidental `examples/` and `fixtures/` packages showing up just because they happened to exist under the repo root.
 - **`--strict-post-write`** — opt-in strict mode for post-write automation. If `--execute`, `--install`, or `--update` fails, depfresh can now return exit code `2` instead of treating that failure as a warning bolted onto an otherwise green run.
 
 ### Changed

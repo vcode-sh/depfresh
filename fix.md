@@ -49,15 +49,15 @@ This is the recommended implementation backlog derived from the plan.
 - `DONE` Task 0.2: Add false-green regression tests for all-resolution-failed cases in table and JSON modes.
 - `DONE` Task 0.3: Add regression tests for Bun catalog detection from subdirectories.
 - `DONE` Task 0.4: Add regression tests for duplicate cold-cache fetches and repo-wide concurrency behavior.
-- `TODO` Task 0.5: Add contract tests for `.npmrc` env expansion and auth parsing behavior.
+- `DONE` Task 0.5: Add contract tests for `.npmrc` env expansion and auth parsing behavior.
 
 - `DONE` Task 1.1: Implement root auto-detection for `cwd` inside a project.
 - `DONE` Task 1.2: Implement downward project-root discovery for parent folders that are not themselves projects.
 - `DONE` Task 1.3: Thread `inputCwd` and `effectiveRoot` through config resolution and runtime.
-- `TODO` Task 1.4: Expose root-resolution metadata in debug and JSON output.
+- `DONE` Task 1.4: Expose root-resolution metadata in debug and JSON output.
 
-- `TODO` Task 2.1: Replace blind recursive manifest globbing with workspace-aware root enumeration where available.
-- `TODO` Task 2.2: Keep fallback glob discovery for plain non-workspace directory trees.
+- `DONE` Task 2.1: Replace blind recursive manifest globbing with workspace-aware root enumeration where available.
+- `DONE` Task 2.2: Keep fallback glob discovery for plain non-workspace directory trees.
 
 - `TODO` Task 3.1: Refactor nested workspace boundary detection to return structured classifications.
 - `DONE` Task 3.2: Keep nested workspace roots visible while excluding nested descendants by default.
@@ -72,36 +72,36 @@ This is the recommended implementation backlog derived from the plan.
 - `DONE` Task 5.2: Add in-flight promise dedupe across packages and duplicate dependency occurrences.
 - `DONE` Task 5.3: Preserve deterministic output ordering after concurrent resolution.
 
-- `TODO` Task 6.1: Change cache keys to include protocol and registry identity.
-- `TODO` Task 6.2: Add cache migration or cache invalidation path.
+- `DONE` Task 6.1: Change cache keys to include protocol and registry identity.
+- `DONE` Task 6.2: Add cache migration or cache invalidation path.
 
 - `DONE` Task 7.1: Implement `${VAR}` expansion in `.npmrc` values.
-- `TODO` Task 7.2: Decide and implement supported `.npmrc` basic-auth formats, or remove the doc claims.
-- `TODO` Task 7.3: Match auth config to registries by normalized origin instead of loose substring matching.
+- `DONE` Task 7.2: Decide and implement supported `.npmrc` basic-auth formats, or remove the doc claims.
+- `DONE` Task 7.3: Match auth config to registries by normalized origin instead of loose substring matching.
 
-- `TODO` Task 8.1: Add `--explain-discovery`.
+- `DONE` Task 8.1: Add `--explain-discovery`.
 - `TODO` Task 8.2: Add `--profile`.
-- `TODO` Task 8.3: Add `--fail-on-no-packages`.
+- `DONE` Task 8.3: Add `--fail-on-no-packages`.
 
-- `TODO` Task 9.1: Make `--execute` failures fail the run under the chosen contract.
-- `TODO` Task 9.2: Make `--install` and `--update` failures fail the run under the chosen contract.
-- `TODO` Task 9.3: If needed, introduce `--strict-post-write` as a transition flag.
+- `DONE` Task 9.1: Make `--execute` failures fail the run under the chosen contract.
+- `DONE` Task 9.2: Make `--install` and `--update` failures fail the run under the chosen contract.
+- `DONE` Task 9.3: If needed, introduce `--strict-post-write` as a transition flag.
 
 - `DONE` Task 10.1: Make Bun catalog detection walk upward like pnpm and Yarn.
 - `TODO` Task 10.2: Make package-manager detection use `effectiveRoot`.
 - `TODO` Task 10.3: Reduce fragile catalog/load/write module coupling while touching these paths.
 
-- `TODO` Task 11.1: Decide the final meaning of `includeWorkspace`.
-- `TODO` Task 11.2: Implement the chosen `workspace:` resolution/skip behavior.
-- `TODO` Task 11.3: Add regression coverage for published-version comparison or explicit skip semantics.
+- `DONE` Task 11.1: Decide the final meaning of `includeWorkspace`.
+- `DONE` Task 11.2: Implement the chosen `workspace:` resolution/skip behavior.
+- `DONE` Task 11.3: Add regression coverage for published-version comparison or explicit skip semantics.
 
-- `TODO` Task 12.1: Decide whether `packageManager` is supported or removed.
-- `TODO` Task 12.2: Implement the chosen path completely, including tests and docs.
+- `DONE` Task 12.1: Decide whether `packageManager` is supported or removed.
+- `DONE` Task 12.2: Implement the chosen path completely, including tests and docs.
 
-- `TODO` Task 13.1: Align JSON docs with actual runtime output and error semantics.
-- `TODO` Task 13.2: Align workspace docs with actual `includeWorkspace` behavior.
-- `TODO` Task 13.3: Align `.npmrc` docs with actual parser/auth behavior.
-- `TODO` Task 13.4: Document `inputCwd` vs `effectiveRoot`.
+- `DONE` Task 13.1: Align JSON docs with actual runtime output and error semantics.
+- `DONE` Task 13.2: Align workspace docs with actual `includeWorkspace` behavior.
+- `DONE` Task 13.3: Align `.npmrc` docs with actual parser/auth behavior.
+- `DONE` Task 13.4: Document `inputCwd` vs `effectiveRoot`.
 
 ## Deep audit additions
 

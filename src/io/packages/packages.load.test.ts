@@ -70,6 +70,58 @@ describe('loadPackages', () => {
     expect(names).toEqual(['root', 'sub-pkg'])
   })
 
+  it('uses root workspaces from package.json to avoid scanning unrelated package trees', async () => {
+    writeFileSync(
+      join(tmpDir, 'package.json'),
+      JSON.stringify({ name: 'root', workspaces: ['packages/*'] }, null, 2),
+    )
+    mkdirSync(join(tmpDir, 'packages', 'sub'), { recursive: true })
+    writeFileSync(
+      join(tmpDir, 'packages', 'sub', 'package.json'),
+      JSON.stringify({ name: 'sub-pkg' }, null, 2),
+    )
+    mkdirSync(join(tmpDir, 'examples', 'demo'), { recursive: true })
+    writeFileSync(
+      join(tmpDir, 'examples', 'demo', 'package.json'),
+      JSON.stringify({ name: 'demo' }, null, 2),
+    )
+
+    const packages = await loadPackages({
+      ...baseOptions,
+      cwd: tmpDir,
+      recursive: true,
+      loglevel: 'silent',
+    })
+
+    const names = packages.map((p) => p.name).sort()
+    expect(names).toEqual(['root', 'sub-pkg'])
+  })
+
+  it('uses pnpm-workspace.yaml package patterns before falling back to blind globbing', async () => {
+    writeFileSync(join(tmpDir, 'package.json'), JSON.stringify({ name: 'root' }, null, 2))
+    writeFileSync(join(tmpDir, 'pnpm-workspace.yaml'), "packages:\n  - 'packages/*'\n")
+    mkdirSync(join(tmpDir, 'packages', 'sub'), { recursive: true })
+    writeFileSync(
+      join(tmpDir, 'packages', 'sub', 'package.json'),
+      JSON.stringify({ name: 'sub-pkg' }, null, 2),
+    )
+    mkdirSync(join(tmpDir, 'examples', 'demo'), { recursive: true })
+    writeFileSync(
+      join(tmpDir, 'examples', 'demo', 'package.json'),
+      JSON.stringify({ name: 'demo' }, null, 2),
+    )
+
+    const packages = await loadPackages({
+      ...baseOptions,
+      cwd: tmpDir,
+      recursive: true,
+      loglevel: 'silent',
+    })
+
+    const names = packages.map((p) => p.name).sort()
+    expect(names).toEqual(['root', 'sub-pkg'])
+  })
+
   it('loads only root package.json when recursive=false', async () => {
     writeFileSync(join(tmpDir, 'package.json'), JSON.stringify({ name: 'root' }, null, 2))
     mkdirSync(join(tmpDir, 'packages', 'sub'), { recursive: true })

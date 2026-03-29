@@ -7,6 +7,7 @@ import { loadPackage } from './load-package'
 import { dedupeManifestsByDirectory } from './manifest-priority'
 import { resolveDiscoveryContext } from './root-detection'
 import { belongsToNestedWorkspace } from './workspace-boundary'
+import { getWorkspaceManifestPatterns } from './workspace-discovery'
 
 export async function loadPackages(options: depfreshOptions): Promise<PackageMeta[]> {
   const logger = createLogger(options.loglevel)
@@ -34,9 +35,11 @@ export async function loadPackages(options: depfreshOptions): Promise<PackageMet
 
   const packages: PackageMeta[] = []
 
-  // Find all package manifests
   const packagePatterns = options.recursive
-    ? ['**/package.json', '**/package.yaml']
+    ? (getWorkspaceManifestPatterns(discoveryRoot)?.patterns ?? [
+        '**/package.json',
+        '**/package.yaml',
+      ])
     : ['package.json', 'package.yaml']
 
   let packageFiles = await glob(packagePatterns, {
