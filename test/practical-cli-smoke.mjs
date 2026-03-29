@@ -210,7 +210,9 @@ const cleanEnv = Object.fromEntries(
 
 async function runCli(args, extra = {}) {
   return await new Promise((resolve, reject) => {
-    const needsCache = !args.some((a) => ['--help', '--help-json', '--version', 'help', 'capabilities'].includes(a))
+    const needsCache = !args.some((a) =>
+      ['--help', '--help-json', '--version', 'help', 'capabilities'].includes(a),
+    )
     const cacheArgs = needsCache ? ['--refresh-cache'] : []
     const child = spawn(process.execPath, [cliPath, ...cacheArgs, ...args], {
       cwd: repoRoot,
