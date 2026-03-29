@@ -140,6 +140,30 @@ describe('fetchPackageData', () => {
     )
   })
 
+  it('continues paginating GitHub tags until a semver tag is found', async () => {
+    const responses = Array.from({ length: 10 }, () =>
+      Array.from({ length: 100 }, () => ({ name: 'not-a-version' })),
+    )
+    responses.push([{ name: 'v3.1.4' }])
+
+    globalThis.fetch = vi.fn().mockImplementation(() => {
+      const next = responses.shift()
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: () => Promise.resolve(next ?? []),
+      })
+    })
+
+    const { fetchPackageData } = await import('./registry')
+    const result = await fetchPackageData('github:owner/repo', defaultOptions)
+
+    expect(globalThis.fetch).toHaveBeenCalledTimes(11)
+    expect(result.versions).toEqual(['3.1.4'])
+    expect(result.distTags.latest).toBe('3.1.4')
+  })
+
   it('encodes scoped package names correctly', async () => {
     const npmResponse = {
       versions: { '3.0.0': {} },

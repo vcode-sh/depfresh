@@ -300,4 +300,61 @@ describe('unexpected resolution failures', () => {
       targetVersion: '^2.0.0',
     })
   })
+
+  it('keeps resolved deps when onDependencyResolved throws', async () => {
+    const { fetchPackageData } = await import('../registry')
+    const { resolvePackage } = await import('./index')
+
+    const cache = createMockCache()
+    vi.mocked(fetchPackageData).mockResolvedValue({
+      name: 'test-pkg',
+      versions: ['1.0.0', '2.0.0'],
+      distTags: { latest: '2.0.0' },
+    })
+
+    const dep = makeDep({ name: 'test-pkg', currentVersion: '^1.0.0' })
+    const pkg = makePkg([dep])
+    const options = makeOptions({
+      mode: 'latest',
+      onDependencyResolved: () => {
+        throw new Error('callback failed')
+      },
+    })
+
+    const result = await resolvePackage(pkg, options, cache, defaultNpmrc)
+
+    expect(result).toHaveLength(1)
+    expect(result[0]).toMatchObject({
+      name: 'test-pkg',
+      diff: 'major',
+      targetVersion: '^2.0.0',
+    })
+  })
+
+  it('keeps resolved deps when onDependencyProcessed throws', async () => {
+    const { fetchPackageData } = await import('../registry')
+    const { resolvePackage } = await import('./index')
+
+    const cache = createMockCache()
+    vi.mocked(fetchPackageData).mockResolvedValue({
+      name: 'test-pkg',
+      versions: ['1.0.0', '2.0.0'],
+      distTags: { latest: '2.0.0' },
+    })
+
+    const dep = makeDep({ name: 'test-pkg', currentVersion: '^1.0.0' })
+    const pkg = makePkg([dep])
+    const options = makeOptions({ mode: 'latest' })
+
+    const result = await resolvePackage(pkg, options, cache, defaultNpmrc, undefined, () => {
+      throw new Error('progress callback failed')
+    })
+
+    expect(result).toHaveLength(1)
+    expect(result[0]).toMatchObject({
+      name: 'test-pkg',
+      diff: 'major',
+      targetVersion: '^2.0.0',
+    })
+  })
 })

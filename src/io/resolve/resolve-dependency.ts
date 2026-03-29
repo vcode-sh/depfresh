@@ -83,7 +83,13 @@ export async function resolveDependency(
       }
 
       if (cachePolicy.shouldWrite) {
-        cache.set(resolveKey, pkgData, options.cacheTTL)
+        try {
+          cache.set(resolveKey, pkgData, options.cacheTTL)
+        } catch (error) {
+          logger.debug(
+            `Failed to write cache entry for ${packageName}: ${error instanceof Error ? error.message : String(error)}`,
+          )
+        }
       }
     } catch (error) {
       logger.debug(`Failed to fetch ${packageName}: ${error}`)

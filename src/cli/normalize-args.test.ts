@@ -115,6 +115,18 @@ describe('normalizeArgs enum validation', () => {
     expect(resolvedOptions.sort).toBe('name-desc')
     expect(resolvedOptions.loglevel).toBe('debug')
   })
+
+  it('throws ConfigError for invalid --concurrency values', async () => {
+    await expect(normalizeArgs(makeRawArgs({ concurrency: 'abc' }))).rejects.toThrow(
+      'Invalid value for --concurrency',
+    )
+  })
+
+  it('throws ConfigError for invalid --cooldown values', async () => {
+    await expect(normalizeArgs(makeRawArgs({ cooldown: '1.5' }))).rejects.toThrow(
+      'Invalid value for --cooldown',
+    )
+  })
 })
 
 describe('normalizeArgs parity flags', () => {

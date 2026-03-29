@@ -1,5 +1,6 @@
 import { execSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
+import { dirname, join, resolve } from 'node:path'
 import { findUpSync } from 'find-up-simple'
 import { parsePackageManagerField } from '../../io/packages/package-manager-field'
 import type { PackageManagerName, PackageMeta } from '../../types'
@@ -54,16 +55,23 @@ export async function runUpdate(
 }
 
 function detectPackageManagerFromManifest(cwd: string): PackageManagerName | undefined {
-  const packageJsonPath = findUpSync('package.json', { cwd })
-  if (packageJsonPath) {
+  let current = resolve(cwd)
+
+  while (true) {
+    const packageJsonPath = join(current, 'package.json')
+
     try {
       const raw = JSON.parse(readFileSync(packageJsonPath, 'utf-8')) as Record<string, unknown>
       if (typeof raw.packageManager === 'string') {
         return parsePackageManagerField(raw.packageManager)?.name
       }
     } catch {
-      // ignore malformed manifests for PM detection fallback
+      // ignore missing or malformed manifests and keep walking upward
     }
+
+    const parent = dirname(current)
+    if (parent === current) break
+    current = parent
   }
 
   return undefined

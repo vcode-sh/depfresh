@@ -126,8 +126,8 @@ async function fetchGithubPackage(repository: string, options: FetchOptions): Pr
 
   const versions = new Set<string>()
 
-  // Fetch tags in pages to avoid missing satisfying versions in long-lived repos.
-  for (let page = 1; page <= 10; page++) {
+  // Fetch tags until GitHub returns an empty page.
+  for (let page = 1; ; page++) {
     const url = `https://api.github.com/repos/${repository}/tags?per_page=100&page=${page}`
     const payload = await fetchWithRetry(url, headers, options)
     if (!Array.isArray(payload)) {
@@ -213,8 +213,14 @@ async function fetchWithRetry(
 
     return await response.json()
   } catch (error) {
-    // Never retry 4xx client errors — they won't resolve with retries
-    if (error instanceof RegistryError && error.status >= 400 && error.status < 500) {
+    // Never retry 4xx client errors — they won't resolve with retries.
+    // 429 is treated as retryable because rate limits are transient.
+    if (
+      error instanceof RegistryError &&
+      error.status >= 400 &&
+      error.status < 500 &&
+      error.status !== 429
+    ) {
       throw error
     }
 

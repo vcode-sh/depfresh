@@ -10,12 +10,18 @@ function isPeerScopedCatalog(name: string): boolean {
 }
 
 export const pnpmCatalogLoader: CatalogLoader = {
-  async detect(cwd: string): Promise<boolean> {
-    return !!findUpSync('pnpm-workspace.yaml', { cwd })
+  async detect(cwd: string, options?: depfreshOptions): Promise<boolean> {
+    return !!findUpSync('pnpm-workspace.yaml', {
+      cwd,
+      stopAt: getCatalogSearchRoot(options),
+    })
   },
 
   async load(cwd: string, options: depfreshOptions): Promise<CatalogSource[]> {
-    const filepath = findUpSync('pnpm-workspace.yaml', { cwd })
+    const filepath = findUpSync('pnpm-workspace.yaml', {
+      cwd,
+      stopAt: getCatalogSearchRoot(options),
+    })
     if (!filepath) return []
 
     const content = readFileSync(filepath, 'utf-8')
@@ -81,4 +87,8 @@ function parseCatalogSection(
     raw: rawContent,
     indent: '  ',
   }
+}
+
+function getCatalogSearchRoot(options: depfreshOptions | undefined): string | undefined {
+  return options?.discoveryReport?.effectiveRoot
 }

@@ -5,7 +5,8 @@ describe('--verify-command flag', () => {
   let mocks: CheckMocks
 
   beforeEach(async () => {
-    vi.clearAllMocks()
+    vi.resetAllMocks()
+    vi.resetModules()
     vi.doUnmock('./interactive')
     mocks = await setupMocks()
   })
@@ -61,6 +62,40 @@ describe('--verify-command flag', () => {
     expect(mocks.backupPackageFilesMock).toHaveBeenCalledTimes(2)
     // writePackage still called for both (tried both)
     expect(mocks.writePackageMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('restores backups when writePackage throws before verification', async () => {
+    const pkg = makePkg('my-app')
+    const dep = makeResolved({ name: 'dep-a', diff: 'minor', targetVersion: '^1.1.0' })
+    mocks.loadPackagesMock.mockResolvedValue([pkg])
+    mocks.resolvePackageMock.mockResolvedValue([dep])
+    mocks.writePackageMock.mockImplementation(() => {
+      throw new Error('write failed')
+    })
+
+    const { check } = await import('./index')
+    const result = await check({ ...baseOptions, write: true, verifyCommand: 'npm test' })
+
+    expect(result).toBe(2)
+    expect(mocks.backupPackageFilesMock).toHaveBeenCalledTimes(1)
+    expect(mocks.restorePackageFilesMock).toHaveBeenCalledTimes(1)
+    expect(mocks.execSyncMock).not.toHaveBeenCalled()
+  })
+
+  it('runs verify command from the package directory on Windows-style paths', async () => {
+    const pkg = makePkg('my-app')
+    pkg.filepath = 'C:\\repo\\my-app\\package.json'
+    const dep = makeResolved({ name: 'dep-a', diff: 'minor', targetVersion: '^1.1.0' })
+    mocks.loadPackagesMock.mockResolvedValue([pkg])
+    mocks.resolvePackageMock.mockResolvedValue([dep])
+
+    const { check } = await import('./index')
+    await check({ ...baseOptions, write: true, verifyCommand: 'npm test' })
+
+    expect(mocks.execSyncMock).toHaveBeenCalledWith(
+      'npm test',
+      expect.objectContaining({ cwd: 'C:\\repo\\my-app', stdio: 'pipe' }),
+    )
   })
 
   it('reports applied and reverted counts', async () => {

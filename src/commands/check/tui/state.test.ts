@@ -173,6 +173,20 @@ describe('detail view transitions', () => {
     expect(state.selectedDepIndices).toEqual(new Set([1]))
   })
 
+  it('preserves existing selections when applying a version from detail view', () => {
+    let state = createInitialState([makeDep('a'), makeDep('b')], { termRows: 20, termCols: 80 })
+
+    state = toggleSelection(state)
+    state = moveCursor(state, 1)
+    state = enterDetail(state)
+    state = moveDetailCursor(state, 1)
+    state = selectDetailVersion(state)
+
+    expect(state.selectedDepIndices).toEqual(new Set([0, 1]))
+    expect(state.items[2]?.dep?.targetVersion).toBe('^1.1.0')
+    expect(state.items[2]?.dep?.diff).toBe('minor')
+  })
+
   it('clamps detail cursor at boundaries', () => {
     let state = createInitialState([makeDep('a')], { termRows: 20, termCols: 80 })
     state = enterDetail(state)

@@ -1,5 +1,6 @@
 import { ConfigError } from '../errors'
 import type { depfreshOptions, OutputFormat, RangeMode, SortOption } from '../types'
+import { parseIntegerOption } from '../validate-options'
 import { VALID_LOG_LEVELS, VALID_MODES, VALID_OUTPUTS, VALID_SORT_OPTIONS } from './arg-values'
 import { parseCommaSeparatedArg } from './parse-list-arg'
 
@@ -43,6 +44,8 @@ export async function normalizeArgs(args: Record<string, unknown>): Promise<depf
   const exclude = parseCommaSeparatedArg(args.exclude)
   const ignorePaths = parseCommaSeparatedArg(args['ignore-paths'])
   const refreshCache = Boolean(args['refresh-cache'] || args['no-cache'])
+  const concurrency = parseIntegerOption(args.concurrency, '--concurrency', 1)
+  const cooldown = parseIntegerOption(args.cooldown, '--cooldown', 0)
 
   return resolveConfig({
     cwd: (args.cwd as string) || process.cwd(),
@@ -60,14 +63,14 @@ export async function normalizeArgs(args: Record<string, unknown>): Promise<depf
     peer: args.peer as boolean,
     includeLocked: args['include-locked'] as boolean,
     output,
-    concurrency: Number.parseInt(args.concurrency as string, 10),
+    concurrency,
     loglevel,
     depFields,
     all: args.all as boolean,
     group: args.group as boolean,
     sort,
     timediff: args.timediff as boolean,
-    cooldown: Number.parseInt(args.cooldown as string, 10),
+    cooldown,
     nodecompat: args.nodecompat as boolean,
     long: args.long as boolean,
     explain: args.explain as boolean,

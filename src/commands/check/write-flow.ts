@@ -1,4 +1,5 @@
 import { execSync } from 'node:child_process'
+import { posix, win32 } from 'node:path'
 import { backupPackageFiles, restorePackageFiles, writePackage } from '../../io/write'
 import type { depfreshOptions, PackageMeta, ResolvedDepChange } from '../../types'
 import type { Logger } from '../../utils/logger'
@@ -8,6 +9,10 @@ export interface PackageWriteResult {
   applied: number
   reverted: number
   didWrite: boolean
+}
+
+function getPackageDirectory(filepath: string): string {
+  return filepath.includes('\\') ? win32.dirname(filepath) : posix.dirname(filepath)
 }
 
 export async function verifyAndWrite(
@@ -21,10 +26,16 @@ export async function verifyAndWrite(
 
   for (const change of changes) {
     const backups = backupPackageFiles(pkg)
-    writePackage(pkg, [change], 'silent')
 
     try {
-      execSync(verifyCommand, { cwd: pkg.filepath.replace(/\/[^/]+$/, ''), stdio: 'pipe' })
+      writePackage(pkg, [change], 'silent')
+    } catch (error) {
+      restorePackageFiles(backups)
+      throw error
+    }
+
+    try {
+      execSync(verifyCommand, { cwd: getPackageDirectory(pkg.filepath), stdio: 'pipe' })
       applied++
       logger.success(`  ${change.name} ${change.currentVersion} → ${change.targetVersion} ✓`)
     } catch {

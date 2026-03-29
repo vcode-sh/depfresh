@@ -27,6 +27,22 @@ function createResolutionError(dep: RawDep): ResolvedDepChange {
   }
 }
 
+async function runBestEffortCallback(
+  logger: ReturnType<typeof createLogger>,
+  label: string,
+  callback: (() => void | Promise<void>) | undefined,
+): Promise<void> {
+  if (!callback) return
+
+  try {
+    await callback()
+  } catch (error) {
+    logger.debug(
+      `Ignored ${label} callback failure: ${error instanceof Error ? error.message : String(error)}`,
+    )
+  }
+}
+
 export async function resolvePackage(
   pkg: PackageMeta,
   options: depfreshOptions,
@@ -65,21 +81,34 @@ export async function resolvePackage(
               )
               return createResolutionError(dep)
             } finally {
-              await onDependencyProcessed?.(pkg, dep)
+              await runBestEffortCallback(
+                logger,
+                'onDependencyProcessed',
+                onDependencyProcessed ? () => onDependencyProcessed(pkg, dep) : undefined,
+              )
             }
           }),
         ),
     )
 
     const resolved: ResolvedDepChange[] = []
+    const onDependencyResolved = options.onDependencyResolved
 
     for (const result of results) {
-      if (result.status === 'fulfilled' && result.value) {
-        resolved.push(result.value)
-        await options.onDependencyResolved?.(pkg, result.value)
-      } else if (result.status === 'rejected') {
-        logger.debug(`Resolution failed: ${result.reason}`)
+      if (result.status !== 'fulfilled' || !result.value) {
+        if (result.status === 'rejected') {
+          logger.debug(`Resolution failed: ${result.reason}`)
+        }
+        continue
       }
+
+      const resolvedDep = result.value
+      resolved.push(resolvedDep)
+      await runBestEffortCallback(
+        logger,
+        'onDependencyResolved',
+        onDependencyResolved ? () => onDependencyResolved(pkg, resolvedDep) : undefined,
+      )
     }
 
     return resolved

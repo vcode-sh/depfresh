@@ -23,8 +23,20 @@ function makeOption(dep: ResolvedDepChange, depIndex: number) {
   }
 }
 
+function getSelectedUpdates(
+  updates: ResolvedDepChange[],
+  selectedValues: string[],
+): ResolvedDepChange[] {
+  const selectedIndices = new Set(
+    selectedValues
+      .map((value) => Number(value))
+      .filter((value) => Number.isInteger(value) && value >= 0),
+  )
+
+  return updates.filter((_dep, depIndex) => selectedIndices.has(depIndex))
+}
+
 async function runClackFallback(updates: ResolvedDepChange[]): Promise<ResolvedDepChange[]> {
-  const updatesByValue = new Map(updates.map((dep, depIndex) => [getSelectionValue(depIndex), dep]))
   const grouped = new Map<DiffType, Array<{ dep: ResolvedDepChange; depIndex: number }>>()
 
   for (const [depIndex, dep] of updates.entries()) {
@@ -52,9 +64,7 @@ async function runClackFallback(updates: ResolvedDepChange[]): Promise<ResolvedD
       return []
     }
 
-    return (selected as string[])
-      .map((value) => updatesByValue.get(value))
-      .filter((dep): dep is ResolvedDepChange => !!dep)
+    return getSelectedUpdates(updates, selected as string[])
   }
 
   const groupOptions: Record<string, Array<{ value: string; label: string; hint?: string }>> = {}
@@ -80,9 +90,7 @@ async function runClackFallback(updates: ResolvedDepChange[]): Promise<ResolvedD
     return []
   }
 
-  return (selected as string[])
-    .map((value) => updatesByValue.get(value))
-    .filter((dep): dep is ResolvedDepChange => !!dep)
+  return getSelectedUpdates(updates, selected as string[])
 }
 
 export async function runInteractive(
@@ -91,9 +99,17 @@ export async function runInteractive(
 ): Promise<ResolvedDepChange[]> {
   if (updates.length === 0) return []
 
-  if (process.stdin.isTTY && process.stdout.isTTY) {
-    const { createInteractiveTUI } = await import('./tui/index')
-    return createInteractiveTUI(updates, { explain: options?.explain ?? false })
+  if (
+    process.stdin.isTTY &&
+    process.stdout.isTTY &&
+    typeof process.stdin.setRawMode === 'function'
+  ) {
+    try {
+      const { createInteractiveTUI } = await import('./tui/index')
+      return await createInteractiveTUI(updates, { explain: options?.explain ?? false })
+    } catch {
+      return runClackFallback(updates)
+    }
   }
 
   return runClackFallback(updates)

@@ -42,6 +42,7 @@ function makeDep(name = 'react'): ResolvedDepChange {
 describe('createAddonLifecycle', () => {
   it('runs callbacks and addons in deterministic order', async () => {
     const order: string[] = []
+    const changes = [makeDep()]
     const addon: depfreshAddon = {
       name: 'timeline',
       setup() {
@@ -87,7 +88,8 @@ describe('createAddonLifecycle', () => {
           order.push('callback.beforePackageWrite')
           return true
         },
-        afterPackageWrite() {
+        afterPackageWrite(_pkg, receivedChanges) {
+          expect(receivedChanges).toEqual(changes)
           order.push('callback.afterPackageWrite')
         },
         afterPackageEnd() {
@@ -106,8 +108,8 @@ describe('createAddonLifecycle', () => {
     await lifecycle.afterPackagesLoaded([pkg])
     await lifecycle.beforePackageStart(pkg)
     await lifecycle.onDependencyResolved(pkg, dep)
-    await lifecycle.beforePackageWrite(pkg, [dep])
-    await lifecycle.afterPackageWrite(pkg, [dep])
+    await lifecycle.beforePackageWrite(pkg, changes)
+    await lifecycle.afterPackageWrite(pkg, changes)
     await lifecycle.afterPackageEnd(pkg)
     await lifecycle.afterPackagesEnd([pkg])
 
@@ -154,6 +156,16 @@ describe('createAddonLifecycle', () => {
       createAddonLifecycle(
         makeOptions({
           addons: [{ name: 'dup' }, { name: 'dup' }],
+        }),
+      ),
+    ).toThrow(ConfigError)
+  })
+
+  it('treats addon names with surrounding whitespace as duplicates', () => {
+    expect(() =>
+      createAddonLifecycle(
+        makeOptions({
+          addons: [{ name: 'dup' }, { name: ' dup ' }],
         }),
       ),
     ).toThrow(ConfigError)

@@ -5,7 +5,15 @@ const PREFIX_RE = /^(\^|~|>=?|<=?|=)?/
 
 export function getVersionPrefix(version: string): string {
   const match = version.match(PREFIX_RE)
-  return match?.[1] ?? ''
+  const prefix = match?.[1] ?? ''
+  if (!prefix) return ''
+
+  const remainder = version.slice(prefix.length).trim()
+  if (remainder.includes(' ') || remainder.includes('||')) {
+    return ''
+  }
+
+  return prefix
 }
 
 export function isRange(version: string): boolean {

@@ -197,7 +197,15 @@ describe('check', () => {
     await check({ ...baseOptions, write: true, beforePackageWrite, afterPackageWrite })
 
     expect(mocks.writePackageMock).toHaveBeenCalled()
-    expect(afterPackageWrite).toHaveBeenCalledWith(pkg)
+    expect(afterPackageWrite).toHaveBeenCalledWith(
+      pkg,
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: 'test-dep',
+          targetVersion: '^1.0.1',
+        }),
+      ]),
+    )
   })
 
   it('skips write when beforePackageWrite returns false', async () => {

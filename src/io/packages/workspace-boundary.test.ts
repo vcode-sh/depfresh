@@ -126,6 +126,21 @@ describe('belongsToNestedWorkspace', () => {
     ).toBe(true)
   })
 
+  it('detects nested .git file as repo boundary', () => {
+    mkdirSync(join(tmpDir, 'nested-worktree', 'packages', 'w'), { recursive: true })
+    writeFileSync(join(tmpDir, 'nested-worktree', '.git'), 'gitdir: ../.git/worktrees/w\n')
+    writeFileSync(
+      join(tmpDir, 'nested-worktree', 'packages', 'w', 'package.json'),
+      JSON.stringify({ name: 'w' }),
+    )
+    expect(
+      belongsToNestedWorkspace(
+        join(tmpDir, 'nested-worktree', 'packages', 'w', 'package.json'),
+        tmpDir,
+      ),
+    ).toBe(true)
+  })
+
   it('detects deeply nested workspace (4+ levels deep)', () => {
     mkdirSync(join(tmpDir, 'deep', 'nested', 'mono', 'packages', 'x'), { recursive: true })
     writeFileSync(

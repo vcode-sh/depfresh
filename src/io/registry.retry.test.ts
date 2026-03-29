@@ -141,6 +141,41 @@ describe('fetchWithRetry', () => {
     expect(globalThis.fetch).toHaveBeenCalledTimes(1)
   })
 
+  it('retries on 429 registry rate limits', async () => {
+    const successResponse = {
+      versions: { '1.0.0': {} },
+      'dist-tags': { latest: '1.0.0' },
+    }
+
+    let callCount = 0
+    globalThis.fetch = vi.fn().mockImplementation(() => {
+      callCount++
+      if (callCount === 1) {
+        return Promise.resolve({
+          ok: false,
+          status: 429,
+          statusText: 'Too Many Requests',
+          json: () => Promise.resolve({}),
+        })
+      }
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: () => Promise.resolve(successResponse),
+      })
+    })
+
+    const { fetchPackageData } = await import('./registry')
+    const result = await fetchPackageData('test-pkg', {
+      ...defaultOptions,
+      retries: 2,
+    })
+
+    expect(callCount).toBe(2)
+    expect(result.name).toBe('test-pkg')
+  }, 10_000)
+
   it('retries on network errors', async () => {
     const successResponse = {
       versions: { '1.0.0': {} },

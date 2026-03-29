@@ -6,13 +6,19 @@ import { isLocked } from '../../utils/versions'
 import type { CatalogLoader } from './index'
 
 export const yarnCatalogLoader: CatalogLoader = {
-  async detect(cwd: string): Promise<boolean> {
-    const rcFile = findUpSync('.yarnrc.yml', { cwd })
+  async detect(cwd: string, options?: depfreshOptions): Promise<boolean> {
+    const rcFile = findUpSync('.yarnrc.yml', {
+      cwd,
+      stopAt: getCatalogSearchRoot(options),
+    })
     return !!rcFile
   },
 
   async load(cwd: string, options: depfreshOptions): Promise<CatalogSource[]> {
-    const filepath = findUpSync('.yarnrc.yml', { cwd })
+    const filepath = findUpSync('.yarnrc.yml', {
+      cwd,
+      stopAt: getCatalogSearchRoot(options),
+    })
     if (!filepath) return []
 
     const content = readFileSync(filepath, 'utf-8')
@@ -47,7 +53,8 @@ export const yarnCatalogLoader: CatalogLoader = {
   },
 
   write(catalog: CatalogSource, changes: Map<string, string>): void {
-    const doc = catalog.raw as YAML.Document
+    const content = readFileSync(catalog.filepath, 'utf-8')
+    const doc = YAML.parseDocument(content)
     const catalogNode = doc.get('catalog') as YAML.YAMLMap | undefined
     if (!catalogNode) return
 
@@ -59,4 +66,8 @@ export const yarnCatalogLoader: CatalogLoader = {
 
     writeFileSync(catalog.filepath, doc.toString(), 'utf-8')
   },
+}
+
+function getCatalogSearchRoot(options: depfreshOptions | undefined): string | undefined {
+  return options?.discoveryReport?.effectiveRoot
 }

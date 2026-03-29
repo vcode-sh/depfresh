@@ -5,7 +5,7 @@ import type { CatalogSource, depfreshOptions } from '../../types'
  * All workspace catalog formats (pnpm, bun, yarn) go through this abstraction.
  */
 export interface CatalogLoader {
-  detect(cwd: string): Promise<boolean>
+  detect(cwd: string, options?: depfreshOptions): Promise<boolean>
   load(cwd: string, options: depfreshOptions): Promise<CatalogSource[]>
   write(catalog: CatalogSource, changes: Map<string, string>): void
 }
@@ -25,7 +25,7 @@ export async function loadCatalogs(
 
   const detected = await Promise.all(
     loaders.map(async (loader) => {
-      if (await loader.detect(cwd)) {
+      if (await loader.detect(cwd, options)) {
         return loader.load(cwd, options)
       }
       return []

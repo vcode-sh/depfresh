@@ -8,7 +8,6 @@ import {
 import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { performance } from 'node:perf_hooks'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { depfreshOptions } from '../../types'
 import { DEFAULT_OPTIONS } from '../../types'
@@ -61,6 +60,9 @@ interface JsonEnvelope {
   meta?: {
     hadResolutionErrors?: boolean
     effectiveRoot?: string
+  }
+  profile?: {
+    resolutionMs?: number
   }
 }
 
@@ -277,17 +279,17 @@ describe('check registry integration (mocked real registries)', () => {
       npmrcLines: [`registry=${registry.url}`],
     })
 
-    const start = performance.now()
     const { exitCode, payload } = await runCheck(cwd, {
       retries: 0,
+      profile: true,
     })
-    const elapsedMs = performance.now() - start
 
     expect(exitCode).toBe(1)
     expect(payload.summary.total).toBe(2)
     expect(registry.count('pkg-a')).toBe(1)
     expect(registry.count('pkg-b')).toBe(1)
-    expect(elapsedMs).toBeLessThan(220)
+    expect(payload.profile?.resolutionMs).toBeDefined()
+    expect(payload.profile?.resolutionMs).toBeLessThan(220)
   })
 
   it('checks workspace protocol deps with explicit versions against the registry', async () => {

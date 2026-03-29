@@ -87,7 +87,16 @@ export function parseDependencies(
 
   if (isDepFieldEnabled('packageManager', options) && typeof raw.packageManager === 'string') {
     const packageManager = parsePackageManagerField(raw.packageManager)
-    if (packageManager) {
+    if (
+      packageManager &&
+      !shouldSkipDependency(
+        packageManager.name,
+        packageManager.version,
+        options,
+        includePatterns,
+        excludePatterns,
+      )
+    ) {
       deps.push({
         name: packageManager.name,
         currentVersion: packageManager.version,

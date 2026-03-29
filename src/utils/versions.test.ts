@@ -22,6 +22,11 @@ describe('getVersionPrefix', () => {
     expect(getVersionPrefix('>=1.2.3')).toBe('>=')
   })
 
+  it('does not treat compound ranges as a single prefix', () => {
+    expect(getVersionPrefix('>=1.0.0 <2.0.0')).toBe('')
+    expect(getVersionPrefix('^1.0.0 || ^2.0.0')).toBe('')
+  })
+
   it('returns empty for exact version', () => {
     expect(getVersionPrefix('1.2.3')).toBe('')
   })

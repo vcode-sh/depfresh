@@ -146,4 +146,33 @@ describe('yarnCatalogLoader.write', () => {
     expect(content).toContain('nodeLinker: node-modules')
     expect(content).toContain('yarnPath: .yarn/releases/yarn-4.0.0.cjs')
   })
+
+  it('re-reads current file content before writing to avoid clobbering concurrent changes', () => {
+    const filepath = join(testDir, '.yarnrc.yml')
+    writeFileSync(filepath, 'nodeLinker: node-modules\ncatalog:\n  react: ^18.0.0\n', 'utf-8')
+
+    const YAML = require('yaml')
+    const doc = YAML.parseDocument(readFileSync(filepath, 'utf-8'))
+
+    const catalog: CatalogSource = {
+      type: 'yarn',
+      name: 'default',
+      filepath,
+      deps: [],
+      raw: doc,
+      indent: '  ',
+    }
+
+    writeFileSync(
+      filepath,
+      'nodeLinker: node-modules\ncatalog:\n  react: ^18.0.0\nnpmRegistryServer: https://registry.npmjs.org\n',
+      'utf-8',
+    )
+
+    yarnCatalogLoader.write(catalog, new Map([['react', '^19.0.0']]))
+
+    const content = readFileSync(filepath, 'utf-8')
+    expect(content).toContain('react: ^19.0.0')
+    expect(content).toContain('npmRegistryServer: https://registry.npmjs.org')
+  })
 })

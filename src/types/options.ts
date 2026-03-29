@@ -69,7 +69,7 @@ export interface depfreshOptions {
   beforePackageStart?: (pkg: PackageMeta) => void | Promise<void>
   onDependencyResolved?: (pkg: PackageMeta, dep: ResolvedDepChange) => void | Promise<void>
   beforePackageWrite?: (pkg: PackageMeta) => boolean | Promise<boolean>
-  afterPackageWrite?: (pkg: PackageMeta) => void | Promise<void>
+  afterPackageWrite?: (pkg: PackageMeta, changes: ResolvedDepChange[]) => void | Promise<void>
   afterPackagesLoaded?: (pkgs: PackageMeta[]) => void | Promise<void>
   afterPackageEnd?: (pkg: PackageMeta) => void | Promise<void>
   afterPackagesEnd?: (pkgs: PackageMeta[]) => void | Promise<void>

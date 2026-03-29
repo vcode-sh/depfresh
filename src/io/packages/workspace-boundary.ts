@@ -82,7 +82,10 @@ function getWorkspaceRootMarker(
   }
 
   const gitWorkspace = resolve(pkgDir, '.git')
-  if (findUpSync('.git', { cwd: pkgDir, stopAt: pkgDir, type: 'directory' }) === gitWorkspace) {
+  const gitMarker =
+    findUpSync('.git', { cwd: pkgDir, stopAt: pkgDir, type: 'directory' }) ??
+    findUpSync('.git', { cwd: pkgDir, stopAt: pkgDir, type: 'file' })
+  if (gitMarker && resolve(gitMarker) === gitWorkspace) {
     return { marker: 'git-repo', path: gitWorkspace }
   }
 
@@ -121,11 +124,17 @@ function getAncestorWorkspaceMarker(
     }
   }
 
-  const gitDir = findUpSync('.git', {
-    cwd: startDir,
-    stopAt: normalizedRoot,
-    type: 'directory',
-  })
+  const gitDir =
+    findUpSync('.git', {
+      cwd: startDir,
+      stopAt: normalizedRoot,
+      type: 'directory',
+    }) ??
+    findUpSync('.git', {
+      cwd: startDir,
+      stopAt: normalizedRoot,
+      type: 'file',
+    })
   if (gitDir && resolve(dirname(gitDir)) !== normalizedRoot) {
     return { marker: 'git-repo', path: gitDir }
   }

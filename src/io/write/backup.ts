@@ -42,11 +42,19 @@ export function backupPackageFiles(pkg: PackageMeta): FileBackup[] {
 }
 
 export function restorePackageFiles(backups: FileBackup[]): void {
+  let firstError: WriteError | undefined
+
   for (const backup of backups) {
     try {
       writeFileSync(backup.filepath, backup.content, 'utf-8')
     } catch (error) {
-      throw new WriteError(`Failed to restore file ${backup.filepath}`, { cause: error })
+      if (!firstError) {
+        firstError = new WriteError(`Failed to restore file ${backup.filepath}`, { cause: error })
+      }
     }
+  }
+
+  if (firstError) {
+    throw firstError
   }
 }

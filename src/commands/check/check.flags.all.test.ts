@@ -188,6 +188,24 @@ describe('detectPackageManager', () => {
     expect(detectPackageManager(join(tmpDir, 'apps', 'web', 'src'), [])).toBe('pnpm')
   })
 
+  it('walks past a child manifest without packageManager to find an ancestor field', async () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), 'depfresh-pm-detect-'))
+    tmpDirs.push(tmpDir)
+    mkdirSync(join(tmpDir, 'apps', 'web'), { recursive: true })
+    writeFileSync(
+      join(tmpDir, 'package.json'),
+      JSON.stringify({ name: 'root', packageManager: 'pnpm@9.0.0' }, null, 2),
+    )
+    writeFileSync(
+      join(tmpDir, 'apps', 'web', 'package.json'),
+      JSON.stringify({ name: 'web' }, null, 2),
+    )
+    mocks.existsSyncMock.mockImplementation(() => false)
+
+    const { detectPackageManager } = await import('./index')
+    expect(detectPackageManager(join(tmpDir, 'apps', 'web'), [])).toBe('pnpm')
+  })
+
   it('prefers packageManager field over lockfiles', async () => {
     mocks.existsSyncMock.mockImplementation((p: string) => p.endsWith('yarn.lock'))
     const pkg = makePkg('my-app')

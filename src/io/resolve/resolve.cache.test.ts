@@ -145,6 +145,28 @@ describe('resolvePackage - cache behavior', () => {
     expect(result.length).toBe(1)
   })
 
+  it('still returns resolved data when cache write fails', async () => {
+    const { fetchPackageData } = await import('../registry')
+    const { resolvePackage } = await import('./index')
+
+    const cache = createMockCache()
+    vi.mocked(fetchPackageData).mockResolvedValue(mockPkgData)
+    vi.mocked(cache.set).mockImplementation(() => {
+      throw new Error('cache write failed')
+    })
+
+    const dep = makeDep()
+    const pkg = makePkg([dep])
+    const options = makeOptions({ mode: 'latest' })
+
+    const result = await resolvePackage(pkg, options, cache, npmrc)
+
+    expect(fetchPackageData).toHaveBeenCalledTimes(1)
+    expect(cache.set).toHaveBeenCalledWith(defaultCacheKey, mockPkgData, options.cacheTTL)
+    expect(result.length).toBe(1)
+    expect(result[0]!.diff).toBe('major')
+  })
+
   it('returns error diff on registry fetch failure', async () => {
     const { fetchPackageData } = await import('../registry')
     const { resolvePackage } = await import('./index')

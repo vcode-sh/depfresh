@@ -199,4 +199,30 @@ describe('loadPackages with ignoreOtherWorkspaces', () => {
     const names = packages.map((p) => p.name).sort()
     expect(names).toEqual(['nested-repo'])
   })
+
+  it('keeps a nested git worktree root file while excluding its descendants', async () => {
+    mkdirSync(join(tmpDir, 'vendor', 'nested-worktree', 'packages', 'b'), { recursive: true })
+    writeFileSync(
+      join(tmpDir, 'vendor', 'nested-worktree', '.git'),
+      'gitdir: ../.git/worktrees/repo\n',
+    )
+    writeFileSync(
+      join(tmpDir, 'vendor', 'nested-worktree', 'package.json'),
+      JSON.stringify({ name: 'nested-worktree' }, null, 2),
+    )
+    writeFileSync(
+      join(tmpDir, 'vendor', 'nested-worktree', 'packages', 'b', 'package.json'),
+      JSON.stringify({ name: 'b' }, null, 2),
+    )
+
+    const packages = await loadPackages({
+      ...baseOptions,
+      cwd: tmpDir,
+      ignoreOtherWorkspaces: true,
+      loglevel: 'silent',
+    })
+
+    const names = packages.map((p) => p.name).sort()
+    expect(names).toEqual(['nested-worktree'])
+  })
 })

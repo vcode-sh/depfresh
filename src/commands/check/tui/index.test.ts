@@ -153,6 +153,23 @@ describe('createInteractiveTUI', () => {
     expect(dep.diff).toBe('minor')
   })
 
+  it('keeps earlier selections when another dependency is changed in detail view', async () => {
+    const updates = [makeDep('alpha', 'dependencies'), makeDep('beta', 'devDependencies')]
+    const promise = createInteractiveTUI(updates, { explain: false })
+
+    process.stdin.emit('keypress', ' ', { name: 'space' })
+    process.stdin.emit('keypress', '', { name: 'down' })
+    process.stdin.emit('keypress', '', { name: 'right' })
+    process.stdin.emit('keypress', '', { name: 'down' })
+    process.stdin.emit('keypress', '\r', { name: 'return' })
+    process.stdin.emit('keypress', '\r', { name: 'return' })
+
+    const result = await promise
+    expect(result).toEqual(updates)
+    expect(updates[1]!.targetVersion).toBe('^1.1.0')
+    expect(updates[1]!.diff).toBe('minor')
+  })
+
   it('handles resize events without crashing', async () => {
     const dep = makeDep('alpha')
     const promise = createInteractiveTUI([dep], { explain: false })

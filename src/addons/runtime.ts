@@ -19,14 +19,15 @@ function normalizeAddons(addons: depfreshAddon[] | undefined): depfreshAddon[] {
 
   const seen = new Set<string>()
   for (const addon of addons) {
-    if (!addon.name || addon.name.trim().length === 0) {
+    const normalizedName = addon.name.trim()
+    if (normalizedName.length === 0) {
       throw new ConfigError('Addon name must be a non-empty string')
     }
 
-    if (seen.has(addon.name)) {
+    if (seen.has(normalizedName)) {
       throw new ConfigError(`Duplicate addon name "${addon.name}"`)
     }
-    seen.add(addon.name)
+    seen.add(normalizedName)
   }
 
   return addons
@@ -110,7 +111,7 @@ export function createAddonLifecycle(options: depfreshOptions): AddonLifecycle {
     },
 
     async afterPackageWrite(pkg: PackageMeta, changes: ResolvedDepChange[]) {
-      await options.afterPackageWrite?.(pkg)
+      await options.afterPackageWrite?.(pkg, changes)
       for (const addon of addons) {
         if (!addon.afterPackageWrite) continue
         await runAddonHook(addon, 'afterPackageWrite', () =>

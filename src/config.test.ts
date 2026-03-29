@@ -160,6 +160,74 @@ describe('root auto-detection in config resolution', () => {
   })
 })
 
+describe('invalid numeric config values', () => {
+  let tmpDir: string
+
+  afterEach(() => {
+    if (tmpDir) {
+      rmSync(tmpDir, { recursive: true, force: true })
+    }
+  })
+
+  it.each([
+    ['concurrency', 'abc', 'Invalid value for --concurrency'],
+    ['timeout', 'abc', 'Invalid value for --timeout'],
+    ['retries', 'abc', 'Invalid value for --retries'],
+    ['cacheTTL', 'abc', 'Invalid value for --cacheTTL'],
+    ['cooldown', 'abc', 'Invalid value for --cooldown'],
+  ])('rejects non-numeric %s from package.json depfresh config', async (key, value, message) => {
+    tmpDir = mkdtempSync(join(tmpdir(), 'depfresh-config-invalid-number-'))
+    writeFileSync(
+      join(tmpDir, 'package.json'),
+      JSON.stringify({ name: 'root', depfresh: { [key]: value } }, null, 2),
+    )
+
+    await expect(resolveConfig({ cwd: tmpDir, loglevel: 'silent' })).rejects.toThrow(message)
+  })
+})
+
+describe('invalid option combinations from config', () => {
+  let tmpDir: string
+
+  afterEach(() => {
+    if (tmpDir) {
+      rmSync(tmpDir, { recursive: true, force: true })
+    }
+  })
+
+  it('rejects interactive json output from package.json depfresh config', async () => {
+    tmpDir = mkdtempSync(join(tmpdir(), 'depfresh-config-invalid-combo-'))
+    writeFileSync(
+      join(tmpDir, 'package.json'),
+      JSON.stringify(
+        { name: 'root', depfresh: { interactive: true, write: true, output: 'json' } },
+        null,
+        2,
+      ),
+    )
+
+    await expect(resolveConfig({ cwd: tmpDir, loglevel: 'silent' })).rejects.toThrow(
+      'Interactive mode cannot be used with JSON output',
+    )
+  })
+
+  it('rejects json output with execute from package.json depfresh config', async () => {
+    tmpDir = mkdtempSync(join(tmpdir(), 'depfresh-config-invalid-execute-'))
+    writeFileSync(
+      join(tmpDir, 'package.json'),
+      JSON.stringify(
+        { name: 'root', depfresh: { write: true, output: 'json', execute: 'echo done' } },
+        null,
+        2,
+      ),
+    )
+
+    await expect(resolveConfig({ cwd: tmpDir, loglevel: 'silent' })).rejects.toThrow(
+      'JSON output cannot be used with --execute, --install, or --update',
+    )
+  })
+})
+
 describe('defineConfig', () => {
   it('returns the config object as-is', () => {
     const config = defineConfig({ mode: 'major', concurrency: 8 })

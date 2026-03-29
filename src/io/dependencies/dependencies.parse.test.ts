@@ -114,6 +114,34 @@ describe('parseDependencies', () => {
     })
     expect(deps).toEqual([])
   })
+
+  it('applies include filter to packageManager source', () => {
+    const raw = {
+      packageManager: 'pnpm@9.0.0',
+    }
+
+    const deps = parseDependencies(raw, { ...baseOptions, include: ['react'] })
+    expect(deps).toEqual([])
+  })
+
+  it('applies exclude filter to packageManager source', () => {
+    const raw = {
+      packageManager: 'pnpm@9.0.0',
+    }
+
+    const deps = parseDependencies(raw, { ...baseOptions, exclude: ['pnpm'] })
+    expect(deps).toEqual([])
+  })
+
+  it('keeps packageManager when it matches include filter', () => {
+    const raw = {
+      packageManager: 'pnpm@9.0.0',
+    }
+
+    const deps = parseDependencies(raw, { ...baseOptions, include: ['pnpm'] })
+    expect(deps).toHaveLength(1)
+    expect(deps[0]?.name).toBe('pnpm')
+  })
 })
 
 describe('isDepFieldEnabled', () => {

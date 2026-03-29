@@ -13,6 +13,7 @@ vi.mock('@clack/prompts', () => clackMock)
 
 const stdinTTYDescriptor = Object.getOwnPropertyDescriptor(process.stdin, 'isTTY')
 const stdoutTTYDescriptor = Object.getOwnPropertyDescriptor(process.stdout, 'isTTY')
+const setRawModeDescriptor = Object.getOwnPropertyDescriptor(process.stdin, 'setRawMode')
 
 function setTTY(stdinTTY: boolean, stdoutTTY: boolean): void {
   Object.defineProperty(process.stdin, 'isTTY', { value: stdinTTY, configurable: true })
@@ -48,6 +49,11 @@ describe('runInteractive', () => {
     vi.doUnmock('./interactive')
     vi.doUnmock('./tui/index')
     clackMock.isCancel.mockReturnValue(false)
+    Object.defineProperty(process.stdin, 'setRawMode', {
+      value: vi.fn(),
+      configurable: true,
+      writable: true,
+    })
     setTTY(false, false)
   })
 
@@ -57,6 +63,9 @@ describe('runInteractive', () => {
     }
     if (stdoutTTYDescriptor) {
       Object.defineProperty(process.stdout, 'isTTY', stdoutTTYDescriptor)
+    }
+    if (setRawModeDescriptor) {
+      Object.defineProperty(process.stdin, 'setRawMode', setRawModeDescriptor)
     }
   })
 
@@ -76,6 +85,23 @@ describe('runInteractive', () => {
     expect(clackMock.groupMultiselect).not.toHaveBeenCalled()
   })
 
+  it('falls back to clack when TUI setup throws on full TTY', async () => {
+    const updates = [makeDep('a', 'major')]
+    const createInteractiveTUIMock = vi.fn().mockRejectedValue(new Error('raw mode failed'))
+    vi.doMock('./tui/index', () => ({
+      createInteractiveTUI: createInteractiveTUIMock,
+    }))
+    clackMock.groupMultiselect.mockResolvedValue(['0'])
+    setTTY(true, true)
+
+    const { runInteractive } = await import('./interactive')
+    const result = await runInteractive(updates)
+
+    expect(createInteractiveTUIMock).toHaveBeenCalledOnce()
+    expect(clackMock.groupMultiselect).toHaveBeenCalledOnce()
+    expect(result).toEqual(updates)
+  })
+
   it('falls back to clack when either stream is non-TTY', async () => {
     const updates = [makeDep('a', 'major')]
     clackMock.groupMultiselect.mockResolvedValue(['0'])
@@ -83,6 +109,23 @@ describe('runInteractive', () => {
 
     const { runInteractive } = await import('./interactive')
     const result = await runInteractive(updates, { explain: true })
+
+    expect(clackMock.groupMultiselect).toHaveBeenCalledOnce()
+    expect(result).toEqual(updates)
+  })
+
+  it('falls back to clack when raw mode is unavailable on full TTY', async () => {
+    const updates = [makeDep('a', 'major')]
+    clackMock.groupMultiselect.mockResolvedValue(['0'])
+    Object.defineProperty(process.stdin, 'setRawMode', {
+      value: undefined,
+      configurable: true,
+      writable: true,
+    })
+    setTTY(true, true)
+
+    const { runInteractive } = await import('./interactive')
+    const result = await runInteractive(updates)
 
     expect(clackMock.groupMultiselect).toHaveBeenCalledOnce()
     expect(result).toEqual(updates)
@@ -118,6 +161,33 @@ describe('runInteractive', () => {
 
     expect(result).toHaveLength(2)
     expect(result.map((r) => r.name)).toEqual(['a', 'c'])
+  })
+
+  it('preserves original update order in grouped fallback even when selection order is reversed', async () => {
+    clackMock.groupMultiselect.mockResolvedValue(['2', '0'])
+
+    const { runInteractive } = await import('./interactive')
+
+    const updates = [makeDep('a', 'major'), makeDep('b', 'minor'), makeDep('c', 'patch')]
+
+    const result = await runInteractive(updates)
+
+    expect(result).toEqual([updates[0], updates[2]])
+  })
+
+  it('preserves original update order for duplicate names in grouped mode', async () => {
+    clackMock.groupMultiselect.mockResolvedValue(['1', '0'])
+
+    const { runInteractive } = await import('./interactive')
+
+    const updates = [
+      makeDep('shared', 'major', { source: 'dependencies' }),
+      makeDep('shared', 'minor', { source: 'devDependencies' }),
+    ]
+
+    const result = await runInteractive(updates)
+
+    expect(result).toEqual(updates)
   })
 
   it('returns empty array on cancel', async () => {
@@ -196,6 +266,22 @@ describe('runInteractive', () => {
     expect(result[0]!.name).toBe('err-pkg')
   })
 
+  it('preserves original update order in flat fallback even when selection order is reversed', async () => {
+    clackMock.multiselect.mockResolvedValue(['2', '0'])
+
+    const { runInteractive } = await import('./interactive')
+
+    const updates = [
+      makeDep('err-pkg', 'error'),
+      makeDep('mid-pkg', 'none'),
+      makeDep('late-pkg', 'none'),
+    ]
+
+    const result = await runInteractive(updates)
+
+    expect(result).toEqual([updates[0], updates[2]])
+  })
+
   it('keeps duplicate package names independently selectable in grouped mode', async () => {
     clackMock.groupMultiselect.mockResolvedValue(['1'])
 
@@ -224,6 +310,21 @@ describe('runInteractive', () => {
     const result = await runInteractive(updates)
 
     expect(result).toEqual([updates[1]])
+  })
+
+  it('preserves original update order for duplicate names in flat mode', async () => {
+    clackMock.multiselect.mockResolvedValue(['1', '0'])
+
+    const { runInteractive } = await import('./interactive')
+
+    const updates = [
+      makeDep('shared', 'error', { source: 'dependencies' }),
+      makeDep('shared', 'none', { source: 'devDependencies' }),
+    ]
+
+    const result = await runInteractive(updates)
+
+    expect(result).toEqual(updates)
   })
 
   it('handles single group (only minor updates)', async () => {
