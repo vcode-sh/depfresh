@@ -76,6 +76,7 @@ export async function normalizeArgs(args: Record<string, unknown>): Promise<depf
     execute: args.execute as string | undefined,
     verifyCommand: args['verify-command'] as string | undefined,
     failOnOutdated: args['fail-on-outdated'] as boolean,
+    failOnResolutionErrors: args['fail-on-resolution-errors'] as boolean,
     ignoreOtherWorkspaces: args['ignore-other-workspaces'] as boolean,
   })
 }

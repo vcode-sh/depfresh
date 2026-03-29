@@ -23,6 +23,7 @@ describe('getCliCapabilities', () => {
     expect(capabilities.exitCodes['0']).toContain('Success')
     expect(capabilities.exitCodes['1']).toContain('--fail-on-outdated')
     expect(capabilities.exitCodes['2']).toContain('invalid enum flag values')
+    expect(capabilities.exitCodes['2']).toContain('--fail-on-resolution-errors')
   })
 
   it('includes CLI version from package.json', () => {
@@ -78,7 +79,10 @@ describe('getCliCapabilities', () => {
     expect(capabilities.jsonOutputSchema['packages[]']).toBeDefined()
     expect(capabilities.jsonOutputSchema['errors[]']).toBeDefined()
     expect(capabilities.jsonOutputSchema['summary.total']).toBeDefined()
+    expect(capabilities.jsonOutputSchema['summary.failedResolutions']).toBeDefined()
     expect(capabilities.jsonOutputSchema['meta.schemaVersion']).toBeDefined()
+    expect(capabilities.jsonOutputSchema['meta.effectiveRoot']).toBeDefined()
+    expect(capabilities.jsonOutputSchema['meta.hadResolutionErrors']).toBeDefined()
     expect(capabilities.jsonOutputSchema['meta.didWrite']).toBeDefined()
   })
 })

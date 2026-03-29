@@ -156,6 +156,24 @@ describe('check', () => {
     errorSpy.mockRestore()
   })
 
+  it('returns 2 when resolution errors occur and failOnResolutionErrors=true', async () => {
+    const pkg = makePkg('broken-app')
+    mocks.loadPackagesMock.mockResolvedValue([pkg])
+    mocks.resolvePackageMock.mockResolvedValue([
+      makeResolved({
+        name: 'missing-pkg',
+        diff: 'error',
+        currentVersion: '^1.0.0',
+        targetVersion: '^1.0.0',
+      }),
+    ])
+
+    const { check } = await import('./index')
+    const result = await check({ ...baseOptions, failOnResolutionErrors: true })
+
+    expect(result).toBe(2)
+  })
+
   it('calls writePackage when write=true and beforePackageWrite returns true', async () => {
     const pkg = makePkg('my-app')
     mocks.loadPackagesMock.mockResolvedValue([pkg])

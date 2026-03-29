@@ -8,6 +8,7 @@ import {
 import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { performance } from 'node:perf_hooks'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { depfreshOptions } from '../../types'
 import { DEFAULT_OPTIONS } from '../../types'
@@ -233,6 +234,61 @@ describe('check registry integration (mocked real registries)', () => {
     expect(registry.count('missing-only')).toBe(1)
   })
 
+  it('returns exit code 2 when resolution errors occur and failOnResolutionErrors=true', async () => {
+    const registry = await startMockRegistry({})
+    servers.push(registry.server)
+
+    const cwd = createWorkspace({
+      dependencies: {
+        'missing-only': '^1.0.0',
+      },
+      npmrcLines: [`registry=${registry.url}`],
+    })
+
+    const { exitCode, payload } = await runCheck(cwd, {
+      retries: 0,
+      failOnResolutionErrors: true,
+    })
+
+    expect(exitCode).toBe(2)
+    expect(payload.summary.failedResolutions).toBe(1)
+    expect(payload.meta?.hadResolutionErrors).toBe(true)
+  })
+
+  it('resolves multiple packages concurrently in json mode', async () => {
+    const registry = await startMockRegistry({
+      'pkg-a': async () => {
+        await sleep(120)
+        return { body: npmMetadata(['1.0.0', '2.0.0']) }
+      },
+      'pkg-b': async () => {
+        await sleep(120)
+        return { body: npmMetadata(['1.0.0', '2.0.0']) }
+      },
+    })
+    servers.push(registry.server)
+
+    const cwd = createMonorepoWorkspace({
+      packages: {
+        a: { 'pkg-a': '^1.0.0' },
+        b: { 'pkg-b': '^1.0.0' },
+      },
+      npmrcLines: [`registry=${registry.url}`],
+    })
+
+    const start = performance.now()
+    const { exitCode, payload } = await runCheck(cwd, {
+      retries: 0,
+    })
+    const elapsedMs = performance.now() - start
+
+    expect(exitCode).toBe(1)
+    expect(payload.summary.total).toBe(2)
+    expect(registry.count('pkg-a')).toBe(1)
+    expect(registry.count('pkg-b')).toBe(1)
+    expect(elapsedMs).toBeLessThan(220)
+  })
+
   function createWorkspace(input: {
     dependencies: Record<string, string>
     npmrcLines: string[]
@@ -262,6 +318,59 @@ describe('check registry integration (mocked real registries)', () => {
       )}\n`,
       'utf-8',
     )
+
+    writeFileSync(join(cwd, '.npmrc'), `${input.npmrcLines.join('\n')}\n`, 'utf-8')
+
+    return cwd
+  }
+
+  function createMonorepoWorkspace(input: {
+    packages: Record<string, Record<string, string>>
+    npmrcLines: string[]
+  }): string {
+    const cwd = mkdtempSync(join(tmpdir(), 'depfresh-registry-integration-'))
+    tmpDirs.push(cwd)
+
+    const homeDir = join(cwd, '.home')
+    mkdirSync(homeDir, { recursive: true })
+
+    const userNpmrc = join(homeDir, '.npmrc')
+    writeFileSync(userNpmrc, '\n', 'utf-8')
+
+    process.env.HOME = homeDir
+    process.env.npm_config_userconfig = userNpmrc
+
+    writeFileSync(
+      join(cwd, 'package.json'),
+      `${JSON.stringify(
+        {
+          name: 'integration-monorepo',
+          private: true,
+          workspaces: ['packages/*'],
+        },
+        null,
+        2,
+      )}\n`,
+      'utf-8',
+    )
+
+    for (const [name, dependencies] of Object.entries(input.packages)) {
+      const pkgDir = join(cwd, 'packages', name)
+      mkdirSync(pkgDir, { recursive: true })
+      writeFileSync(
+        join(pkgDir, 'package.json'),
+        `${JSON.stringify(
+          {
+            name: `workspace-${name}`,
+            private: true,
+            dependencies,
+          },
+          null,
+          2,
+        )}\n`,
+        'utf-8',
+      )
+    }
 
     writeFileSync(join(cwd, '.npmrc'), `${input.npmrcLines.join('\n')}\n`, 'utf-8')
 
@@ -378,6 +487,10 @@ function npmMetadata(versions: string[]): Record<string, unknown> {
       latest: versions[versions.length - 1],
     },
   }
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 function closeServer(server: Server): Promise<void> {

@@ -139,3 +139,63 @@ describe('loadNpmrc strict-ssl parsing', () => {
     expect(config.cafile).toBe(join(tmpDir, 'ca.pem'))
   })
 })
+
+describe('loadNpmrc environment variable expansion', () => {
+  const savedEnv = {
+    npm_config_registry: process.env.npm_config_registry,
+    NPM_CONFIG_REGISTRY: process.env.NPM_CONFIG_REGISTRY,
+    NPM_TOKEN: process.env.NPM_TOKEN,
+  }
+
+  afterEach(() => {
+    for (const [key, value] of Object.entries(savedEnv)) {
+      if (value === undefined) {
+        delete process.env[key]
+      } else {
+        process.env[key] = value
+      }
+    }
+  })
+
+  it('expands env variables in scoped registry auth tokens', () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), 'npmrc-env-test-'))
+    writeFileSync(
+      join(tmpDir, '.npmrc'),
+      ['@scope:registry=https://example.com/', `//example.com/:_authToken=\${NPM_TOKEN}`].join(
+        '\n',
+      ),
+    )
+
+    // biome-ignore lint/performance/noDelete: test must remove env override completely
+    delete process.env.npm_config_registry
+    // biome-ignore lint/performance/noDelete: test must remove env override completely
+    delete process.env.NPM_CONFIG_REGISTRY
+    process.env.NPM_TOKEN = 'secret123'
+
+    const config = loadNpmrc(tmpDir)
+    const registry = config.registries.get('@scope')
+
+    expect(registry?.token).toBe('secret123')
+    expect(registry?.authType).toBe('bearer')
+  })
+
+  it('expands env variables in the default registry token mapping', () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), 'npmrc-env-test-'))
+    writeFileSync(
+      join(tmpDir, '.npmrc'),
+      ['registry=https://example.com/', `//example.com/:_authToken=\${NPM_TOKEN}`].join('\n'),
+    )
+
+    // biome-ignore lint/performance/noDelete: test must remove env override completely
+    delete process.env.npm_config_registry
+    // biome-ignore lint/performance/noDelete: test must remove env override completely
+    delete process.env.NPM_CONFIG_REGISTRY
+    process.env.NPM_TOKEN = 'secret456'
+
+    const config = loadNpmrc(tmpDir)
+    const defaultRegistry = config.registries.get('default')
+
+    expect(defaultRegistry?.token).toBe('secret456')
+    expect(defaultRegistry?.authType).toBe('bearer')
+  })
+})

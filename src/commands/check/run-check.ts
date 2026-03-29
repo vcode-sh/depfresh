@@ -3,7 +3,8 @@ import { createAddonLifecycle } from '../../addons'
 import { createSqliteCache } from '../../cache/index'
 import { loadPackages } from '../../io/packages'
 import { resolveDiscoveryContext } from '../../io/packages/root-detection'
-import type { depfreshOptions, ResolvedDepChange } from '../../types'
+import { createResolveContext, resolvePackage } from '../../io/resolve'
+import type { depfreshOptions, PackageMeta, ResolvedDepChange } from '../../types'
 import { createLogger } from '../../utils/logger'
 import { loadNpmrc } from '../../utils/npmrc'
 import {
@@ -16,9 +17,9 @@ import {
 } from './json-output'
 import { runInstall, runUpdate } from './package-manager'
 import { renderUpToDate, runExecute } from './post-write-actions'
-import { processPackage } from './process-package'
+import { type ProcessPackageHooks, processPackage } from './process-package'
 import { createCheckProgress } from './progress'
-import { renderTable } from './render'
+import { renderResolutionErrors, renderTable } from './render'
 
 export async function check(options: depfreshOptions): Promise<number> {
   const logLevel = options.output === 'json' ? 'silent' : options.loglevel
@@ -70,67 +71,99 @@ export async function check(options: depfreshOptions): Promise<number> {
     const npmrc = loadNpmrc(executionRoot)
     const workspacePackageNames = new Set(packages.map((p) => p.name).filter(Boolean))
 
+    const packageHooks = (pkg: PackageMeta): ProcessPackageHooks => ({
+      cache,
+      npmrc,
+      workspacePackageNames,
+      beforePackageStart: (currentPkg) => addons.beforePackageStart(currentPkg),
+      beforePackageWrite: (currentPkg, changes: ResolvedDepChange[]) =>
+        addons.beforePackageWrite(currentPkg, changes),
+      afterPackageWrite: (currentPkg, changes: ResolvedDepChange[]) =>
+        addons.afterPackageWrite(currentPkg, changes),
+      afterPackageEnd: (currentPkg) => addons.afterPackageEnd(currentPkg),
+      onDependencyProcessed: () => progress?.onDependencyProcessed(),
+      onHasUpdates: (updates: ResolvedDepChange[]) => {
+        hasUpdates = true
+        executionState.packagesWithUpdates += 1
+        if (options.output === 'json') {
+          jsonPackages.push(buildJsonPackage(pkg.name, updates))
+        } else {
+          renderTable(pkg.name, updates, options)
+        }
+      },
+      onErrorDeps: (errors: ResolvedDepChange[]) => {
+        executionState.failedResolutions += errors.length
+        if (options.output === 'json') {
+          for (const dep of errors) {
+            jsonErrors.push({
+              name: dep.name,
+              source: dep.source,
+              currentVersion: dep.currentVersion,
+              message: 'Failed to resolve from registry',
+            })
+          }
+        } else {
+          renderResolutionErrors(pkg.name, errors)
+        }
+      },
+      onAllModeNoUpdates: () => {
+        if (!options.all) return
+        if (options.output === 'json') {
+          jsonPackages.push(buildJsonPackage(pkg.name, []))
+        } else {
+          renderUpToDate(pkg.name)
+        }
+      },
+      onPlannedUpdates: (count: number) => {
+        executionState.plannedUpdates += count
+      },
+      onWriteResult: (result: { applied: number; reverted: number }) => {
+        executionState.appliedUpdates += result.applied
+        executionState.revertedUpdates += result.reverted
+      },
+      onDidWrite: () => {
+        didWrite = true
+        executionState.didWrite = true
+      },
+      logger,
+    })
+
     try {
-      for (const pkg of packages) {
-        progress?.onPackageStart(pkg)
-        await processPackage(pkg, runtimeOptions, {
-          cache,
-          npmrc,
-          workspacePackageNames,
-          beforePackageStart: (currentPkg) => addons.beforePackageStart(currentPkg),
-          beforePackageWrite: (currentPkg, changes) =>
-            addons.beforePackageWrite(currentPkg, changes),
-          afterPackageWrite: (currentPkg, changes) => addons.afterPackageWrite(currentPkg, changes),
-          afterPackageEnd: (currentPkg) => addons.afterPackageEnd(currentPkg),
-          onDependencyProcessed: () => progress?.onDependencyProcessed(),
-          onHasUpdates: (updates: ResolvedDepChange[]) => {
-            hasUpdates = true
-            executionState.packagesWithUpdates += 1
-            if (options.output === 'json') {
-              jsonPackages.push(buildJsonPackage(pkg.name, updates))
-            } else {
-              renderTable(pkg.name, updates, options)
-            }
-          },
-          onErrorDeps: (errors: ResolvedDepChange[]) => {
-            executionState.failedResolutions += errors.length
-            if (options.output === 'json') {
-              for (const dep of errors) {
-                jsonErrors.push({
-                  name: dep.name,
-                  source: dep.source,
-                  currentVersion: dep.currentVersion,
-                  message: 'Failed to resolve from registry',
-                })
-              }
-            } else {
-              logger.warn(
-                `${pkg.name}: failed to resolve ${errors.map((dep) => dep.name).join(', ')}`,
-              )
-            }
-          },
-          onAllModeNoUpdates: () => {
-            if (!options.all) return
-            if (options.output === 'json') {
-              jsonPackages.push(buildJsonPackage(pkg.name, []))
-            } else {
-              renderUpToDate(pkg.name)
-            }
-          },
-          onPlannedUpdates: (count: number) => {
-            executionState.plannedUpdates += count
-          },
-          onWriteResult: (result) => {
-            executionState.appliedUpdates += result.applied
-            executionState.revertedUpdates += result.reverted
-          },
-          onDidWrite: () => {
-            didWrite = true
-            executionState.didWrite = true
-          },
-          logger,
-        })
-        progress?.onPackageEnd()
+      if (progress === null && packages.length > 1) {
+        const resolveContext = createResolveContext(runtimeOptions)
+        const pendingResolutions = new Map<PackageMeta, Promise<ResolvedDepChange[]>>()
+
+        for (const pkg of packages) {
+          await addons.beforePackageStart(pkg)
+          pendingResolutions.set(
+            pkg,
+            resolvePackage(
+              pkg,
+              runtimeOptions,
+              cache,
+              npmrc,
+              workspacePackageNames,
+              undefined,
+              resolveContext,
+            ),
+          )
+        }
+
+        for (const pkg of packages) {
+          await processPackage(
+            pkg,
+            runtimeOptions,
+            packageHooks(pkg),
+            pendingResolutions.get(pkg),
+            true,
+          )
+        }
+      } else {
+        for (const pkg of packages) {
+          progress?.onPackageStart(pkg)
+          await processPackage(pkg, runtimeOptions, packageHooks(pkg))
+          progress?.onPackageEnd()
+        }
       }
       await addons.afterPackagesEnd(packages)
     } finally {
@@ -176,6 +209,10 @@ export async function check(options: depfreshOptions): Promise<number> {
       console.error(
         'Tip: Use --output json for structured output. Run --help-json for CLI capabilities.',
       )
+    }
+
+    if (executionState.failedResolutions > 0 && options.failOnResolutionErrors) {
+      return 2
     }
 
     return hasUpdates && !options.write && options.failOnOutdated ? 1 : 0

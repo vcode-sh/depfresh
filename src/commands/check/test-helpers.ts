@@ -8,6 +8,12 @@ vi.mock('../../io/packages', () => ({
 
 vi.mock('../../io/resolve', () => ({
   resolvePackage: vi.fn(),
+  createResolveContext: vi.fn(() => ({
+    limit: ((fn: () => Promise<unknown>) => fn()) as (
+      fn: () => Promise<unknown>,
+    ) => Promise<unknown>,
+    inFlight: new Map(),
+  })),
 }))
 
 vi.mock('../../io/write', () => ({

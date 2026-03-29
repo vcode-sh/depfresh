@@ -49,6 +49,7 @@ function makeRawArgs(overrides: Record<string, unknown> = {}): Record<string, un
     execute: undefined,
     'verify-command': undefined,
     'fail-on-outdated': false,
+    'fail-on-resolution-errors': false,
     'ignore-other-workspaces': true,
     ...overrides,
   }
@@ -144,6 +145,13 @@ describe('normalizeArgs parity flags', () => {
     const resolvedOptions = resolveConfigMock.mock.calls[0]?.[0] as depfreshOptions
     expect(resolvedOptions.global).toBe(true)
     expect(resolvedOptions.globalAll).toBe(true)
+  })
+
+  it('maps --fail-on-resolution-errors into options', async () => {
+    await normalizeArgs(makeRawArgs({ 'fail-on-resolution-errors': true }))
+
+    const resolvedOptions = resolveConfigMock.mock.calls[0]?.[0] as depfreshOptions
+    expect(resolvedOptions.failOnResolutionErrors).toBe(true)
   })
 
   it('keeps globalAll false when only --global is used', async () => {

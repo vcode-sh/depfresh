@@ -28,17 +28,23 @@ export async function processPackage(
   pkg: PackageMeta,
   options: depfreshOptions,
   hooks: ProcessPackageHooks,
+  preResolved?: Promise<ResolvedDepChange[]> | ResolvedDepChange[],
+  skipBeforePackageStart = false,
 ): Promise<void> {
-  await hooks.beforePackageStart(pkg)
+  if (!skipBeforePackageStart) {
+    await hooks.beforePackageStart(pkg)
+  }
   try {
-    pkg.resolved = await resolvePackage(
-      pkg,
-      options,
-      hooks.cache,
-      hooks.npmrc,
-      hooks.workspacePackageNames,
-      hooks.onDependencyProcessed,
-    )
+    pkg.resolved = preResolved
+      ? await preResolved
+      : await resolvePackage(
+          pkg,
+          options,
+          hooks.cache,
+          hooks.npmrc,
+          hooks.workspacePackageNames,
+          hooks.onDependencyProcessed,
+        )
 
     const errorDeps = pkg.resolved.filter((d) => d.diff === 'error')
     if (errorDeps.length > 0) {

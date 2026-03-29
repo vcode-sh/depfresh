@@ -56,7 +56,7 @@ const ENUM_VALUES_BY_FLAG: Record<string, readonly string[]> = {
 const EXIT_CODES: Record<string, string> = {
   '0': 'Success (no updates found, or updates written successfully).',
   '1': 'Outdated dependencies found with --fail-on-outdated and without --write.',
-  '2': 'Fatal/runtime/configuration error (including invalid enum flag values).',
+  '2': 'Fatal/runtime/configuration error (including invalid enum flag values and runs failed by --fail-on-resolution-errors).',
 }
 
 const WORKFLOWS: Record<string, Workflow> = {
@@ -106,10 +106,13 @@ const JSON_OUTPUT_SCHEMA: Record<string, string> = {
   'summary.major': 'Count of major updates',
   'summary.minor': 'Count of minor updates',
   'summary.patch': 'Count of patch updates',
+  'summary.failedResolutions': 'Count of dependencies that failed to resolve',
   'meta.schemaVersion': 'JSON schema version (currently 1)',
   'meta.cwd': 'Working directory used',
+  'meta.effectiveRoot': 'Derived project root used for discovery and root-aware operations',
   'meta.mode': 'Version range mode used',
   'meta.timestamp': 'ISO 8601 timestamp',
+  'meta.hadResolutionErrors': 'Whether any dependency failed to resolve',
   'meta.didWrite': 'Whether package files were written',
 }
 

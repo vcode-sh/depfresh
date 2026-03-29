@@ -11,6 +11,7 @@ import type {
 import { createLogger } from '../../utils/logger'
 import { loadNpmrc } from '../../utils/npmrc'
 import { resolveDiscoveryContext } from '../packages/root-detection'
+import type { ResolveContext } from './context'
 import { resolveDependency } from './resolve-dependency'
 
 export async function resolvePackage(
@@ -20,13 +21,14 @@ export async function resolvePackage(
   externalNpmrc?: NpmrcConfig,
   privatePackages?: Set<string>,
   onDependencyProcessed?: (pkg: PackageMeta, dep: RawDep) => void | Promise<void>,
+  resolveContext?: ResolveContext,
 ): Promise<ResolvedDepChange[]> {
   const logger = createLogger(options.loglevel)
   const effectiveRoot = options.effectiveRoot ?? resolveDiscoveryContext(options.cwd).effectiveRoot
   const npmrc = externalNpmrc ?? loadNpmrc(effectiveRoot)
   const cache = externalCache ?? createSqliteCache()
   const ownCache = !externalCache
-  const limit = pLimit(options.concurrency)
+  const limit = resolveContext?.limit ?? pLimit(options.concurrency)
 
   try {
     const results = await Promise.allSettled(
@@ -35,7 +37,15 @@ export async function resolvePackage(
         .map((dep) =>
           limit(async () => {
             try {
-              return await resolveDependency(dep, options, cache, npmrc, logger, privatePackages)
+              return await resolveDependency(
+                dep,
+                options,
+                cache,
+                npmrc,
+                logger,
+                privatePackages,
+                resolveContext,
+              )
             } finally {
               await onDependencyProcessed?.(pkg, dep)
             }

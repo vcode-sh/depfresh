@@ -12,6 +12,7 @@ vi.mock('../../cache/index', () => ({
 
 vi.mock('../../utils/npmrc', () => ({
   loadNpmrc: vi.fn(),
+  getRegistryForPackage: vi.fn((_name, config) => ({ url: config.defaultRegistry })),
 }))
 
 const mockPkgData: PackageData = {
@@ -61,6 +62,7 @@ function makeOptions(overrides: Partial<depfreshOptions> = {}): depfreshOptions 
     long: false,
     explain: false,
     failOnOutdated: false,
+    failOnResolutionErrors: false,
     install: false,
     update: false,
     ...overrides,
@@ -187,6 +189,59 @@ describe('resolvePackage - cache behavior', () => {
 
     expect(fetchPackageData).toHaveBeenCalledTimes(2)
     expect(result.length).toBe(2)
+  })
+
+  it('dedupes concurrent fetches for duplicate dependencies within one package when sharing context', async () => {
+    const { fetchPackageData } = await import('../registry')
+    const { createResolveContext, resolvePackage } = await import('./index')
+
+    const cache = createMockCache()
+    const options = makeOptions({ mode: 'latest' })
+    const context = createResolveContext(options)
+
+    vi.mocked(fetchPackageData).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          setTimeout(() => resolve(mockPkgData), 20)
+        }),
+    )
+
+    const depA = makeDep({ name: 'test-pkg', currentVersion: '^1.0.0' })
+    const depB = makeDep({ name: 'test-pkg', currentVersion: '^1.0.0', source: 'devDependencies' })
+    const pkg = makePkg([depA, depB])
+
+    const result = await resolvePackage(pkg, options, cache, npmrc, undefined, undefined, context)
+
+    expect(fetchPackageData).toHaveBeenCalledTimes(1)
+    expect(result.length).toBe(2)
+  })
+
+  it('dedupes concurrent fetches across packages when sharing context', async () => {
+    const { fetchPackageData } = await import('../registry')
+    const { createResolveContext, resolvePackage } = await import('./index')
+
+    const cache = createMockCache()
+    const options = makeOptions({ mode: 'latest' })
+    const context = createResolveContext(options)
+
+    vi.mocked(fetchPackageData).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          setTimeout(() => resolve(mockPkgData), 20)
+        }),
+    )
+
+    const pkgA = makePkg([makeDep({ name: 'test-pkg' })])
+    const pkgB = makePkg([makeDep({ name: 'test-pkg' })])
+
+    const [resultA, resultB] = await Promise.all([
+      resolvePackage(pkgA, options, cache, npmrc, undefined, undefined, context),
+      resolvePackage(pkgB, options, cache, npmrc, undefined, undefined, context),
+    ])
+
+    expect(fetchPackageData).toHaveBeenCalledTimes(1)
+    expect(resultA.length).toBe(1)
+    expect(resultB.length).toBe(1)
   })
 
   it('calls onDependencyResolved callback per dep', async () => {

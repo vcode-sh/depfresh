@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import detectIndent from 'detect-indent'
-import { join } from 'pathe'
+import { dirname, join } from 'pathe'
 import type { CatalogSource, depfreshOptions, RawDep } from '../../types'
 import { isLocked } from '../../utils/versions'
 import { detectLineEnding } from '../write'
@@ -30,7 +30,7 @@ function parseCatalogDeps(
 
 export const bunCatalogLoader: CatalogLoader = {
   async detect(cwd: string): Promise<boolean> {
-    const pkgPath = join(cwd, 'package.json')
+    const pkgPath = findBunCatalogManifest(cwd)
     if (!existsSync(pkgPath)) return false
 
     try {
@@ -42,7 +42,8 @@ export const bunCatalogLoader: CatalogLoader = {
   },
 
   async load(cwd: string, options: depfreshOptions): Promise<CatalogSource[]> {
-    const filepath = join(cwd, 'package.json')
+    const filepath = findBunCatalogManifest(cwd)
+    if (!existsSync(filepath)) return []
     const content = readFileSync(filepath, 'utf-8')
     const raw = JSON.parse(content)
     const indent = detectIndent(content).indent || '  '
@@ -111,4 +112,30 @@ export const bunCatalogLoader: CatalogLoader = {
     const final = lineEnding === '\r\n' ? withTrailing.replace(/\n/g, '\r\n') : withTrailing
     writeFileSync(catalog.filepath, final, 'utf-8')
   },
+}
+
+function findBunCatalogManifest(startDir: string): string {
+  let current = startDir
+
+  while (true) {
+    const candidate = join(current, 'package.json')
+    if (existsSync(candidate) && manifestHasCatalog(candidate)) {
+      return candidate
+    }
+
+    const parent = dirname(current)
+    if (parent === current) {
+      return candidate
+    }
+    current = parent
+  }
+}
+
+function manifestHasCatalog(filepath: string): boolean {
+  try {
+    const raw = JSON.parse(readFileSync(filepath, 'utf-8'))
+    return !!raw.workspaces?.catalog || !!raw.workspaces?.catalogs
+  } catch {
+    return false
+  }
 }

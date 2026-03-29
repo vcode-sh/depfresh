@@ -13,6 +13,7 @@ vi.mock('../../cache/index', () => ({
 
 vi.mock('../../utils/npmrc', () => ({
   loadNpmrc: vi.fn(),
+  getRegistryForPackage: vi.fn((_name, config) => ({ url: config.defaultRegistry })),
 }))
 
 function makeDep(overrides: Partial<RawDep> = {}): RawDep {
@@ -56,6 +57,7 @@ function makeOptions(overrides: Partial<depfreshOptions> = {}): depfreshOptions 
     long: false,
     explain: false,
     failOnOutdated: false,
+    failOnResolutionErrors: false,
     install: false,
     update: false,
     ...overrides,

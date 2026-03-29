@@ -10,17 +10,23 @@ The "stop lying about where you are and what just failed" release. depfresh now 
 
 - **Project root auto-detection** — when you run depfresh from a child directory, it now resolves the effective project root instead of treating `cwd` as gospel. The runtime tracks both the input cwd and the derived root so discovery and config loading finally agree on where the project actually is.
 - **Root-detection test coverage** — dedicated regression tests for child-directory runs, parent-folder project discovery, nested workspace roots, and false-green resolution failures. The sort of tests you add after getting annoyed enough times.
+- **`--fail-on-resolution-errors`** — strict mode for CI and automation. If any dependency fails to resolve from the registry, depfresh now exits `2` instead of quietly carrying on like nothing happened.
 
 ### Changed
 
 - **Nested workspace filtering semantics** — nested workspace and nested repo roots are now preserved while their descendants remain filtered by default. Previously depfresh could walk a parent folder full of real projects and conclude that absolutely nothing existed. Deeply philosophical. Also wrong.
 - **JSON execution metadata** — JSON output now includes `meta.effectiveRoot`, `meta.hadResolutionErrors`, and `summary.failedResolutions`. Machine consumers can now distinguish "clean", "updates available", and "resolution went sideways" without reading tea leaves.
+- **Bun catalog lookup parity** — Bun catalog detection and loading now walk upward from nested working directories like pnpm and Yarn instead of pretending the catalog only exists when you stand in exactly the right folder.
+- **Resolver scheduling** — in non-progress runs, dependency resolution now fans out across packages through a shared limiter, while rendering and writing stay ordered. Faster where it matters, predictable where it counts.
+- **`.npmrc` parsing** — `${VAR}` references in parsed `.npmrc` string values are now expanded before registry and auth handling. Private-registry setups finally stop carrying literal `${NPM_TOKEN}` strings around like decorative syntax.
 
 ### Fixed
 
 - **False-green resolution failures** — depfresh no longer reports `All dependencies are up to date` when dependencies failed to resolve. Table output surfaces the failure state, and JSON output marks the run accordingly instead of pretending the absence of updates means success.
 - **Child-directory discovery misses** — running depfresh from paths like `packages/app/src` now resolves against the actual project root instead of returning `noPackagesFound` because you had the audacity to be one folder too deep.
 - **Parent-folder nested workspace misses** — scanning a parent directory that only contains nested monorepos or nested git repos now keeps those roots visible instead of filtering the entire tree into oblivion.
+- **Duplicate cold-cache fetches** — repeated concurrent resolutions for the same dependency now collapse behind one in-flight registry request instead of stampeding the registry for identical data.
+- **Multi-package non-TTY throughput** — JSON and other non-progress runs no longer serialize every package's registry work one package at a time. Monorepos with many small packages finally get to use the concurrency flag they were promised.
 
 ## [1.0.0] - 2026-02-23
 

@@ -208,4 +208,23 @@ describe('bunCatalogLoader.load', () => {
 
     expect(sources[0]!.indent).toBe('    ')
   })
+
+  it('loads catalogs from the nearest ancestor when cwd is a nested subdirectory', async () => {
+    writePackageJson(testDir, {
+      name: 'my-monorepo',
+      workspaces: {
+        catalog: {
+          react: '^18.0.0',
+        },
+      },
+    })
+    const subdir = join(testDir, 'apps', 'web', 'src')
+    mkdirSync(subdir, { recursive: true })
+
+    const sources = await bunCatalogLoader.load(subdir, baseOptions)
+
+    expect(sources).toHaveLength(1)
+    expect(sources[0]!.filepath).toBe(join(testDir, 'package.json'))
+    expect(sources[0]!.deps[0]!.name).toBe('react')
+  })
 })

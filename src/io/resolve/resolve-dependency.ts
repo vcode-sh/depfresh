@@ -3,6 +3,7 @@ import type { Cache } from '../../cache/index'
 import type { depfreshOptions, ProvenanceLevel, RawDep, ResolvedDepChange } from '../../types'
 import type { createLogger } from '../../utils/logger'
 import type { loadNpmrc } from '../../utils/npmrc'
+import { getRegistryForPackage } from '../../utils/npmrc'
 import {
   applyVersionPrefix,
   getDiff,
@@ -12,6 +13,7 @@ import {
 import { fetchPackageData } from '../registry'
 import { getPackageMode } from '../resolve-mode'
 import { getResolveCachePolicy } from './cache-policy'
+import type { ResolveContext } from './context'
 import { filterVersions } from './version-filter'
 
 export async function resolveDependency(
@@ -21,6 +23,7 @@ export async function resolveDependency(
   npmrc: ReturnType<typeof loadNpmrc>,
   logger: ReturnType<typeof createLogger>,
   privatePackages?: Set<string>,
+  resolveContext?: ResolveContext,
 ): Promise<ResolvedDepChange | null> {
   const packageName = dep.aliasName ?? dep.name
 
@@ -44,12 +47,25 @@ export async function resolveDependency(
 
   if (!pkgData) {
     try {
-      pkgData = await fetchPackageData(packageName, {
-        npmrc,
-        timeout: options.timeout,
-        retries: options.retries,
-        logger,
-      })
+      const resolveKey = buildResolveKey(packageName, npmrc)
+      const inFlight = resolveContext?.inFlight.get(resolveKey)
+
+      if (inFlight) {
+        pkgData = await inFlight
+      } else {
+        const fetchPromise = fetchPackageData(packageName, {
+          npmrc,
+          timeout: options.timeout,
+          retries: options.retries,
+          logger,
+        }).finally(() => {
+          resolveContext?.inFlight.delete(resolveKey)
+        })
+
+        resolveContext?.inFlight.set(resolveKey, fetchPromise)
+        pkgData = await fetchPromise
+      }
+
       if (cachePolicy.shouldWrite) {
         cache.set(packageName, pkgData, options.cacheTTL)
       }
@@ -107,4 +123,17 @@ export async function resolveDependency(
     nodeCompat,
     nodeCompatible,
   }
+}
+
+function buildResolveKey(packageName: string, npmrc: ReturnType<typeof loadNpmrc>): string {
+  if (packageName.startsWith('github:')) {
+    return `github|${packageName}`
+  }
+
+  if (packageName.startsWith('jsr:')) {
+    return `jsr|${packageName}`
+  }
+
+  const registry = getRegistryForPackage(packageName, npmrc)
+  return `npm|${registry.url}|${packageName}`
 }

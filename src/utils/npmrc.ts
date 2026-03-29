@@ -40,36 +40,38 @@ function loadNpmrcFile(filepath: string, config: NpmrcConfig): void {
   const parsed = parseIni(content)
 
   for (const [key, value] of Object.entries(parsed)) {
-    if (key === 'registry' && typeof value === 'string') {
-      config.defaultRegistry = ensureTrailingSlash(value)
+    const resolvedValue = typeof value === 'string' ? expandEnvVariables(value) : value
+
+    if (key === 'registry' && typeof resolvedValue === 'string') {
+      config.defaultRegistry = ensureTrailingSlash(resolvedValue)
       continue
     }
 
-    if (key === 'proxy' && typeof value === 'string') {
-      config.proxy = value
+    if (key === 'proxy' && typeof resolvedValue === 'string') {
+      config.proxy = resolvedValue
       continue
     }
 
-    if (key === 'https-proxy' && typeof value === 'string') {
-      config.httpsProxy = value
+    if (key === 'https-proxy' && typeof resolvedValue === 'string') {
+      config.httpsProxy = resolvedValue
       continue
     }
 
     if (key === 'strict-ssl') {
-      config.strictSsl = parseStrictSsl(value, config.strictSsl)
+      config.strictSsl = parseStrictSsl(resolvedValue, config.strictSsl)
       continue
     }
 
-    if (key === 'cafile' && typeof value === 'string') {
-      config.cafile = resolve(filepath, '..', value)
+    if (key === 'cafile' && typeof resolvedValue === 'string') {
+      config.cafile = resolve(filepath, '..', resolvedValue)
       continue
     }
 
     // Scoped registry: @scope:registry = https://...
     const scopedMatch = key.match(/^(@[^:]+):registry$/)
-    if (scopedMatch && typeof value === 'string') {
+    if (scopedMatch && typeof resolvedValue === 'string') {
       const scope = scopedMatch[1]!
-      const url = ensureTrailingSlash(value)
+      const url = ensureTrailingSlash(resolvedValue)
       const existing = config.registries.get(scope) ?? { url }
       existing.url = url
       config.registries.set(scope, existing)
@@ -78,12 +80,12 @@ function loadNpmrcFile(filepath: string, config: NpmrcConfig): void {
 
     // Auth tokens: //registry.example.com/:_authToken = xxx
     const tokenMatch = key.match(/^\/\/(.+)\/:_authToken$/)
-    if (tokenMatch && typeof value === 'string') {
+    if (tokenMatch && typeof resolvedValue === 'string') {
       const host = tokenMatch[1]!
       // Find which scope this registry belongs to
       for (const [_scope, reg] of config.registries) {
         if (reg.url.includes(host)) {
-          reg.token = value
+          reg.token = resolvedValue
           reg.authType = 'bearer'
         }
       }
@@ -92,12 +94,16 @@ function loadNpmrcFile(filepath: string, config: NpmrcConfig): void {
         const defaultReg = config.registries.get('default') ?? {
           url: config.defaultRegistry,
         }
-        defaultReg.token = value
+        defaultReg.token = resolvedValue
         defaultReg.authType = 'bearer'
         config.registries.set('default', defaultReg)
       }
     }
   }
+}
+
+function expandEnvVariables(value: string): string {
+  return value.replaceAll(/\$\{([^}]+)\}/g, (_match, name: string) => process.env[name] ?? '')
 }
 
 function applyEnvOverrides(config: NpmrcConfig): void {

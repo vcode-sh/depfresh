@@ -76,4 +76,17 @@ describe('bunCatalogLoader.detect', () => {
 
     expect(await bunCatalogLoader.detect(testDir)).toBe(false)
   })
+
+  it('finds a Bun catalog when called from a nested subdirectory', async () => {
+    writePackageJson(testDir, {
+      name: 'my-monorepo',
+      workspaces: {
+        catalog: { react: '^18.0.0' },
+      },
+    })
+    const subdir = join(testDir, 'apps', 'web', 'src')
+    mkdirSync(subdir, { recursive: true })
+
+    expect(await bunCatalogLoader.detect(subdir)).toBe(true)
+  })
 })

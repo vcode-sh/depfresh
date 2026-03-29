@@ -186,6 +186,11 @@ export const args: ArgsDef = {
     description: 'Exit with code 1 when outdated dependencies are found (CI mode)',
     default: false,
   },
+  'fail-on-resolution-errors': {
+    type: 'boolean',
+    description: 'Exit with code 2 when any dependency fails to resolve from the registry',
+    default: false,
+  },
   'ignore-other-workspaces': {
     type: 'boolean',
     description: 'Skip packages that belong to nested/separate workspaces',

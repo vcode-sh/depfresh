@@ -48,6 +48,7 @@ export interface depfreshOptions {
 
   // Exit behavior
   failOnOutdated: boolean
+  failOnResolutionErrors: boolean
 
   // Post-write
   install: boolean
@@ -98,6 +99,7 @@ export const DEFAULT_OPTIONS: Partial<depfreshOptions> = {
   long: false,
   explain: false,
   failOnOutdated: false,
+  failOnResolutionErrors: false,
   install: false,
   update: false,
 }

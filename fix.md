@@ -47,8 +47,8 @@ This is the recommended implementation backlog derived from the plan.
 
 - `DONE` Task 0.1: Add regression harness for subdirectory discovery and parent-folder nested workspace discovery.
 - `DONE` Task 0.2: Add false-green regression tests for all-resolution-failed cases in table and JSON modes.
-- `TODO` Task 0.3: Add regression tests for Bun catalog detection from subdirectories.
-- `TODO` Task 0.4: Add regression tests for duplicate cold-cache fetches and repo-wide concurrency behavior.
+- `DONE` Task 0.3: Add regression tests for Bun catalog detection from subdirectories.
+- `DONE` Task 0.4: Add regression tests for duplicate cold-cache fetches and repo-wide concurrency behavior.
 - `TODO` Task 0.5: Add contract tests for `.npmrc` env expansion and auth parsing behavior.
 
 - `DONE` Task 1.1: Implement root auto-detection for `cwd` inside a project.
@@ -65,17 +65,17 @@ This is the recommended implementation backlog derived from the plan.
 
 - `DONE` Task 4.1: Track resolution errors explicitly in runtime state and JSON summary/meta.
 - `DONE` Task 4.2: Prevent false "All dependencies are up to date" output when any resolution error occurred.
-- `TODO` Task 4.3: Add table-mode rendering for resolution errors.
-- `TODO` Task 4.4: Add `--fail-on-resolution-errors`.
+- `DONE` Task 4.3: Add table-mode rendering for resolution errors.
+- `DONE` Task 4.4: Add `--fail-on-resolution-errors`.
 
-- `TODO` Task 5.1: Introduce shared repo-wide resolver context with a single limiter.
-- `TODO` Task 5.2: Add in-flight promise dedupe across packages and duplicate dependency occurrences.
-- `TODO` Task 5.3: Preserve deterministic output ordering after concurrent resolution.
+- `DONE` Task 5.1: Introduce shared repo-wide resolver context with a single limiter.
+- `DONE` Task 5.2: Add in-flight promise dedupe across packages and duplicate dependency occurrences.
+- `DONE` Task 5.3: Preserve deterministic output ordering after concurrent resolution.
 
 - `TODO` Task 6.1: Change cache keys to include protocol and registry identity.
 - `TODO` Task 6.2: Add cache migration or cache invalidation path.
 
-- `TODO` Task 7.1: Implement `${VAR}` expansion in `.npmrc` values.
+- `DONE` Task 7.1: Implement `${VAR}` expansion in `.npmrc` values.
 - `TODO` Task 7.2: Decide and implement supported `.npmrc` basic-auth formats, or remove the doc claims.
 - `TODO` Task 7.3: Match auth config to registries by normalized origin instead of loose substring matching.
 
@@ -87,7 +87,7 @@ This is the recommended implementation backlog derived from the plan.
 - `TODO` Task 9.2: Make `--install` and `--update` failures fail the run under the chosen contract.
 - `TODO` Task 9.3: If needed, introduce `--strict-post-write` as a transition flag.
 
-- `TODO` Task 10.1: Make Bun catalog detection walk upward like pnpm and Yarn.
+- `DONE` Task 10.1: Make Bun catalog detection walk upward like pnpm and Yarn.
 - `TODO` Task 10.2: Make package-manager detection use `effectiveRoot`.
 - `TODO` Task 10.3: Reduce fragile catalog/load/write module coupling while touching these paths.
 
