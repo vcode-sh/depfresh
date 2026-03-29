@@ -129,7 +129,9 @@ function loadNpmrcFile(
     if (passwordMatch && typeof resolvedValue === 'string') {
       const authKey = normalizeAuthorityKey(passwordMatch[1]!)
       const current = partialBasicAuth.get(authKey) ?? {}
-      current.password = decodePassword(resolvedValue)
+      const decodedPassword = decodePassword(resolvedValue)
+      if (decodedPassword === undefined) continue
+      current.password = decodedPassword
       partialBasicAuth.set(authKey, current)
       syncPartialBasicAuth(authKey, authConfigs, partialBasicAuth)
     }
@@ -220,12 +222,20 @@ function normalizeRegistryUrl(url: string): string {
   }
 }
 
-function decodePassword(encoded: string): string {
+function decodePassword(encoded: string): string | undefined {
+  const trimmed = encoded.trim()
+  if (!isBase64(trimmed)) return undefined
+
   try {
-    return Buffer.from(encoded, 'base64').toString('utf-8')
+    return Buffer.from(trimmed, 'base64').toString('utf-8')
   } catch {
-    return encoded
+    return undefined
   }
+}
+
+function isBase64(value: string): boolean {
+  if (value.length === 0 || value.length % 4 !== 0) return false
+  return /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(value)
 }
 
 function ensureTrailingSlash(url: string): string {

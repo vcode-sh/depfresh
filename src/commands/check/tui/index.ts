@@ -75,7 +75,11 @@ export async function createInteractiveTUI(
       }
       output.write(SHOW_CURSOR)
 
-      input.setRawMode(false)
+      if (typeof input.setRawMode === 'function') {
+        try {
+          input.setRawMode(false)
+        } catch {}
+      }
       input.pause()
     }
 

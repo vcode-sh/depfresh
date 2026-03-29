@@ -228,6 +228,47 @@ describe('invalid option combinations from config', () => {
   })
 })
 
+describe('CLI array overrides', () => {
+  let tmpDir: string
+
+  afterEach(() => {
+    if (tmpDir) {
+      rmSync(tmpDir, { recursive: true, force: true })
+    }
+  })
+
+  it('lets CLI array options override config arrays instead of concatenating them', async () => {
+    tmpDir = mkdtempSync(join(tmpdir(), 'depfresh-config-array-override-'))
+    writeFileSync(
+      join(tmpDir, 'package.json'),
+      JSON.stringify(
+        {
+          name: 'root',
+          depfresh: {
+            include: ['from-config'],
+            exclude: ['exclude-config'],
+            ignorePaths: ['**/config-only/**'],
+          },
+        },
+        null,
+        2,
+      ),
+    )
+
+    const config = await resolveConfig({
+      cwd: tmpDir,
+      loglevel: 'silent',
+      include: ['from-cli'],
+      exclude: ['exclude-cli'],
+      ignorePaths: ['**/cli-only/**'],
+    })
+
+    expect(config.include).toEqual(['from-cli'])
+    expect(config.exclude).toEqual(['exclude-cli'])
+    expect(config.ignorePaths).toEqual(['**/cli-only/**'])
+  })
+})
+
 describe('defineConfig', () => {
   it('returns the config object as-is', () => {
     const config = defineConfig({ mode: 'major', concurrency: 8 })

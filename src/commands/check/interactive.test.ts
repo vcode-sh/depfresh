@@ -190,6 +190,20 @@ describe('runInteractive', () => {
     expect(result).toEqual(updates)
   })
 
+  it('selects all dependencies in a group when the group header is selected', async () => {
+    clackMock.groupMultiselect.mockImplementation(
+      async (input: { options: Record<string, unknown> }) => [Object.keys(input.options)[0]!],
+    )
+
+    const { runInteractive } = await import('./interactive')
+
+    const updates = [makeDep('a', 'major'), makeDep('b', 'major'), makeDep('c', 'minor')]
+
+    const result = await runInteractive(updates)
+
+    expect(result).toEqual([updates[0], updates[1]])
+  })
+
   it('returns empty array on cancel', async () => {
     clackMock.isCancel.mockReturnValue(true)
     clackMock.groupMultiselect.mockResolvedValue(Symbol('cancel'))

@@ -62,4 +62,29 @@ describe('render overflow handling', () => {
     expect(row).toBeDefined()
     expect(row).not.toContain('…')
   })
+
+  it('keeps nodecompat and provenance suffixes within terminal width', () => {
+    Object.defineProperty(process.stdout, 'isTTY', { configurable: true, value: true })
+    Object.defineProperty(process.stdout, 'columns', { configurable: true, value: 60 })
+
+    renderTable(
+      'project',
+      [
+        makeUpdate({
+          name: 'suffix-overflow-package-name',
+          deprecated: 'Use another package',
+          nodeCompatible: false,
+          nodeCompat: '<16',
+          currentProvenance: 'attested',
+          provenance: 'none',
+        }),
+      ],
+      { ...baseOptions, long: false, timediff: false, nodecompat: true },
+    )
+
+    const stripped = lines.map(stripAnsi).filter((line) => line.trim().length > 0)
+    for (const line of stripped) {
+      expect(visualLength(line)).toBeLessThanOrEqual(60)
+    }
+  })
 })

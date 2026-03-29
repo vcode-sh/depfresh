@@ -322,4 +322,27 @@ describe('loadNpmrc basic auth support', () => {
     expect(registry?.token).toBe(Buffer.from('alice:secret', 'utf-8').toString('base64'))
     expect(registry?.authType).toBe('basic')
   })
+
+  it('ignores malformed _password values instead of synthesizing bogus auth', () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), 'npmrc-basic-auth-test-'))
+    writeFileSync(
+      join(tmpDir, '.npmrc'),
+      [
+        '@scope:registry=https://example.com/npm/',
+        '//example.com/npm/:username=alice',
+        '//example.com/npm/:_password=not-base64',
+      ].join('\n'),
+    )
+
+    // biome-ignore lint/performance/noDelete: test must remove env override completely
+    delete process.env.npm_config_registry
+    // biome-ignore lint/performance/noDelete: test must remove env override completely
+    delete process.env.NPM_CONFIG_REGISTRY
+
+    const config = loadNpmrc(tmpDir)
+    const registry = config.registries.get('@scope')
+
+    expect(registry?.token).toBeUndefined()
+    expect(registry?.authType).toBeUndefined()
+  })
 })

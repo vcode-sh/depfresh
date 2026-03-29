@@ -109,6 +109,40 @@ describe('prepareDetailVersions', () => {
     expect(minor?.explain).toContain('Backwards compatible')
   })
 
+  it('adds node incompatibility warning when engines do not match the current runtime', () => {
+    const dep = makeDep({
+      pkgData: {
+        name: 'test-pkg',
+        versions: ['1.0.0', '2.0.0'],
+        distTags: { latest: '2.0.0' },
+        engines: { '2.0.0': '>=999.0.0' },
+      },
+    })
+
+    const versions = prepareDetailVersions(dep, true)
+    const major = versions.find((v) => v.version === '2.0.0')
+
+    expect(major?.nodeEngines).toBe('>=999.0.0')
+    expect(major?.explain).toContain('Node incompatible.')
+  })
+
+  it('treats malformed engine ranges as incompatible in explanations', () => {
+    const dep = makeDep({
+      pkgData: {
+        name: 'test-pkg',
+        versions: ['1.0.0', '2.0.0'],
+        distTags: { latest: '2.0.0' },
+        engines: { '2.0.0': 'node >=18' },
+      },
+    })
+
+    const versions = prepareDetailVersions(dep, true)
+    const major = versions.find((v) => v.version === '2.0.0')
+
+    expect(major?.nodeEngines).toBe('node >=18')
+    expect(major?.explain).toContain('Node incompatible.')
+  })
+
   it('omits explanation text when explain is false', () => {
     const dep = makeDep()
     const versions = prepareDetailVersions(dep, false)

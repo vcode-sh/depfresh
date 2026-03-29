@@ -88,6 +88,12 @@ describe('handleKeypress - list view', () => {
     const pagedUp = handleKeypress(last, { name: 'pageup' })
     expect(pagedUp.cursor).toBeLessThan(last.cursor)
   })
+
+  it('ignores unknown keys in list view', () => {
+    const state = createInitialState([makeDep('a', 'dependencies')], { termRows: 20, termCols: 80 })
+
+    expect(handleKeypress(state, { name: 'x' })).toBe(state)
+  })
 })
 
 describe('handleKeypress - detail view', () => {
@@ -127,5 +133,13 @@ describe('handleKeypress - detail view', () => {
       createInitialState([makeDep('a', 'dependencies')], { termRows: 20, termCols: 80 }),
     )
     expect(handleKeypress(state, { name: 'c', ctrl: true }).cancelled).toBe(true)
+  })
+
+  it('ignores unknown keys in detail view', () => {
+    const state = enterDetail(
+      createInitialState([makeDep('a', 'dependencies')], { termRows: 20, termCols: 80 }),
+    )
+
+    expect(handleKeypress(state, { name: 'x' })).toBe(state)
   })
 })

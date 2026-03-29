@@ -41,12 +41,20 @@ describe('calculateScrollOffset', () => {
     expect(calculateScrollOffset(19, 10, 20, 0)).toBe(10)
   })
 
+  it('clamps overshot offsets back into range when cursor is above the viewport', () => {
+    expect(calculateScrollOffset(5, 10, 20, 99)).toBe(5)
+  })
+
   it('handles single item', () => {
     expect(calculateScrollOffset(0, 10, 1, 0)).toBe(0)
   })
 
   it('handles viewport larger than total items', () => {
     expect(calculateScrollOffset(2, 10, 5, 0)).toBe(0)
+  })
+
+  it('returns zero when current offset is overshot beyond content bounds', () => {
+    expect(calculateScrollOffset(0, 10, 5, 7)).toBe(0)
   })
 
   it('handles cursor at viewport boundary', () => {

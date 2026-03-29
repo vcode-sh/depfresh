@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { stripAnsi } from '../../../utils/format'
+import { stripAnsi, visualLength } from '../../../utils/format'
 import { renderTable } from './index'
 import { defaultOpts, makeUpdate } from './test-helpers'
 
@@ -114,5 +114,40 @@ describe('renderTable --long mode', () => {
     expect(homepageLines).toHaveLength(2)
     expect(homepageLines[0]).toContain('https://pkg-a.dev')
     expect(homepageLines[1]).toContain('https://pkg-c.io')
+  })
+
+  it('truncates homepage lines to terminal width in long mode', () => {
+    const originalIsTTY = process.stdout.isTTY
+    const originalColumns = process.stdout.columns
+    Object.defineProperty(process.stdout, 'isTTY', { configurable: true, value: true })
+    Object.defineProperty(process.stdout, 'columns', { configurable: true, value: 48 })
+
+    try {
+      const updates = [
+        makeUpdate({
+          name: 'pkg-a',
+          pkgData: {
+            name: 'pkg-a',
+            versions: ['1.0.0', '2.0.0'],
+            distTags: { latest: '2.0.0' },
+            homepage: 'https://example.com/a/very/very/long/homepage/url',
+          },
+        }),
+      ]
+
+      renderTable('test-project', updates, { ...defaultOpts, long: true })
+
+      const stripped = lines.map(stripAnsi)
+      const homepageLine = stripped.find((l) => l.includes('\u21B3'))
+      expect(homepageLine).toBeDefined()
+      expect(visualLength(homepageLine!)).toBeLessThanOrEqual(48)
+      expect(homepageLine).toContain('https://example.com')
+    } finally {
+      Object.defineProperty(process.stdout, 'isTTY', { configurable: true, value: originalIsTTY })
+      Object.defineProperty(process.stdout, 'columns', {
+        configurable: true,
+        value: originalColumns,
+      })
+    }
   })
 })

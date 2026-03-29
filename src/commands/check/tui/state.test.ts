@@ -64,6 +64,15 @@ describe('createInitialState', () => {
     expect(state.termRows).toBe(20)
     expect(state.termCols).toBe(100)
   })
+
+  it('creates an empty list state when there are no updates', () => {
+    const state = createInitialState([], { termRows: 0, termCols: -1 })
+
+    expect(state.items).toEqual([])
+    expect(state.cursor).toBe(0)
+    expect(state.termRows).toBe(24)
+    expect(state.termCols).toBe(80)
+  })
 })
 
 describe('list navigation and selection', () => {
@@ -99,6 +108,13 @@ describe('list navigation and selection', () => {
     expect(paged.cursor).toBeGreaterThan(state.cursor)
   })
 
+  it('keeps list navigation as a no-op when movement is impossible', () => {
+    const state = createInitialState([], { termRows: 20, termCols: 80 })
+
+    expect(moveCursor(state, 0)).toBe(state)
+    expect(pageMove({ ...state, view: 'detail' }, 1)).toEqual({ ...state, view: 'detail' })
+  })
+
   it('toggles single selections and all selections', () => {
     const updates = [makeDep('a'), makeDep('b'), makeDep('c')]
     let state = createInitialState(updates, { termRows: 20, termCols: 80 })
@@ -116,6 +132,17 @@ describe('list navigation and selection', () => {
     expect(state.selectedDepIndices.size).toBe(0)
   })
 
+  it('toggleAll selects remaining items when only some are selected', () => {
+    const updates = [makeDep('a'), makeDep('b'), makeDep('c')]
+    let state = createInitialState(updates, { termRows: 20, termCols: 80 })
+
+    state = toggleSelection(state)
+    state = moveCursor(state, 1)
+    state = toggleAll(state)
+
+    expect(state.selectedDepIndices).toEqual(new Set([0, 1, 2]))
+  })
+
   it('keeps duplicate package names independently selectable', () => {
     const updates = [makeDep('shared', 'dependencies'), makeDep('shared', 'devDependencies')]
     let state = createInitialState(updates, { termRows: 20, termCols: 80 })
@@ -130,6 +157,13 @@ describe('list navigation and selection', () => {
     state = moveCursor(state, -1)
     state = toggleSelection(state)
     expect(state.selectedDepIndices).toEqual(new Set([1]))
+  })
+
+  it('keeps selection actions as no-ops when the cursor is not on a dependency', () => {
+    const state = createInitialState([], { termRows: 20, termCols: 80 })
+
+    expect(toggleSelection(state)).toBe(state)
+    expect(toggleAll(state)).toBe(state)
   })
 })
 
@@ -146,6 +180,45 @@ describe('detail view transitions', () => {
     expect(back.view).toBe('list')
     expect(back.detailDep).toBeNull()
     expect(back.detailVersions).toEqual([])
+  })
+
+  it('keeps detail transitions as no-ops when the state shape is invalid', () => {
+    const listState = createInitialState([makeDep('a')], { termRows: 20, termCols: 80 })
+    const detailState = enterDetail(listState)
+
+    expect(exitDetail(listState)).toBe(listState)
+    expect(
+      selectDetailVersion({
+        ...detailState,
+        detailDep: null,
+      }),
+    ).toEqual({
+      ...detailState,
+      detailDep: null,
+    })
+    expect(moveDetailCursor(listState, 1)).toBe(listState)
+    expect(moveDetailCursor({ ...detailState, detailVersions: [] }, 1)).toEqual({
+      ...detailState,
+      detailVersions: [],
+    })
+    expect(moveDetailCursor(detailState, 0)).toBe(detailState)
+  })
+
+  it('stays in list view when the current dependency has no newer versions', () => {
+    const dep = makeDep('latest-pkg', 'dependencies', {
+      currentVersion: '^2.0.0',
+      targetVersion: '^2.0.0',
+      pkgData: {
+        name: 'latest-pkg',
+        versions: ['2.0.0'],
+        distTags: { latest: '2.0.0' },
+      },
+    })
+    const state = createInitialState([dep], { termRows: 20, termCols: 80 })
+    const detail = enterDetail(state)
+
+    expect(detail).toBe(state)
+    expect(detail.view).toBe('list')
   })
 
   it('applies selected detail version and auto-selects dependency', () => {

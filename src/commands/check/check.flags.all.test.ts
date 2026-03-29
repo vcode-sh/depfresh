@@ -214,4 +214,47 @@ describe('detectPackageManager', () => {
     const { detectPackageManager } = await import('./index')
     expect(detectPackageManager('/tmp/test', [pkg])).toBe('bun')
   })
+
+  it('prefers the cwd manifest over heterogeneous package metadata', async () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), 'depfresh-pm-detect-'))
+    tmpDirs.push(tmpDir)
+    mkdirSync(join(tmpDir, 'packages', 'app'), { recursive: true })
+    writeFileSync(
+      join(tmpDir, 'package.json'),
+      JSON.stringify({ name: 'root', packageManager: 'npm@10.0.0' }, null, 2),
+    )
+
+    const nested = makePkg('nested')
+    nested.packageManager = { name: 'pnpm', version: '9.0.0', raw: 'pnpm@9.0.0' }
+
+    const { detectPackageManager } = await import('./index')
+    expect(detectPackageManager(join(tmpDir, 'packages', 'app'), [nested])).toBe('npm')
+  })
+
+  it('prefers the cwd lockfile over heterogeneous package metadata', async () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), 'depfresh-pm-detect-'))
+    tmpDirs.push(tmpDir)
+    mkdirSync(join(tmpDir, 'packages', 'app'), { recursive: true })
+    writeFileSync(join(tmpDir, 'yarn.lock'), '')
+
+    const nested = makePkg('nested')
+    nested.packageManager = { name: 'pnpm', version: '9.0.0', raw: 'pnpm@9.0.0' }
+
+    const { detectPackageManager } = await import('./index')
+    expect(detectPackageManager(join(tmpDir, 'packages', 'app'), [nested])).toBe('yarn')
+  })
+
+  it('falls back to npm when package metadata is heterogeneous', async () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), 'depfresh-pm-detect-'))
+    tmpDirs.push(tmpDir)
+    mkdirSync(join(tmpDir, 'packages', 'app'), { recursive: true })
+
+    const pnpmPkg = makePkg('pnpm-pkg')
+    pnpmPkg.packageManager = { name: 'pnpm', version: '9.0.0', raw: 'pnpm@9.0.0' }
+    const yarnPkg = makePkg('yarn-pkg')
+    yarnPkg.packageManager = { name: 'yarn', version: '4.0.0', raw: 'yarn@4.0.0' }
+
+    const { detectPackageManager } = await import('./index')
+    expect(detectPackageManager(join(tmpDir, 'packages', 'app'), [pnpmPkg, yarnPkg])).toBe('npm')
+  })
 })

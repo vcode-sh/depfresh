@@ -1,7 +1,7 @@
 import * as p from '@clack/prompts'
 import c from 'ansis'
 import type { DiffType, ResolvedDepChange } from '../../types'
-import { arrow, colorDiff, colorizeVersionDiff } from '../../utils/format'
+import { arrow, colorDiff, colorizeVersionDiff, stripAnsi } from '../../utils/format'
 
 const DIFF_GROUP_ORDER: DiffType[] = ['major', 'minor', 'patch']
 
@@ -26,18 +26,32 @@ function makeOption(dep: ResolvedDepChange, depIndex: number) {
 function getSelectedUpdates(
   updates: ResolvedDepChange[],
   selectedValues: string[],
+  groupIndicesByLabel = new Map<string, number[]>(),
 ): ResolvedDepChange[] {
-  const selectedIndices = new Set(
-    selectedValues
-      .map((value) => Number(value))
-      .filter((value) => Number.isInteger(value) && value >= 0),
-  )
+  const selectedIndices = new Set<number>()
+
+  for (const value of selectedValues) {
+    const index = Number(value)
+    if (Number.isInteger(index) && index >= 0) {
+      selectedIndices.add(index)
+      continue
+    }
+
+    const groupedIndices =
+      groupIndicesByLabel.get(value) ?? groupIndicesByLabel.get(stripAnsi(value))
+    if (groupedIndices) {
+      for (const depIndex of groupedIndices) {
+        selectedIndices.add(depIndex)
+      }
+    }
+  }
 
   return updates.filter((_dep, depIndex) => selectedIndices.has(depIndex))
 }
 
 async function runClackFallback(updates: ResolvedDepChange[]): Promise<ResolvedDepChange[]> {
   const grouped = new Map<DiffType, Array<{ dep: ResolvedDepChange; depIndex: number }>>()
+  const groupIndicesByLabel = new Map<string, number[]>()
 
   for (const [depIndex, dep] of updates.entries()) {
     const existing = grouped.get(dep.diff)
@@ -76,6 +90,9 @@ async function runClackFallback(updates: ResolvedDepChange[]): Promise<ResolvedD
     const colorFn = GROUP_COLORS[diffType]
     const label = colorFn ? colorFn(diffType) : diffType
     groupOptions[label] = deps.map(({ dep, depIndex }) => makeOption(dep, depIndex))
+    const indices = deps.map(({ depIndex }) => depIndex)
+    groupIndicesByLabel.set(label, indices)
+    groupIndicesByLabel.set(stripAnsi(label), indices)
   }
 
   const selected = await p.groupMultiselect({
@@ -90,7 +107,7 @@ async function runClackFallback(updates: ResolvedDepChange[]): Promise<ResolvedD
     return []
   }
 
-  return getSelectedUpdates(updates, selected as string[])
+  return getSelectedUpdates(updates, selected as string[], groupIndicesByLabel)
 }
 
 export async function runInteractive(

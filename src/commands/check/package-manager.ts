@@ -7,18 +7,24 @@ import type { PackageManagerName, PackageMeta } from '../../types'
 import type { Logger } from '../../utils/logger'
 
 export function detectPackageManager(cwd: string, packages: PackageMeta[]): PackageManagerName {
-  for (const pkg of packages) {
-    if (pkg.packageManager?.name) {
-      return pkg.packageManager.name
-    }
-  }
-
   const manifestPm = detectPackageManagerFromManifest(cwd)
   if (manifestPm) return manifestPm
 
   if (findUpSync('bun.lock', { cwd }) || findUpSync('bun.lockb', { cwd })) return 'bun'
   if (findUpSync('pnpm-lock.yaml', { cwd })) return 'pnpm'
   if (findUpSync('yarn.lock', { cwd })) return 'yarn'
+
+  const packageManagers = new Set<PackageManagerName>()
+  for (const pkg of packages) {
+    if (pkg.packageManager?.name) {
+      packageManagers.add(pkg.packageManager.name)
+    }
+  }
+
+  if (packageManagers.size === 1) {
+    return packageManagers.values().next().value as PackageManagerName
+  }
+
   return 'npm'
 }
 

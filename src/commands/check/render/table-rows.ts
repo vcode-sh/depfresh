@@ -22,11 +22,12 @@ export function renderRows(
   const showLong = options.long
   const layout = buildColumnLayout(deps, showSource, showTimediff, terminalWidth)
 
-  const header = buildHeader(layout)
+  const header = terminalWidth ? fitCell(buildHeader(layout), terminalWidth) : buildHeader(layout)
   log(header)
 
   const separatorLen = Math.max(0, totalRowWidth(layout) - 4)
-  log(c.gray(`    ${'-'.repeat(separatorLen)}`))
+  const separator = c.gray(`    ${'-'.repeat(separatorLen)}`)
+  log(terminalWidth ? fitCell(separator, terminalWidth) : separator)
 
   for (const dep of deps) {
     const name = visualPadEnd(fitCell(dep.name, layout.nameWidth), layout.nameWidth)
@@ -67,10 +68,14 @@ export function renderRows(
     }
 
     line += deprecated
+    if (terminalWidth) {
+      line = fitCell(line, terminalWidth)
+    }
     log(line)
 
     if (showLong && dep.pkgData.homepage) {
-      log(c.gray(`      \u21B3 ${dep.pkgData.homepage}`))
+      const homepageLine = `      \u21B3 ${dep.pkgData.homepage}`
+      log(terminalWidth ? fitCell(c.gray(homepageLine), terminalWidth) : c.gray(homepageLine))
     }
   }
 }

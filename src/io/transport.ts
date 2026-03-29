@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs'
+import { readFileSync, statSync } from 'node:fs'
 import { Agent, ProxyAgent } from 'undici'
 import { ResolveError } from '../errors'
 import type { NpmrcConfig } from '../types'
@@ -21,7 +21,7 @@ export interface FetchTransportInit {
 }
 
 const dispatcherCache = new Map<string, Dispatcher>()
-const caCache = new Map<string, string>()
+const caCache = new Map<string, { signature: string; content: string }>()
 
 export function resolveTransportPolicy(url: string, npmrc: NpmrcConfig): TransportPolicy {
   return {
@@ -118,14 +118,16 @@ function createDispatcher(policy: TransportPolicy): Dispatcher {
 }
 
 function loadCaBundle(cafilePath: string): string {
-  const cached = caCache.get(cafilePath)
-  if (cached !== undefined) {
-    return cached
-  }
-
   try {
+    const stat = statSync(cafilePath, { bigint: true })
+    const signature = `${stat.size}:${stat.mtimeNs}:${stat.ino}`
+    const cached = caCache.get(cafilePath)
+    if (cached?.signature === signature) {
+      return cached.content
+    }
+
     const content = readFileSync(cafilePath, 'utf-8')
-    caCache.set(cafilePath, content)
+    caCache.set(cafilePath, { signature, content })
     return content
   } catch (error) {
     throw new ResolveError(`Unable to read npmrc cafile at ${cafilePath}`, { cause: error })

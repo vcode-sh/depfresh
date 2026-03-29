@@ -88,6 +88,19 @@ describe('createInteractiveTUI', () => {
     expect(setRawModeMock).not.toHaveBeenCalled()
   })
 
+  it('returns empty array when raw mode is unavailable', async () => {
+    const dep = makeDep('alpha')
+    Object.defineProperty(process.stdin, 'setRawMode', {
+      value: undefined,
+      configurable: true,
+      writable: true,
+    })
+
+    const result = await createInteractiveTUI([dep], { explain: false })
+
+    expect(result).toEqual([])
+  })
+
   it('returns selected updates on confirm', async () => {
     const dep = makeDep('alpha')
     const promise = createInteractiveTUI([dep], { explain: false })
@@ -179,5 +192,23 @@ describe('createInteractiveTUI', () => {
 
     const result = await promise
     expect(result).toEqual([])
+  })
+
+  it('rejects startup errors and still restores cursor state', async () => {
+    const dep = makeDep('alpha')
+    const startupError = new Error('raw mode failed')
+    const throwingSetRawMode = vi.fn((mode: boolean) => {
+      if (mode) throw startupError
+    })
+    Object.defineProperty(process.stdin, 'setRawMode', {
+      value: throwingSetRawMode,
+      configurable: true,
+      writable: true,
+    })
+
+    await expect(createInteractiveTUI([dep], { explain: false })).rejects.toBe(startupError)
+    expect(throwingSetRawMode).toHaveBeenCalledWith(true)
+    expect(throwingSetRawMode).toHaveBeenCalledWith(false)
+    expect(writeSpy).toHaveBeenCalledWith(expect.stringContaining('\u001B[?25h'))
   })
 })

@@ -74,6 +74,22 @@ describe('transport', () => {
     expect(second.dispatcher).toBe(first.dispatcher)
   })
 
+  it('reloads cafile content when the file changes on disk', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'depfresh-ca-'))
+    const cafile = join(dir, 'ca.pem')
+    writeFileSync(cafile, '-----BEGIN CERTIFICATE-----\nOLD\n-----END CERTIFICATE-----\n')
+
+    const npmrc = createNpmrc({ cafile })
+    const first = resolveTransportPolicy('https://registry.npmjs.org/lodash', npmrc)
+    expect(first.tls.ca).toContain('OLD')
+
+    writeFileSync(cafile, '-----BEGIN CERTIFICATE-----\nNEW\n-----END CERTIFICATE-----\n')
+
+    const second = resolveTransportPolicy('https://registry.npmjs.org/lodash', npmrc)
+    expect(second.tls.ca).toContain('NEW')
+    expect(second.tls.ca).not.toContain('OLD')
+  })
+
   it('throws ResolveError when cafile path is invalid', () => {
     const npmrc = createNpmrc({ cafile: '/tmp/does-not-exist-ca.pem' })
     expect(() => resolveTransportPolicy('https://registry.npmjs.org/lodash', npmrc)).toThrowError(

@@ -99,6 +99,15 @@ export async function resolveConfig(
   const discovery = resolveDiscoveryContext(requestedCwd)
   const fileConfig = await loadConfigFile(discovery.effectiveRoot)
   const merged = defu(overrides, fileConfig ?? {}, DEFAULT_OPTIONS) as depfreshOptions
+  if (overrides.include !== undefined) {
+    merged.include = overrides.include
+  }
+  if (overrides.exclude !== undefined) {
+    merged.exclude = overrides.exclude
+  }
+  if (overrides.ignorePaths !== undefined) {
+    merged.ignorePaths = overrides.ignorePaths
+  }
   merged.cwd = discovery.inputCwd
   merged.inputCwd = discovery.inputCwd
   merged.effectiveRoot = discovery.effectiveRoot

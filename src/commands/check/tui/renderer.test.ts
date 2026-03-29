@@ -89,6 +89,50 @@ describe('renderFrame - detail view', () => {
 
     expect(output).toContain('Breaking change. Check migration guide.')
   })
+
+  it('renders node incompatibility explanations and metadata together', () => {
+    const dep = makeDep('alpha', 'dependencies')
+    dep.pkgData.engines = { '2.0.0': '>=999.0.0' }
+
+    const base = createInitialState([dep], {
+      termRows: 20,
+      termCols: 120,
+      explain: true,
+    })
+    const detail = enterDetail(base)
+    const output = stripAnsi(renderFrame(detail))
+
+    expect(output).toContain('node >=999.0.0')
+    expect(output).toContain('Node incompatible.')
+  })
+
+  it('keeps every visible line within the terminal width when detail metadata is long', () => {
+    const dep = makeDep('alpha', 'dependencies')
+    dep.pkgData.homepage = 'https://alpha.example.com/with/a/very/long/path/that/needs/truncation'
+
+    const base = createInitialState([dep], {
+      termRows: 20,
+      termCols: 32,
+      explain: true,
+    })
+    const detail = enterDetail(base)
+    const lines = stripAnsi(renderFrame(detail))
+      .split('\n')
+      .filter((line) => line.length > 0)
+
+    expect(lines.every((line) => line.length <= 32)).toBe(true)
+  })
+
+  it('falls back to list view rendering when detail state is empty', () => {
+    const base = createInitialState([makeDep('alpha', 'dependencies')], {
+      termRows: 20,
+      termCols: 120,
+    })
+    const output = stripAnsi(renderFrame({ ...base, view: 'detail', detailDep: null }))
+
+    expect(output).toContain('Select dependencies to update')
+    expect(output).not.toContain('dist-tags: latest -> 2.0.0')
+  })
 })
 
 describe('eraseLines', () => {

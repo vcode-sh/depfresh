@@ -66,4 +66,26 @@ describe('interactive fallback integration', () => {
     expect(clackMock.groupMultiselect).toHaveBeenCalledOnce()
     expect(mocks.writePackageMock).toHaveBeenCalledWith(pkg, [updates[0], updates[2]], 'silent')
   })
+
+  it('writes every dependency in the selected group when the group header is chosen', async () => {
+    const pkg = makePkg('my-app')
+    const updates = [
+      makeResolved({ name: 'dep-a', diff: 'major', source: 'dependencies' }),
+      makeResolved({ name: 'dep-b', diff: 'major', source: 'devDependencies' }),
+      makeResolved({ name: 'dep-c', diff: 'minor', source: 'peerDependencies' }),
+    ]
+
+    mocks.loadPackagesMock.mockResolvedValue([pkg])
+    mocks.resolvePackageMock.mockResolvedValue(updates)
+    clackMock.groupMultiselect.mockImplementation(
+      async (input: { options: Record<string, unknown> }) => [Object.keys(input.options)[0]!],
+    )
+
+    const { check } = await import('./index')
+    const result = await check({ ...baseOptions, write: true, interactive: true })
+
+    expect(result).toBe(0)
+    expect(clackMock.groupMultiselect).toHaveBeenCalledOnce()
+    expect(mocks.writePackageMock).toHaveBeenCalledWith(pkg, [updates[0], updates[1]], 'silent')
+  })
 })

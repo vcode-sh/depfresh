@@ -43,6 +43,8 @@ export function prepareDetailVersions(dep: ResolvedDepChange, explain: boolean):
     const deprecated = pkgData.deprecated?.[version]
     const nodeEngines = pkgData.engines?.[version]
     const provenance = pkgData.provenance?.[version]
+    const nodeIncompat =
+      typeof nodeEngines === 'string' && !semver.satisfies(process.version, nodeEngines)
 
     const result: DetailVersion = { version, diff }
     if (age) result.age = age
@@ -52,7 +54,7 @@ export function prepareDetailVersions(dep: ResolvedDepChange, explain: boolean):
     if (provenance) result.provenance = provenance
 
     if (explain) {
-      result.explain = getExplanation(diff, deprecated, provenance === 'none', false)
+      result.explain = getExplanation(diff, deprecated, provenance === 'none', nodeIncompat)
     }
 
     return result
