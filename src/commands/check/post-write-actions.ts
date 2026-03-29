@@ -3,12 +3,14 @@ import c from 'ansis'
 import type { ResolvedDepChange } from '../../types'
 import type { Logger } from '../../utils/logger'
 
-export async function runExecute(command: string, cwd: string, logger: Logger): Promise<void> {
+export async function runExecute(command: string, cwd: string, logger: Logger): Promise<boolean> {
   try {
     logger.info(`Running: ${command}`)
     execSync(command, { cwd, stdio: 'inherit' })
+    return true
   } catch {
     logger.error(`Command failed: ${command}`)
+    return false
   }
 }
 

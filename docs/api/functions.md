@@ -13,7 +13,7 @@ function check(options: depfreshOptions): Promise<number>
 **Returns** an exit code:
 - `0` -- no updates found, or updates were written successfully
 - `1` -- updates available (only when `failOnOutdated: true` and `write: false`)
-- `2` -- something went wrong
+- `2` -- something went wrong, or strict failure flags tripped (`failOnResolutionErrors`, `failOnNoPackages`, `strictPostWrite`)
 
 ```ts
 import { check, resolveConfig } from 'depfresh'
@@ -104,7 +104,7 @@ for (const pkg of packages) {
 
 ## `resolvePackage(pkg, options, externalCache?, externalNpmrc?, privatePackages?)`
 
-Resolves every dependency in a package against the registry. Handles caching, concurrency, version filtering, and the `onDependencyResolved` callback. This is where the network calls happen.
+Resolves every dependency in a package against the registry. Handles caching, concurrency, version filtering, workspace protocol semantics, and the `onDependencyResolved` callback. This is where the network calls happen.
 
 ```ts
 function resolvePackage(
@@ -122,7 +122,7 @@ function resolvePackage(
 | `options` | Full depfresh options (mode, concurrency, timeout, etc.) |
 | `externalCache?` | Reuse a cache across multiple packages. If omitted, creates and closes its own |
 | `externalNpmrc?` | Pre-loaded npmrc config. If omitted, loads from disk |
-| `privatePackages?` | Set of workspace package names to skip (no point hitting the registry for local deps) |
+| `privatePackages?` | Set of workspace package names normally skipped for local-only refs. Explicit-version `workspace:` refs still resolve against the registry. |
 
 ```ts
 import { loadPackages, resolvePackage, resolveConfig } from 'depfresh'
@@ -141,7 +141,7 @@ for (const pkg of packages) {
 
 ## `parseDependencies(raw, options)`
 
-Extracts dependencies from a parsed package manifest object (JSON or YAML). Handles all standard fields, overrides, resolutions, nested overrides, protocols (`npm:`, `jsr:`, `github:`), include/exclude filters, and locked version detection.
+Extracts dependencies from a parsed package manifest object (JSON or YAML). Handles all standard fields, `packageManager`, overrides, resolutions, nested overrides, protocols (`npm:`, `jsr:`, `github:`, `workspace:`), include/exclude filters, and locked version detection.
 
 ```ts
 function parseDependencies(

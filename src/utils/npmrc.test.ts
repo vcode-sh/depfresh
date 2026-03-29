@@ -199,3 +199,127 @@ describe('loadNpmrc environment variable expansion', () => {
     expect(defaultRegistry?.authType).toBe('bearer')
   })
 })
+
+describe('loadNpmrc registry auth matching', () => {
+  const savedEnv = {
+    npm_config_registry: process.env.npm_config_registry,
+    NPM_CONFIG_REGISTRY: process.env.NPM_CONFIG_REGISTRY,
+  }
+
+  afterEach(() => {
+    for (const [key, value] of Object.entries(savedEnv)) {
+      if (value === undefined) {
+        delete process.env[key]
+      } else {
+        process.env[key] = value
+      }
+    }
+  })
+
+  it('matches auth by exact host and path, not loose hostname substring', () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), 'npmrc-auth-match-test-'))
+    writeFileSync(
+      join(tmpDir, '.npmrc'),
+      [
+        '@scope:registry=https://example.com/npm-a/',
+        '//example.com/npm-b/:_authToken=wrong-token',
+        '//example.com/npm-a/:_authToken=right-token',
+      ].join('\n'),
+    )
+
+    // biome-ignore lint/performance/noDelete: test must remove env override completely
+    delete process.env.npm_config_registry
+    // biome-ignore lint/performance/noDelete: test must remove env override completely
+    delete process.env.NPM_CONFIG_REGISTRY
+
+    const config = loadNpmrc(tmpDir)
+    const registry = config.registries.get('@scope')
+
+    expect(registry?.token).toBe('right-token')
+    expect(registry?.authType).toBe('bearer')
+  })
+
+  it('applies exact path matching to the default registry too', () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), 'npmrc-auth-match-test-'))
+    writeFileSync(
+      join(tmpDir, '.npmrc'),
+      [
+        'registry=https://example.com/npm-a/',
+        '//example.com/npm-b/:_authToken=wrong-token',
+        '//example.com/npm-a/:_authToken=right-token',
+      ].join('\n'),
+    )
+
+    // biome-ignore lint/performance/noDelete: test must remove env override completely
+    delete process.env.npm_config_registry
+    // biome-ignore lint/performance/noDelete: test must remove env override completely
+    delete process.env.NPM_CONFIG_REGISTRY
+
+    const config = loadNpmrc(tmpDir)
+    const registry = config.registries.get('default')
+
+    expect(registry?.token).toBe('right-token')
+    expect(registry?.authType).toBe('bearer')
+  })
+})
+
+describe('loadNpmrc basic auth support', () => {
+  const savedEnv = {
+    npm_config_registry: process.env.npm_config_registry,
+    NPM_CONFIG_REGISTRY: process.env.NPM_CONFIG_REGISTRY,
+  }
+
+  afterEach(() => {
+    for (const [key, value] of Object.entries(savedEnv)) {
+      if (value === undefined) {
+        delete process.env[key]
+      } else {
+        process.env[key] = value
+      }
+    }
+  })
+
+  it('parses basic auth from _auth', () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), 'npmrc-basic-auth-test-'))
+    writeFileSync(
+      join(tmpDir, '.npmrc'),
+      ['@scope:registry=https://example.com/npm/', '//example.com/npm/:_auth=dXNlcjpwYXNz'].join(
+        '\n',
+      ),
+    )
+
+    // biome-ignore lint/performance/noDelete: test must remove env override completely
+    delete process.env.npm_config_registry
+    // biome-ignore lint/performance/noDelete: test must remove env override completely
+    delete process.env.NPM_CONFIG_REGISTRY
+
+    const config = loadNpmrc(tmpDir)
+    const registry = config.registries.get('@scope')
+
+    expect(registry?.token).toBe('dXNlcjpwYXNz')
+    expect(registry?.authType).toBe('basic')
+  })
+
+  it('parses basic auth from username and _password', () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), 'npmrc-basic-auth-test-'))
+    writeFileSync(
+      join(tmpDir, '.npmrc'),
+      [
+        '@scope:registry=https://example.com/npm/',
+        '//example.com/npm/:username=alice',
+        `//example.com/npm/:_password=${Buffer.from('secret', 'utf-8').toString('base64')}`,
+      ].join('\n'),
+    )
+
+    // biome-ignore lint/performance/noDelete: test must remove env override completely
+    delete process.env.npm_config_registry
+    // biome-ignore lint/performance/noDelete: test must remove env override completely
+    delete process.env.NPM_CONFIG_REGISTRY
+
+    const config = loadNpmrc(tmpDir)
+    const registry = config.registries.get('@scope')
+
+    expect(registry?.token).toBe(Buffer.from('alice:secret', 'utf-8').toString('base64'))
+    expect(registry?.authType).toBe('basic')
+  })
+})

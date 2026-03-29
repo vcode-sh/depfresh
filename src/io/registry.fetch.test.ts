@@ -205,6 +205,40 @@ describe('fetchPackageData', () => {
     expect(headers.authorization).toBe('Bearer secret-token')
   })
 
+  it('includes Basic auth header for registries configured with basic auth', async () => {
+    const npmResponse = {
+      versions: { '1.0.0': {} },
+      'dist-tags': { latest: '1.0.0' },
+    }
+    globalThis.fetch = mockFetchResponse(npmResponse)
+
+    const scopedNpmrc: NpmrcConfig = {
+      registries: new Map([
+        [
+          '@private',
+          {
+            url: 'https://private.registry.com/npm/',
+            token: 'dXNlcjpwYXNz',
+            authType: 'basic',
+            scope: '@private',
+          },
+        ],
+      ]),
+      defaultRegistry: 'https://registry.npmjs.org/',
+      strictSsl: true,
+    }
+
+    const { fetchPackageData } = await import('./registry')
+    await fetchPackageData('@private/pkg', {
+      ...defaultOptions,
+      npmrc: scopedNpmrc,
+    })
+
+    const fetchCall = vi.mocked(globalThis.fetch).mock.calls[0]!
+    const headers = (fetchCall[1] as RequestInit).headers as Record<string, string>
+    expect(headers.authorization).toBe('Basic dXNlcjpwYXNz')
+  })
+
   it('detects deprecated versions', async () => {
     const npmResponse = {
       versions: {

@@ -71,12 +71,15 @@ export async function normalizeArgs(args: Record<string, unknown>): Promise<depf
     nodecompat: args.nodecompat as boolean,
     long: args.long as boolean,
     explain: args.explain as boolean,
+    explainDiscovery: args['explain-discovery'] as boolean,
     install: args.install as boolean,
     update: args.update as boolean,
+    strictPostWrite: args['strict-post-write'] as boolean,
     execute: args.execute as string | undefined,
     verifyCommand: args['verify-command'] as string | undefined,
     failOnOutdated: args['fail-on-outdated'] as boolean,
     failOnResolutionErrors: args['fail-on-resolution-errors'] as boolean,
+    failOnNoPackages: args['fail-on-no-packages'] as boolean,
     ignoreOtherWorkspaces: args['ignore-other-workspaces'] as boolean,
   })
 }

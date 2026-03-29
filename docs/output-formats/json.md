@@ -37,6 +37,7 @@ Spits out a single JSON envelope to stdout. All log output is automatically supp
       ]
     }
   ],
+  "errors": [],
   "summary": {
     "total": 2,
     "major": 0,
@@ -47,15 +48,27 @@ Spits out a single JSON envelope to stdout. All log output is automatically supp
     "packagesWithUpdates": 1,
     "plannedUpdates": 0,
     "appliedUpdates": 0,
-    "revertedUpdates": 0
+    "revertedUpdates": 0,
+    "failedResolutions": 0
   },
   "meta": {
     "schemaVersion": 1,
     "cwd": "/path/to/project",
+    "effectiveRoot": "/path/to/project",
     "mode": "default",
     "timestamp": "2026-02-22T12:00:00.000Z",
     "noPackagesFound": false,
+    "hadResolutionErrors": false,
     "didWrite": false
+  },
+  "discovery": {
+    "inputCwd": "/path/to/project/src",
+    "effectiveRoot": "/path/to/project",
+    "discoveryMode": "inside-project",
+    "matchedManifests": ["/path/to/project/package.json"],
+    "loadedPackages": ["/path/to/project/package.json"],
+    "skippedManifests": [],
+    "loadedCatalogs": []
   }
 }
 ```
@@ -96,17 +109,43 @@ Spits out a single JSON envelope to stdout. All log output is automatically supp
 | `plannedUpdates` | `number` | Number of dependency updates planned for write attempts (`--write`) |
 | `appliedUpdates` | `number` | Number of planned updates successfully applied |
 | `revertedUpdates` | `number` | Number of planned updates reverted by `--verify-command` |
+| `failedResolutions` | `number` | Number of dependencies that failed to resolve from the registry |
 
 ### `meta`
 
 | Field | Type | Description |
 |-------|------|-------------|
 | `schemaVersion` | `number` | JSON contract schema version (`1`) |
-| `cwd` | `string` | Working directory depfresh ran in |
+| `cwd` | `string` | Original cwd requested by the user |
+| `effectiveRoot` | `string` | Derived root used for discovery and root-aware operations |
 | `mode` | `string` | Range mode used: `default`, `major`, `minor`, `patch`, `latest`, `newest`, `next` |
 | `timestamp` | `string` | ISO 8601 timestamp of when the check ran |
 | `noPackagesFound` | `boolean` | `true` when no package files were discovered in the target workspace |
+| `hadResolutionErrors` | `boolean` | `true` when at least one dependency failed to resolve |
 | `didWrite` | `boolean` | `true` when at least one update was written and kept on disk |
+
+### `errors[]`
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `name` | `string` | Dependency name that failed to resolve |
+| `source` | `string` | Dependency field where it came from |
+| `currentVersion` | `string` | The current version/range seen in the manifest |
+| `message` | `string` | Error description |
+
+### `discovery`
+
+Present only when `--explain-discovery` is enabled.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `inputCwd` | `string` | Original cwd requested by the user |
+| `effectiveRoot` | `string` | Derived root used for discovery |
+| `discoveryMode` | `string` | One of `direct-root`, `inside-project`, `parent-folder` |
+| `matchedManifests` | `string[]` | Manifest paths matched during discovery |
+| `loadedPackages` | `string[]` | Package manifests successfully loaded |
+| `skippedManifests` | `array` | Manifest paths skipped with reasons |
+| `loadedCatalogs` | `string[]` | Catalog identifiers loaded during discovery |
 
 ## Notes
 
@@ -116,6 +155,7 @@ Spits out a single JSON envelope to stdout. All log output is automatically supp
 - You can distinguish all major outcomes without guessing:
   - `meta.noPackagesFound: true` means no package files were found.
   - `meta.noPackagesFound: false` and `summary.total: 0` means packages were found but already up to date.
+  - `meta.hadResolutionErrors: true` means the run had registry resolution failures even if `summary.total` is `0`.
   - `summary.plannedUpdates > 0` and `summary.appliedUpdates: 0` with `summary.revertedUpdates > 0` means verify-command reverted everything.
 
 ## AI Agent Integration

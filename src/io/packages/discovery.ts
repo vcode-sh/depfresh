@@ -11,6 +11,16 @@ import { belongsToNestedWorkspace } from './workspace-boundary'
 export async function loadPackages(options: depfreshOptions): Promise<PackageMeta[]> {
   const logger = createLogger(options.loglevel)
   const discoveryRoot = options.effectiveRoot ?? resolveDiscoveryContext(options.cwd).effectiveRoot
+  const report = options.discoveryReport ?? {
+    inputCwd: options.inputCwd ?? options.cwd,
+    effectiveRoot: discoveryRoot,
+    discoveryMode: options.discoveryMode ?? resolveDiscoveryContext(options.cwd).discoveryMode,
+    matchedManifests: [],
+    loadedPackages: [],
+    skippedManifests: [],
+    loadedCatalogs: [],
+  }
+  options.discoveryReport = report
 
   // Global packages mode — skip filesystem scan
   if (options.global || options.globalAll) {
@@ -34,12 +44,24 @@ export async function loadPackages(options: depfreshOptions): Promise<PackageMet
     ignore: options.ignorePaths,
     absolute: true,
   })
+  report.matchedManifests = [...packageFiles]
 
   // Filter out packages belonging to nested/separate workspaces
   if (options.ignoreOtherWorkspaces) {
     const rootDir = resolve(discoveryRoot)
+    const keptFiles: string[] = []
+    for (const filepath of packageFiles) {
+      if (belongsToNestedWorkspace(filepath, rootDir)) {
+        report.skippedManifests.push({
+          path: filepath,
+          reason: 'nested-workspace-descendant',
+        })
+      } else {
+        keptFiles.push(filepath)
+      }
+    }
     const before = packageFiles.length
-    packageFiles = packageFiles.filter((f) => !belongsToNestedWorkspace(f, rootDir))
+    packageFiles = keptFiles
     const skipped = before - packageFiles.length
     if (skipped > 0) {
       logger.debug(`Skipped ${skipped} package(s) from nested workspaces`)
@@ -52,8 +74,13 @@ export async function loadPackages(options: depfreshOptions): Promise<PackageMet
     try {
       const meta = loadPackage(filepath, options)
       packages.push(meta)
+      report.loadedPackages.push(meta.filepath)
       logger.debug(`Loaded ${filepath} (${meta.deps.length} deps)`)
     } catch (error) {
+      report.skippedManifests.push({
+        path: filepath,
+        reason: 'load-failed',
+      })
       logger.warn(`Failed to load ${filepath}:`, error)
     }
   }
@@ -85,6 +112,7 @@ export async function loadPackages(options: depfreshOptions): Promise<PackageMet
           indent: catalog.indent,
           catalogs: [catalog],
         })
+        report.loadedCatalogs.push(`${catalog.filepath}:${catalog.name}`)
         logger.debug(`Loaded catalog ${displayName} (${catalog.deps.length} deps)`)
       }
     } catch (error) {

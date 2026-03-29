@@ -159,6 +159,11 @@ export const args: ArgsDef = {
     description: 'Show human-readable explanations for update types in interactive mode',
     default: false,
   },
+  'explain-discovery': {
+    type: 'boolean',
+    description: 'Explain how depfresh discovered roots, manifests, skipped paths, and catalogs',
+    default: false,
+  },
   install: {
     type: 'boolean',
     alias: 'i',
@@ -169,6 +174,11 @@ export const args: ArgsDef = {
     type: 'boolean',
     alias: 'u',
     description: 'Run package manager update instead of install after writing',
+    default: false,
+  },
+  'strict-post-write': {
+    type: 'boolean',
+    description: 'Exit with code 2 when execute/install/update post-write steps fail',
     default: false,
   },
   execute: {
@@ -189,6 +199,11 @@ export const args: ArgsDef = {
   'fail-on-resolution-errors': {
     type: 'boolean',
     description: 'Exit with code 2 when any dependency fails to resolve from the registry',
+    default: false,
+  },
+  'fail-on-no-packages': {
+    type: 'boolean',
+    description: 'Exit with code 2 when no packages are discovered in the target workspace',
     default: false,
   },
   'ignore-other-workspaces': {

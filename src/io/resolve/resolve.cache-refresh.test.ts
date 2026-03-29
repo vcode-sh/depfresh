@@ -54,6 +54,7 @@ const dep: RawDep = {
   update: true,
   parents: [],
 }
+const defaultCacheKey = 'npm|https://registry.npmjs.org/|test-pkg'
 
 describe('resolvePackage cache refresh integration', () => {
   beforeEach(() => {
@@ -71,7 +72,7 @@ describe('resolvePackage cache refresh integration', () => {
 
     const result = await resolvePackage(makePkg(dep), makeOptions(), cache, npmrc)
 
-    expect(cache.get).toHaveBeenCalledWith('test-pkg')
+    expect(cache.get).toHaveBeenCalledWith(defaultCacheKey)
     expect(fetchPackageData).not.toHaveBeenCalled()
     expect(result).toHaveLength(1)
     expect(result[0]?.targetVersion).toBe('^2.0.0')
@@ -101,7 +102,7 @@ describe('resolvePackage cache refresh integration', () => {
 
     expect(cache.get).not.toHaveBeenCalled()
     expect(fetchPackageData).toHaveBeenCalledWith('test-pkg', expect.any(Object))
-    expect(cache.set).toHaveBeenCalledWith('test-pkg', fetchedData, expect.any(Number))
+    expect(cache.set).toHaveBeenCalledWith(defaultCacheKey, fetchedData, expect.any(Number))
     expect(result).toHaveLength(1)
     expect(result[0]?.targetVersion).toBe('^3.0.0')
   })

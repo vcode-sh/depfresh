@@ -13,7 +13,7 @@ Every option from the `depfreshOptions` interface. I documented all of them beca
 | `interactive` | `boolean` | `false` | Launch the TUI for cherry-picking updates. Vim keys, version drill-down, the works. Falls back to `@clack/prompts` in non-TTY. |
 | `force` | `boolean` | `false` | Include packages even when they're already up to date. Does not bypass cache reads. |
 | `includeLocked` | `boolean` | `false` | Check packages that are pinned to exact versions. |
-| `includeWorkspace` | `boolean` | `true` | Include workspace protocol (`workspace:*`) dependencies. |
+| `includeWorkspace` | `boolean` | `true` | Include `workspace:` dependencies. Explicit-version forms like `workspace:^1.2.3` are checked against the registry; prefix-only forms like `workspace:^` and `workspace:*` are treated as local-only and skipped. |
 
 ## Filtering
 
@@ -63,12 +63,15 @@ Every option from the `depfreshOptions` interface. I documented all of them beca
 | `nodecompat` | `boolean` | `true` | Check Node engine compatibility and warn about incompatible updates. |
 | `long` | `boolean` | `false` | Extended display with the package homepage URL. |
 | `explain` | `boolean` | `false` | Show human-readable explanations in the interactive detail view. "Breaking change." for majors, "Bug fixes only." for patches. Only does anything with `interactive: true`. |
+| `explainDiscovery` | `boolean` | `false` | Print or emit discovery diagnostics: chosen root, matched manifests, skipped manifests, and loaded catalogs. |
 
 ## Exit Behavior
 
 | Option | Type | Default | Description |
 |---|---|---|---|
 | `failOnOutdated` | `boolean` | `false` | Exit with code `1` when outdated dependencies are found. Perfect for CI pipelines where you want builds to fail and developers to cry. |
+| `failOnResolutionErrors` | `boolean` | `false` | Exit with code `2` when any dependency fails to resolve from the registry. |
+| `failOnNoPackages` | `boolean` | `false` | Exit with code `2` when no packages are discovered in the target workspace. |
 
 ## Post-Write
 
@@ -78,6 +81,7 @@ These only matter when `write: true`.
 |---|---|---|---|
 | `install` | `boolean` | `false` | Run package manager install after writing updates. |
 | `update` | `boolean` | `false` | Run package manager update after writing. Slightly different from install, depending on your package manager's mood. |
+| `strictPostWrite` | `boolean` | `false` | Exit with code `2` when post-write `execute`, `install`, or `update` steps fail. Useful when CI should treat those failures as real failures instead of warnings. |
 | `execute` | `string` | `undefined` | Shell command to run after updates are written. `'npm test'`, `'make coffee'`, whatever you need. |
 | `verifyCommand` | `string` | `undefined` | Command to run after each package update to verify nothing is broken. If it exits non-zero, the update is rolled back. Safety nets are underrated. |
 

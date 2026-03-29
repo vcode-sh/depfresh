@@ -134,7 +134,23 @@ Catalog dependencies are resolved and updated alongside regular dependencies. Wh
 
 ## Workspace Protocol
 
-`includeWorkspace` (default: `true`) controls whether `workspace:*` and `workspace:^` dependencies are included in the check. These are inter-package references within a monorepo. Usually you want them included so depfresh can show you if a workspace package's version constraint is outdated relative to the actual published version.
+`includeWorkspace` (default: `true`) controls whether `workspace:` dependencies are considered during checks.
+
+Current semantics:
+
+- `workspace:^1.2.3`
+- `workspace:~1.2.3`
+- `workspace:1.2.3`
+
+These explicit-version forms are checked against the registry, even when the package also exists locally in the workspace. This lets depfresh show whether the declared workspace version range is behind the published version.
+
+Prefix-only local forms are still treated as local-only and skipped:
+
+- `workspace:^`
+- `workspace:~`
+- `workspace:*`
+
+Those forms intentionally defer to the local workspace package version, so depfresh does not try to invent a published-range update for them.
 
 Set to `false` if workspace references aren't meaningful in your setup:
 

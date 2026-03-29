@@ -11,14 +11,22 @@ The "stop lying about where you are and what just failed" release. depfresh now 
 - **Project root auto-detection** — when you run depfresh from a child directory, it now resolves the effective project root instead of treating `cwd` as gospel. The runtime tracks both the input cwd and the derived root so discovery and config loading finally agree on where the project actually is.
 - **Root-detection test coverage** — dedicated regression tests for child-directory runs, parent-folder project discovery, nested workspace roots, and false-green resolution failures. The sort of tests you add after getting annoyed enough times.
 - **`--fail-on-resolution-errors`** — strict mode for CI and automation. If any dependency fails to resolve from the registry, depfresh now exits `2` instead of quietly carrying on like nothing happened.
+- **`--explain-discovery`** — discovery diagnostics on demand. depfresh can now tell you which root it picked, which manifests it matched, which ones it skipped, and which catalogs it loaded. Finally, a flag for people tired of reading source just to answer "why didn't it see my package?".
+- **`--fail-on-no-packages`** — strict mode for the other embarrassing CI case: wrong cwd, empty folder, or overly aggressive filters. depfresh can now fail loudly instead of smiling and pretending an empty scan was success.
+- **`--strict-post-write`** — opt-in strict mode for post-write automation. If `--execute`, `--install`, or `--update` fails, depfresh can now return exit code `2` instead of treating that failure as a warning bolted onto an otherwise green run.
 
 ### Changed
 
 - **Nested workspace filtering semantics** — nested workspace and nested repo roots are now preserved while their descendants remain filtered by default. Previously depfresh could walk a parent folder full of real projects and conclude that absolutely nothing existed. Deeply philosophical. Also wrong.
 - **JSON execution metadata** — JSON output now includes `meta.effectiveRoot`, `meta.hadResolutionErrors`, and `summary.failedResolutions`. Machine consumers can now distinguish "clean", "updates available", and "resolution went sideways" without reading tea leaves.
+- **Discovery diagnostics in JSON** — when `--explain-discovery` is enabled, JSON output now includes a `discovery` block with input cwd, effective root, discovery mode, matched manifests, skipped manifests, loaded packages, and loaded catalogs.
 - **Bun catalog lookup parity** — Bun catalog detection and loading now walk upward from nested working directories like pnpm and Yarn instead of pretending the catalog only exists when you stand in exactly the right folder.
 - **Resolver scheduling** — in non-progress runs, dependency resolution now fans out across packages through a shared limiter, while rendering and writing stay ordered. Faster where it matters, predictable where it counts.
 - **`.npmrc` parsing** — `${VAR}` references in parsed `.npmrc` string values are now expanded before registry and auth handling. Private-registry setups finally stop carrying literal `${NPM_TOKEN}` strings around like decorative syntax.
+- **Registry auth matching** — auth entries from `.npmrc` now match registries by exact host + path instead of loose hostname substring checks. If your registry lives at `/internal/`, the auth must target `/internal/` too. Sensible, finally.
+- **Workspace protocol semantics** — explicit-version workspace refs like `workspace:^1.2.3`, `workspace:~1.2.3`, and `workspace:1.2.3` are now checked against the registry even when the package also exists locally in the workspace. Prefix-only forms like `workspace:^` and `workspace:*` stay local-only and are skipped on purpose.
+- **`packageManager` as a first-class source** — the parser now emits `packageManager` as a real updatable source instead of just exposing it in types/docs and hoping nobody noticed the gap. That means `pnpm@9.x`, `npm@10.x`, `bun@1.x`, and `yarn@x` can now flow through check output and writes like the rest of the system.
+- **Cache identity** — registry cache lookups now use composite keys (`protocol + registry + package`) instead of plain package names. Public npm and private registry packages no longer share cache rows just because they happen to be called the same thing.
 
 ### Fixed
 
@@ -27,6 +35,10 @@ The "stop lying about where you are and what just failed" release. depfresh now 
 - **Parent-folder nested workspace misses** — scanning a parent directory that only contains nested monorepos or nested git repos now keeps those roots visible instead of filtering the entire tree into oblivion.
 - **Duplicate cold-cache fetches** — repeated concurrent resolutions for the same dependency now collapse behind one in-flight registry request instead of stampeding the registry for identical data.
 - **Multi-package non-TTY throughput** — JSON and other non-progress runs no longer serialize every package's registry work one package at a time. Monorepos with many small packages finally get to use the concurrency flag they were promised.
+- **Basic auth from `.npmrc`** — `_auth` and `username` + `_password` now produce real `Basic` authorization headers instead of being documented fantasies.
+- **Workspace protocol writes** — when an explicit-version `workspace:` dependency is updated with `--write`, depfresh now preserves the `workspace:` prefix instead of rewriting it into a plain semver range.
+- **`packageManager` no longer missing from runtime checks** — the field was already writable and already documented in JSON output, but parse-time support was missing. It's now actually implemented, which is the sort of detail users tend to notice eventually.
+- **Legacy cache row invalidation** — old cache entries keyed only by package name are now dropped on startup instead of hanging around forever as stale ghosts after the key-format change.
 
 ## [1.0.0] - 2026-02-23
 

@@ -1,5 +1,6 @@
 import type { DepFieldType, depfreshOptions, RawDep } from '../../types'
 import { isLocked } from '../../utils/versions'
+import { parsePackageManagerField } from '../packages/package-manager-field'
 import { flattenOverrides, getNestedField } from './overrides'
 import { compilePatternsStrict } from './patterns'
 import { parseGithubSpec, parseProtocol } from './protocols'
@@ -80,6 +81,19 @@ export function parseDependencies(
         update: !isLocked(protocol.currentVersion) || options.includeLocked,
         parents: [],
         protocol: protocol.protocol,
+      })
+    }
+  }
+
+  if (isDepFieldEnabled('packageManager', options) && typeof raw.packageManager === 'string') {
+    const packageManager = parsePackageManagerField(raw.packageManager)
+    if (packageManager) {
+      deps.push({
+        name: packageManager.name,
+        currentVersion: packageManager.version,
+        source: 'packageManager',
+        update: true,
+        parents: [],
       })
     }
   }

@@ -56,7 +56,7 @@ const ENUM_VALUES_BY_FLAG: Record<string, readonly string[]> = {
 const EXIT_CODES: Record<string, string> = {
   '0': 'Success (no updates found, or updates written successfully).',
   '1': 'Outdated dependencies found with --fail-on-outdated and without --write.',
-  '2': 'Fatal/runtime/configuration error (including invalid enum flag values and runs failed by --fail-on-resolution-errors).',
+  '2': 'Fatal/runtime/configuration error (including invalid enum flag values and runs failed by --fail-on-resolution-errors or --fail-on-no-packages).',
 }
 
 const WORKFLOWS: Record<string, Workflow> = {
@@ -84,6 +84,7 @@ const FLAG_RELATIONSHIPS: Record<string, FlagRelationship> = {
   execute: { requires: ['write'] },
   'verify-command': { requires: ['write'] },
   interactive: { requires: ['write'] },
+  'strict-post-write': { requires: ['write'] },
   'deps-only': { conflicts: ['dev-only'] },
   'dev-only': { conflicts: ['deps-only'] },
 }
@@ -114,6 +115,10 @@ const JSON_OUTPUT_SCHEMA: Record<string, string> = {
   'meta.timestamp': 'ISO 8601 timestamp',
   'meta.hadResolutionErrors': 'Whether any dependency failed to resolve',
   'meta.didWrite': 'Whether package files were written',
+  discovery: 'Optional discovery diagnostics block emitted when --explain-discovery is enabled',
+  'discovery.inputCwd': 'Original cwd requested by the user',
+  'discovery.effectiveRoot': 'Resolved root used for discovery',
+  'discovery.discoveryMode': 'How the effective root was determined',
 }
 
 function buildFlagDefinitions(argsDef: ArgsDef): {

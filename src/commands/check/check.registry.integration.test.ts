@@ -38,6 +38,7 @@ interface MockRegistry {
 
 interface JsonUpdate {
   name: string
+  source?: string
 }
 
 interface JsonPackage {
@@ -289,8 +290,70 @@ describe('check registry integration (mocked real registries)', () => {
     expect(elapsedMs).toBeLessThan(220)
   })
 
+  it('checks workspace protocol deps with explicit versions against the registry', async () => {
+    const registry = await startMockRegistry({
+      '@my-org/shared-utils': async () => ({
+        body: npmMetadata(['1.0.0', '2.0.0']),
+      }),
+    })
+    servers.push(registry.server)
+
+    const cwd = createMonorepoWorkspace({
+      packages: {
+        shared: {
+          __manifest: {
+            name: '@my-org/shared-utils',
+            version: '1.0.0',
+          },
+        },
+        app: {
+          __manifest: {
+            name: 'workspace-app',
+          },
+          '@my-org/shared-utils': 'workspace:^1.0.0',
+        },
+      },
+      npmrcLines: [`registry=${registry.url}`],
+    })
+
+    const { exitCode, payload } = await runCheck(cwd, {
+      retries: 0,
+    })
+
+    expect(exitCode).toBe(1)
+    expect(payload.summary.total).toBe(1)
+    expect(payload.packages[0]?.updates[0]?.name).toBe('@my-org/shared-utils')
+    expect(registry.count('@my-org/shared-utils')).toBe(1)
+  })
+
+  it('checks packageManager as an updatable source', async () => {
+    const registry = await startMockRegistry({
+      pnpm: async () => ({
+        body: npmMetadata(['9.0.0', '10.0.0']),
+      }),
+    })
+    servers.push(registry.server)
+
+    const cwd = createWorkspace({
+      dependencies: {},
+      packageManager: 'pnpm@9.0.0',
+      npmrcLines: [`registry=${registry.url}`],
+    })
+
+    const { exitCode, payload } = await runCheck(cwd, {
+      retries: 0,
+    })
+
+    expect(exitCode).toBe(1)
+    expect(payload.summary.total).toBe(1)
+    expect(payload.packages[0]?.updates[0]?.name).toBe('pnpm')
+    expect(payload.packages[0]?.updates[0]?.source).toBe('packageManager')
+    expect(registry.count('pnpm')).toBe(1)
+  })
+
   function createWorkspace(input: {
     dependencies: Record<string, string>
+    packageManager?: string
     npmrcLines: string[]
   }): string {
     const cwd = mkdtempSync(join(tmpdir(), 'depfresh-registry-integration-'))
@@ -311,6 +374,7 @@ describe('check registry integration (mocked real registries)', () => {
         {
           name: 'integration-fixture',
           private: true,
+          ...(input.packageManager ? { packageManager: input.packageManager } : {}),
           dependencies: input.dependencies,
         },
         null,
@@ -325,7 +389,7 @@ describe('check registry integration (mocked real registries)', () => {
   }
 
   function createMonorepoWorkspace(input: {
-    packages: Record<string, Record<string, string>>
+    packages: Record<string, Record<string, string | { name?: string; version?: string }>>
     npmrcLines: string[]
   }): string {
     const cwd = mkdtempSync(join(tmpdir(), 'depfresh-registry-integration-'))
@@ -354,14 +418,19 @@ describe('check registry integration (mocked real registries)', () => {
       'utf-8',
     )
 
-    for (const [name, dependencies] of Object.entries(input.packages)) {
+    for (const [name, rawPackage] of Object.entries(input.packages)) {
       const pkgDir = join(cwd, 'packages', name)
       mkdirSync(pkgDir, { recursive: true })
+      const manifest = rawPackage.__manifest as { name?: string; version?: string } | undefined
+      const dependencies = Object.fromEntries(
+        Object.entries(rawPackage).filter(([key]) => key !== '__manifest'),
+      ) as Record<string, string>
       writeFileSync(
         join(pkgDir, 'package.json'),
         `${JSON.stringify(
           {
-            name: `workspace-${name}`,
+            name: manifest?.name ?? `workspace-${name}`,
+            ...(manifest?.version ? { version: manifest.version } : {}),
             private: true,
             dependencies,
           },

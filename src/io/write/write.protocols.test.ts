@@ -188,6 +188,55 @@ describe('writePackage protocol preservation', () => {
     expect(result).toContain('my-pkg: jsr:@scope/name@^3.0.0')
   })
 
+  it('preserves workspace: protocol in package.json', () => {
+    const filepath = join(tmpDir, 'package.json')
+    const raw = { name: 'test', dependencies: { 'my-workspace-pkg': 'workspace:^1.0.0' } }
+    const content = `${JSON.stringify(raw, null, 2)}\n`
+    writeFileSync(filepath, content)
+
+    const pkg = makePkg(filepath, raw)
+    const changes = [
+      makeChange({
+        name: 'my-workspace-pkg',
+        source: 'dependencies',
+        currentVersion: '^1.0.0',
+        targetVersion: '^2.0.0',
+      }),
+    ]
+
+    writePackage(pkg, changes, 'silent')
+
+    const result = readFileSync(filepath, 'utf-8')
+    const parsed = JSON.parse(result)
+    expect(parsed.dependencies['my-workspace-pkg']).toBe('workspace:^2.0.0')
+  })
+
+  it('preserves workspace: protocol in package.yaml', () => {
+    const filepath = join(tmpDir, 'package.yaml')
+    const content = [
+      'name: test',
+      'dependencies:',
+      '  my-workspace-pkg: workspace:^1.0.0',
+      '',
+    ].join('\n')
+    writeFileSync(filepath, content)
+
+    const pkg = makePkg(filepath, {}, { type: 'package.yaml' })
+    const changes = [
+      makeChange({
+        name: 'my-workspace-pkg',
+        source: 'dependencies',
+        currentVersion: '^1.0.0',
+        targetVersion: '^2.0.0',
+      }),
+    ]
+
+    writePackage(pkg, changes, 'silent')
+
+    const result = readFileSync(filepath, 'utf-8')
+    expect(result).toContain('my-workspace-pkg: workspace:^2.0.0')
+  })
+
   it('preserves github: protocol in package.yaml', () => {
     const filepath = join(tmpDir, 'package.yaml')
     const content = [

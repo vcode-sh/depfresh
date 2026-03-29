@@ -7,29 +7,47 @@ import type { NpmrcConfig, RegistryConfig } from '../types'
 
 const DEFAULT_REGISTRY = 'https://registry.npmjs.org/'
 
+interface RegistryAuthConfig {
+  token: string
+  authType: 'bearer' | 'basic'
+}
+
+interface PartialBasicAuth {
+  username?: string
+  password?: string
+}
+
 export function loadNpmrc(cwd: string): NpmrcConfig {
   const config: NpmrcConfig = {
     registries: new Map(),
     defaultRegistry: DEFAULT_REGISTRY,
     strictSsl: true,
   }
+  const authConfigs = new Map<string, RegistryAuthConfig>()
+  const partialBasicAuth = new Map<string, PartialBasicAuth>()
 
   // Load in order: builtin defaults -> global -> user -> project
   const globalPath = process.env.npm_config_userconfig || join(homedir(), '.npmrc')
   const projectFile = findUpSync('.npmrc', { cwd })
 
-  loadNpmrcFile(globalPath, config)
+  loadNpmrcFile(globalPath, config, authConfigs, partialBasicAuth)
   if (projectFile) {
-    loadNpmrcFile(projectFile, config)
+    loadNpmrcFile(projectFile, config, authConfigs, partialBasicAuth)
   }
 
   // Environment variable overrides
   applyEnvOverrides(config)
+  applyAuthConfigs(config, authConfigs)
 
   return config
 }
 
-function loadNpmrcFile(filepath: string, config: NpmrcConfig): void {
+function loadNpmrcFile(
+  filepath: string,
+  config: NpmrcConfig,
+  authConfigs: Map<string, RegistryAuthConfig>,
+  partialBasicAuth: Map<string, PartialBasicAuth>,
+): void {
   let content: string
   try {
     content = readFileSync(filepath, 'utf-8')
@@ -81,23 +99,39 @@ function loadNpmrcFile(filepath: string, config: NpmrcConfig): void {
     // Auth tokens: //registry.example.com/:_authToken = xxx
     const tokenMatch = key.match(/^\/\/(.+)\/:_authToken$/)
     if (tokenMatch && typeof resolvedValue === 'string') {
-      const host = tokenMatch[1]!
-      // Find which scope this registry belongs to
-      for (const [_scope, reg] of config.registries) {
-        if (reg.url.includes(host)) {
-          reg.token = resolvedValue
-          reg.authType = 'bearer'
-        }
-      }
-      // Also check if it's the default registry
-      if (config.defaultRegistry.includes(host)) {
-        const defaultReg = config.registries.get('default') ?? {
-          url: config.defaultRegistry,
-        }
-        defaultReg.token = resolvedValue
-        defaultReg.authType = 'bearer'
-        config.registries.set('default', defaultReg)
-      }
+      authConfigs.set(normalizeAuthorityKey(tokenMatch[1]!), {
+        token: resolvedValue,
+        authType: 'bearer',
+      })
+      continue
+    }
+
+    const authMatch = key.match(/^\/\/(.+)\/:_auth$/)
+    if (authMatch && typeof resolvedValue === 'string') {
+      authConfigs.set(normalizeAuthorityKey(authMatch[1]!), {
+        token: resolvedValue,
+        authType: 'basic',
+      })
+      continue
+    }
+
+    const usernameMatch = key.match(/^\/\/(.+)\/:username$/)
+    if (usernameMatch && typeof resolvedValue === 'string') {
+      const authKey = normalizeAuthorityKey(usernameMatch[1]!)
+      const current = partialBasicAuth.get(authKey) ?? {}
+      current.username = resolvedValue
+      partialBasicAuth.set(authKey, current)
+      syncPartialBasicAuth(authKey, authConfigs, partialBasicAuth)
+      continue
+    }
+
+    const passwordMatch = key.match(/^\/\/(.+)\/:_password$/)
+    if (passwordMatch && typeof resolvedValue === 'string') {
+      const authKey = normalizeAuthorityKey(passwordMatch[1]!)
+      const current = partialBasicAuth.get(authKey) ?? {}
+      current.password = decodePassword(resolvedValue)
+      partialBasicAuth.set(authKey, current)
+      syncPartialBasicAuth(authKey, authConfigs, partialBasicAuth)
     }
   }
 }
@@ -137,6 +171,61 @@ export function getRegistryForPackage(name: string, config: NpmrcConfig): Regist
   if (defaultReg) return defaultReg
 
   return { url: config.defaultRegistry }
+}
+
+function applyAuthConfigs(config: NpmrcConfig, authConfigs: Map<string, RegistryAuthConfig>): void {
+  for (const [_scope, registry] of config.registries) {
+    const auth = authConfigs.get(normalizeRegistryUrl(registry.url))
+    if (!auth) continue
+    registry.token = auth.token
+    registry.authType = auth.authType
+  }
+
+  const defaultAuth = authConfigs.get(normalizeRegistryUrl(config.defaultRegistry))
+  if (defaultAuth) {
+    const defaultReg = config.registries.get('default') ?? {
+      url: config.defaultRegistry,
+    }
+    defaultReg.token = defaultAuth.token
+    defaultReg.authType = defaultAuth.authType
+    config.registries.set('default', defaultReg)
+  }
+}
+
+function syncPartialBasicAuth(
+  authKey: string,
+  authConfigs: Map<string, RegistryAuthConfig>,
+  partialBasicAuth: Map<string, PartialBasicAuth>,
+): void {
+  const partial = partialBasicAuth.get(authKey)
+  if (!(partial?.username && partial.password)) return
+
+  authConfigs.set(authKey, {
+    token: Buffer.from(`${partial.username}:${partial.password}`, 'utf-8').toString('base64'),
+    authType: 'basic',
+  })
+}
+
+function normalizeAuthorityKey(rawAuthority: string): string {
+  return normalizeRegistryUrl(`https://${rawAuthority}`)
+}
+
+function normalizeRegistryUrl(url: string): string {
+  try {
+    const parsed = new URL(ensureTrailingSlash(url))
+    const pathname = parsed.pathname.endsWith('/') ? parsed.pathname : `${parsed.pathname}/`
+    return `${parsed.host.toLowerCase()}${pathname}`
+  } catch {
+    return ensureTrailingSlash(url)
+  }
+}
+
+function decodePassword(encoded: string): string {
+  try {
+    return Buffer.from(encoded, 'base64').toString('utf-8')
+  } catch {
+    return encoded
+  }
 }
 
 function ensureTrailingSlash(url: string): string {

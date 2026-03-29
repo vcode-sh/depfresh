@@ -38,6 +38,9 @@ export async function check(options: depfreshOptions): Promise<number> {
     await addons.setup()
 
     const packages = await loadPackages(runtimeOptions)
+    if (runtimeOptions.explainDiscovery && runtimeOptions.output === 'table') {
+      logDiscoveryReport(runtimeOptions, logger)
+    }
     const executionState: JsonExecutionState = {
       scannedPackages: packages.length,
       packagesWithUpdates: 0,
@@ -52,9 +55,9 @@ export async function check(options: depfreshOptions): Promise<number> {
     if (packages.length === 0) {
       logger.warn('No packages found')
       if (options.output === 'json') {
-        outputJsonEnvelope([], options, executionState)
+        outputJsonEnvelope([], runtimeOptions, executionState)
       }
-      return 0
+      return options.failOnNoPackages ? 2 : 0
     }
 
     await addons.afterPackagesLoaded(packages)
@@ -173,20 +176,25 @@ export async function check(options: depfreshOptions): Promise<number> {
       logger.debug(`Cache stats: ${stats.hits} hits, ${stats.misses} misses, ${stats.size} entries`)
     }
 
+    let postWriteFailed = false
+
     if (options.execute && options.write && didWrite) {
-      await runExecute(options.execute, executionRoot, logger)
+      const executeSucceeded = await runExecute(options.execute, executionRoot, logger)
+      postWriteFailed = postWriteFailed || !executeSucceeded
     }
 
     if (options.write && didWrite) {
       if (options.update) {
-        await runUpdate(executionRoot, packages, logger)
+        const updateSucceeded = await runUpdate(executionRoot, packages, logger)
+        postWriteFailed = postWriteFailed || !updateSucceeded
       } else if (options.install) {
-        await runInstall(executionRoot, packages, logger)
+        const installSucceeded = await runInstall(executionRoot, packages, logger)
+        postWriteFailed = postWriteFailed || !installSucceeded
       }
     }
 
     if (options.output === 'json') {
-      outputJsonEnvelope(jsonPackages, options, executionState, jsonErrors)
+      outputJsonEnvelope(jsonPackages, runtimeOptions, executionState, jsonErrors)
     }
 
     if (!hasUpdates && executionState.failedResolutions === 0) {
@@ -215,6 +223,10 @@ export async function check(options: depfreshOptions): Promise<number> {
       return 2
     }
 
+    if (postWriteFailed && options.strictPostWrite) {
+      return 2
+    }
+
     return hasUpdates && !options.write && options.failOnOutdated ? 1 : 0
   } catch (error) {
     if (options.output === 'json') {
@@ -223,5 +235,32 @@ export async function check(options: depfreshOptions): Promise<number> {
       logger.error('Check failed:', error instanceof Error ? error.message : String(error))
     }
     return 2
+  }
+}
+
+function logDiscoveryReport(
+  options: depfreshOptions,
+  logger: ReturnType<typeof createLogger>,
+): void {
+  const report = options.discoveryReport
+  if (!report) return
+
+  logger.info(
+    `Discovery: mode=${report.discoveryMode}, input=${report.inputCwd}, root=${report.effectiveRoot}`,
+  )
+  logger.info(
+    `Discovery: matched ${report.matchedManifests.length}, loaded ${report.loadedPackages.length}, skipped ${report.skippedManifests.length}, catalogs ${report.loadedCatalogs.length}`,
+  )
+
+  for (const path of report.loadedPackages) {
+    logger.info(`Discovery loaded: ${path}`)
+  }
+
+  for (const skipped of report.skippedManifests) {
+    logger.info(`Discovery skipped: ${skipped.path} (${skipped.reason})`)
+  }
+
+  for (const catalog of report.loadedCatalogs) {
+    logger.info(`Discovery catalog: ${catalog}`)
   }
 }

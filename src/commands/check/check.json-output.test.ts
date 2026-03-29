@@ -192,6 +192,31 @@ describe('JSON output', () => {
     consoleSpy.mockRestore()
   })
 
+  it('still emits JSON envelope when no packages are found and failOnNoPackages=true', async () => {
+    mocks.loadPackagesMock.mockResolvedValue([])
+
+    const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+
+    const { check } = await import('./index')
+    const result = await check({ ...baseOptions, output: 'json', failOnNoPackages: true })
+
+    const jsonCall = consoleSpy.mock.calls.find((call) => {
+      try {
+        const parsed = JSON.parse(call[0] as string)
+        return parsed.packages !== undefined
+      } catch {
+        return false
+      }
+    })
+
+    expect(result).toBe(2)
+    expect(jsonCall).toBeDefined()
+    const output = JSON.parse(jsonCall![0] as string)
+    expect(output.meta.noPackagesFound).toBe(true)
+
+    consoleSpy.mockRestore()
+  })
+
   it('reports planned/applied/reverted counters for verify-command writes', async () => {
     const pkg = makePkg('my-app')
     const dep = makeResolved({
@@ -277,6 +302,51 @@ describe('JSON output', () => {
     expect(output.summary.failedResolutions).toBe(1)
     expect(output.meta.noPackagesFound).toBe(false)
     expect(output.meta.hadResolutionErrors).toBe(true)
+
+    consoleSpy.mockRestore()
+  })
+
+  it('includes discovery diagnostics when explainDiscovery is enabled', async () => {
+    const pkg = makePkg('my-app')
+    mocks.loadPackagesMock.mockImplementation(async (options) => {
+      options.discoveryReport = {
+        inputCwd: '/tmp/test/src',
+        effectiveRoot: '/tmp/test',
+        discoveryMode: 'inside-project',
+        matchedManifests: ['/tmp/test/package.json'],
+        loadedPackages: ['/tmp/test/package.json'],
+        skippedManifests: [],
+        loadedCatalogs: [],
+      }
+      return [pkg]
+    })
+    mocks.resolvePackageMock.mockResolvedValue([])
+
+    const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+
+    const { check } = await import('./index')
+    await check({ ...baseOptions, output: 'json', explainDiscovery: true, cwd: '/tmp/test/src' })
+
+    const jsonCall = consoleSpy.mock.calls.find((call) => {
+      try {
+        const parsed = JSON.parse(call[0] as string)
+        return parsed.packages !== undefined
+      } catch {
+        return false
+      }
+    })
+
+    expect(jsonCall).toBeDefined()
+    const output = JSON.parse(jsonCall![0] as string)
+    expect(output.discovery).toEqual({
+      inputCwd: '/tmp/test/src',
+      effectiveRoot: '/tmp/test',
+      discoveryMode: 'inside-project',
+      matchedManifests: ['/tmp/test/package.json'],
+      loadedPackages: ['/tmp/test/package.json'],
+      skippedManifests: [],
+      loadedCatalogs: [],
+    })
 
     consoleSpy.mockRestore()
   })

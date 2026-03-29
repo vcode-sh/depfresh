@@ -6,14 +6,16 @@ const mockData: PackageData = {
   versions: ['1.0.0', '1.1.0', '2.0.0'],
   distTags: { latest: '2.0.0' },
 }
+const cacheKey = 'npm|https://registry.npmjs.org/|test-pkg'
+const scopedCacheKey = 'npm|https://registry.npmjs.org/|@vue/reactivity'
 
 describe('sqlite cache', () => {
   it('stores and retrieves data', async () => {
     const { createSqliteCache } = await import('./sqlite')
     const cache = createSqliteCache()
 
-    cache.set('test-pkg', mockData, 60_000)
-    const result = cache.get('test-pkg')
+    cache.set(cacheKey, mockData, 60_000)
+    const result = cache.get(cacheKey)
 
     expect(result).toEqual(mockData)
     cache.close()
@@ -72,8 +74,8 @@ describe('cache round-trip with PackageData', () => {
       repository: 'https://github.com/test/pkg',
     }
 
-    cache.set('@scope/complex-pkg', fullData, 60_000)
-    const result = cache.get('@scope/complex-pkg')
+    cache.set('npm|https://registry.npmjs.org/|@scope/complex-pkg', fullData, 60_000)
+    const result = cache.get('npm|https://registry.npmjs.org/|@scope/complex-pkg')
 
     expect(result).toEqual(fullData)
     cache.close()
@@ -86,12 +88,12 @@ describe('cache TTL expiration', () => {
     const cache = createSqliteCache()
 
     // Set with 1ms TTL
-    cache.set('expiring-pkg', mockData, 1)
+    cache.set('npm|https://registry.npmjs.org/|expiring-pkg', mockData, 1)
 
     // Wait for expiry
     await new Promise((r) => setTimeout(r, 10))
 
-    const result = cache.get('expiring-pkg')
+    const result = cache.get('npm|https://registry.npmjs.org/|expiring-pkg')
     expect(result).toBeUndefined()
     cache.close()
   })
@@ -155,6 +157,43 @@ describe('corrupt JSON data handling', () => {
     expect(stats.misses).toBeGreaterThanOrEqual(1)
     cache.close()
   })
+
+  it('invalidates legacy package-name rows on startup', async () => {
+    const Database = (await import('better-sqlite3')).default
+    const { mkdirSync } = await import('node:fs')
+    const { homedir } = await import('node:os')
+    const { join } = await import('pathe')
+
+    const cacheDir = join(homedir(), '.depfresh')
+    mkdirSync(cacheDir, { recursive: true })
+
+    const db = new Database(join(cacheDir, 'cache.db'))
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS registry_cache (
+        package TEXT NOT NULL,
+        data TEXT NOT NULL,
+        fetched_at INTEGER NOT NULL,
+        expires_at INTEGER NOT NULL,
+        PRIMARY KEY (package)
+      )
+    `)
+    db.prepare(
+      'INSERT OR REPLACE INTO registry_cache (package, data, fetched_at, expires_at) VALUES (?, ?, ?, ?)',
+    ).run('legacy-pkg', JSON.stringify(mockData), Date.now(), Date.now() + 60_000)
+    db.close()
+
+    const { createSqliteCache } = await import('./sqlite')
+    const cache = createSqliteCache()
+    const verifyDb = new Database(join(cacheDir, 'cache.db'))
+    const row = verifyDb
+      .prepare('SELECT COUNT(*) as count FROM registry_cache WHERE package = ?')
+      .get('legacy-pkg') as { count: number }
+
+    expect(cache.has('legacy-pkg')).toBe(false)
+    expect(row.count).toBe(0)
+    verifyDb.close()
+    cache.close()
+  })
 })
 
 describe('scoped package names', () => {
@@ -168,11 +207,11 @@ describe('scoped package names', () => {
       distTags: { latest: '3.1.0' },
     }
 
-    cache.set('@vue/reactivity', scopedData, 60_000)
-    const result = cache.get('@vue/reactivity')
+    cache.set(scopedCacheKey, scopedData, 60_000)
+    const result = cache.get(scopedCacheKey)
 
     expect(result).toEqual(scopedData)
-    expect(cache.has('@vue/reactivity')).toBe(true)
+    expect(cache.has(scopedCacheKey)).toBe(true)
     cache.close()
   })
 })

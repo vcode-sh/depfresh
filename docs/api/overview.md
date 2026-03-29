@@ -62,9 +62,13 @@ import { DEFAULT_OPTIONS } from 'depfresh'
   nodecompat: true,
   long: false,
   explain: false,
+  explainDiscovery: false,
   failOnOutdated: false,
+  failOnResolutionErrors: false,
+  failOnNoPackages: false,
   install: false,
   update: false,
+  strictPostWrite: false,
 }
 ```
 

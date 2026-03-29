@@ -89,6 +89,28 @@ describe('--install flag', () => {
     expect(mocks.execSyncMock).toHaveBeenCalled()
   })
 
+  it('returns 2 when install fails and strictPostWrite=true', async () => {
+    const pkg = makePkg('my-app')
+    pkg.packageManager = { name: 'npm', version: '10.0.0', raw: 'npm@10.0.0' }
+    mocks.loadPackagesMock.mockResolvedValue([pkg])
+    mocks.resolvePackageMock.mockResolvedValue([
+      makeResolved({ diff: 'minor', targetVersion: '^1.1.0' }),
+    ])
+    mocks.execSyncMock.mockImplementation(() => {
+      throw new Error('install failed')
+    })
+
+    const { check } = await import('./index')
+    const result = await check({
+      ...baseOptions,
+      write: true,
+      install: true,
+      strictPostWrite: true,
+    })
+
+    expect(result).toBe(2)
+  })
+
   it('does not run install when beforePackageWrite blocks all writes', async () => {
     const pkg = makePkg('my-app')
     pkg.packageManager = { name: 'pnpm', version: '9.0.0', raw: 'pnpm@9.0.0' }

@@ -22,6 +22,15 @@ describe('check', () => {
     expect(result).toBe(0)
   })
 
+  it('returns 2 when no packages found and failOnNoPackages=true', async () => {
+    mocks.loadPackagesMock.mockResolvedValue([])
+
+    const { check } = await import('./index')
+    const result = await check({ ...baseOptions, failOnNoPackages: true })
+
+    expect(result).toBe(2)
+  })
+
   it('returns 0 when no updates available', async () => {
     const pkg = makePkg('my-app')
     mocks.loadPackagesMock.mockResolvedValue([pkg])

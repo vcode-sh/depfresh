@@ -29,6 +29,22 @@ describe('parseProtocol', () => {
     })
   })
 
+  it('parses workspace protocol with explicit version', () => {
+    const result = parseProtocol('workspace:^1.2.3')
+    expect(result).toEqual({
+      protocol: 'workspace',
+      currentVersion: '^1.2.3',
+    })
+  })
+
+  it('parses workspace protocol with prefix-only form', () => {
+    const result = parseProtocol('workspace:^')
+    expect(result).toEqual({
+      protocol: 'workspace',
+      currentVersion: '^',
+    })
+  })
+
   it('keeps unknown formats as plain versions', () => {
     const result = parseProtocol('^1.0.0')
     expect(result).toEqual({

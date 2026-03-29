@@ -61,6 +61,13 @@ Ah, corporate life. Your packages live behind a firewall and depfresh can't reac
 
 Note the trailing slashes. Note the `//` prefix. npm invented this syntax and I refuse to explain why it looks like that.
 
+**Registry path matching is exact.** If your registry URL includes a path segment, the auth entry needs to include the same path:
+
+```ini
+@mycompany:registry=https://npm.mycompany.com/internal/
+//npm.mycompany.com/internal/:_authToken=${NPM_TOKEN}
+```
+
 **Environment variable expansion.** depfresh expands `${VAR}` references in `.npmrc` values. If the env var isn't set, the token will be empty and your registry will reject you. Double-check with `echo $NPM_TOKEN` before blaming depfresh.
 
 ## "Dependency not found"

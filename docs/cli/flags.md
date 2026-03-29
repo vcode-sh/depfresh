@@ -115,6 +115,7 @@ The output includes supported flags, defaults, valid enum values, and exit-code 
 | `--nodecompat` | -- | boolean | `true` | Show Node.js engine compatibility for target versions. Warns you before you install something that hates your runtime. Disable with `--no-nodecompat`. |
 | `--long` | `-L` | boolean | `false` | Show extra details per package -- currently the homepage URL. For when you need to rage-read a changelog. |
 | `--explain` | `-E` | boolean | `false` | Show human-readable explanations for update types in interactive mode. Tells you *why* a version change matters. Only works with `--interactive`. |
+| `--explain-discovery` | -- | boolean | `false` | Explain how depfresh chose the root, which manifests it matched, which ones it skipped, and which catalogs it loaded. |
 | `--loglevel <level>` | -- | string | `info` | Log level: `silent`, `info`, or `debug`. `silent` suppresses everything except output. `debug` tells you things you didn't ask to know. |
 | `--help-json` | -- | boolean | `false` | Print machine-readable CLI capabilities (flags, enums, defaults, exit codes) as JSON. |
 | `--json` | -- | boolean | `false` | JSON mode for the `depfresh capabilities` discoverability command. |
@@ -128,6 +129,7 @@ These flags only do anything when `--write` is also present. Without `--write`, 
 | `--execute <command>` | `-e` | string | -- | Run a shell command after all updates are written. Runs once, after everything. E.g. `--execute "pnpm test"`. |
 | `--install` | `-i` | boolean | `false` | Auto-detect your package manager and run `install` after writing. Mutually exclusive with `--update` (update wins). |
 | `--update` | `-u` | boolean | `false` | Auto-detect your package manager and run `update` instead of `install` after writing. Takes priority over `--install`. |
+| `--strict-post-write` | -- | boolean | `false` | Exit with code `2` when post-write `execute`, `install`, or `update` steps fail. Without this flag, depfresh logs the failure and continues. |
 | `--verify-command <cmd>` | `-V` | string | -- | Run a command after *each individual* dependency update. If the command fails, that update is reverted. The nuclear option for cautious people. See [Verify Command](#verify-command). |
 
 ## Behavior
@@ -135,6 +137,8 @@ These flags only do anything when `--write` is also present. Without `--write`, 
 | Flag | Alias | Type | Default | Description |
 |------|-------|------|---------|-------------|
 | `--fail-on-outdated` | -- | boolean | `false` | Exit with code `1` when outdated dependencies are found (without `--write`). Built for CI pipelines. See [CI Usage](#ci-usage). |
+| `--fail-on-resolution-errors` | -- | boolean | `false` | Exit with code `2` when any dependency fails to resolve from the registry. |
+| `--fail-on-no-packages` | -- | boolean | `false` | Exit with code `2` when discovery finds no packages at all. Useful for catching wrong cwd or bad filters in CI. |
 | `--ignore-other-workspaces` | -- | boolean | `true` | Skip packages that belong to nested or separate workspaces. Prevents depfresh from trampling someone else's monorepo-within-a-monorepo. |
 | `--refresh-cache` | -- | boolean | `false` | Bypass cache reads for this run and fetch fresh registry metadata. Cache is repopulated unless `cacheTTL=0`. |
 | `--no-cache` | -- | boolean | `false` | Alias for `--refresh-cache` for migration compatibility. |
@@ -240,13 +244,28 @@ depfresh major --fail-on-outdated
 depfresh --fail-on-outdated --output json
 ```
 
+### Fail on Resolution or Discovery Errors
+
+If partial success is not acceptable in your automation, use the strict flags:
+
+```bash
+# CI: fail if any dependency cannot be resolved
+depfresh --fail-on-resolution-errors
+
+# CI: fail if discovery found no packages at all
+depfresh --fail-on-no-packages
+
+# CI: fail if post-write commands fail
+depfresh --write --install --strict-post-write
+```
+
 ### Exit Codes
 
 | Code | Meaning |
 |------|---------|
 | `0` | Everything is up to date, or updates were written successfully. |
 | `1` | Outdated dependencies found (only with `--fail-on-outdated` and without `--write`). |
-| `2` | Fatal error. Something went properly wrong. |
+| `2` | Fatal error, strict resolution failure, strict discovery failure, or strict post-write failure. |
 
 ### Machine-Readable Output
 

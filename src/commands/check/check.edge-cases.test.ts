@@ -185,3 +185,47 @@ describe('non-TTY stderr hint', () => {
     stderrSpy.mockRestore()
   })
 })
+
+describe('--explain-discovery output', () => {
+  let mocks: CheckMocks
+
+  beforeEach(async () => {
+    vi.clearAllMocks()
+    mocks = await setupMocks()
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('prints discovery diagnostics in table mode when enabled', async () => {
+    const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+    mocks.loadPackagesMock.mockImplementation(async (options) => {
+      options.discoveryReport = {
+        inputCwd: '/tmp/test/src',
+        effectiveRoot: '/tmp/test',
+        discoveryMode: 'inside-project',
+        matchedManifests: ['/tmp/test/package.json'],
+        loadedPackages: ['/tmp/test/package.json'],
+        skippedManifests: [],
+        loadedCatalogs: [],
+      }
+      return []
+    })
+
+    const { check } = await import('./index')
+    await check({
+      ...baseOptions,
+      loglevel: 'info',
+      output: 'table',
+      explainDiscovery: true,
+      cwd: '/tmp/test/src',
+    })
+
+    const allOutput = consoleSpy.mock.calls.map((c) => String(c.join(' '))).join('\n')
+    expect(allOutput).toContain('Discovery: mode=inside-project')
+    expect(allOutput).toContain('root=/tmp/test')
+
+    consoleSpy.mockRestore()
+  })
+})

@@ -51,6 +51,7 @@ function makeOptions(overrides: Partial<depfreshOptions> = {}): depfreshOptions 
     explain: false,
     failOnOutdated: false,
     failOnResolutionErrors: false,
+    failOnNoPackages: false,
     install: false,
     update: false,
     ...overrides,
@@ -82,6 +83,7 @@ const fetchedData: PackageData = {
   versions: ['1.0.0', '3.0.0'],
   distTags: { latest: '3.0.0' },
 }
+const defaultCacheKey = 'npm|https://registry.npmjs.org/|test-dep'
 
 describe('resolveDependency cache policy', () => {
   beforeEach(() => {
@@ -100,7 +102,7 @@ describe('resolveDependency cache policy', () => {
       createLogger('silent'),
     )
 
-    expect(cache.get).toHaveBeenCalledWith('test-dep')
+    expect(cache.get).toHaveBeenCalledWith(defaultCacheKey)
     expect(fetchPackageData).not.toHaveBeenCalled()
     expect(result?.targetVersion).toBe('^2.0.0')
   })
@@ -120,7 +122,7 @@ describe('resolveDependency cache policy', () => {
 
     expect(cache.get).not.toHaveBeenCalled()
     expect(fetchPackageData).toHaveBeenCalledWith('test-dep', expect.any(Object))
-    expect(cache.set).toHaveBeenCalledWith('test-dep', fetchedData, 60_000)
+    expect(cache.set).toHaveBeenCalledWith(defaultCacheKey, fetchedData, 60_000)
     expect(result?.targetVersion).toBe('^3.0.0')
   })
 

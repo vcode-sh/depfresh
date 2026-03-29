@@ -21,6 +21,7 @@ export type {
   CatalogSource,
   DepFieldType,
   DiffType,
+  DiscoveryReport,
   depfreshAddon,
   depfreshOptions,
   NpmrcConfig,

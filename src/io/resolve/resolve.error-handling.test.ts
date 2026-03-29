@@ -63,6 +63,7 @@ function makeOptions(overrides: Partial<depfreshOptions> = {}): depfreshOptions 
     explain: false,
     failOnOutdated: false,
     failOnResolutionErrors: false,
+    failOnNoPackages: false,
     install: false,
     update: false,
     ...overrides,

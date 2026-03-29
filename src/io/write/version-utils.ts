@@ -1,4 +1,6 @@
 export function rebuildVersion(original: string, newVersion: string): string {
+  if (original.startsWith('workspace:')) return `workspace:${newVersion}`
+
   // Preserve protocol prefixes like npm:@scope/name@
   const npmMatch = original.match(/^(npm:.+@)/)
   if (npmMatch) return `${npmMatch[1]}${newVersion}`

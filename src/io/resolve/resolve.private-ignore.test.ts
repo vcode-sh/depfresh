@@ -63,6 +63,7 @@ function makeOptions(overrides: Partial<depfreshOptions> = {}): depfreshOptions 
     explain: false,
     failOnOutdated: false,
     failOnResolutionErrors: false,
+    failOnNoPackages: false,
     install: false,
     update: false,
     ...overrides,
@@ -143,5 +144,58 @@ describe('private package filtering', () => {
 
     expect(fetchPackageData).toHaveBeenCalledWith('test-pkg', expect.any(Object))
     expect(result.length).toBe(1)
+  })
+
+  it('does not skip workspace protocol deps with explicit versions', async () => {
+    const { fetchPackageData } = await import('../registry')
+    const { resolvePackage } = await import('./index')
+
+    const cache = createMockCache()
+    vi.mocked(fetchPackageData).mockResolvedValue(mockPkgData)
+
+    const dep = makeDep({
+      name: '@my-org/shared-utils',
+      currentVersion: '^1.0.0',
+      protocol: 'workspace',
+    })
+    const pkg = makePkg([dep])
+    const options = makeOptions({ mode: 'latest' })
+    const npmrc: NpmrcConfig = {
+      registries: new Map(),
+      defaultRegistry: 'https://registry.npmjs.org/',
+      strictSsl: true,
+    }
+
+    const privatePackages = new Set(['@my-org/shared-utils'])
+    const result = await resolvePackage(pkg, options, cache, npmrc, privatePackages)
+
+    expect(fetchPackageData).toHaveBeenCalledWith('@my-org/shared-utils', expect.any(Object))
+    expect(result.length).toBe(1)
+  })
+
+  it('skips workspace protocol deps without explicit versions', async () => {
+    const { fetchPackageData } = await import('../registry')
+    const { resolvePackage } = await import('./index')
+
+    const cache = createMockCache()
+
+    const dep = makeDep({
+      name: '@my-org/shared-utils',
+      currentVersion: '^',
+      protocol: 'workspace',
+    })
+    const pkg = makePkg([dep])
+    const options = makeOptions({ mode: 'latest' })
+    const npmrc: NpmrcConfig = {
+      registries: new Map(),
+      defaultRegistry: 'https://registry.npmjs.org/',
+      strictSsl: true,
+    }
+
+    const privatePackages = new Set(['@my-org/shared-utils'])
+    const result = await resolvePackage(pkg, options, cache, npmrc, privatePackages)
+
+    expect(fetchPackageData).not.toHaveBeenCalled()
+    expect(result.length).toBe(0)
   })
 })

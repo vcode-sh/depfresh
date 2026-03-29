@@ -21,13 +21,15 @@ export async function runInstall(
   cwd: string,
   packages: PackageMeta[],
   logger: Logger,
-): Promise<void> {
+): Promise<boolean> {
   const pm = detectPackageManager(cwd, packages)
   try {
     logger.info(`Running ${pm} install...`)
     execSync(`${pm} install`, { cwd, stdio: 'inherit' })
+    return true
   } catch {
     logger.error(`${pm} install failed`)
+    return false
   }
 }
 
@@ -35,12 +37,14 @@ export async function runUpdate(
   cwd: string,
   packages: PackageMeta[],
   logger: Logger,
-): Promise<void> {
+): Promise<boolean> {
   const pm = detectPackageManager(cwd, packages)
   try {
     logger.info(`Running ${pm} update...`)
     execSync(`${pm} update`, { cwd, stdio: 'inherit' })
+    return true
   } catch {
     logger.error(`${pm} update failed`)
+    return false
   }
 }

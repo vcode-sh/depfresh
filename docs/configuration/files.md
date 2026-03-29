@@ -147,11 +147,17 @@ If you have `@mycompany` packages on a private registry and everything else on n
 //npm.mycompany.com/:_authToken=${COMPANY_NPM_TOKEN}
 ```
 
-depfresh maps auth tokens to registries by matching the hostname. If the token URL contains the registry hostname, it gets attached. No manual wiring needed.
+depfresh maps auth config to registries by exact registry host + path matching. If your registry is `https://npm.mycompany.com/internal/`, the auth entry needs to target that same path, not just the host.
 
 ### Auth types
 
-depfresh supports both `bearer` and `basic` auth, detected from your `.npmrc`. The `_authToken` key maps to bearer tokens, which is what most private registries use. If you're on something exotic, it probably still works. If it doesn't, [file an issue](https://github.com/vcode-sh/depfresh/issues).
+depfresh supports both `bearer` and `basic` auth from `.npmrc`:
+
+- `_authToken` -> bearer auth
+- `_auth` -> basic auth
+- `username` + `_password` -> basic auth
+
+If you're on something more exotic than that, it may still work, but that's no longer a promise hidden behind vague prose. If it doesn't, [file an issue](https://github.com/vcode-sh/depfresh/issues).
 
 ## Cache
 

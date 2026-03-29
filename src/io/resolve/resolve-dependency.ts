@@ -26,9 +26,20 @@ export async function resolveDependency(
   resolveContext?: ResolveContext,
 ): Promise<ResolvedDepChange | null> {
   const packageName = dep.aliasName ?? dep.name
+  const normalizedCurrentVersion = normalizeWorkspaceCurrentVersion(
+    dep.currentVersion,
+    dep.protocol,
+  )
+  const resolveKey = buildResolveKey(packageName, npmrc)
+
+  if (dep.protocol === 'workspace' && !normalizedCurrentVersion) {
+    logger.debug(`Skipping workspace dependency without explicit version: ${packageName}`)
+    return null
+  }
+  const currentVersion = normalizedCurrentVersion ?? dep.currentVersion
 
   // Skip private workspace packages — no point hitting the registry for local deps
-  if (privatePackages?.has(packageName)) {
+  if (privatePackages?.has(packageName) && dep.protocol !== 'workspace') {
     logger.debug(`Skipping private workspace package: ${packageName}`)
     return null
   }
@@ -43,11 +54,10 @@ export async function resolveDependency(
   }
 
   const cachePolicy = getResolveCachePolicy(options)
-  let pkgData = cachePolicy.bypassRead ? undefined : cache.get(packageName)
+  let pkgData = cachePolicy.bypassRead ? undefined : cache.get(resolveKey)
 
   if (!pkgData) {
     try {
-      const resolveKey = buildResolveKey(packageName, npmrc)
       const inFlight = resolveContext?.inFlight.get(resolveKey)
 
       if (inFlight) {
@@ -67,7 +77,7 @@ export async function resolveDependency(
       }
 
       if (cachePolicy.shouldWrite) {
-        cache.set(packageName, pkgData, options.cacheTTL)
+        cache.set(resolveKey, pkgData, options.cacheTTL)
       }
     } catch (error) {
       logger.debug(`Failed to fetch ${packageName}: ${error}`)
@@ -84,22 +94,22 @@ export async function resolveDependency(
   const versions = filterVersions(pkgData, dep, options)
 
   // Resolve the target version based on mode
-  const targetVersion = resolveTargetVersion(dep.currentVersion, versions, pkgData.distTags, mode)
+  const targetVersion = resolveTargetVersion(currentVersion, versions, pkgData.distTags, mode)
 
   if (!targetVersion) {
     return null
   }
 
-  const prefix = getVersionPrefix(dep.currentVersion)
+  const prefix = getVersionPrefix(currentVersion)
   const prefixedTarget = applyVersionPrefix(targetVersion, prefix)
-  const diff = getDiff(dep.currentVersion, targetVersion)
+  const diff = getDiff(currentVersion, targetVersion)
 
   // Skip if no change
   if (diff === 'none' && !options.force) {
     return null
   }
 
-  const cleanCurrent = semver.coerce(dep.currentVersion)?.version ?? undefined
+  const cleanCurrent = semver.coerce(currentVersion)?.version ?? undefined
   const currentProvenance: ProvenanceLevel | undefined = cleanCurrent
     ? pkgData.provenance?.[cleanCurrent]
     : undefined
@@ -111,6 +121,7 @@ export async function resolveDependency(
 
   return {
     ...dep,
+    currentVersion,
     targetVersion: prefixedTarget,
     diff,
     pkgData,
@@ -123,6 +134,26 @@ export async function resolveDependency(
     nodeCompat,
     nodeCompatible,
   }
+}
+
+function normalizeWorkspaceCurrentVersion(
+  currentVersion: string,
+  protocol: string | undefined,
+): string | null {
+  if (protocol !== 'workspace') {
+    return currentVersion
+  }
+
+  if (
+    currentVersion === '' ||
+    currentVersion === '*' ||
+    currentVersion === '^' ||
+    currentVersion === '~'
+  ) {
+    return null
+  }
+
+  return currentVersion
 }
 
 function buildResolveKey(packageName: string, npmrc: ReturnType<typeof loadNpmrc>): string {

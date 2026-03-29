@@ -63,6 +63,7 @@ function makeOptions(overrides: Partial<depfreshOptions> = {}): depfreshOptions 
     explain: false,
     failOnOutdated: false,
     failOnResolutionErrors: false,
+    failOnNoPackages: false,
     install: false,
     update: false,
     ...overrides,
@@ -100,6 +101,7 @@ const npmrc: NpmrcConfig = {
   defaultRegistry: 'https://registry.npmjs.org/',
   strictSsl: true,
 }
+const defaultCacheKey = 'npm|https://registry.npmjs.org/|test-pkg'
 
 describe('resolvePackage - cache behavior', () => {
   beforeEach(() => {
@@ -119,7 +121,7 @@ describe('resolvePackage - cache behavior', () => {
 
     const result = await resolvePackage(pkg, options, cache, npmrc)
 
-    expect(cache.get).toHaveBeenCalledWith('test-pkg')
+    expect(cache.get).toHaveBeenCalledWith(defaultCacheKey)
     expect(fetchPackageData).not.toHaveBeenCalled()
     expect(result.length).toBe(1)
     expect(result[0]!.diff).toBe('major')
@@ -139,7 +141,7 @@ describe('resolvePackage - cache behavior', () => {
     const result = await resolvePackage(pkg, options, cache, npmrc)
 
     expect(fetchPackageData).toHaveBeenCalledWith('test-pkg', expect.any(Object))
-    expect(cache.set).toHaveBeenCalledWith('test-pkg', mockPkgData, options.cacheTTL)
+    expect(cache.set).toHaveBeenCalledWith(defaultCacheKey, mockPkgData, options.cacheTTL)
     expect(result.length).toBe(1)
   })
 
@@ -242,6 +244,44 @@ describe('resolvePackage - cache behavior', () => {
     expect(fetchPackageData).toHaveBeenCalledTimes(1)
     expect(resultA.length).toBe(1)
     expect(resultB.length).toBe(1)
+  })
+
+  it('keeps cache entries isolated per registry identity', async () => {
+    const { fetchPackageData } = await import('../registry')
+    const { resolvePackage } = await import('./index')
+
+    const cache = createMockCache()
+    vi.mocked(fetchPackageData).mockResolvedValue(mockPkgData)
+
+    const pkg = makePkg([makeDep({ name: 'test-pkg' })])
+    const options = makeOptions({ mode: 'latest' })
+
+    const publicNpmrc: NpmrcConfig = {
+      registries: new Map(),
+      defaultRegistry: 'https://registry.npmjs.org/',
+      strictSsl: true,
+    }
+    const privateNpmrc: NpmrcConfig = {
+      registries: new Map(),
+      defaultRegistry: 'https://packages.example.com/npm/',
+      strictSsl: true,
+    }
+
+    await resolvePackage(pkg, options, cache, publicNpmrc)
+    await resolvePackage(pkg, options, cache, privateNpmrc)
+
+    expect(cache.get).toHaveBeenCalledWith('npm|https://registry.npmjs.org/|test-pkg')
+    expect(cache.get).toHaveBeenCalledWith('npm|https://packages.example.com/npm/|test-pkg')
+    expect(cache.set).toHaveBeenCalledWith(
+      'npm|https://registry.npmjs.org/|test-pkg',
+      mockPkgData,
+      options.cacheTTL,
+    )
+    expect(cache.set).toHaveBeenCalledWith(
+      'npm|https://packages.example.com/npm/|test-pkg',
+      mockPkgData,
+      options.cacheTTL,
+    )
   })
 
   it('calls onDependencyResolved callback per dep', async () => {

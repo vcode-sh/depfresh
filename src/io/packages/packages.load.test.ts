@@ -164,6 +164,52 @@ describe('loadPackages', () => {
       raw: 'pnpm@9.0.0',
     })
   })
+
+  it('populates discoveryReport when explainDiscovery is enabled', async () => {
+    writeFileSync(join(tmpDir, 'package.json'), JSON.stringify({ name: 'root' }, null, 2))
+    mkdirSync(join(tmpDir, 'vendor', 'other', 'packages', 'b'), { recursive: true })
+    writeFileSync(
+      join(tmpDir, 'vendor', 'other', 'pnpm-workspace.yaml'),
+      'packages:\n  - packages/*\n',
+    )
+    writeFileSync(
+      join(tmpDir, 'vendor', 'other', 'package.json'),
+      JSON.stringify({ name: 'other' }, null, 2),
+    )
+    writeFileSync(
+      join(tmpDir, 'vendor', 'other', 'packages', 'b', 'package.json'),
+      JSON.stringify({ name: 'b' }, null, 2),
+    )
+
+    const options = {
+      ...baseOptions,
+      cwd: tmpDir,
+      explainDiscovery: true,
+      loglevel: 'silent',
+    } as depfreshOptions
+
+    const packages = await loadPackages(options)
+
+    expect(packages.map((pkg) => pkg.name).sort()).toEqual(['other', 'root'])
+    expect(options.discoveryReport).toBeDefined()
+    expect(options.discoveryReport?.inputCwd).toBe(tmpDir)
+    expect(options.discoveryReport?.effectiveRoot).toBe(tmpDir)
+    expect(options.discoveryReport?.matchedManifests.length).toBeGreaterThan(0)
+    expect(options.discoveryReport?.loadedPackages).toEqual(
+      expect.arrayContaining([
+        join(tmpDir, 'package.json'),
+        join(tmpDir, 'vendor', 'other', 'package.json'),
+      ]),
+    )
+    expect(options.discoveryReport?.skippedManifests).toEqual(
+      expect.arrayContaining([
+        {
+          path: join(tmpDir, 'vendor', 'other', 'packages', 'b', 'package.json'),
+          reason: 'nested-workspace-descendant',
+        },
+      ]),
+    )
+  })
 })
 
 describe('loadPackages with global flag', () => {

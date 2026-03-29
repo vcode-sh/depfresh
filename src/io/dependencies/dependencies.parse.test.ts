@@ -87,6 +87,33 @@ describe('parseDependencies', () => {
     expect(deps).toHaveLength(1)
     expect(deps[0]?.source).toBe('overrides')
   })
+
+  it('parses packageManager as a dependency source', () => {
+    const raw = {
+      packageManager: 'pnpm@9.0.0',
+    }
+
+    const deps = parseDependencies(raw, baseOptions)
+    expect(deps).toHaveLength(1)
+    expect(deps[0]).toMatchObject({
+      name: 'pnpm',
+      currentVersion: '9.0.0',
+      source: 'packageManager',
+      update: true,
+    })
+  })
+
+  it('can disable packageManager via depFields', () => {
+    const raw = {
+      packageManager: 'pnpm@9.0.0',
+    }
+
+    const deps = parseDependencies(raw, {
+      ...baseOptions,
+      depFields: { packageManager: false },
+    })
+    expect(deps).toEqual([])
+  })
 })
 
 describe('isDepFieldEnabled', () => {

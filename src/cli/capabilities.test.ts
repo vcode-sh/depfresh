@@ -24,6 +24,7 @@ describe('getCliCapabilities', () => {
     expect(capabilities.exitCodes['1']).toContain('--fail-on-outdated')
     expect(capabilities.exitCodes['2']).toContain('invalid enum flag values')
     expect(capabilities.exitCodes['2']).toContain('--fail-on-resolution-errors')
+    expect(capabilities.exitCodes['2']).toContain('--fail-on-no-packages')
   })
 
   it('includes CLI version from package.json', () => {
@@ -83,6 +84,7 @@ describe('getCliCapabilities', () => {
     expect(capabilities.jsonOutputSchema['meta.schemaVersion']).toBeDefined()
     expect(capabilities.jsonOutputSchema['meta.effectiveRoot']).toBeDefined()
     expect(capabilities.jsonOutputSchema['meta.hadResolutionErrors']).toBeDefined()
+    expect(capabilities.jsonOutputSchema.discovery).toBeDefined()
     expect(capabilities.jsonOutputSchema['meta.didWrite']).toBeDefined()
   })
 })

@@ -7,6 +7,8 @@ export interface depfreshOptions {
   inputCwd?: string
   effectiveRoot?: string
   discoveryMode?: 'direct-root' | 'inside-project' | 'parent-folder'
+  explainDiscovery?: boolean
+  discoveryReport?: DiscoveryReport
   recursive: boolean
   mode: RangeMode
   write: boolean
@@ -49,10 +51,12 @@ export interface depfreshOptions {
   // Exit behavior
   failOnOutdated: boolean
   failOnResolutionErrors: boolean
+  failOnNoPackages: boolean
 
   // Post-write
   install: boolean
   update: boolean
+  strictPostWrite?: boolean
   execute?: string
   verifyCommand?: string
 
@@ -67,6 +71,16 @@ export interface depfreshOptions {
   afterPackagesLoaded?: (pkgs: PackageMeta[]) => void | Promise<void>
   afterPackageEnd?: (pkg: PackageMeta) => void | Promise<void>
   afterPackagesEnd?: (pkgs: PackageMeta[]) => void | Promise<void>
+}
+
+export interface DiscoveryReport {
+  inputCwd: string
+  effectiveRoot: string
+  discoveryMode: 'direct-root' | 'inside-project' | 'parent-folder'
+  matchedManifests: string[]
+  loadedPackages: string[]
+  skippedManifests: Array<{ path: string; reason: string }>
+  loadedCatalogs: string[]
 }
 
 export const DEFAULT_OPTIONS: Partial<depfreshOptions> = {
@@ -98,8 +112,11 @@ export const DEFAULT_OPTIONS: Partial<depfreshOptions> = {
   nodecompat: true,
   long: false,
   explain: false,
+  explainDiscovery: false,
   failOnOutdated: false,
   failOnResolutionErrors: false,
+  failOnNoPackages: false,
   install: false,
   update: false,
+  strictPostWrite: false,
 }

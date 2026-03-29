@@ -98,4 +98,25 @@ describe('--execute flag basics', () => {
     expect(result).toBe(0)
     expect(mocks.execSyncMock).toHaveBeenCalled()
   })
+
+  it('returns 2 when command fails and strictPostWrite=true', async () => {
+    const pkg = makePkg('my-app')
+    mocks.loadPackagesMock.mockResolvedValue([pkg])
+    mocks.resolvePackageMock.mockResolvedValue([
+      makeResolved({ diff: 'minor', targetVersion: '^1.1.0' }),
+    ])
+    mocks.execSyncMock.mockImplementation(() => {
+      throw new Error('command failed')
+    })
+
+    const { check } = await import('./index')
+    const result = await check({
+      ...baseOptions,
+      write: true,
+      execute: 'exit 1',
+      strictPostWrite: true,
+    })
+
+    expect(result).toBe(2)
+  })
 })

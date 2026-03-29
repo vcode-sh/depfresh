@@ -44,12 +44,15 @@ function makeRawArgs(overrides: Record<string, unknown> = {}): Record<string, un
     nodecompat: true,
     long: false,
     explain: false,
+    'explain-discovery': false,
     install: false,
     update: false,
+    'strict-post-write': false,
     execute: undefined,
     'verify-command': undefined,
     'fail-on-outdated': false,
     'fail-on-resolution-errors': false,
+    'fail-on-no-packages': false,
     'ignore-other-workspaces': true,
     ...overrides,
   }
@@ -152,6 +155,27 @@ describe('normalizeArgs parity flags', () => {
 
     const resolvedOptions = resolveConfigMock.mock.calls[0]?.[0] as depfreshOptions
     expect(resolvedOptions.failOnResolutionErrors).toBe(true)
+  })
+
+  it('maps --explain-discovery into options', async () => {
+    await normalizeArgs(makeRawArgs({ 'explain-discovery': true }))
+
+    const resolvedOptions = resolveConfigMock.mock.calls[0]?.[0] as depfreshOptions
+    expect(resolvedOptions.explainDiscovery).toBe(true)
+  })
+
+  it('maps --fail-on-no-packages into options', async () => {
+    await normalizeArgs(makeRawArgs({ 'fail-on-no-packages': true }))
+
+    const resolvedOptions = resolveConfigMock.mock.calls[0]?.[0] as depfreshOptions
+    expect(resolvedOptions.failOnNoPackages).toBe(true)
+  })
+
+  it('maps --strict-post-write into options', async () => {
+    await normalizeArgs(makeRawArgs({ 'strict-post-write': true }))
+
+    const resolvedOptions = resolveConfigMock.mock.calls[0]?.[0] as depfreshOptions
+    expect(resolvedOptions.strictPostWrite).toBe(true)
   })
 
   it('keeps globalAll false when only --global is used', async () => {

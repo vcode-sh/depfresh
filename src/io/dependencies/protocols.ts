@@ -1,7 +1,7 @@
 import * as semver from 'semver'
 
 interface ParsedProtocol {
-  protocol?: 'npm' | 'jsr' | 'github'
+  protocol?: 'npm' | 'jsr' | 'github' | 'workspace'
   currentVersion: string
   aliasName?: string
 }
@@ -38,6 +38,14 @@ export function parseGithubSpec(version: string): ParsedGithubSpec | null {
 }
 
 export function parseProtocol(version: string): ParsedProtocol {
+  const workspaceMatch = version.match(/^workspace:(.*)$/)
+  if (workspaceMatch) {
+    return {
+      protocol: 'workspace',
+      currentVersion: workspaceMatch[1] ?? '',
+    }
+  }
+
   // npm:@scope/name@version or npm:name@version
   const npmMatch = version.match(/^npm:(.+)@(.+)$/)
   if (npmMatch) {

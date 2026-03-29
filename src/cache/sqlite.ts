@@ -22,6 +22,7 @@ const SCHEMA = `
 `
 
 const INDEX = `CREATE INDEX IF NOT EXISTS idx_expires ON registry_cache(expires_at)`
+const LEGACY_KEY_PRUNE = `DELETE FROM registry_cache WHERE package NOT LIKE '%|%'`
 
 export function createSqliteCache(): Cache {
   mkdirSync(CACHE_DIR, { recursive: true })
@@ -51,6 +52,7 @@ export function createSqliteCache(): Cache {
   const clearStmt = db.prepare('DELETE FROM registry_cache')
   const countStmt = db.prepare('SELECT COUNT(*) as count FROM registry_cache WHERE expires_at > ?')
   const pruneStmt = db.prepare('DELETE FROM registry_cache WHERE expires_at <= ?')
+  const pruneLegacyStmt = db.prepare(LEGACY_KEY_PRUNE)
   const deleteStmt = db.prepare('DELETE FROM registry_cache WHERE package = ?')
 
   let hits = 0
@@ -58,6 +60,8 @@ export function createSqliteCache(): Cache {
 
   // Prune expired entries on startup
   pruneStmt.run(Date.now())
+  // Invalidate legacy cache rows keyed only by package name.
+  pruneLegacyStmt.run()
 
   return {
     get(key: string): PackageData | undefined {
