@@ -7,7 +7,7 @@ import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-const repoRoot = '/Users/tomrobak/_code_/depfresh'
+const repoRoot = new URL('..', import.meta.url).pathname.replace(/\/$/, '')
 const cliPath = join(repoRoot, 'dist', 'cli.mjs')
 
 const tmpRoot = mkdtempSync(join(tmpdir(), 'depfresh-practical-'))
@@ -203,12 +203,19 @@ writeJson(join(workspaceRoot, 'packages', 'web', 'package.json'), {
 })
 writeFileSync(join(workspaceRoot, '.npmrc'), `registry=${registryUrl}\n`, 'utf8')
 
+// Strip npm_config_* env vars that pnpm injects — they override .npmrc in fixtures
+const cleanEnv = Object.fromEntries(
+  Object.entries(process.env).filter(([k]) => !k.startsWith('npm_config_')),
+)
+
 async function runCli(args, extra = {}) {
   return await new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, [cliPath, ...args], {
+    const needsCache = !args.some((a) => ['--help', '--help-json', '--version', 'help', 'capabilities'].includes(a))
+    const cacheArgs = needsCache ? ['--refresh-cache'] : []
+    const child = spawn(process.execPath, [cliPath, ...cacheArgs, ...args], {
       cwd: repoRoot,
       env: {
-        ...process.env,
+        ...cleanEnv,
         HOME: homeDir,
         PATH: `${binDir}:${process.env.PATH}`,
         DEPFRESH_PM_LOG: logFile,

@@ -117,3 +117,6 @@ jobs:
           set -euo pipefail
           node dist/cli.mjs --help
           node dist/cli.mjs --version
+
+      - name: Practical CLI smoke tests
+        run: pnpm test:smoke
