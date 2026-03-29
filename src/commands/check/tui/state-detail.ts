@@ -15,6 +15,7 @@ export function enterDetail(state: TuiState): TuiState {
     ...state,
     view: 'detail',
     detailDep: item.dep,
+    detailDepIndex: item.depIndex ?? null,
     detailVersions,
     detailCursor: 0,
     detailScrollOffset: calculateScrollOffset(
@@ -32,6 +33,7 @@ export function exitDetail(state: TuiState): TuiState {
     ...state,
     view: 'list',
     detailDep: null,
+    detailDepIndex: null,
     detailVersions: [],
     detailCursor: 0,
     detailScrollOffset: 0,
@@ -44,17 +46,20 @@ export function selectDetailVersion(state: TuiState): TuiState {
   if (!selected) return state
 
   applyVersionSelection(state.detailDep, selected.version)
-  const selectedNames = new Set(state.selectedNames)
-  selectedNames.add(state.detailDep.name)
+  const selectedDepIndices = new Set(state.selectedDepIndices)
+  if (state.detailDepIndex !== null) {
+    selectedDepIndices.add(state.detailDepIndex)
+  }
 
   return {
     ...state,
     view: 'list',
     detailDep: null,
+    detailDepIndex: null,
     detailVersions: [],
     detailCursor: 0,
     detailScrollOffset: 0,
-    selectedNames,
+    selectedDepIndices,
   }
 }
 

@@ -61,10 +61,11 @@ export function createInitialState(
     cursor,
     scrollOffset: 0,
     detailDep: null,
+    detailDepIndex: null,
     detailVersions: [],
     detailCursor: 0,
     detailScrollOffset: 0,
-    selectedNames: new Set<string>(),
+    selectedDepIndices: new Set<number>(),
     termRows,
     termCols,
     explain: options.explain ?? false,
@@ -133,35 +134,31 @@ export function pageMove(state: TuiState, direction: 1 | -1): TuiState {
 export function toggleSelection(state: TuiState): TuiState {
   if (state.view !== 'list') return state
   const item = state.items[state.cursor]
-  if (item?.type !== 'dep' || !item.dep) return state
+  if (item?.type !== 'dep' || !item.dep || item.depIndex === undefined) return state
 
-  const selectedNames = new Set(state.selectedNames)
-  if (selectedNames.has(item.dep.name)) {
-    selectedNames.delete(item.dep.name)
+  const selectedDepIndices = new Set(state.selectedDepIndices)
+  if (selectedDepIndices.has(item.depIndex)) {
+    selectedDepIndices.delete(item.depIndex)
   } else {
-    selectedNames.add(item.dep.name)
+    selectedDepIndices.add(item.depIndex)
   }
 
-  return { ...state, selectedNames }
+  return { ...state, selectedDepIndices }
 }
 
 export function toggleAll(state: TuiState): TuiState {
-  const depNames = Array.from(
-    new Set(
-      state.items
-        .filter(
-          (item): item is ListItem & { dep: ResolvedDepChange } =>
-            item.type === 'dep' && !!item.dep,
-        )
-        .map((item) => item.dep.name),
-    ),
-  )
+  const depIndices = state.items
+    .filter(
+      (item): item is ListItem & { dep: ResolvedDepChange; depIndex: number } =>
+        item.type === 'dep' && !!item.dep && item.depIndex !== undefined,
+    )
+    .map((item) => item.depIndex)
 
-  if (depNames.length === 0) return state
+  if (depIndices.length === 0) return state
 
-  const allSelected = depNames.every((name) => state.selectedNames.has(name))
+  const allSelected = depIndices.every((depIndex) => state.selectedDepIndices.has(depIndex))
   return {
     ...state,
-    selectedNames: allSelected ? new Set<string>() : new Set(depNames),
+    selectedDepIndices: allSelected ? new Set<number>() : new Set(depIndices),
   }
 }

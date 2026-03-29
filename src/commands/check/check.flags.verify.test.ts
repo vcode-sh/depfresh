@@ -6,10 +6,12 @@ describe('--verify-command flag', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks()
+    vi.doUnmock('./interactive')
     mocks = await setupMocks()
   })
 
   afterEach(() => {
+    vi.doUnmock('./interactive')
     vi.restoreAllMocks()
   })
 
@@ -119,7 +121,7 @@ describe('--verify-command flag', () => {
     }))
 
     const { check } = await import('./index')
-    await check({ ...baseOptions, interactive: true, explain: true })
+    await check({ ...baseOptions, write: true, interactive: true, explain: true })
 
     expect(runInteractiveMock).toHaveBeenCalledWith([dep1], { explain: true })
   })

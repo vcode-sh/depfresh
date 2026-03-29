@@ -32,7 +32,7 @@ function countFrameLines(frame: string): number {
 }
 
 function getSelectedUpdates(state: TuiState, updates: ResolvedDepChange[]): ResolvedDepChange[] {
-  return updates.filter((dep) => state.selectedNames.has(dep.name))
+  return updates.filter((_dep, depIndex) => state.selectedDepIndices.has(depIndex))
 }
 
 export async function createInteractiveTUI(

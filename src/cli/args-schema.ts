@@ -28,7 +28,7 @@ export const args: ArgsDef = {
   interactive: {
     type: 'boolean',
     alias: 'I',
-    description: 'Interactive mode — select which deps to update',
+    description: 'Interactive mode — select which deps to update (requires --write)',
     default: false,
   },
   mode: {

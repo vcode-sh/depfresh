@@ -41,10 +41,10 @@ describe('handleKeypress - list view', () => {
     })
 
     state = handleKeypress(state, { name: 'space' })
-    expect(state.selectedNames.has('a')).toBe(true)
+    expect(state.selectedDepIndices.has(0)).toBe(true)
 
     state = handleKeypress(state, { name: 'a' })
-    expect(state.selectedNames.size).toBe(2)
+    expect(state.selectedDepIndices.size).toBe(2)
   })
 
   it('enters detail mode with right/l and confirms with return', () => {
@@ -112,14 +112,14 @@ describe('handleKeypress - detail view', () => {
 
     const selected = handleKeypress(state, { name: 'space' })
     expect(selected.view).toBe('list')
-    expect(selected.selectedNames.has('a')).toBe(true)
+    expect(selected.selectedDepIndices.has(0)).toBe(true)
 
     const state2 = enterDetail(
       createInitialState([makeDep('a', 'dependencies')], { termRows: 20, termCols: 80 }),
     )
     const selectedWithEnter = handleKeypress(state2, { name: 'return' })
     expect(selectedWithEnter.view).toBe('list')
-    expect(selectedWithEnter.selectedNames.has('a')).toBe(true)
+    expect(selectedWithEnter.selectedDepIndices.has(0)).toBe(true)
   })
 
   it('still cancels from detail mode with ctrl+c', () => {

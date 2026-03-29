@@ -14,6 +14,19 @@ import { resolveDiscoveryContext } from '../packages/root-detection'
 import type { ResolveContext } from './context'
 import { resolveDependency } from './resolve-dependency'
 
+function createResolutionError(dep: RawDep): ResolvedDepChange {
+  return {
+    ...dep,
+    targetVersion: dep.currentVersion,
+    diff: 'error',
+    pkgData: {
+      name: dep.aliasName ?? dep.name,
+      versions: [],
+      distTags: {},
+    },
+  }
+}
+
 export async function resolvePackage(
   pkg: PackageMeta,
   options: depfreshOptions,
@@ -46,6 +59,11 @@ export async function resolvePackage(
                 privatePackages,
                 resolveContext,
               )
+            } catch (error) {
+              logger.debug(
+                `Resolution failed for ${dep.aliasName ?? dep.name}: ${error instanceof Error ? error.message : String(error)}`,
+              )
+              return createResolutionError(dep)
             } finally {
               await onDependencyProcessed?.(pkg, dep)
             }

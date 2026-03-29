@@ -41,7 +41,10 @@ export function renderListView(state: TuiState): string[] {
 
   const totalDeps = depItems.length
   const selectedCount = depItems.reduce(
-    (count, item) => (state.selectedNames.has(item.dep.name) ? count + 1 : count),
+    (count, item) =>
+      item.depIndex !== undefined && state.selectedDepIndices.has(item.depIndex)
+        ? count + 1
+        : count,
     0,
   )
 
@@ -61,7 +64,7 @@ export function renderListLine(state: TuiState, item: ListItem, nameWidth: numbe
   return renderListDepLine(
     item.dep,
     item.index === state.cursor,
-    state.selectedNames.has(item.dep.name),
+    item.depIndex !== undefined && state.selectedDepIndices.has(item.depIndex),
     nameWidth,
     state.termCols,
   )

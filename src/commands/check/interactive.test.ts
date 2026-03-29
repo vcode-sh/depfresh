@@ -45,6 +45,8 @@ describe('runInteractive', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.resetModules()
+    vi.doUnmock('./interactive')
+    vi.doUnmock('./tui/index')
     clackMock.isCancel.mockReturnValue(false)
     setTTY(false, false)
   })
@@ -76,7 +78,7 @@ describe('runInteractive', () => {
 
   it('falls back to clack when either stream is non-TTY', async () => {
     const updates = [makeDep('a', 'major')]
-    clackMock.groupMultiselect.mockResolvedValue(['a'])
+    clackMock.groupMultiselect.mockResolvedValue(['0'])
     setTTY(true, false)
 
     const { runInteractive } = await import('./interactive')
@@ -87,7 +89,7 @@ describe('runInteractive', () => {
   })
 
   it('groups deps by diff type into major, minor, patch groups', async () => {
-    clackMock.groupMultiselect.mockResolvedValue(['a', 'b', 'c'])
+    clackMock.groupMultiselect.mockResolvedValue(['0', '1', '2'])
 
     const { runInteractive } = await import('./interactive')
 
@@ -106,7 +108,7 @@ describe('runInteractive', () => {
   })
 
   it('returns selected deps from groupMultiselect', async () => {
-    clackMock.groupMultiselect.mockResolvedValue(['a', 'c'])
+    clackMock.groupMultiselect.mockResolvedValue(['0', '2'])
 
     const { runInteractive } = await import('./interactive')
 
@@ -132,7 +134,7 @@ describe('runInteractive', () => {
   })
 
   it('omits empty groups', async () => {
-    clackMock.groupMultiselect.mockResolvedValue(['a', 'b'])
+    clackMock.groupMultiselect.mockResolvedValue(['0', '1'])
 
     const { runInteractive } = await import('./interactive')
 
@@ -148,7 +150,7 @@ describe('runInteractive', () => {
   })
 
   it('preserves group order: major first, then minor, then patch', async () => {
-    clackMock.groupMultiselect.mockResolvedValue(['c', 'b', 'a'])
+    clackMock.groupMultiselect.mockResolvedValue(['0', '1', '2'])
 
     const { runInteractive } = await import('./interactive')
 
@@ -180,7 +182,7 @@ describe('runInteractive', () => {
   })
 
   it('falls back to flat multiselect when no standard diffs', async () => {
-    clackMock.multiselect.mockResolvedValue(['err-pkg'])
+    clackMock.multiselect.mockResolvedValue(['0'])
 
     const { runInteractive } = await import('./interactive')
 
@@ -194,8 +196,38 @@ describe('runInteractive', () => {
     expect(result[0]!.name).toBe('err-pkg')
   })
 
+  it('keeps duplicate package names independently selectable in grouped mode', async () => {
+    clackMock.groupMultiselect.mockResolvedValue(['1'])
+
+    const { runInteractive } = await import('./interactive')
+
+    const updates = [
+      makeDep('shared', 'major', { source: 'dependencies' }),
+      makeDep('shared', 'minor', { source: 'devDependencies' }),
+    ]
+
+    const result = await runInteractive(updates)
+
+    expect(result).toEqual([updates[1]])
+  })
+
+  it('keeps duplicate package names independently selectable in flat mode', async () => {
+    clackMock.multiselect.mockResolvedValue(['1'])
+
+    const { runInteractive } = await import('./interactive')
+
+    const updates = [
+      makeDep('shared', 'error', { source: 'dependencies' }),
+      makeDep('shared', 'none', { source: 'devDependencies' }),
+    ]
+
+    const result = await runInteractive(updates)
+
+    expect(result).toEqual([updates[1]])
+  })
+
   it('handles single group (only minor updates)', async () => {
-    clackMock.groupMultiselect.mockResolvedValue(['x', 'y'])
+    clackMock.groupMultiselect.mockResolvedValue(['0', '1'])
 
     const { runInteractive } = await import('./interactive')
 

@@ -104,16 +104,32 @@ describe('list navigation and selection', () => {
     let state = createInitialState(updates, { termRows: 20, termCols: 80 })
 
     state = toggleSelection(state)
-    expect(state.selectedNames.has('a')).toBe(true)
+    expect(state.selectedDepIndices.has(0)).toBe(true)
 
     state = toggleSelection(state)
-    expect(state.selectedNames.has('a')).toBe(false)
+    expect(state.selectedDepIndices.has(0)).toBe(false)
 
     state = toggleAll(state)
-    expect(state.selectedNames.size).toBe(3)
+    expect(state.selectedDepIndices.size).toBe(3)
 
     state = toggleAll(state)
-    expect(state.selectedNames.size).toBe(0)
+    expect(state.selectedDepIndices.size).toBe(0)
+  })
+
+  it('keeps duplicate package names independently selectable', () => {
+    const updates = [makeDep('shared', 'dependencies'), makeDep('shared', 'devDependencies')]
+    let state = createInitialState(updates, { termRows: 20, termCols: 80 })
+
+    state = toggleSelection(state)
+    expect(state.selectedDepIndices).toEqual(new Set([0]))
+
+    state = moveCursor(state, 1)
+    state = toggleSelection(state)
+    expect(state.selectedDepIndices).toEqual(new Set([0, 1]))
+
+    state = moveCursor(state, -1)
+    state = toggleSelection(state)
+    expect(state.selectedDepIndices).toEqual(new Set([1]))
   })
 })
 
@@ -142,7 +158,19 @@ describe('detail view transitions', () => {
     const dep = state.items[1]?.dep
     expect(dep?.targetVersion).toBe('^1.1.0')
     expect(dep?.diff).toBe('minor')
-    expect(state.selectedNames.has('a')).toBe(true)
+    expect(state.selectedDepIndices.has(0)).toBe(true)
+  })
+
+  it('detail selection only selects the focused duplicate dependency', () => {
+    let state = createInitialState(
+      [makeDep('shared', 'dependencies'), makeDep('shared', 'devDependencies')],
+      { termRows: 20, termCols: 80 },
+    )
+    state = moveCursor(state, 1)
+    state = enterDetail(state)
+    state = selectDetailVersion(state)
+
+    expect(state.selectedDepIndices).toEqual(new Set([1]))
   })
 
   it('clamps detail cursor at boundaries', () => {

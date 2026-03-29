@@ -229,3 +229,75 @@ describe('currentVersionTime', () => {
     expect(result[0]!.currentVersionTime).toBeUndefined()
   })
 })
+
+describe('unexpected resolution failures', () => {
+  beforeEach(() => {
+    vi.resetAllMocks()
+  })
+
+  it('converts cache read explosions into explicit error diffs', async () => {
+    const { resolvePackage } = await import('./index')
+
+    const cache = createMockCache()
+    vi.mocked(cache.get).mockImplementation(() => {
+      throw new Error('cache read failed')
+    })
+
+    const dep = makeDep({ name: 'broken-pkg', currentVersion: '^1.2.3' })
+    const pkg = makePkg([dep])
+    const options = makeOptions({ mode: 'latest' })
+
+    const result = await resolvePackage(pkg, options, cache, defaultNpmrc)
+
+    expect(result).toHaveLength(1)
+    expect(result[0]).toMatchObject({
+      name: 'broken-pkg',
+      currentVersion: '^1.2.3',
+      targetVersion: '^1.2.3',
+      diff: 'error',
+    })
+  })
+
+  it('preserves sibling successes when one dependency throws unexpectedly', async () => {
+    const { fetchPackageData } = await import('../registry')
+    const { resolvePackage } = await import('./index')
+
+    const cache = createMockCache()
+    vi.mocked(cache.get).mockImplementation((key: string) => {
+      if (key === 'npm|https://registry.npmjs.org/|broken-pkg') {
+        throw new Error('cache read failed')
+      }
+      return undefined
+    })
+    vi.mocked(fetchPackageData).mockImplementation(async (name: string) => {
+      if (name === 'good-pkg') {
+        return {
+          name,
+          versions: ['1.0.0', '2.0.0'],
+          distTags: { latest: '2.0.0' },
+        }
+      }
+      throw new Error(`unexpected fetch for ${name}`)
+    })
+
+    const pkg = makePkg([
+      makeDep({ name: 'broken-pkg', currentVersion: '^1.2.3' }),
+      makeDep({ name: 'good-pkg', currentVersion: '^1.0.0', source: 'devDependencies' }),
+    ])
+    const options = makeOptions({ mode: 'latest' })
+
+    const result = await resolvePackage(pkg, options, cache, defaultNpmrc)
+
+    expect(result).toHaveLength(2)
+    expect(result[0]).toMatchObject({
+      name: 'broken-pkg',
+      diff: 'error',
+      targetVersion: '^1.2.3',
+    })
+    expect(result[1]).toMatchObject({
+      name: 'good-pkg',
+      diff: 'major',
+      targetVersion: '^2.0.0',
+    })
+  })
+})

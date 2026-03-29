@@ -18,11 +18,12 @@ export interface TuiState {
   scrollOffset: number
 
   detailDep: ResolvedDepChange | null
+  detailDepIndex: number | null
   detailVersions: DetailVersion[]
   detailCursor: number
   detailScrollOffset: number
 
-  selectedNames: Set<string>
+  selectedDepIndices: Set<number>
 
   termRows: number
   termCols: number

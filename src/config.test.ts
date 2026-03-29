@@ -29,6 +29,16 @@ describe('resolveConfig', () => {
     expect(config.mode).toBe('latest')
     expect(config.concurrency).toBe(32)
   })
+
+  it('rejects interactive mode without write enabled', async () => {
+    await expect(
+      resolveConfig({
+        cwd: '/tmp',
+        loglevel: 'silent',
+        interactive: true,
+      }),
+    ).rejects.toThrow('Interactive mode requires write mode')
+  })
 })
 
 describe('Phase 5 option defaults', () => {

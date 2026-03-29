@@ -1,12 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { ResolvedDepChange } from '../../../types'
+import type { DepFieldType, ResolvedDepChange } from '../../../types'
 import { createInteractiveTUI } from './index'
 
-function makeDep(name: string): ResolvedDepChange {
+function makeDep(name: string, source: DepFieldType = 'dependencies'): ResolvedDepChange {
   return {
     name,
     currentVersion: '^1.0.0',
-    source: 'dependencies',
+    source,
     update: true,
     parents: [],
     targetVersion: '^2.0.0',
@@ -100,6 +100,32 @@ describe('createInteractiveTUI', () => {
     expect(setRawModeMock).toHaveBeenCalledWith(true)
     expect(setRawModeMock).toHaveBeenCalledWith(false)
     expect(writeSpy).toHaveBeenCalled()
+  })
+
+  it('returns all updates when toggling all and confirming immediately', async () => {
+    const updates = [
+      makeDep('alpha', 'dependencies'),
+      makeDep('beta', 'devDependencies'),
+      makeDep('gamma', 'peerDependencies'),
+    ]
+    const promise = createInteractiveTUI(updates, { explain: false })
+
+    process.stdin.emit('keypress', 'a', { name: 'a' })
+    process.stdin.emit('keypress', '\r', { name: 'return' })
+
+    const result = await promise
+    expect(result).toEqual(updates)
+  })
+
+  it('keeps duplicate package names independently selectable', async () => {
+    const updates = [makeDep('shared', 'dependencies'), makeDep('shared', 'devDependencies')]
+    const promise = createInteractiveTUI(updates, { explain: false })
+
+    process.stdin.emit('keypress', ' ', { name: 'space' })
+    process.stdin.emit('keypress', '\r', { name: 'return' })
+
+    const result = await promise
+    expect(result).toEqual([updates[0]])
   })
 
   it('returns empty array on cancel', async () => {

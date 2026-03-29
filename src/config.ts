@@ -7,6 +7,7 @@ import { resolveDiscoveryContext } from './io/packages/root-detection'
 import type { depfreshOptions } from './types'
 import { DEFAULT_OPTIONS } from './types'
 import { createLogger } from './utils/logger'
+import { validateOptions } from './validate-options'
 
 const TS_RE = /\.[mc]?ts$/
 const JS_RE = /\.[mc]?js$/
@@ -102,6 +103,7 @@ export async function resolveConfig(
   merged.inputCwd = discovery.inputCwd
   merged.effectiveRoot = discovery.effectiveRoot
   merged.discoveryMode = discovery.discoveryMode
+  validateOptions(merged)
 
   const logger = createLogger(merged.loglevel)
   logger.debug('Config resolved:', JSON.stringify(merged, null, 2))

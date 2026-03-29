@@ -11,30 +11,35 @@ const GROUP_COLORS: Record<string, (s: string) => string> = {
   patch: c.green,
 }
 
-function makeOption(dep: ResolvedDepChange) {
+function getSelectionValue(depIndex: number): string {
+  return String(depIndex)
+}
+
+function makeOption(dep: ResolvedDepChange, depIndex: number) {
   return {
-    value: dep.name,
+    value: getSelectionValue(depIndex),
     label: `${dep.name}  ${dep.currentVersion}${arrow()}${colorizeVersionDiff(dep.currentVersion, dep.targetVersion, dep.diff)}  ${colorDiff(dep.diff)}`,
     hint: dep.deprecated ? c.red('deprecated') : undefined,
   }
 }
 
 async function runClackFallback(updates: ResolvedDepChange[]): Promise<ResolvedDepChange[]> {
-  const grouped = new Map<DiffType, ResolvedDepChange[]>()
+  const updatesByValue = new Map(updates.map((dep, depIndex) => [getSelectionValue(depIndex), dep]))
+  const grouped = new Map<DiffType, Array<{ dep: ResolvedDepChange; depIndex: number }>>()
 
-  for (const dep of updates) {
+  for (const [depIndex, dep] of updates.entries()) {
     const existing = grouped.get(dep.diff)
     if (existing) {
-      existing.push(dep)
+      existing.push({ dep, depIndex })
     } else {
-      grouped.set(dep.diff, [dep])
+      grouped.set(dep.diff, [{ dep, depIndex }])
     }
   }
 
   const hasStandardGroups = DIFF_GROUP_ORDER.some((d) => grouped.has(d))
 
   if (!hasStandardGroups) {
-    const options = updates.map(makeOption)
+    const options = updates.map((dep, depIndex) => makeOption(dep, depIndex))
 
     const selected = await p.multiselect({
       message: 'Select dependencies to update',
@@ -47,7 +52,9 @@ async function runClackFallback(updates: ResolvedDepChange[]): Promise<ResolvedD
       return []
     }
 
-    return updates.filter((u) => (selected as string[]).includes(u.name))
+    return (selected as string[])
+      .map((value) => updatesByValue.get(value))
+      .filter((dep): dep is ResolvedDepChange => !!dep)
   }
 
   const groupOptions: Record<string, Array<{ value: string; label: string; hint?: string }>> = {}
@@ -58,7 +65,7 @@ async function runClackFallback(updates: ResolvedDepChange[]): Promise<ResolvedD
 
     const colorFn = GROUP_COLORS[diffType]
     const label = colorFn ? colorFn(diffType) : diffType
-    groupOptions[label] = deps.map(makeOption)
+    groupOptions[label] = deps.map(({ dep, depIndex }) => makeOption(dep, depIndex))
   }
 
   const selected = await p.groupMultiselect({
@@ -73,7 +80,9 @@ async function runClackFallback(updates: ResolvedDepChange[]): Promise<ResolvedD
     return []
   }
 
-  return updates.filter((u) => (selected as string[]).includes(u.name))
+  return (selected as string[])
+    .map((value) => updatesByValue.get(value))
+    .filter((dep): dep is ResolvedDepChange => !!dep)
 }
 
 export async function runInteractive(

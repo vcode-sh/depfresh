@@ -8,6 +8,7 @@ import { createResolveContext, resolvePackage } from '../../io/resolve'
 import type { depfreshOptions, PackageMeta, ResolvedDepChange } from '../../types'
 import { createLogger } from '../../utils/logger'
 import { loadNpmrc } from '../../utils/npmrc'
+import { validateOptions } from '../../validate-options'
 import {
   buildJsonPackage,
   type JsonError,
@@ -37,6 +38,7 @@ export async function check(options: depfreshOptions): Promise<number> {
   }
 
   try {
+    validateOptions(runtimeOptions)
     await addons.setup()
 
     const discoveryStart = performance.now()
