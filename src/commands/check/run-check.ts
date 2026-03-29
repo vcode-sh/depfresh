@@ -1,3 +1,4 @@
+import { performance } from 'node:perf_hooks'
 import c from 'ansis'
 import { createAddonLifecycle } from '../../addons'
 import { createSqliteCache } from '../../cache/index'
@@ -22,6 +23,7 @@ import { createCheckProgress } from './progress'
 import { renderResolutionErrors, renderTable } from './render'
 
 export async function check(options: depfreshOptions): Promise<number> {
+  const totalStart = performance.now()
   const logLevel = options.output === 'json' ? 'silent' : options.loglevel
   const addonOptions: depfreshOptions = {
     ...options,
@@ -37,7 +39,9 @@ export async function check(options: depfreshOptions): Promise<number> {
   try {
     await addons.setup()
 
+    const discoveryStart = performance.now()
     const packages = await loadPackages(runtimeOptions)
+    const discoveryMs = performance.now() - discoveryStart
     if (runtimeOptions.explainDiscovery && runtimeOptions.output === 'table') {
       logDiscoveryReport(runtimeOptions, logger)
     }
@@ -53,6 +57,22 @@ export async function check(options: depfreshOptions): Promise<number> {
     }
 
     if (packages.length === 0) {
+      if (runtimeOptions.profile) {
+        runtimeOptions.profileReport = {
+          discoveryMs,
+          resolutionMs: 0,
+          postWriteMs: 0,
+          totalMs: performance.now() - totalStart,
+          cacheHits: 0,
+          cacheMisses: 0,
+          cacheEntries: 0,
+          networkFetches: 0,
+          dedupeHits: 0,
+          scannedPackages: 0,
+          scannedDependencies: 0,
+          failedResolutions: 0,
+        }
+      }
       logger.warn('No packages found')
       if (options.output === 'json') {
         outputJsonEnvelope([], runtimeOptions, executionState)
@@ -67,12 +87,17 @@ export async function check(options: depfreshOptions): Promise<number> {
     const jsonPackages: JsonPackage[] = []
     const jsonErrors: JsonError[] = []
     const progress = createCheckProgress(options, packages)
+    const totalDependencies = packages.reduce(
+      (sum, pkg) => sum + pkg.deps.filter((d) => d.update).length,
+      0,
+    )
 
     const cache = createSqliteCache()
     const executionRoot =
       options.effectiveRoot ?? resolveDiscoveryContext(options.cwd).effectiveRoot
     const npmrc = loadNpmrc(executionRoot)
     const workspacePackageNames = new Set(packages.map((p) => p.name).filter(Boolean))
+    const resolveContext = createResolveContext(runtimeOptions)
 
     const packageHooks = (pkg: PackageMeta): ProcessPackageHooks => ({
       cache,
@@ -131,9 +156,9 @@ export async function check(options: depfreshOptions): Promise<number> {
       logger,
     })
 
+    const resolutionStart = performance.now()
     try {
       if (progress === null && packages.length > 1) {
-        const resolveContext = createResolveContext(runtimeOptions)
         const pendingResolutions = new Map<PackageMeta, Promise<ResolvedDepChange[]>>()
 
         for (const pkg of packages) {
@@ -174,9 +199,24 @@ export async function check(options: depfreshOptions): Promise<number> {
       const stats = cache.stats()
       cache.close()
       logger.debug(`Cache stats: ${stats.hits} hits, ${stats.misses} misses, ${stats.size} entries`)
+      runtimeOptions.profileReport = {
+        discoveryMs,
+        resolutionMs: performance.now() - resolutionStart,
+        postWriteMs: 0,
+        totalMs: 0,
+        cacheHits: stats.hits,
+        cacheMisses: stats.misses,
+        cacheEntries: stats.size,
+        networkFetches: resolveContext.metrics.fetchesStarted,
+        dedupeHits: resolveContext.metrics.dedupeHits,
+        scannedPackages: packages.length,
+        scannedDependencies: totalDependencies,
+        failedResolutions: executionState.failedResolutions,
+      }
     }
 
     let postWriteFailed = false
+    const postWriteStart = performance.now()
 
     if (options.execute && options.write && didWrite) {
       const executeSucceeded = await runExecute(options.execute, executionRoot, logger)
@@ -191,6 +231,12 @@ export async function check(options: depfreshOptions): Promise<number> {
         const installSucceeded = await runInstall(executionRoot, packages, logger)
         postWriteFailed = postWriteFailed || !installSucceeded
       }
+    }
+
+    if (runtimeOptions.profileReport) {
+      runtimeOptions.profileReport.postWriteMs = performance.now() - postWriteStart
+      runtimeOptions.profileReport.totalMs = performance.now() - totalStart
+      runtimeOptions.profileReport.failedResolutions = executionState.failedResolutions
     }
 
     if (options.output === 'json') {
@@ -223,6 +269,14 @@ export async function check(options: depfreshOptions): Promise<number> {
       return 2
     }
 
+    if (
+      runtimeOptions.profile &&
+      runtimeOptions.output === 'table' &&
+      runtimeOptions.profileReport
+    ) {
+      logProfileReport(runtimeOptions.profileReport, logger)
+    }
+
     if (postWriteFailed && options.strictPostWrite) {
       return 2
     }
@@ -236,6 +290,21 @@ export async function check(options: depfreshOptions): Promise<number> {
     }
     return 2
   }
+}
+
+function logProfileReport(
+  profile: NonNullable<depfreshOptions['profileReport']>,
+  logger: ReturnType<typeof createLogger>,
+): void {
+  logger.info(
+    `Profile: discovery=${profile.discoveryMs.toFixed(1)}ms, resolution=${profile.resolutionMs.toFixed(1)}ms, post-write=${profile.postWriteMs.toFixed(1)}ms, total=${profile.totalMs.toFixed(1)}ms`,
+  )
+  logger.info(
+    `Profile: cache hits=${profile.cacheHits}, misses=${profile.cacheMisses}, entries=${profile.cacheEntries}, fetches=${profile.networkFetches}, dedupeHits=${profile.dedupeHits}`,
+  )
+  logger.info(
+    `Profile: packages=${profile.scannedPackages}, deps=${profile.scannedDependencies}, failedResolutions=${profile.failedResolutions}`,
+  )
 }
 
 function logDiscoveryReport(

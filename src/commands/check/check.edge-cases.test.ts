@@ -229,3 +229,38 @@ describe('--explain-discovery output', () => {
     consoleSpy.mockRestore()
   })
 })
+
+describe('--profile output', () => {
+  let mocks: CheckMocks
+
+  beforeEach(async () => {
+    vi.clearAllMocks()
+    mocks = await setupMocks()
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('prints profile diagnostics in table mode when enabled', async () => {
+    const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+    const pkg = makePkg('my-app')
+    mocks.loadPackagesMock.mockResolvedValue([pkg])
+    mocks.resolvePackageMock.mockResolvedValue([makeResolved({ diff: 'minor' })])
+
+    const { check } = await import('./index')
+    await check({
+      ...baseOptions,
+      loglevel: 'info',
+      output: 'table',
+      profile: true,
+    })
+
+    const allOutput = consoleSpy.mock.calls.map((c) => String(c.join(' '))).join('\n')
+    expect(allOutput).toContain('Profile: discovery=')
+    expect(allOutput).toContain('cache hits=')
+    expect(allOutput).toContain('failedResolutions=')
+
+    consoleSpy.mockRestore()
+  })
+})

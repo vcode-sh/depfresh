@@ -350,6 +350,38 @@ describe('JSON output', () => {
 
     consoleSpy.mockRestore()
   })
+
+  it('includes profile diagnostics when profile is enabled', async () => {
+    const update = makeResolved({ name: 'lodash', diff: 'minor', targetVersion: '^4.1.0' })
+    const pkg = makePkg('my-app', [update])
+    mocks.loadPackagesMock.mockResolvedValue([pkg])
+    mocks.resolvePackageMock.mockResolvedValue([update])
+
+    const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+
+    const { check } = await import('./index')
+    await check({ ...baseOptions, output: 'json', profile: true })
+
+    const jsonCall = consoleSpy.mock.calls.find((call) => {
+      try {
+        const parsed = JSON.parse(call[0] as string)
+        return parsed.packages !== undefined
+      } catch {
+        return false
+      }
+    })
+
+    expect(jsonCall).toBeDefined()
+    const output = JSON.parse(jsonCall![0] as string)
+    expect(output.profile).toBeDefined()
+    expect(output.profile.discoveryMs).toBeTypeOf('number')
+    expect(output.profile.resolutionMs).toBeTypeOf('number')
+    expect(output.profile.totalMs).toBeTypeOf('number')
+    expect(output.profile.scannedPackages).toBe(1)
+    expect(output.profile.scannedDependencies).toBe(1)
+
+    consoleSpy.mockRestore()
+  })
 })
 
 describe('JSON error envelope', () => {

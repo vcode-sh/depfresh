@@ -1,58 +1,144 @@
 import { readFileSync } from 'node:fs'
 import { findUpSync } from 'find-up-simple'
-import { dirname, resolve } from 'pathe'
+import { basename, dirname, resolve } from 'pathe'
 import YAML from 'yaml'
 
-/**
- * Check if a package manifest belongs to a nested workspace (not our root workspace).
- * Walks up from the package's parent looking for workspace root markers.
- * If one is found before reaching rootDir, the package is in a nested workspace.
- */
-export function belongsToNestedWorkspace(filepath: string, rootDir: string): boolean {
+export type WorkspaceBoundaryClassification =
+  | 'same-root'
+  | 'plain-child'
+  | 'nested-root'
+  | 'nested-descendant'
+
+export type WorkspaceBoundaryMarker =
+  | 'pnpm-workspace'
+  | 'yarn-workspace'
+  | 'manifest-workspaces'
+  | 'git-repo'
+
+export interface WorkspaceBoundaryInfo {
+  classification: WorkspaceBoundaryClassification
+  marker?: WorkspaceBoundaryMarker
+  markerPath?: string
+}
+
+export function classifyWorkspaceBoundary(
+  filepath: string,
+  rootDir: string,
+): WorkspaceBoundaryInfo {
   const pkgDir = dirname(filepath)
   const normalizedRoot = resolve(rootDir)
   const parentDir = dirname(pkgDir)
 
   // If the package is at the root, it never belongs to a nested workspace
-  if (resolve(pkgDir) === normalizedRoot) return false
+  if (resolve(pkgDir) === normalizedRoot) {
+    return { classification: 'same-root' }
+  }
 
-  // Look for workspace root markers between the package's dir and our root.
-  // findUpSync with stopAt still checks the stopAt directory itself,
-  // so we filter results to only those NOT at our root.
-
-  // Check for pnpm-workspace.yaml
-  const pnpmWs = findUpSync('pnpm-workspace.yaml', { cwd: parentDir, stopAt: normalizedRoot })
-  if (pnpmWs && resolve(dirname(pnpmWs)) !== normalizedRoot) return true
-
-  // Check for .yarnrc.yml
-  const yarnRc = findUpSync('.yarnrc.yml', { cwd: parentDir, stopAt: normalizedRoot })
-  if (yarnRc && resolve(dirname(yarnRc)) !== normalizedRoot) return true
-
-  // Check for parent manifests with workspaces field.
-  // Start from the parent of pkgDir to avoid matching the file itself.
-  if (resolve(parentDir) !== normalizedRoot) {
-    const nestedJson = findUpSync('package.json', { cwd: parentDir, stopAt: normalizedRoot })
-    const nestedYaml = findUpSync('package.yaml', { cwd: parentDir, stopAt: normalizedRoot })
-
-    const parentManifests = [nestedJson, nestedYaml]
-      .filter((candidate): candidate is string => !!candidate)
-      .filter((candidate) => resolve(dirname(candidate)) !== normalizedRoot)
-      .sort((a, b) => b.length - a.length)
-
-    for (const manifest of parentManifests) {
-      if (hasWorkspaceField(manifest)) return true
+  const rootMarker = getWorkspaceRootMarker(pkgDir, filepath)
+  if (rootMarker) {
+    return {
+      classification: 'nested-root',
+      marker: rootMarker.marker,
+      markerPath: rootMarker.path,
     }
   }
 
-  // Check for .git directory (indicates a separate repo boundary)
+  const ancestorMarker = getAncestorWorkspaceMarker(parentDir, normalizedRoot)
+  if (ancestorMarker) {
+    return {
+      classification: 'nested-descendant',
+      marker: ancestorMarker.marker,
+      markerPath: ancestorMarker.path,
+    }
+  }
+
+  return { classification: 'plain-child' }
+}
+
+/**
+ * Check if a package manifest belongs to a nested workspace (not our root workspace).
+ * Kept as a convenience wrapper around the richer boundary classification.
+ */
+export function belongsToNestedWorkspace(filepath: string, rootDir: string): boolean {
+  return classifyWorkspaceBoundary(filepath, rootDir).classification === 'nested-descendant'
+}
+
+function getWorkspaceRootMarker(
+  pkgDir: string,
+  filepath: string,
+): { marker: WorkspaceBoundaryMarker; path: string } | null {
+  const pnpmWorkspace = resolve(pkgDir, 'pnpm-workspace.yaml')
+  if (basename(pnpmWorkspace) && existsWorkspaceMarker(pnpmWorkspace)) {
+    return { marker: 'pnpm-workspace', path: pnpmWorkspace }
+  }
+
+  const yarnWorkspace = resolve(pkgDir, '.yarnrc.yml')
+  if (existsWorkspaceMarker(yarnWorkspace)) {
+    return { marker: 'yarn-workspace', path: yarnWorkspace }
+  }
+
+  if (hasWorkspaceField(filepath)) {
+    return { marker: 'manifest-workspaces', path: filepath }
+  }
+
+  const gitWorkspace = resolve(pkgDir, '.git')
+  if (findUpSync('.git', { cwd: pkgDir, stopAt: pkgDir, type: 'directory' }) === gitWorkspace) {
+    return { marker: 'git-repo', path: gitWorkspace }
+  }
+
+  return null
+}
+
+function getAncestorWorkspaceMarker(
+  startDir: string,
+  normalizedRoot: string,
+): { marker: WorkspaceBoundaryMarker; path: string } | null {
+  if (resolve(startDir) === normalizedRoot) {
+    return null
+  }
+
+  const pnpmWs = findUpSync('pnpm-workspace.yaml', { cwd: startDir, stopAt: normalizedRoot })
+  if (pnpmWs && resolve(dirname(pnpmWs)) !== normalizedRoot) {
+    return { marker: 'pnpm-workspace', path: pnpmWs }
+  }
+
+  const yarnRc = findUpSync('.yarnrc.yml', { cwd: startDir, stopAt: normalizedRoot })
+  if (yarnRc && resolve(dirname(yarnRc)) !== normalizedRoot) {
+    return { marker: 'yarn-workspace', path: yarnRc }
+  }
+
+  const nestedJson = findUpSync('package.json', { cwd: startDir, stopAt: normalizedRoot })
+  const nestedYaml = findUpSync('package.yaml', { cwd: startDir, stopAt: normalizedRoot })
+
+  const parentManifests = [nestedJson, nestedYaml]
+    .filter((candidate): candidate is string => !!candidate)
+    .filter((candidate) => resolve(dirname(candidate)) !== normalizedRoot)
+    .sort((a, b) => b.length - a.length)
+
+  for (const manifest of parentManifests) {
+    if (hasWorkspaceField(manifest)) {
+      return { marker: 'manifest-workspaces', path: manifest }
+    }
+  }
+
   const gitDir = findUpSync('.git', {
-    cwd: parentDir,
+    cwd: startDir,
     stopAt: normalizedRoot,
     type: 'directory',
   })
-  if (gitDir && resolve(dirname(gitDir)) !== normalizedRoot) return true
+  if (gitDir && resolve(dirname(gitDir)) !== normalizedRoot) {
+    return { marker: 'git-repo', path: gitDir }
+  }
 
-  return false
+  return null
+}
+
+function existsWorkspaceMarker(filepath: string): boolean {
+  try {
+    return readFileSync(filepath, 'utf-8').length >= 0
+  } catch {
+    return false
+  }
 }
 
 function hasWorkspaceField(filepath: string): boolean {

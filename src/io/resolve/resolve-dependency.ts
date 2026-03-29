@@ -61,8 +61,14 @@ export async function resolveDependency(
       const inFlight = resolveContext?.inFlight.get(resolveKey)
 
       if (inFlight) {
+        if (resolveContext) {
+          resolveContext.metrics.dedupeHits += 1
+        }
         pkgData = await inFlight
       } else {
+        if (resolveContext) {
+          resolveContext.metrics.fetchesStarted += 1
+        }
         const fetchPromise = fetchPackageData(packageName, {
           npmrc,
           timeout: options.timeout,

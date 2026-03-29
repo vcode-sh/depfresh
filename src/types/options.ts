@@ -9,6 +9,8 @@ export interface depfreshOptions {
   discoveryMode?: 'direct-root' | 'inside-project' | 'parent-folder'
   explainDiscovery?: boolean
   discoveryReport?: DiscoveryReport
+  profile?: boolean
+  profileReport?: ProfileReport
   recursive: boolean
   mode: RangeMode
   write: boolean
@@ -83,6 +85,21 @@ export interface DiscoveryReport {
   loadedCatalogs: string[]
 }
 
+export interface ProfileReport {
+  discoveryMs: number
+  resolutionMs: number
+  postWriteMs: number
+  totalMs: number
+  cacheHits: number
+  cacheMisses: number
+  cacheEntries: number
+  networkFetches: number
+  dedupeHits: number
+  scannedPackages: number
+  scannedDependencies: number
+  failedResolutions: number
+}
+
 export const DEFAULT_OPTIONS: Partial<depfreshOptions> = {
   cwd: '.',
   recursive: true,
@@ -113,6 +130,7 @@ export const DEFAULT_OPTIONS: Partial<depfreshOptions> = {
   long: false,
   explain: false,
   explainDiscovery: false,
+  profile: false,
   failOnOutdated: false,
   failOnResolutionErrors: false,
   failOnNoPackages: false,

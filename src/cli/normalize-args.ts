@@ -72,6 +72,7 @@ export async function normalizeArgs(args: Record<string, unknown>): Promise<depf
     long: args.long as boolean,
     explain: args.explain as boolean,
     explainDiscovery: args['explain-discovery'] as boolean,
+    profile: args.profile as boolean,
     install: args.install as boolean,
     update: args.update as boolean,
     strictPostWrite: args['strict-post-write'] as boolean,

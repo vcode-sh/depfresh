@@ -164,6 +164,11 @@ export const args: ArgsDef = {
     description: 'Explain how depfresh discovered roots, manifests, skipped paths, and catalogs',
     default: false,
   },
+  profile: {
+    type: 'boolean',
+    description: 'Emit runtime timing and cache/network diagnostics for this run',
+    default: false,
+  },
   install: {
     type: 'boolean',
     alias: 'i',

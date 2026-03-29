@@ -69,6 +69,20 @@ Spits out a single JSON envelope to stdout. All log output is automatically supp
     "loadedPackages": ["/path/to/project/package.json"],
     "skippedManifests": [],
     "loadedCatalogs": []
+  },
+  "profile": {
+    "discoveryMs": 3.1,
+    "resolutionMs": 42.7,
+    "postWriteMs": 0,
+    "totalMs": 48.9,
+    "cacheHits": 12,
+    "cacheMisses": 4,
+    "cacheEntries": 30,
+    "networkFetches": 4,
+    "dedupeHits": 2,
+    "scannedPackages": 2,
+    "scannedDependencies": 14,
+    "failedResolutions": 0
   }
 }
 ```
@@ -146,6 +160,25 @@ Present only when `--explain-discovery` is enabled.
 | `loadedPackages` | `string[]` | Package manifests successfully loaded |
 | `skippedManifests` | `array` | Manifest paths skipped with reasons |
 | `loadedCatalogs` | `string[]` | Catalog identifiers loaded during discovery |
+
+### `profile`
+
+Present only when `--profile` is enabled.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `discoveryMs` | `number` | Time spent discovering packages and catalogs |
+| `resolutionMs` | `number` | Time spent resolving dependencies |
+| `postWriteMs` | `number` | Time spent in execute/install/update post-write steps |
+| `totalMs` | `number` | Total wall-clock time for the run |
+| `cacheHits` | `number` | Cache hits during the run |
+| `cacheMisses` | `number` | Cache misses during the run |
+| `cacheEntries` | `number` | Number of live cache entries after the run |
+| `networkFetches` | `number` | Actual network fetches started |
+| `dedupeHits` | `number` | In-flight dedupe hits during the run |
+| `scannedPackages` | `number` | Number of packages discovered |
+| `scannedDependencies` | `number` | Number of update-eligible dependencies scanned |
+| `failedResolutions` | `number` | Number of dependency resolution failures |
 
 ## Notes
 

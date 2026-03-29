@@ -6,7 +6,7 @@ import { loadCatalogs } from '../catalogs/index'
 import { loadPackage } from './load-package'
 import { dedupeManifestsByDirectory } from './manifest-priority'
 import { resolveDiscoveryContext } from './root-detection'
-import { belongsToNestedWorkspace } from './workspace-boundary'
+import { classifyWorkspaceBoundary } from './workspace-boundary'
 import { getWorkspaceManifestPatterns } from './workspace-discovery'
 
 export async function loadPackages(options: depfreshOptions): Promise<PackageMeta[]> {
@@ -54,10 +54,11 @@ export async function loadPackages(options: depfreshOptions): Promise<PackageMet
     const rootDir = resolve(discoveryRoot)
     const keptFiles: string[] = []
     for (const filepath of packageFiles) {
-      if (belongsToNestedWorkspace(filepath, rootDir)) {
+      const boundary = classifyWorkspaceBoundary(filepath, rootDir)
+      if (boundary.classification === 'nested-descendant') {
         report.skippedManifests.push({
           path: filepath,
-          reason: 'nested-workspace-descendant',
+          reason: boundary.marker ? `nested-descendant:${boundary.marker}` : 'nested-descendant',
         })
       } else {
         keptFiles.push(filepath)

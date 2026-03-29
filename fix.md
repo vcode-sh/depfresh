@@ -59,9 +59,9 @@ This is the recommended implementation backlog derived from the plan.
 - `DONE` Task 2.1: Replace blind recursive manifest globbing with workspace-aware root enumeration where available.
 - `DONE` Task 2.2: Keep fallback glob discovery for plain non-workspace directory trees.
 
-- `TODO` Task 3.1: Refactor nested workspace boundary detection to return structured classifications.
+- `DONE` Task 3.1: Refactor nested workspace boundary detection to return structured classifications.
 - `DONE` Task 3.2: Keep nested workspace roots visible while excluding nested descendants by default.
-- `TODO` Task 3.3: Improve discovery debug output with exact skip reasons and affected paths.
+- `DONE` Task 3.3: Improve discovery debug output with exact skip reasons and affected paths.
 
 - `DONE` Task 4.1: Track resolution errors explicitly in runtime state and JSON summary/meta.
 - `DONE` Task 4.2: Prevent false "All dependencies are up to date" output when any resolution error occurred.
@@ -80,7 +80,7 @@ This is the recommended implementation backlog derived from the plan.
 - `DONE` Task 7.3: Match auth config to registries by normalized origin instead of loose substring matching.
 
 - `DONE` Task 8.1: Add `--explain-discovery`.
-- `TODO` Task 8.2: Add `--profile`.
+- `DONE` Task 8.2: Add `--profile`.
 - `DONE` Task 8.3: Add `--fail-on-no-packages`.
 
 - `DONE` Task 9.1: Make `--execute` failures fail the run under the chosen contract.

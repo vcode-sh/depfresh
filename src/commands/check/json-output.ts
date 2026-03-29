@@ -1,4 +1,10 @@
-import type { DiffType, DiscoveryReport, depfreshOptions, ResolvedDepChange } from '../../types'
+import type {
+  DiffType,
+  DiscoveryReport,
+  depfreshOptions,
+  ProfileReport,
+  ResolvedDepChange,
+} from '../../types'
 
 export interface JsonPackage {
   name: string
@@ -59,6 +65,7 @@ interface JsonOutput {
     didWrite: boolean
   }
   discovery?: DiscoveryReport
+  profile?: ProfileReport
 }
 
 interface JsonErrorOutput {
@@ -131,6 +138,7 @@ export function outputJsonEnvelope(
     ...(options.explainDiscovery && options.discoveryReport
       ? { discovery: options.discoveryReport }
       : {}),
+    ...(options.profile && options.profileReport ? { profile: options.profileReport } : {}),
   }
 
   // biome-ignore lint/suspicious/noConsole: intentional JSON output

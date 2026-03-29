@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { belongsToNestedWorkspace } from './workspace-boundary'
+import { belongsToNestedWorkspace, classifyWorkspaceBoundary } from './workspace-boundary'
 
 describe('belongsToNestedWorkspace', () => {
   let tmpDir: string
@@ -42,6 +42,43 @@ describe('belongsToNestedWorkspace', () => {
         tmpDir,
       ),
     ).toBe(true)
+  })
+
+  it('classifies nested workspace roots explicitly', () => {
+    mkdirSync(join(tmpDir, 'nested-mono'), { recursive: true })
+    writeFileSync(join(tmpDir, 'nested-mono', 'pnpm-workspace.yaml'), 'packages:\n  - packages/*\n')
+    writeFileSync(
+      join(tmpDir, 'nested-mono', 'package.json'),
+      JSON.stringify({ name: 'nested-root' }),
+    )
+
+    expect(classifyWorkspaceBoundary(join(tmpDir, 'nested-mono', 'package.json'), tmpDir)).toEqual(
+      expect.objectContaining({
+        classification: 'nested-root',
+        marker: 'pnpm-workspace',
+      }),
+    )
+  })
+
+  it('classifies nested descendants with their nearest marker', () => {
+    mkdirSync(join(tmpDir, 'nested-mono', 'packages', 'x'), { recursive: true })
+    writeFileSync(join(tmpDir, 'nested-mono', 'pnpm-workspace.yaml'), 'packages:\n  - packages/*\n')
+    writeFileSync(
+      join(tmpDir, 'nested-mono', 'packages', 'x', 'package.json'),
+      JSON.stringify({ name: 'x' }),
+    )
+
+    expect(
+      classifyWorkspaceBoundary(
+        join(tmpDir, 'nested-mono', 'packages', 'x', 'package.json'),
+        tmpDir,
+      ),
+    ).toEqual(
+      expect.objectContaining({
+        classification: 'nested-descendant',
+        marker: 'pnpm-workspace',
+      }),
+    )
   })
 
   it('detects nested yarn workspace via .yarnrc.yml', () => {

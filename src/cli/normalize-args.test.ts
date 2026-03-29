@@ -45,6 +45,7 @@ function makeRawArgs(overrides: Record<string, unknown> = {}): Record<string, un
     long: false,
     explain: false,
     'explain-discovery': false,
+    profile: false,
     install: false,
     update: false,
     'strict-post-write': false,
@@ -169,6 +170,13 @@ describe('normalizeArgs parity flags', () => {
 
     const resolvedOptions = resolveConfigMock.mock.calls[0]?.[0] as depfreshOptions
     expect(resolvedOptions.failOnNoPackages).toBe(true)
+  })
+
+  it('maps --profile into options', async () => {
+    await normalizeArgs(makeRawArgs({ profile: true }))
+
+    const resolvedOptions = resolveConfigMock.mock.calls[0]?.[0] as depfreshOptions
+    expect(resolvedOptions.profile).toBe(true)
   })
 
   it('maps --strict-post-write into options', async () => {

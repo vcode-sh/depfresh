@@ -116,6 +116,7 @@ The output includes supported flags, defaults, valid enum values, and exit-code 
 | `--long` | `-L` | boolean | `false` | Show extra details per package -- currently the homepage URL. For when you need to rage-read a changelog. |
 | `--explain` | `-E` | boolean | `false` | Show human-readable explanations for update types in interactive mode. Tells you *why* a version change matters. Only works with `--interactive`. |
 | `--explain-discovery` | -- | boolean | `false` | Explain how depfresh chose the root, which manifests it matched, which ones it skipped, and which catalogs it loaded. |
+| `--profile` | -- | boolean | `false` | Emit runtime timing and cache/network diagnostics for this run. Useful when "it feels slower" is not a bug report, it's a shrug. |
 | `--loglevel <level>` | -- | string | `info` | Log level: `silent`, `info`, or `debug`. `silent` suppresses everything except output. `debug` tells you things you didn't ask to know. |
 | `--help-json` | -- | boolean | `false` | Print machine-readable CLI capabilities (flags, enums, defaults, exit codes) as JSON. |
 | `--json` | -- | boolean | `false` | JSON mode for the `depfresh capabilities` discoverability command. |

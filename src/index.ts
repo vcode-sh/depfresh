@@ -31,6 +31,7 @@ export type {
   PackageManagerName,
   PackageMeta,
   PackageType,
+  ProfileReport,
   ProvenanceLevel,
   RangeMode,
   RawDep,

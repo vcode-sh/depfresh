@@ -119,6 +119,11 @@ const JSON_OUTPUT_SCHEMA: Record<string, string> = {
   'discovery.inputCwd': 'Original cwd requested by the user',
   'discovery.effectiveRoot': 'Resolved root used for discovery',
   'discovery.discoveryMode': 'How the effective root was determined',
+  profile: 'Optional runtime performance diagnostics block emitted when --profile is enabled',
+  'profile.discoveryMs': 'Time spent discovering packages and catalogs',
+  'profile.resolutionMs': 'Time spent resolving dependencies',
+  'profile.postWriteMs': 'Time spent in execute/install/update post-write steps',
+  'profile.totalMs': 'Total wall-clock time for the run',
 }
 
 function buildFlagDefinitions(argsDef: ArgsDef): {

@@ -257,7 +257,7 @@ describe('loadPackages', () => {
       expect.arrayContaining([
         {
           path: join(tmpDir, 'vendor', 'other', 'packages', 'b', 'package.json'),
-          reason: 'nested-workspace-descendant',
+          reason: 'nested-descendant:pnpm-workspace',
         },
       ]),
     )

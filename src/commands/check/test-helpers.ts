@@ -13,6 +13,10 @@ vi.mock('../../io/resolve', () => ({
       fn: () => Promise<unknown>,
     ) => Promise<unknown>,
     inFlight: new Map(),
+    metrics: {
+      fetchesStarted: 0,
+      dedupeHits: 0,
+    },
   })),
 }))
 
