@@ -2,7 +2,7 @@
 
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Semver because I'm not a psychopath.
 
-## [1.1.0] - Unreleased
+## [1.1.0] - 2026-03-29
 
 The "stop lying about where you are and what just failed" release. depfresh now understands project roots instead of blindly trusting the current directory, keeps nested workspace roots visible instead of pretending they don't exist, and stops reporting a clean run when every dependency resolution just exploded. First slice only. Still `Unreleased` until the full fix plan lands.
 
