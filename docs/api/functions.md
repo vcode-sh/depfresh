@@ -273,7 +273,7 @@ check() starts
   |   |
   |   +- if writing:
   |       +- beforePackageWrite(pkg)  <- return false to skip
-  |       +- afterPackageWrite(pkg)
+  |       +- afterPackageWrite(pkg, changes)
   |
   +- afterPackagesEnd(pkgs)
 ```
@@ -318,12 +318,12 @@ Called before writing changes to disk. Return `false` to skip this package. Retu
 beforePackageWrite?: (pkg: PackageMeta) => boolean | Promise<boolean>
 ```
 
-### `afterPackageWrite(pkg)`
+### `afterPackageWrite(pkg, changes)`
 
-Called after the file has been written. The damage is done. Use this for logging, notifications, or post-write commands.
+Called after the file has been written. The damage is done. Use this for logging, notifications, or post-write commands. Receives the package and the list of changes that were applied.
 
 ```ts
-afterPackageWrite?: (pkg: PackageMeta) => void | Promise<void>
+afterPackageWrite?: (pkg: PackageMeta, changes: ResolvedDepChange[]) => void | Promise<void>
 ```
 
 ### `afterPackagesEnd(pkgs)`
@@ -421,8 +421,8 @@ const options = await resolveConfig({
     }
     return true
   },
-  afterPackageWrite(pkg) {
-    console.log(`Updated ${pkg.filepath}`)
+  afterPackageWrite(pkg, changes) {
+    console.log(`Updated ${pkg.filepath} (${changes.length} changes)`)
   },
 })
 
