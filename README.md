@@ -9,23 +9,37 @@ Keep your dependencies fresh. Taze alternative. Zero config, fast, monorepo-read
 
 ## Install
 
+### One-off run (no install needed)
+
 ```bash
-# One-off run (no install)
 npx depfresh
 pnpm dlx depfresh
 bunx depfresh
+yarn dlx depfresh
+```
 
-# Global install
+### Global install
+
+```bash
 npm install -g depfresh
+pnpm add -g depfresh
+bun add -g depfresh
+yarn global add depfresh
+```
 
-# Local devDependency (recommended for team + CI)
+### Local devDependency (recommended for team + CI)
+
+```bash
+npm install -D depfresh
 pnpm add -D depfresh
+bun add -D depfresh
+yarn add -D depfresh
 ```
 
 | If you want... | Use | Example |
 | --- | --- | --- |
-| Run once in any repo | One-off | `npx depfresh` |
-| Always available on your machine | Global | `pnpm add -g depfresh` |
+| Run once in any repo | One-off | `npx depfresh` / `pnpm dlx depfresh` / `bunx depfresh` |
+| Always available on your machine | Global | `npm install -g depfresh` |
 | Pinned for team/CI consistency | Local devDep | `npm install -D depfresh` |
 
 ## Quick Start
