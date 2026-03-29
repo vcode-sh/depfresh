@@ -4,7 +4,7 @@ import type { depfreshOptions, PackageMeta } from '../../types'
 import { createLogger } from '../../utils/logger'
 import { loadCatalogs } from '../catalogs/index'
 import { loadPackage } from './load-package'
-import { dedupeManifestsByDirectory } from './manifest-priority'
+import { sortManifestsByPriority } from './manifest-priority'
 import { resolveDiscoveryContext } from './root-detection'
 import { classifyWorkspaceBoundary } from './workspace-boundary'
 import { getWorkspaceManifestPatterns } from './workspace-discovery'
@@ -72,20 +72,32 @@ export async function loadPackages(options: depfreshOptions): Promise<PackageMet
     }
   }
 
-  packageFiles = dedupeManifestsByDirectory(packageFiles)
+  const packageGroups = groupManifestsByDirectory(packageFiles)
 
-  for (const filepath of packageFiles) {
-    try {
-      const meta = loadPackage(filepath, options)
-      packages.push(meta)
-      report.loadedPackages.push(meta.filepath)
-      logger.debug(`Loaded ${filepath} (${meta.deps.length} deps)`)
-    } catch (error) {
-      report.skippedManifests.push({
-        path: filepath,
-        reason: 'load-failed',
-      })
-      logger.warn(`Failed to load ${filepath}:`, error)
+  for (const group of packageGroups) {
+    let loaded = false
+
+    for (const filepath of group) {
+      try {
+        const meta = loadPackage(filepath, options)
+        packages.push(meta)
+        report.loadedPackages.push(meta.filepath)
+        logger.debug(`Loaded ${filepath} (${meta.deps.length} deps)`)
+        loaded = true
+        break
+      } catch (error) {
+        logger.warn(`Failed to load ${filepath}:`, error)
+      }
+    }
+
+    if (!loaded) {
+      const primary = group[0]
+      if (primary) {
+        report.skippedManifests.push({
+          path: primary,
+          reason: 'load-failed',
+        })
+      }
     }
   }
 
@@ -130,4 +142,19 @@ export async function loadPackages(options: depfreshOptions): Promise<PackageMet
     `Found ${packages.length} packages with ${packages.reduce((sum, p) => sum + p.deps.length, 0)} dependencies`,
   )
   return packages
+}
+
+function groupManifestsByDirectory(filepaths: string[]): string[][] {
+  const byDirectory = new Map<string, string[]>()
+
+  for (const filepath of filepaths) {
+    const directory = resolve(filepath, '..')
+    const group = byDirectory.get(directory) ?? []
+    group.push(filepath)
+    byDirectory.set(directory, group)
+  }
+
+  return [...byDirectory.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([_directory, manifests]) => sortManifestsByPriority(manifests))
 }

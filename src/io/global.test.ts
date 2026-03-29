@@ -41,6 +41,19 @@ describe('parseNpmGlobalList', () => {
     const result = parseNpmGlobalList(json)
     expect(result).toEqual([])
   })
+
+  it('skips malformed dependency entries instead of synthesizing bogus versions', () => {
+    const json = JSON.stringify({
+      dependencies: {
+        valid: { version: '1.2.3' },
+        missingVersion: {},
+        invalidVersion: { version: 'not-a-version' },
+      },
+    })
+
+    const result = parseNpmGlobalList(json)
+    expect(result).toEqual([{ name: 'valid', version: '1.2.3' }])
+  })
 })
 
 describe('parsePnpmGlobalList', () => {
@@ -63,6 +76,21 @@ describe('parsePnpmGlobalList', () => {
   it('returns empty array for empty array input', () => {
     const result = parsePnpmGlobalList('[]')
     expect(result).toEqual([])
+  })
+
+  it('skips malformed dependency entries instead of synthesizing bogus versions', () => {
+    const json = JSON.stringify([
+      {
+        dependencies: {
+          valid: { version: '4.7.0' },
+          missingVersion: {},
+          invalidVersion: { version: 'bogus' },
+        },
+      },
+    ])
+
+    const result = parsePnpmGlobalList(json)
+    expect(result).toEqual([{ name: 'valid', version: '4.7.0' }])
   })
 })
 

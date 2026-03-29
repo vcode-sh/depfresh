@@ -52,6 +52,41 @@ describe('loadGlobalPackagesAll', () => {
     expect(getGlobalWriteTargets(pkg!, 'bun-types')).toEqual(['bun'])
   })
 
+  it('keeps the lowest installed version when the same package differs across managers', () => {
+    mockedExecSync.mockImplementation((cmd: string) => {
+      if (cmd === 'npm list -g --depth=0 --json') {
+        return JSON.stringify({
+          dependencies: {
+            shared: { version: '2.0.0' },
+          },
+        })
+      }
+
+      if (cmd === 'pnpm list -g --json') {
+        return JSON.stringify([
+          {
+            dependencies: {
+              shared: { version: '1.0.0' },
+            },
+          },
+        ])
+      }
+
+      if (cmd === 'bun pm ls -g') {
+        return ''
+      }
+
+      throw new Error(`Unexpected command: ${cmd}`)
+    })
+
+    const result = loadGlobalPackagesAll()
+    expect(result).toHaveLength(1)
+    const pkg = result[0]
+    expect(pkg?.deps[0]?.name).toBe('shared')
+    expect(pkg?.deps[0]?.currentVersion).toBe('1.0.0')
+    expect(getGlobalWriteTargets(pkg!, 'shared')).toEqual(['npm', 'pnpm'])
+  })
+
   it('returns empty array when no global packages are found', () => {
     mockedExecSync.mockImplementation(() => JSON.stringify({}))
     const result = loadGlobalPackagesAll()

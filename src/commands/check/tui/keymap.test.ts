@@ -89,6 +89,16 @@ describe('handleKeypress - list view', () => {
     expect(pagedUp.cursor).toBeLessThan(last.cursor)
   })
 
+  it('supports jump-to-last through the default shift+g path', () => {
+    const state = createInitialState([makeDep('a', 'dependencies'), makeDep('b', 'dependencies')], {
+      termRows: 20,
+      termCols: 80,
+    })
+
+    const jumped = handleKeypress(state, { sequence: 'G' })
+    expect(jumped.items[jumped.cursor]?.dep?.name).toBe('b')
+  })
+
   it('ignores unknown keys in list view', () => {
     const state = createInitialState([makeDep('a', 'dependencies')], { termRows: 20, termCols: 80 })
 

@@ -1,3 +1,4 @@
+import * as semver from 'semver'
 import type { PackageManagerName, PackageMeta } from '../types'
 
 export const GLOBAL_ALL_PACKAGE_MANAGERS: PackageManagerName[] = ['npm', 'pnpm', 'bun']
@@ -37,6 +38,16 @@ export function dedupeGlobalPackageRecords(records: GlobalPackageRecord[]): {
       continue
     }
     existing.managers.add(record.manager)
+    if (semver.valid(record.version) && semver.valid(existing.version)) {
+      if (semver.lt(record.version, existing.version)) {
+        existing.version = record.version
+      }
+      continue
+    }
+
+    if (semver.valid(record.version) && !semver.valid(existing.version)) {
+      existing.version = record.version
+    }
   }
 
   const sortedEntries = [...byName.entries()].sort(([a], [b]) => a.localeCompare(b))

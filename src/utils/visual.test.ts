@@ -8,6 +8,11 @@ describe('visualLength', () => {
     expect(visualLength('a你b')).toBe(4)
   })
 
+  it('treats ZWJ emoji sequences as a single visible glyph', () => {
+    expect(visualLength('👨‍👩‍👧‍👦')).toBe(2)
+    expect(visualLength('a👨‍👩‍👧‍👦b')).toBe(4)
+  })
+
   it('ignores combining marks', () => {
     const combining = 'e\u0301'
     expect(visualLength(combining)).toBe(1)
@@ -38,6 +43,21 @@ describe('visualTruncate', () => {
   it('truncates by visible width', () => {
     expect(visualTruncate('abcdefgh', 5)).toBe('abcd…')
     expect(visualLength(visualTruncate('abcdefgh', 5))).toBe(5)
+  })
+
+  it('preserves ANSI styling when truncating colored text', () => {
+    const colored = '\u001B[31mabcdef\u001B[0m'
+    const result = visualTruncate(colored, 4)
+
+    expect(result).toContain('\u001B[31m')
+    expect(result).toContain('\u001B[0m')
+    expect(visualLength(result)).toBe(4)
+  })
+
+  it('truncates ZWJ emoji sequences without splitting the glyph', () => {
+    const result = visualTruncate('👨‍👩‍👧‍👦abc', 3)
+    expect(result).toBe('👨‍👩‍👧‍👦…')
+    expect(visualLength(result)).toBe(3)
   })
 
   it('truncates CJK text safely', () => {

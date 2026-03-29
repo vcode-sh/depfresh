@@ -32,6 +32,21 @@ describe('loadPackages YAML manifests', () => {
     expect(packages[0]?.name).toBe('yaml-root')
   })
 
+  it('falls back to package.json when preferred package.yaml is malformed in the same directory', async () => {
+    writeFileSync(
+      join(tmpDir, 'package.json'),
+      JSON.stringify({ name: 'json-root', dependencies: { lodash: '^4.17.21' } }, null, 2),
+    )
+    writeFileSync(join(tmpDir, 'package.yaml'), 'name: [invalid')
+
+    const packages = await loadPackages({ ...baseOptions, cwd: tmpDir, loglevel: 'silent' })
+
+    expect(packages).toHaveLength(1)
+    expect(packages[0]?.type).toBe('package.json')
+    expect(packages[0]?.name).toBe('json-root')
+    expect(packages[0]?.deps.some((dep) => dep.name === 'lodash')).toBe(true)
+  })
+
   it('finds nested package.yaml files with recursive option', async () => {
     writeFileSync(join(tmpDir, 'package.yaml'), ['name: root', ''].join('\n'))
     mkdirSync(join(tmpDir, 'packages', 'sub'), { recursive: true })

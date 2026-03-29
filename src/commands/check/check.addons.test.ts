@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { createVSCodeAddon } from '../../addons'
 import type { depfreshAddon } from '../../types'
 import { baseOptions, type CheckMocks, makePkg, makeResolved, setupMocks } from './test-helpers'
 
@@ -83,5 +84,30 @@ describe('addons', () => {
     const code = await check({ ...baseOptions, addons: [addon] })
 
     expect(code).toBe(2)
+  })
+
+  it('creates engines.vscode when syncing @types/vscode into a package without engines', async () => {
+    const pkg = makePkg('vscode-ext')
+    ;(pkg.raw as { engines?: unknown }).engines = undefined
+    const resolved = [
+      makeResolved({
+        name: '@types/vscode',
+        diff: 'minor',
+        targetVersion: '^1.92.0',
+      }),
+    ]
+
+    mocks.loadPackagesMock.mockResolvedValue([pkg])
+    mocks.resolvePackageMock.mockResolvedValue(resolved)
+
+    const { check } = await import('./index')
+    await check({ ...baseOptions, write: true, addons: [createVSCodeAddon()] })
+
+    expect(pkg.raw).toMatchObject({
+      engines: {
+        vscode: '^1.92.0',
+      },
+    })
+    expect(mocks.writePackageMock).toHaveBeenCalledWith(pkg, resolved, 'silent')
   })
 })

@@ -12,12 +12,7 @@ export async function showUsageWithLinks<T extends ArgsDef = ArgsDef>(
   cmd: CommandDef<T>,
   parent?: CommandDef<T>,
 ): Promise<void> {
-  try {
-    const usage = await renderUsage(cmd, parent)
-    // biome-ignore lint/suspicious/noConsole: intentional CLI help output
-    console.log(withHelpLinks(usage))
-  } catch (error) {
-    // biome-ignore lint/suspicious/noConsole: intentional CLI help error output
-    console.error(error)
-  }
+  const usage = await renderUsage(cmd, parent)
+  // biome-ignore lint/suspicious/noConsole: intentional CLI help output
+  console.log(withHelpLinks(usage))
 }

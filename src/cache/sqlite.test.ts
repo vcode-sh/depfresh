@@ -246,6 +246,30 @@ describe('memory fallback', () => {
     vi.doUnmock('better-sqlite3')
   })
 
+  it('falls back to memory when the cache directory cannot be created', async () => {
+    vi.doMock('node:fs', async () => {
+      const actual = await vi.importActual<typeof import('node:fs')>('node:fs')
+      return {
+        ...actual,
+        mkdirSync: vi.fn(() => {
+          throw new Error('EACCES: permission denied')
+        }),
+      }
+    })
+
+    vi.resetModules()
+    const { createSqliteCache } = await import('./sqlite')
+    const cache = createSqliteCache()
+
+    cache.set('blocked', mockData, 60_000)
+    expect(cache.get('blocked')).toEqual(mockData)
+    expect(cache.has('blocked')).toBe(true)
+    expect(cache.stats().size).toBe(1)
+
+    cache.close()
+    vi.doUnmock('node:fs')
+  })
+
   it('memory fallback expires entries', async () => {
     vi.doMock('better-sqlite3', () => ({
       default: class {

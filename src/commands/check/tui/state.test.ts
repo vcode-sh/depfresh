@@ -182,6 +182,18 @@ describe('detail view transitions', () => {
     expect(back.detailVersions).toEqual([])
   })
 
+  it('does not enter detail view from a non-list state or a group-header cursor', () => {
+    const listState = createInitialState([makeDep('a'), makeDep('b')], {
+      termRows: 20,
+      termCols: 80,
+    })
+    const nonListState = { ...listState, view: 'detail' as const }
+    const headerState = { ...listState, cursor: 0 }
+
+    expect(enterDetail(nonListState)).toBe(nonListState)
+    expect(enterDetail(headerState)).toBe(headerState)
+  })
+
   it('keeps detail transitions as no-ops when the state shape is invalid', () => {
     const listState = createInitialState([makeDep('a')], { termRows: 20, termCols: 80 })
     const detailState = enterDetail(listState)
@@ -221,6 +233,15 @@ describe('detail view transitions', () => {
     expect(detail.view).toBe('list')
   })
 
+  it('keeps enterDetail as a no-op when already in detail or focused on a group header', () => {
+    const listState = createInitialState([makeDep('a')], { termRows: 20, termCols: 80 })
+    const detailState = enterDetail(listState)
+    const headerState = { ...listState, cursor: 0 }
+
+    expect(enterDetail(detailState)).toBe(detailState)
+    expect(enterDetail(headerState)).toBe(headerState)
+  })
+
   it('applies selected detail version and auto-selects dependency', () => {
     let state = createInitialState([makeDep('a')], { termRows: 20, termCols: 80 })
     state = enterDetail(state)
@@ -258,6 +279,29 @@ describe('detail view transitions', () => {
     expect(state.selectedDepIndices).toEqual(new Set([0, 1]))
     expect(state.items[2]?.dep?.targetVersion).toBe('^1.1.0')
     expect(state.items[2]?.dep?.diff).toBe('minor')
+  })
+
+  it('keeps detail selection as a no-op when the focused version is missing', () => {
+    let state = createInitialState([makeDep('a')], { termRows: 20, termCols: 80 })
+    state = enterDetail(state)
+
+    const invalidCursorState = { ...state, detailCursor: 999 }
+    expect(selectDetailVersion(invalidCursorState)).toBe(invalidCursorState)
+  })
+
+  it('returns to list without adding a selection when detailDepIndex is missing', () => {
+    const state = enterDetail(createInitialState([makeDep('a')], { termRows: 20, termCols: 80 }))
+    const next = selectDetailVersion({ ...state, detailDepIndex: null })
+
+    expect(next.view).toBe('list')
+    expect(next.selectedDepIndices.size).toBe(0)
+  })
+
+  it('keeps detail selection as a no-op when the cursor points outside available versions', () => {
+    const state = enterDetail(createInitialState([makeDep('a')], { termRows: 20, termCols: 80 }))
+    const next = selectDetailVersion({ ...state, detailCursor: 999 })
+
+    expect(next).toEqual({ ...state, detailCursor: 999 })
   })
 
   it('clamps detail cursor at boundaries', () => {
@@ -302,5 +346,13 @@ describe('flags and resize', () => {
     const resizedDetail = resize(detailState, 7, 70)
     expect(resizedDetail.termRows).toBe(7)
     expect(resizedDetail.detailScrollOffset).toBeGreaterThanOrEqual(0)
+  })
+
+  it('keeps jump helpers as no-ops when already at the boundary', () => {
+    const state = createInitialState([makeDep('a'), makeDep('b')], { termRows: 20, termCols: 80 })
+    const atLast = jumpToLast(state)
+
+    expect(jumpToFirst(state)).toBe(state)
+    expect(jumpToLast(atLast)).toBe(atLast)
   })
 })

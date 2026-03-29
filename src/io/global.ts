@@ -1,4 +1,5 @@
 import { execSync } from 'node:child_process'
+import * as semver from 'semver'
 import type { PackageManagerName, PackageMeta, RawDep } from '../types'
 import { createLogger } from '../utils/logger'
 import {
@@ -32,10 +33,14 @@ export function parseNpmGlobalList(json: string): Array<{ name: string; version:
     if (!data.dependencies || typeof data.dependencies !== 'object') {
       return []
     }
-    return Object.entries(data.dependencies).map(([name, info]) => ({
-      name,
-      version: (info as { version: string }).version,
-    }))
+    return Object.entries(data.dependencies).flatMap(([name, info]) => {
+      const version = (info as { version?: unknown } | undefined)?.version
+      if (typeof version !== 'string' || semver.valid(version) === null) {
+        return []
+      }
+
+      return [{ name, version }]
+    })
   } catch {
     return []
   }
@@ -51,10 +56,14 @@ export function parsePnpmGlobalList(json: string): Array<{ name: string; version
     if (!deps || typeof deps !== 'object') {
       return []
     }
-    return Object.entries(deps).map(([name, info]) => ({
-      name,
-      version: (info as { version: string }).version,
-    }))
+    return Object.entries(deps).flatMap(([name, info]) => {
+      const version = (info as { version?: unknown } | undefined)?.version
+      if (typeof version !== 'string' || semver.valid(version) === null) {
+        return []
+      }
+
+      return [{ name, version }]
+    })
   } catch {
     return []
   }

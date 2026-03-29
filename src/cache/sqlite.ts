@@ -25,7 +25,11 @@ const INDEX = `CREATE INDEX IF NOT EXISTS idx_expires ON registry_cache(expires_
 const LEGACY_KEY_PRUNE = `DELETE FROM registry_cache WHERE package NOT LIKE '%|%'`
 
 export function createSqliteCache(): Cache {
-  mkdirSync(CACHE_DIR, { recursive: true })
+  try {
+    mkdirSync(CACHE_DIR, { recursive: true })
+  } catch {
+    return createMemoryFallback()
+  }
 
   let db: InstanceType<typeof Database>
   try {

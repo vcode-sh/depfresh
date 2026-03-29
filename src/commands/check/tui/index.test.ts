@@ -115,6 +115,26 @@ describe('createInteractiveTUI', () => {
     expect(writeSpy).toHaveBeenCalled()
   })
 
+  it('uses default terminal dimensions when rows and columns are unavailable', async () => {
+    const dep = makeDep('alpha')
+    Object.defineProperty(process.stdout, 'rows', {
+      value: undefined,
+      configurable: true,
+      writable: true,
+    })
+    Object.defineProperty(process.stdout, 'columns', {
+      value: undefined,
+      configurable: true,
+      writable: true,
+    })
+
+    const promise = createInteractiveTUI([dep], { explain: false })
+    process.stdin.emit('keypress', '', { name: 'space' })
+    process.stdin.emit('keypress', '\r', { name: 'return' })
+
+    await expect(promise).resolves.toEqual([dep])
+  })
+
   it('returns all updates when toggling all and confirming immediately', async () => {
     const updates = [
       makeDep('alpha', 'dependencies'),
@@ -210,5 +230,24 @@ describe('createInteractiveTUI', () => {
     expect(throwingSetRawMode).toHaveBeenCalledWith(true)
     expect(throwingSetRawMode).toHaveBeenCalledWith(false)
     expect(writeSpy).toHaveBeenCalledWith(expect.stringContaining('\u001B[?25h'))
+  })
+
+  it('ignores errors while disabling raw mode during cleanup', async () => {
+    const dep = makeDep('alpha')
+    const cleanupSetRawMode = vi.fn((mode: boolean) => {
+      if (!mode) throw new Error('cleanup failed')
+    })
+    Object.defineProperty(process.stdin, 'setRawMode', {
+      value: cleanupSetRawMode,
+      configurable: true,
+      writable: true,
+    })
+
+    const promise = createInteractiveTUI([dep], { explain: false })
+    process.stdin.emit('keypress', '', { name: 'escape' })
+
+    await expect(promise).resolves.toEqual([])
+    expect(cleanupSetRawMode).toHaveBeenCalledWith(true)
+    expect(cleanupSetRawMode).toHaveBeenCalledWith(false)
   })
 })

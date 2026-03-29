@@ -280,6 +280,19 @@ describe('runInteractive', () => {
     expect(result[0]!.name).toBe('err-pkg')
   })
 
+  it('returns empty array on cancel in flat fallback', async () => {
+    clackMock.isCancel.mockReturnValue(true)
+    clackMock.multiselect.mockResolvedValue(Symbol('cancel'))
+
+    const { runInteractive } = await import('./interactive')
+
+    const updates = [makeDep('err-pkg', 'error')]
+    const result = await runInteractive(updates)
+
+    expect(result).toEqual([])
+    expect(clackMock.cancel).toHaveBeenCalledWith('Update cancelled')
+  })
+
   it('preserves original update order in flat fallback even when selection order is reversed', async () => {
     clackMock.multiselect.mockResolvedValue(['2', '0'])
 
