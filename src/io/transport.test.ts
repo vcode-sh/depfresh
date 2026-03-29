@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ResolveError } from '../errors'
 import type { NpmrcConfig } from '../types'
 import type { Logger } from '../utils/logger'
-import { getFetchTransportInit, resolveTransportPolicy } from './transport'
+import { _resetTransportCaches, getFetchTransportInit, resolveTransportPolicy } from './transport'
 
 const mockLogger: Logger = {
   info: vi.fn(),
@@ -26,6 +26,7 @@ function createNpmrc(overrides: Partial<NpmrcConfig> = {}): NpmrcConfig {
 
 describe('transport', () => {
   afterEach(() => {
+    _resetTransportCaches()
     vi.restoreAllMocks()
   })
 

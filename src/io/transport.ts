@@ -23,6 +23,12 @@ export interface FetchTransportInit {
 const dispatcherCache = new Map<string, Dispatcher>()
 const caCache = new Map<string, { signature: string; content: string }>()
 
+/** @internal Reset module-level caches — for testing only. */
+export function _resetTransportCaches(): void {
+  dispatcherCache.clear()
+  caCache.clear()
+}
+
 export function resolveTransportPolicy(url: string, npmrc: NpmrcConfig): TransportPolicy {
   return {
     proxyUrl: resolveProxyUrl(url, npmrc),
