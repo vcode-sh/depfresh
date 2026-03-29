@@ -49,9 +49,13 @@ vi.mock('node:child_process', () => ({
   execSync: vi.fn(),
 }))
 
-vi.mock('node:fs', () => ({
-  existsSync: vi.fn(() => false),
-}))
+vi.mock('node:fs', async () => {
+  const actual = await vi.importActual<typeof import('node:fs')>('node:fs')
+  return {
+    ...actual,
+    existsSync: vi.fn(() => false),
+  }
+})
 
 vi.mock('../../io/global', () => ({
   writeGlobalPackage: vi.fn(),

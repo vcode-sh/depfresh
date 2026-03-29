@@ -1,6 +1,7 @@
 import { execSync } from 'node:child_process'
-import { existsSync } from 'node:fs'
-import { join } from 'pathe'
+import { readFileSync } from 'node:fs'
+import { findUpSync } from 'find-up-simple'
+import { parsePackageManagerField } from '../../io/packages/package-manager-field'
 import type { PackageManagerName, PackageMeta } from '../../types'
 import type { Logger } from '../../utils/logger'
 
@@ -11,9 +12,12 @@ export function detectPackageManager(cwd: string, packages: PackageMeta[]): Pack
     }
   }
 
-  if (existsSync(join(cwd, 'bun.lock')) || existsSync(join(cwd, 'bun.lockb'))) return 'bun'
-  if (existsSync(join(cwd, 'pnpm-lock.yaml'))) return 'pnpm'
-  if (existsSync(join(cwd, 'yarn.lock'))) return 'yarn'
+  const manifestPm = detectPackageManagerFromManifest(cwd)
+  if (manifestPm) return manifestPm
+
+  if (findUpSync('bun.lock', { cwd }) || findUpSync('bun.lockb', { cwd })) return 'bun'
+  if (findUpSync('pnpm-lock.yaml', { cwd })) return 'pnpm'
+  if (findUpSync('yarn.lock', { cwd })) return 'yarn'
   return 'npm'
 }
 
@@ -47,4 +51,20 @@ export async function runUpdate(
     logger.error(`${pm} update failed`)
     return false
   }
+}
+
+function detectPackageManagerFromManifest(cwd: string): PackageManagerName | undefined {
+  const packageJsonPath = findUpSync('package.json', { cwd })
+  if (packageJsonPath) {
+    try {
+      const raw = JSON.parse(readFileSync(packageJsonPath, 'utf-8')) as Record<string, unknown>
+      if (typeof raw.packageManager === 'string') {
+        return parsePackageManagerField(raw.packageManager)?.name
+      }
+    } catch {
+      // ignore malformed manifests for PM detection fallback
+    }
+  }
+
+  return undefined
 }

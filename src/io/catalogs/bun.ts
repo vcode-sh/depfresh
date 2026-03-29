@@ -3,7 +3,7 @@ import detectIndent from 'detect-indent'
 import { dirname, join } from 'pathe'
 import type { CatalogSource, depfreshOptions, RawDep } from '../../types'
 import { isLocked } from '../../utils/versions'
-import { detectLineEnding } from '../write'
+import { detectLineEnding } from '../write/text'
 import type { CatalogLoader } from './index'
 
 function isPeerScopedCatalog(name: string): boolean {

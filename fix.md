@@ -88,8 +88,8 @@ This is the recommended implementation backlog derived from the plan.
 - `DONE` Task 9.3: If needed, introduce `--strict-post-write` as a transition flag.
 
 - `DONE` Task 10.1: Make Bun catalog detection walk upward like pnpm and Yarn.
-- `TODO` Task 10.2: Make package-manager detection use `effectiveRoot`.
-- `TODO` Task 10.3: Reduce fragile catalog/load/write module coupling while touching these paths.
+- `DONE` Task 10.2: Make package-manager detection use `effectiveRoot`.
+- `DONE` Task 10.3: Reduce fragile catalog/load/write module coupling while touching these paths.
 
 - `DONE` Task 11.1: Decide the final meaning of `includeWorkspace`.
 - `DONE` Task 11.2: Implement the chosen `workspace:` resolution/skip behavior.

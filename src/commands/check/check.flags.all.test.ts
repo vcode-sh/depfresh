@@ -1,3 +1,6 @@
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { baseOptions, type CheckMocks, makePkg, makeResolved, setupMocks } from './test-helpers'
 
@@ -106,6 +109,7 @@ describe('--all flag', () => {
 
 describe('detectPackageManager', () => {
   let mocks: CheckMocks
+  const tmpDirs: string[] = []
 
   beforeEach(async () => {
     vi.clearAllMocks()
@@ -114,6 +118,9 @@ describe('detectPackageManager', () => {
   })
 
   afterEach(() => {
+    for (const dir of tmpDirs.splice(0)) {
+      rmSync(dir, { recursive: true, force: true })
+    }
     vi.restoreAllMocks()
   })
 
@@ -126,36 +133,59 @@ describe('detectPackageManager', () => {
   })
 
   it('detects bun from bun.lock', async () => {
-    mocks.existsSyncMock.mockImplementation((p: string) => p.endsWith('bun.lock'))
+    const tmpDir = mkdtempSync(join(tmpdir(), 'depfresh-pm-detect-'))
+    tmpDirs.push(tmpDir)
+    writeFileSync(join(tmpDir, 'bun.lock'), '')
 
     const { detectPackageManager } = await import('./index')
-    expect(detectPackageManager('/tmp/test', [])).toBe('bun')
+    expect(detectPackageManager(tmpDir, [])).toBe('bun')
   })
 
   it('detects bun from bun.lockb', async () => {
-    mocks.existsSyncMock.mockImplementation((p: string) => p.endsWith('bun.lockb'))
+    const tmpDir = mkdtempSync(join(tmpdir(), 'depfresh-pm-detect-'))
+    tmpDirs.push(tmpDir)
+    writeFileSync(join(tmpDir, 'bun.lockb'), '')
 
     const { detectPackageManager } = await import('./index')
-    expect(detectPackageManager('/tmp/test', [])).toBe('bun')
+    expect(detectPackageManager(tmpDir, [])).toBe('bun')
   })
 
   it('detects pnpm from pnpm-lock.yaml', async () => {
-    mocks.existsSyncMock.mockImplementation((p: string) => p.endsWith('pnpm-lock.yaml'))
+    const tmpDir = mkdtempSync(join(tmpdir(), 'depfresh-pm-detect-'))
+    tmpDirs.push(tmpDir)
+    writeFileSync(join(tmpDir, 'pnpm-lock.yaml'), 'lockfileVersion: 9.0\n')
 
     const { detectPackageManager } = await import('./index')
-    expect(detectPackageManager('/tmp/test', [])).toBe('pnpm')
+    expect(detectPackageManager(tmpDir, [])).toBe('pnpm')
   })
 
   it('detects yarn from yarn.lock', async () => {
-    mocks.existsSyncMock.mockImplementation((p: string) => p.endsWith('yarn.lock'))
+    const tmpDir = mkdtempSync(join(tmpdir(), 'depfresh-pm-detect-'))
+    tmpDirs.push(tmpDir)
+    writeFileSync(join(tmpDir, 'yarn.lock'), '')
 
     const { detectPackageManager } = await import('./index')
-    expect(detectPackageManager('/tmp/test', [])).toBe('yarn')
+    expect(detectPackageManager(tmpDir, [])).toBe('yarn')
   })
 
   it('defaults to npm when no lockfile found', async () => {
     const { detectPackageManager } = await import('./index')
     expect(detectPackageManager('/tmp/test', [])).toBe('npm')
+  })
+
+  it('detects packageManager from nearest ancestor manifest when called from a child cwd', async () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), 'depfresh-pm-detect-'))
+    tmpDirs.push(tmpDir)
+    mkdirSync(join(tmpDir, 'apps', 'web', 'src'), { recursive: true })
+    writeFileSync(
+      join(tmpDir, 'package.json'),
+      JSON.stringify({ name: 'root', packageManager: 'pnpm@9.0.0' }, null, 2),
+    )
+
+    mocks.existsSyncMock.mockImplementation(() => false)
+
+    const { detectPackageManager } = await import('./index')
+    expect(detectPackageManager(join(tmpDir, 'apps', 'web', 'src'), [])).toBe('pnpm')
   })
 
   it('prefers packageManager field over lockfiles', async () => {

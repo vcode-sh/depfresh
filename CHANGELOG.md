@@ -16,6 +16,7 @@ The "stop lying about where you are and what just failed" release. depfresh now 
 - **Workspace-aware manifest discovery** — when the effective root declares workspace package patterns, depfresh now uses those patterns to enumerate manifests before falling back to blind recursive globbing. Translation: fewer accidental `examples/` and `fixtures/` packages showing up just because they happened to exist under the repo root.
 - **`--strict-post-write`** — opt-in strict mode for post-write automation. If `--execute`, `--install`, or `--update` fails, depfresh can now return exit code `2` instead of treating that failure as a warning bolted onto an otherwise green run.
 - **`--profile`** — runtime diagnostics on demand. depfresh can now emit timing, cache, network-fetch, dedupe, and package/dependency count metrics instead of forcing you to benchmark the thing by hand every time it feels weird.
+- **Root-aware package-manager detection** — install/update package-manager detection now works from nested child directories too, by checking the nearest ancestor manifest and lockfiles instead of pretending the current working directory is the whole world.
 
 ### Changed
 
@@ -28,6 +29,7 @@ The "stop lying about where you are and what just failed" release. depfresh now 
 - **`.npmrc` parsing** — `${VAR}` references in parsed `.npmrc` string values are now expanded before registry and auth handling. Private-registry setups finally stop carrying literal `${NPM_TOKEN}` strings around like decorative syntax.
 - **Registry auth matching** — auth entries from `.npmrc` now match registries by exact host + path instead of loose hostname substring checks. If your registry lives at `/internal/`, the auth must target `/internal/` too. Sensible, finally.
 - **Structured discovery classification** — nested manifests are now classified instead of reduced to a dumb boolean. Discovery diagnostics can distinguish nested roots from nested descendants and show the marker that caused the decision.
+- **Catalog/write module decoupling** — the Bun catalog loader no longer reaches through the write barrel just to get line-ending detection. Less fragile coupling, fewer chances to trip an import cycle in sidecar code paths.
 - **Workspace protocol semantics** — explicit-version workspace refs like `workspace:^1.2.3`, `workspace:~1.2.3`, and `workspace:1.2.3` are now checked against the registry even when the package also exists locally in the workspace. Prefix-only forms like `workspace:^` and `workspace:*` stay local-only and are skipped on purpose.
 - **`packageManager` as a first-class source** — the parser now emits `packageManager` as a real updatable source instead of just exposing it in types/docs and hoping nobody noticed the gap. That means `pnpm@9.x`, `npm@10.x`, `bun@1.x`, and `yarn@x` can now flow through check output and writes like the rest of the system.
 - **Cache identity** — registry cache lookups now use composite keys (`protocol + registry + package`) instead of plain package names. Public npm and private registry packages no longer share cache rows just because they happen to be called the same thing.
