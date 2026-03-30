@@ -102,6 +102,12 @@ export async function resolveDependency(
     }
   }
 
+  // Skip dist-tag versions (e.g., "latest", "next") — they resolve dynamically at install time
+  if (currentVersion in pkgData.distTags) {
+    logger.debug(`Skipping ${dep.name}: version "${currentVersion}" is a dist-tag`)
+    return null
+  }
+
   // Filter out deprecated, immature, and wrong-channel prerelease versions
   const versions = filterVersions(pkgData, dep, options)
 
