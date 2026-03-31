@@ -222,6 +222,36 @@ describe('writePackage', () => {
     expect(result).toBe(content)
   })
 
+  it('does not crash when packageManager change goes through source loop', () => {
+    const filepath = join(tmpDir, 'package.json')
+    const raw = {
+      name: 'test',
+      packageManager: 'bun@1.3.10',
+      dependencies: { foo: '^1.0.0' },
+    }
+    const content = `${JSON.stringify(raw, null, 2)}\n`
+    writeFileSync(filepath, content)
+
+    const pkg = makePkg(filepath, raw, {
+      packageManager: { name: 'bun', version: '1.3.10', raw: 'bun@1.3.10' },
+    })
+    const changes = [
+      makeChange({
+        name: 'bun',
+        source: 'packageManager' as ResolvedDepChange['source'],
+        currentVersion: '1.3.10',
+        targetVersion: '1.3.11',
+        diff: 'patch',
+      }),
+    ]
+
+    writePackage(pkg, changes, 'silent')
+
+    const result = readFileSync(filepath, 'utf-8')
+    const parsed = JSON.parse(result)
+    expect(parsed.packageManager).toBe('bun@1.3.11')
+  })
+
   it('handles pnpm.overrides dotted source path', () => {
     const filepath = join(tmpDir, 'package.json')
     const raw = {

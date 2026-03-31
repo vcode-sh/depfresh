@@ -82,5 +82,7 @@ function getSection(raw: Record<string, unknown>, source: string): Record<string
     }
     return current as Record<string, string> | null
   }
-  return (raw[source] as Record<string, string>) ?? null
+  const value = raw[source]
+  if (!value || typeof value !== 'object') return null
+  return value as Record<string, string>
 }

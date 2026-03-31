@@ -2,11 +2,12 @@
 
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Semver because I'm not a psychopath.
 
-## [1.1.1] - 2026-03-31
+## [1.1.2] - 2026-03-31
 
 ### Fixed
 
 - **Dist-tag versions no longer cause false resolution errors** -- dependencies using dist-tags as their version (e.g., `npm:@fumadocs/base-ui@latest`, `next`, `canary`) are now correctly skipped instead of failing with "Failed to resolve from registry". Dist-tags resolve dynamically at install time, so there is nothing to update.
+- **`packageManager` write no longer crashes with `Cannot use 'in' operator`** -- the `packageManager` field is a string (e.g., `bun@1.3.10`), not an object. The write loop now guards against non-object source fields instead of blindly using the `in` operator on them.
 
 ## [1.1.0] - 2026-03-29
 
