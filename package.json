@@ -80,7 +80,7 @@
     "@biomejs/biome": "^2.4.9",
     "@types/better-sqlite3": "^7.6.13",
     "@types/ini": "^4.1.1",
-    "@types/node": "^24.12.0",
+    "@types/node": "^25.5.0",
     "@types/semver": "^7.7.1",
     "@vitest/coverage-v8": "^4.1.2",
     "tsx": "^4.21.0",
