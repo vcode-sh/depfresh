@@ -8,6 +8,17 @@ const mockData: PackageData = {
 }
 const cacheKey = 'npm|https://registry.npmjs.org/|test-pkg'
 const scopedCacheKey = 'npm|https://registry.npmjs.org/|@vue/reactivity'
+const sqliteAvailable = await import('better-sqlite3').then(
+  (mod) => {
+    try {
+      new mod.default(':memory:').close()
+      return true
+    } catch {
+      return false
+    }
+  },
+  () => false,
+)
 
 describe('sqlite cache', () => {
   it('stores and retrieves data', async () => {
@@ -121,7 +132,7 @@ describe('cache stats accuracy', () => {
   })
 })
 
-describe('corrupt JSON data handling', () => {
+describe.skipIf(!sqliteAvailable)('corrupt JSON data handling', () => {
   it('returns undefined for corrupt cache entries', async () => {
     const Database = (await import('better-sqlite3')).default
     const { mkdirSync } = await import('node:fs')

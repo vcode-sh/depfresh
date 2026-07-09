@@ -12,6 +12,17 @@ function runCli(args: string[]) {
   })
 }
 
+function significantStderr(stderr: string): string {
+  return stderr
+    .split('\n')
+    .filter(
+      (line) =>
+        !/DeprecationWarning|ExperimentalWarning|--trace-deprecation|--trace-warnings/.test(line),
+    )
+    .join('\n')
+    .trim()
+}
+
 describe('CLI interactive mode validation', () => {
   it('exits with code 2 and prints a table-mode error when interactive is used without write', () => {
     const result = runCli(['--interactive'])
@@ -28,7 +39,7 @@ describe('CLI interactive mode validation', () => {
     const result = runCli(['--interactive', '--output', 'json'])
 
     expect(result.status).toBe(2)
-    expect(result.stderr).toBe('')
+    expect(significantStderr(result.stderr)).toBe('')
 
     const output = JSON.parse(result.stdout) as {
       error: { code: string; message: string; retryable: boolean }
@@ -49,7 +60,7 @@ describe('CLI interactive mode validation', () => {
     const result = runCli(['--concurrency', 'abc', '--output', 'json'])
 
     expect(result.status).toBe(2)
-    expect(result.stderr).toBe('')
+    expect(significantStderr(result.stderr)).toBe('')
 
     const output = JSON.parse(result.stdout) as {
       error: { code: string; message: string; retryable: boolean }
@@ -70,7 +81,7 @@ describe('CLI interactive mode validation', () => {
     const result = runCli(['--interactive', '--write', '--output', 'json'])
 
     expect(result.status).toBe(2)
-    expect(result.stderr).toBe('')
+    expect(significantStderr(result.stderr)).toBe('')
 
     const output = JSON.parse(result.stdout) as {
       error: { code: string; message: string; retryable: boolean }
@@ -91,7 +102,7 @@ describe('CLI interactive mode validation', () => {
     const result = runCli(['--write', '--execute', 'echo done', '--output', 'json'])
 
     expect(result.status).toBe(2)
-    expect(result.stderr).toBe('')
+    expect(significantStderr(result.stderr)).toBe('')
 
     const output = JSON.parse(result.stdout) as {
       error: { code: string; message: string; retryable: boolean }
