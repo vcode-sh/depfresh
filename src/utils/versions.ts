@@ -1,7 +1,10 @@
 import * as semver from 'semver'
 import type { DiffType, RangeMode } from '../types'
 
-const PREFIX_RE = /^(\^|~|>=?|<=?|=)?/
+export type SpecShape = 'simple' | 'x-range' | 'complex'
+
+const PREFIX_RE = /^(\^|~|=)?/
+const X_RANGE_RE = /^(\d+)(\.(\d+))?\.(x|X|\*)$/
 
 export function getVersionPrefix(version: string): string {
   const match = version.match(PREFIX_RE)
@@ -14,6 +17,21 @@ export function getVersionPrefix(version: string): string {
   }
 
   return prefix
+}
+
+export function getSpecShape(version: string): SpecShape {
+  if (version === '*' || version === 'x' || version === 'X') return 'complex'
+  if (X_RANGE_RE.test(version)) return 'x-range'
+  const prefix = version.match(/^(\^|~|=)/)?.[1] ?? ''
+  const bare = version.slice(prefix.length)
+  return semver.valid(bare) ? 'simple' : 'complex'
+}
+
+export function rebuildXRange(original: string, target: string): string | null {
+  const match = original.match(X_RANGE_RE)
+  const parsed = semver.coerce(target)
+  if (!(match && parsed)) return null
+  return match[3] !== undefined ? `${parsed.major}.${parsed.minor}.x` : `${parsed.major}.x`
 }
 
 export function isRange(version: string): boolean {

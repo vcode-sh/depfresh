@@ -2,6 +2,12 @@
 
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Semver because I'm not a psychopath.
 
+## [Unreleased]
+
+### Fixed
+
+- **Complex version ranges are no longer rewritten to bare pins** -- comparator, compound, OR, hyphen, and wildcard ranges now stay untouched when depfresh cannot preserve their semantics faithfully. Preservable x-ranges still update in place while keeping their shape, so `1.x` can become `2.x` and `1.2.x` can become `1.9.x` instead of collapsing to exact pins.
+
 ## [1.1.2] - 2026-03-31
 
 ### Fixed

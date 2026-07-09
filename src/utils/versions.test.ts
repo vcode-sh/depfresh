@@ -3,9 +3,11 @@ import {
   getDiff,
   getMaxSatisfying,
   getMaxVersion,
+  getSpecShape,
   getVersionPrefix,
   isLocked,
   isRange,
+  rebuildXRange,
   resolveTargetVersion,
 } from './versions'
 
@@ -18,8 +20,8 @@ describe('getVersionPrefix', () => {
     expect(getVersionPrefix('~1.2.3')).toBe('~')
   })
 
-  it('extracts >= prefix', () => {
-    expect(getVersionPrefix('>=1.2.3')).toBe('>=')
+  it('does not extract comparator prefixes', () => {
+    expect(getVersionPrefix('>=1.2.3')).toBe('')
   })
 
   it('does not treat compound ranges as a single prefix', () => {
@@ -29,6 +31,45 @@ describe('getVersionPrefix', () => {
 
   it('returns empty for exact version', () => {
     expect(getVersionPrefix('1.2.3')).toBe('')
+  })
+})
+
+describe('getSpecShape', () => {
+  it('classifies exact and single-prefix full versions as simple', () => {
+    expect(getSpecShape('1.2.3')).toBe('simple')
+    expect(getSpecShape('^1.2.3')).toBe('simple')
+    expect(getSpecShape('~1.2.3')).toBe('simple')
+    expect(getSpecShape('=1.2.3')).toBe('simple')
+  })
+
+  it('classifies preservable x-ranges', () => {
+    expect(getSpecShape('1.x')).toBe('x-range')
+    expect(getSpecShape('1.2.x')).toBe('x-range')
+    expect(getSpecShape('2.X')).toBe('x-range')
+  })
+
+  it('classifies complex ranges and bare wildcards as complex', () => {
+    expect(getSpecShape('*')).toBe('complex')
+    expect(getSpecShape('>=1.2.0')).toBe('complex')
+    expect(getSpecShape('<2.0.0')).toBe('complex')
+    expect(getSpecShape('>=1.0.0 <2.0.0')).toBe('complex')
+    expect(getSpecShape('^1 || ^2')).toBe('complex')
+    expect(getSpecShape('1.2 - 1.5')).toBe('complex')
+  })
+})
+
+describe('rebuildXRange', () => {
+  it('preserves major-only x-range shape', () => {
+    expect(rebuildXRange('1.x', '2.4.1')).toBe('2.x')
+  })
+
+  it('preserves major-minor x-range shape', () => {
+    expect(rebuildXRange('1.2.x', '1.9.3')).toBe('1.9.x')
+  })
+
+  it('returns null for non-x-range inputs or invalid targets', () => {
+    expect(rebuildXRange('^1.2.3', '2.4.1')).toBe(null)
+    expect(rebuildXRange('1.x', 'latest')).toBe(null)
   })
 })
 

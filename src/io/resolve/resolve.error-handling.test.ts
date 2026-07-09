@@ -134,7 +134,7 @@ describe('currentVersionTime', () => {
     expect(result[0]!.publishedAt).toBe('2024-06-20T12:00:00.000Z')
   })
 
-  it('returns undefined currentVersionTime for wildcard version *', async () => {
+  it('skips wildcard version * without producing a resolved change', async () => {
     const { fetchPackageData } = await import('../registry')
     const { resolvePackage } = await import('./index')
 
@@ -156,8 +156,7 @@ describe('currentVersionTime', () => {
 
     const result = await resolvePackage(pkg, options, cache, defaultNpmrc)
 
-    expect(result.length).toBe(1)
-    expect(result[0]!.currentVersionTime).toBeUndefined()
+    expect(result.length).toBe(0)
   })
 
   it('coerces range version for currentVersionTime lookup', async () => {

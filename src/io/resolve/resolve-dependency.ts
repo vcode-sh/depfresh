@@ -7,7 +7,9 @@ import { getRegistryForPackage } from '../../utils/npmrc'
 import {
   applyVersionPrefix,
   getDiff,
+  getSpecShape,
   getVersionPrefix,
+  rebuildXRange,
   resolveTargetVersion,
 } from '../../utils/versions'
 import { fetchPackageData } from '../registry'
@@ -112,6 +114,14 @@ export async function resolveDependency(
     return null
   }
 
+  const specShape = getSpecShape(currentVersion)
+  if (specShape === 'complex' && semver.validRange(currentVersion)) {
+    logger.debug(
+      `Skipping ${dep.name}: version "${currentVersion}" is a complex range depfresh cannot rewrite faithfully`,
+    )
+    return null
+  }
+
   // Filter out deprecated, immature, and wrong-channel prerelease versions
   const versions = filterVersions(pkgData, dep, options)
 
@@ -122,9 +132,19 @@ export async function resolveDependency(
     return null
   }
 
-  const prefix = getVersionPrefix(currentVersion)
-  const prefixedTarget = applyVersionPrefix(targetVersion, prefix)
+  if (specShape === 'x-range' && semver.satisfies(targetVersion, currentVersion)) {
+    return null
+  }
+
+  const prefixedTarget =
+    specShape === 'x-range'
+      ? (rebuildXRange(currentVersion, targetVersion) ?? targetVersion)
+      : applyVersionPrefix(targetVersion, getVersionPrefix(currentVersion))
   const diff = getDiff(currentVersion, targetVersion)
+
+  if (prefixedTarget === currentVersion) {
+    return null
+  }
 
   // Skip if no change
   if (diff === 'none' && !options.force) {
