@@ -114,6 +114,60 @@ export function makeResolved(overrides: Partial<ResolvedDepChange> = {}): Resolv
   }
 }
 
+export interface CapturedJsonEnvelope {
+  packages: Array<{
+    name: string
+    updates: Array<{
+      name: string
+      current: string
+      target: string
+      diff: string
+      source: string
+    }>
+  }>
+  errors: unknown[]
+  summary: {
+    total: number
+    major: number
+    minor: number
+    patch: number
+    packages: number
+    scannedPackages: number
+    packagesWithUpdates: number
+    plannedUpdates: number
+    appliedUpdates: number
+    revertedUpdates: number
+    failedResolutions: number
+  }
+  meta: {
+    noPackagesFound: boolean
+    hadResolutionErrors: boolean
+    didWrite: boolean
+  }
+}
+
+export function findJsonEnvelope(calls: unknown[][]): CapturedJsonEnvelope {
+  for (const call of calls) {
+    const [firstArg] = call
+    if (typeof firstArg !== 'string') continue
+
+    try {
+      const parsed = JSON.parse(firstArg) as Partial<CapturedJsonEnvelope>
+      if (parsed.packages !== undefined && parsed.summary !== undefined) {
+        return parsed as CapturedJsonEnvelope
+      }
+    } catch {
+      // Ignore non-JSON logger output from table-mode tests.
+    }
+  }
+
+  throw new Error('Expected a JSON output envelope')
+}
+
+export function resolvedSnapshot(packages: PackageMeta[]): Record<string, ResolvedDepChange[]> {
+  return Object.fromEntries(packages.map((pkg) => [pkg.name ?? pkg.filepath, pkg.resolved]))
+}
+
 export interface CheckMocks {
   loadPackagesMock: ReturnType<typeof vi.fn>
   resolvePackageMock: ReturnType<typeof vi.fn>
