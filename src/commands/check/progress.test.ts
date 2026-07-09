@@ -60,8 +60,8 @@ describe('createCheckProgress', () => {
     expect(progress).not.toBeNull()
 
     progress!.onPackageStart(pkg)
-    progress!.onDependencyProcessed()
-    progress!.onDependencyProcessed()
+    progress!.onDependencyProcessed(pkg)
+    progress!.onDependencyProcessed(pkg)
     progress!.onPackageEnd()
     progress!.done()
 
@@ -76,12 +76,36 @@ describe('createCheckProgress', () => {
     const pkg = makePkg('beta', 1)
     const progress = createCheckProgress(baseOptions, [pkg])
     progress!.onPackageStart(pkg)
-    progress!.onDependencyProcessed()
-    progress!.onDependencyProcessed()
+    progress!.onDependencyProcessed(pkg)
+    progress!.onDependencyProcessed(pkg)
 
     const output = writeSpy.mock.calls.map((call: [unknown]) => String(call[0])).join('')
     expect(output).toContain('1/1')
     expect(output).not.toContain('2/1')
+
+    progress!.done()
+  })
+
+  it('attributes dependency progress to the active package while counting global ticks', () => {
+    const alpha = makePkg('alpha', 2)
+    const beta = makePkg('beta', 2)
+    const progress = createCheckProgress(baseOptions, [alpha, beta])
+
+    progress!.onPackageStart(alpha)
+    progress!.onDependencyProcessed(beta)
+
+    let output = writeSpy.mock.calls.map((call: [unknown]) => String(call[0])).join('')
+    expect(output).toContain('Deps (alpha)')
+    expect(output).toContain('0/2')
+    expect(output).toContain('total 1/4')
+
+    writeSpy.mockClear()
+    progress!.onDependencyProcessed(alpha)
+
+    output = writeSpy.mock.calls.map((call: [unknown]) => String(call[0])).join('')
+    expect(output).toContain('Deps (alpha)')
+    expect(output).toContain('1/2')
+    expect(output).toContain('total 2/4')
 
     progress!.done()
   })

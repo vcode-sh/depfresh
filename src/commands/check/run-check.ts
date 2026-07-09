@@ -111,7 +111,7 @@ export async function check(options: depfreshOptions): Promise<number> {
       afterPackageWrite: (currentPkg, changes: ResolvedDepChange[]) =>
         addons.afterPackageWrite(currentPkg, changes),
       afterPackageEnd: (currentPkg) => addons.afterPackageEnd(currentPkg),
-      onDependencyProcessed: () => progress?.onDependencyProcessed(),
+      onDependencyProcessed: () => undefined,
       onHasUpdates: (updates: ResolvedDepChange[]) => {
         hasUpdates = true
         executionState.packagesWithUpdates += 1
@@ -160,40 +160,34 @@ export async function check(options: depfreshOptions): Promise<number> {
 
     const resolutionStart = performance.now()
     try {
-      if (progress === null && packages.length > 1) {
-        const pendingResolutions = new Map<PackageMeta, Promise<ResolvedDepChange[]>>()
+      const pendingResolutions = new Map<PackageMeta, Promise<ResolvedDepChange[]>>()
 
-        for (const pkg of packages) {
-          await addons.beforePackageStart(pkg)
-          pendingResolutions.set(
-            pkg,
-            resolvePackage(
-              pkg,
-              runtimeOptions,
-              cache,
-              npmrc,
-              workspacePackageNames,
-              undefined,
-              resolveContext,
-            ),
-          )
-        }
-
-        for (const pkg of packages) {
-          await processPackage(
+      for (const pkg of packages) {
+        await addons.beforePackageStart(pkg)
+        pendingResolutions.set(
+          pkg,
+          resolvePackage(
             pkg,
             runtimeOptions,
-            packageHooks(pkg),
-            pendingResolutions.get(pkg),
-            true,
-          )
-        }
-      } else {
-        for (const pkg of packages) {
-          progress?.onPackageStart(pkg)
-          await processPackage(pkg, runtimeOptions, packageHooks(pkg))
-          progress?.onPackageEnd()
-        }
+            cache,
+            npmrc,
+            workspacePackageNames,
+            progress ? (currentPkg) => progress.onDependencyProcessed(currentPkg) : undefined,
+            resolveContext,
+          ),
+        )
+      }
+
+      for (const pkg of packages) {
+        progress?.onPackageStart(pkg)
+        await processPackage(
+          pkg,
+          runtimeOptions,
+          packageHooks(pkg),
+          pendingResolutions.get(pkg),
+          true,
+        )
+        progress?.onPackageEnd()
       }
       await addons.afterPackagesEnd(packages)
     } finally {

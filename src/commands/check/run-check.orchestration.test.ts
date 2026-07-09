@@ -48,14 +48,17 @@ describe('run-check orchestration paths', () => {
     expect(calls[1]?.[6]).toBe(firstContext)
   })
 
-  it('passes no resolve context to packages on the sequential TTY table path', async () => {
-    await runScenario('sequential')
+  it('passes one shared resolve context and progress callback on the sequential TTY table path', async () => {
+    await runScenario('sequential', { profile: true })
 
     expect(mocks.resolvePackageMock).toHaveBeenCalledTimes(2)
-    for (const call of mocks.resolvePackageMock.mock.calls) {
-      expect(call.length).toBeLessThan(7)
-      expect(call[6]).toBeUndefined()
-    }
+    const calls = mocks.resolvePackageMock.mock.calls
+    const firstContext = calls[0]?.[6]
+
+    expect(firstContext).toBeDefined()
+    expect(calls.every((call) => call.length >= 7)).toBe(true)
+    expect(calls.every((call) => typeof call[5] === 'function')).toBe(true)
+    expect(calls[1]?.[6]).toBe(firstContext)
   })
 
   it('keeps exit code, resolved sets, counts, and start hooks equal across both paths', async () => {
@@ -115,7 +118,7 @@ describe('run-check orchestration paths', () => {
     ])
   })
 
-  it('keeps single-package runs on the sequential path even without progress rendering', async () => {
+  it('keeps single-package runs on the unified path even without progress rendering', async () => {
     const dep = makeResolved({
       name: 'solo-dep',
       diff: 'minor',
@@ -133,8 +136,9 @@ describe('run-check orchestration paths', () => {
 
     expect(exitCode).toBe(0)
     expect(mocks.resolvePackageMock).toHaveBeenCalledTimes(1)
-    expect(mocks.resolvePackageMock.mock.calls[0]?.length).toBeLessThan(7)
-    expect(mocks.resolvePackageMock.mock.calls[0]?.[6]).toBeUndefined()
+    expect(mocks.resolvePackageMock.mock.calls[0]?.length).toBeGreaterThanOrEqual(7)
+    expect(mocks.resolvePackageMock.mock.calls[0]?.[5]).toBeUndefined()
+    expect(mocks.resolvePackageMock.mock.calls[0]?.[6]).toBeDefined()
     expect(findJsonEnvelope(consoleSpy.mock.calls).summary.scannedPackages).toBe(1)
   })
 

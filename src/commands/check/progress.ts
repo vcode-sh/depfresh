@@ -6,7 +6,7 @@ const LINES = 2
 
 export interface CheckProgress {
   onPackageStart(pkg: PackageMeta): void
-  onDependencyProcessed(): void
+  onDependencyProcessed(pkg: PackageMeta): void
   onPackageEnd(): void
   done(): void
 }
@@ -17,8 +17,9 @@ interface ProgressState {
   completedPackages: number
   completedDeps: number
   currentPackageName: string
+  currentPackage?: PackageMeta
   currentPackageTotalDeps: number
-  currentPackageResolvedDeps: number
+  resolvedDepsByPackage: Map<PackageMeta, number>
   renderedLines: number
 }
 
@@ -36,29 +37,32 @@ export function createCheckProgress(
     completedPackages: 0,
     completedDeps: 0,
     currentPackageName: '',
+    currentPackage: undefined,
     currentPackageTotalDeps: 0,
-    currentPackageResolvedDeps: 0,
+    resolvedDepsByPackage: new Map(),
     renderedLines: 0,
   }
 
   const progress: CheckProgress = {
     onPackageStart(pkg): void {
       state.currentPackageName = pkg.name || '(unnamed)'
+      state.currentPackage = pkg
       state.currentPackageTotalDeps = pkg.deps.filter((d) => d.update).length
-      state.currentPackageResolvedDeps = 0
+      state.resolvedDepsByPackage.set(pkg, state.resolvedDepsByPackage.get(pkg) ?? 0)
       render(state)
     },
-    onDependencyProcessed(): void {
-      state.currentPackageResolvedDeps = Math.min(
-        state.currentPackageResolvedDeps + 1,
-        state.currentPackageTotalDeps,
-      )
+    onDependencyProcessed(pkg): void {
+      const packageTotalDeps = pkg.deps.filter((d) => d.update).length
+      const resolvedDeps = state.resolvedDepsByPackage.get(pkg) ?? 0
+      state.resolvedDepsByPackage.set(pkg, Math.min(resolvedDeps + 1, packageTotalDeps))
       state.completedDeps = Math.min(state.completedDeps + 1, state.totalDeps)
       render(state)
     },
     onPackageEnd(): void {
       state.completedPackages = Math.min(state.completedPackages + 1, state.totalPackages)
-      state.currentPackageResolvedDeps = state.currentPackageTotalDeps
+      if (state.currentPackage) {
+        state.resolvedDepsByPackage.set(state.currentPackage, state.currentPackageTotalDeps)
+      }
       render(state)
     },
     done(): void {
@@ -79,7 +83,10 @@ function render(state: ProgressState): void {
   const depLabel = clampLabel(`Deps (${state.currentPackageName || '-'})`, maxLabel)
 
   const pkgBar = formatBar(state.completedPackages, state.totalPackages)
-  const depBar = formatBar(state.currentPackageResolvedDeps, state.currentPackageTotalDeps)
+  const currentPackageResolvedDeps = state.currentPackage
+    ? (state.resolvedDepsByPackage.get(state.currentPackage) ?? 0)
+    : 0
+  const depBar = formatBar(currentPackageResolvedDeps, state.currentPackageTotalDeps)
 
   const pkgLine = `${pkgLabel} ${pkgBar}`
   const depLine = `${depLabel} ${depBar}  total ${state.completedDeps}/${state.totalDeps}`
