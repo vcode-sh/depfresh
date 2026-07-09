@@ -21,7 +21,7 @@ importers:
         specifier: ^0.2.1
         version: 0.2.1
       defu:
-        specifier: ^6.1.4
+        specifier: ^6.1.7
         version: 6.1.7
       detect-indent:
         specifier: ^7.0.2
@@ -48,10 +48,10 @@ importers:
         specifier: ^7.7.4
         version: 7.7.4
       tinyglobby:
-        specifier: ^0.2.15
+        specifier: ^0.2.17
         version: 0.2.17
       undici:
-        specifier: ^7.24.6
+        specifier: ^7.28.0
         version: 7.28.0
       yaml:
         specifier: ^2.8.3

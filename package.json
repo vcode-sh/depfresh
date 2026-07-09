@@ -63,7 +63,7 @@
     "ansis": "^4.2.0",
     "better-sqlite3": "^12.8.0",
     "citty": "^0.2.1",
-    "defu": "^6.1.4",
+    "defu": "^6.1.7",
     "detect-indent": "^7.0.2",
     "find-up-simple": "^1.0.1",
     "ini": "^6.0.0",
@@ -72,8 +72,8 @@
     "pathe": "^2.0.3",
     "pnpm-workspace-yaml": "^1.6.0",
     "semver": "^7.7.4",
-    "tinyglobby": "^0.2.15",
-    "undici": "^7.24.6",
+    "tinyglobby": "^0.2.17",
+    "undici": "^7.28.0",
     "yaml": "^2.8.3"
   },
   "devDependencies": {

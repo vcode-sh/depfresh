@@ -9,6 +9,7 @@ import { join } from 'node:path'
 
 const repoRoot = new URL('..', import.meta.url).pathname.replace(/\/$/, '')
 const cliPath = join(repoRoot, 'dist', 'cli.mjs')
+const pkgVersion = JSON.parse(readFileSync(join(repoRoot, 'package.json'), 'utf8')).version
 
 const tmpRoot = mkdtempSync(join(tmpdir(), 'depfresh-practical-'))
 const homeDir = join(tmpRoot, 'home')
@@ -295,7 +296,7 @@ await record('capabilities command', async () => {
 await record('version flag', async () => {
   const result = await runCli(['--version'])
   assert.equal(result.status, 0)
-  assert.match(result.stdout, /1\.1\.0/)
+  assert.equal(result.stdout.trim(), pkgVersion)
 })
 
 await record('default json check', async () => {
