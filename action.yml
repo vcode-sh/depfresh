@@ -62,7 +62,7 @@ runs:
   using: composite
   steps:
     - name: Setup Node.js
-      uses: actions/setup-node@v4
+      uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4
       with:
         node-version: ${{ inputs.node-version }}
 
@@ -74,41 +74,37 @@ runs:
       id: run
       shell: bash
       working-directory: ${{ inputs.working-directory }}
+      env:
+        INPUT_MODE: ${{ inputs.mode }}
+        INPUT_WRITE: ${{ inputs.write }}
+        INPUT_FAIL_ON_OUTDATED: ${{ inputs.fail-on-outdated }}
+        INPUT_RECURSIVE: ${{ inputs.recursive }}
+        INPUT_INCLUDE: ${{ inputs.include }}
+        INPUT_EXCLUDE: ${{ inputs.exclude }}
+        INPUT_EXTRA_ARGS: ${{ inputs.extra-args }}
       run: |
-        DEPFRESH_ARGS="--output json"
+        case "$INPUT_MODE" in
+          default|major|minor|patch|latest|newest|next) ;;
+          *) echo "::error::Invalid mode: $INPUT_MODE"; exit 2 ;;
+        esac
 
-        if [ "${{ inputs.mode }}" != "default" ]; then
-          DEPFRESH_ARGS="$DEPFRESH_ARGS --mode ${{ inputs.mode }}"
-        fi
-
-        if [ "${{ inputs.write }}" = "true" ]; then
-          DEPFRESH_ARGS="$DEPFRESH_ARGS --write"
-        fi
-
-        if [ "${{ inputs.fail-on-outdated }}" = "true" ] && [ "${{ inputs.write }}" != "true" ]; then
-          DEPFRESH_ARGS="$DEPFRESH_ARGS --fail-on-outdated"
-        fi
-
-        if [ "${{ inputs.recursive }}" = "false" ]; then
-          DEPFRESH_ARGS="$DEPFRESH_ARGS --no-recursive"
-        fi
-
-        if [ -n "${{ inputs.include }}" ]; then
-          DEPFRESH_ARGS="$DEPFRESH_ARGS --include ${{ inputs.include }}"
-        fi
-
-        if [ -n "${{ inputs.exclude }}" ]; then
-          DEPFRESH_ARGS="$DEPFRESH_ARGS --exclude ${{ inputs.exclude }}"
-        fi
-
-        if [ -n "${{ inputs.extra-args }}" ]; then
-          DEPFRESH_ARGS="$DEPFRESH_ARGS ${{ inputs.extra-args }}"
+        ARGS=(--output json)
+        if [ "$INPUT_MODE" != "default" ]; then ARGS+=(--mode "$INPUT_MODE"); fi
+        if [ "$INPUT_WRITE" = "true" ]; then ARGS+=(--write); fi
+        if [ "$INPUT_FAIL_ON_OUTDATED" = "true" ] && [ "$INPUT_WRITE" != "true" ]; then ARGS+=(--fail-on-outdated); fi
+        if [ "$INPUT_RECURSIVE" = "false" ]; then ARGS+=(--no-recursive); fi
+        if [ -n "$INPUT_INCLUDE" ]; then ARGS+=(--include "$INPUT_INCLUDE"); fi
+        if [ -n "$INPUT_EXCLUDE" ]; then ARGS+=(--exclude "$INPUT_EXCLUDE"); fi
+        if [ -n "$INPUT_EXTRA_ARGS" ]; then
+          # Intentional word-splitting: extra-args carries multiple flags.
+          # shellcheck disable=SC2206
+          ARGS+=($INPUT_EXTRA_ARGS)
         fi
 
         DEPFRESH_OUTPUT=$(mktemp)
         EXIT_CODE=0
 
-        depfresh $DEPFRESH_ARGS > "$DEPFRESH_OUTPUT" || EXIT_CODE=$?
+        depfresh "${ARGS[@]}" > "$DEPFRESH_OUTPUT" || EXIT_CODE=$?
 
         echo "exit-code=$EXIT_CODE" >> "$GITHUB_OUTPUT"
         echo "output-file=$DEPFRESH_OUTPUT" >> "$GITHUB_OUTPUT"
