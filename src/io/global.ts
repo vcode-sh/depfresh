@@ -1,4 +1,4 @@
-import { execSync } from 'node:child_process'
+import { execFileSync, execSync } from 'node:child_process'
 import * as semver from 'semver'
 import type { PackageManagerName, PackageMeta, RawDep } from '../types'
 import { createLogger } from '../utils/logger'
@@ -174,18 +174,32 @@ export function loadGlobalPackagesAll(): PackageMeta[] {
   ]
 }
 
+const NPM_NAME_RE = /^(@[a-z0-9-~][a-z0-9-._~]*\/)?[a-z0-9-~][a-z0-9-._~]*$/
+
+export function isValidGlobalWriteTarget(name: string, version: string): boolean {
+  if (!NPM_NAME_RE.test(name)) return false
+  const bare = version.replace(/^[\^~]/, '')
+  return semver.valid(bare) !== null
+}
+
 export function writeGlobalPackage(pm: PackageManagerName, name: string, version: string): void {
   const logger = createLogger('info')
 
+  if (!isValidGlobalWriteTarget(name, version)) {
+    logger.warn(`Skipped global update for ${name}: invalid package name or version`)
+    return
+  }
+
+  const spec = `${name}@${version}`
   switch (pm) {
     case 'npm':
-      execSync(`npm install -g ${name}@${version}`, { stdio: 'inherit' })
+      execFileSync('npm', ['install', '-g', spec], { stdio: 'inherit' })
       break
     case 'pnpm':
-      execSync(`pnpm add -g ${name}@${version}`, { stdio: 'inherit' })
+      execFileSync('pnpm', ['add', '-g', spec], { stdio: 'inherit' })
       break
     case 'bun':
-      execSync(`bun add -g ${name}@${version}`, { stdio: 'inherit' })
+      execFileSync('bun', ['add', '-g', spec], { stdio: 'inherit' })
       break
     case 'yarn':
       logger.warn('Yarn global packages not supported')

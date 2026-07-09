@@ -59,6 +59,10 @@ export function applyVersionPrefix(version: string, prefix: string): string {
   return `${prefix}${version}`
 }
 
+function validDistTag(value: string | undefined): string | null {
+  return value && semver.valid(value) ? value : null
+}
+
 export function resolveTargetVersion(
   currentVersion: string,
   versions: string[],
@@ -67,14 +71,14 @@ export function resolveTargetVersion(
 ): string | null {
   switch (mode) {
     case 'latest':
-      return distTags.latest ?? null
+      return validDistTag(distTags.latest)
 
     case 'newest': {
       return getMaxVersion(versions)
     }
 
     case 'next':
-      return distTags.next ?? distTags.latest ?? null
+      return validDistTag(distTags.next) ?? validDistTag(distTags.latest)
 
     case 'major':
       return getMaxVersion(versions)
@@ -99,6 +103,6 @@ export function resolveTargetVersion(
       return getMaxVersion(patch)
     }
     default:
-      return getMaxSatisfying(versions, currentVersion) ?? distTags.latest ?? null
+      return getMaxSatisfying(versions, currentVersion) ?? validDistTag(distTags.latest)
   }
 }

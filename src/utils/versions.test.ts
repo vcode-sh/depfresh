@@ -207,4 +207,20 @@ describe('resolveTargetVersion', () => {
   it('resolves patch mode with invalid currentVersion', () => {
     expect(resolveTargetVersion('invalid', versions, distTags, 'patch')).toBe(null)
   })
+
+  it('resolves latest mode with a valid dist-tag', () => {
+    expect(resolveTargetVersion('1.0.0', [], { latest: '2.0.0' }, 'latest')).toBe('2.0.0')
+  })
+
+  it('rejects a non-semver latest dist-tag', () => {
+    expect(
+      resolveTargetVersion('1.0.0', [], { latest: 'not-a-version; rm -rf /tmp/x' }, 'latest'),
+    ).toBe(null)
+  })
+
+  it('falls back to a valid latest when the next dist-tag is invalid', () => {
+    expect(resolveTargetVersion('1.0.0', [], { next: 'garbage', latest: '2.0.0' }, 'next')).toBe(
+      '2.0.0',
+    )
+  })
 })
