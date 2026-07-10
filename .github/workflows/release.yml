@@ -25,7 +25,9 @@ jobs:
         with:
           node-version: 24.x
           cache: pnpm
-          registry-url: https://registry.npmjs.org
+
+      # Trusted publishing (OIDC) requires npm >= 11.5.1
+      - run: npm install -g npm@latest
 
       - run: pnpm install --frozen-lockfile
 
@@ -38,10 +40,9 @@ jobs:
       - name: Build
         run: pnpm build
 
+      # Auth via OIDC trusted publishing -- no token needed (configured on npmjs.com)
       - name: Publish to npm
         run: npm publish --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: GitHub Release
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65  # v2
