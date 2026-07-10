@@ -121,6 +121,8 @@ The output includes supported flags, defaults, valid enum values, and exit-code 
 | `--help-json` | -- | boolean | `false` | Print machine-readable CLI capabilities (flags, enums, defaults, exit codes) as JSON. |
 | `--json` | -- | boolean | `false` | JSON mode for the `depfresh capabilities` discoverability command. |
 
+`--profile`'s `networkFetches` and `dedupeHits` count real registry fetches and real in-flight cache hits in every output mode, interactive terminal runs included. Before 1.2.0 those two numbers were always `0` on an interactive run, which made them worse than useless -- they were reassuring.
+
 ## Post-Write
 
 These flags only do anything when `--write` is also present. Without `--write`, they sit there silently judging you.

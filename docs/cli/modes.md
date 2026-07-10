@@ -6,6 +6,8 @@ The `--mode` flag controls how depfresh picks target versions. It's the philosop
 
 Respects existing range prefixes. If your manifest says `^1.2.3`, depfresh finds the latest version that satisfies `^1.x.x`. If it says `~1.2.3`, you get the latest `1.2.x`. This is the polite, society-approved mode.
 
+Note that no mode -- not even `latest` -- will rewrite a range whose meaning it can't preserve. See [What gets rewritten](#what-gets-rewritten).
+
 ## `major`
 
 Only shows major version updates. Filters out minor and patch updates entirely. Use this when you're feeling brave and want to see what breaking changes await. `depfresh major` is the shorthand.
@@ -44,6 +46,33 @@ Not available via CLI flags -- this one's for the config file's `packageMode` op
   }
 }
 ```
+
+## What gets rewritten
+
+Modes decide *which version* depfresh aims for. The shape of the spec already in your manifest decides whether depfresh is willing to touch it at all. This applies to every mode, including `latest` and `newest`.
+
+Rewritten, shape preserved:
+
+| Spec in your manifest | Example result |
+|------|-------------|
+| Exact pin -- `1.2.3` | `2.0.0` |
+| Prefixed -- `^1.2.3`, `~1.2.3`, `=1.2.3` | `^2.0.0`, `~1.2.9`, `=2.0.0` |
+| x-range -- `1.x`, `1.2.x` (also `1.X`, `1.*`, `1.2.*`) | `2.x`, `1.9.x` |
+
+Held, never rewritten:
+
+| Spec in your manifest | Example |
+|------|-------------|
+| Comparator range | `>=1.2.0` |
+| Compound range | `>=1.0.0 <2.0.0` |
+| OR range | `^1 \|\| ^2` |
+| Hyphen range | `1.2 - 1.5` |
+| Bare wildcard | `*`, `x`, `X` |
+| Partial version | `1`, `1.2` |
+
+depfresh cannot rewrite any of these without changing what they mean -- there is no single version that expresses "anything at or above 1.2.0" -- so it leaves them exactly as it found them rather than silently collapsing them into a pin. They're skipped, not reported as errors. If you want one of them updated, you're the one who has to decide what it should say.
+
+A spec that is *not* a valid semver range at all -- a bare dist-tag like `beta`, or a typo -- is a different story. It isn't held; it goes down the normal resolution path and surfaces with an `error` diff, so you find out about it instead of quietly keeping it forever.
 
 ## Summary
 

@@ -2,11 +2,31 @@
 
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Semver because I'm not a psychopath.
 
-## [Unreleased]
+## [1.2.0] - 2026-07-10
+
+The "stop rewriting things you don't understand" release. Three security holes closed -- one of which let a registry hand depfresh a string that ended up in a shell -- plus depfresh finally admits that `>=1.2.0` is not a version it knows how to update, and stops flattening it into a pin. Interactive runs got the concurrency the piped ones have had since 1.1.0, which means the progress bar is no longer the slowest way to use this tool. No API breaks.
+
+### Security
+
+- **Global package updates no longer run through a shell** -- `depfresh -gw` used to build `npm install -g ${name}@${version}` as a string and hand it to `execSync`. It now calls `execFileSync` with an argument array for npm, pnpm, and bun, and validates the package name and target version before doing even that. A registry serving a crafted dist-tag can no longer smuggle a command past your shell.
+- **Dist-tag values are semver-validated before becoming update targets** -- `latest` and `next` now have to parse as real semver versions to be used at all. Previously depfresh used whatever string the registry handed it, which is a lot of trust to place in a stranger.
+- **Vulnerable dependencies bumped past their advisories** -- `undici` 7.24.6 -> 7.28.0 (TLS certificate-validation bypass, GHSA-vmh5-mc38-953g; cross-origin request routing, GHSA-hm92-r4w5-c3mj), `defu` 6.1.4 -> 6.1.7 (prototype pollution via `__proto__`, GHSA-737v-mqg7-c878), and `picomatch` 4.0.3 -> 4.0.5 (ReDoS, GHSA-c2c7-rcm5-vvqj). undici carries your `.npmrc` auth tokens on every registry request and defu merges your config files, so none of this was academic. Declared floors were raised for `undici`, `defu`, and `tinyglobby` -- picomatch arrives via tinyglobby, so that's where its floor had to go -- meaning a fresh install can't quietly resolve back down into a vulnerable version.
+- **The published GitHub Action passes its inputs via `env:`** -- instead of interpolating `${{ inputs.* }}` directly into a shell script, which is the Actions script-injection classic. `mode` is now validated against the known enum before anything else runs.
+- **Every workflow action is pinned to a commit SHA** -- tags move. Commits don't.
 
 ### Fixed
 
 - **Complex version ranges are no longer rewritten to bare pins** -- comparator, compound, OR, hyphen, and wildcard ranges now stay untouched when depfresh cannot preserve their semantics faithfully. Preservable x-ranges still update in place while keeping their shape, so `1.x` can become `2.x` and `1.2.x` can become `1.9.x` instead of collapsing to exact pins.
+- **`--profile` reports real numbers on interactive runs** -- `networkFetches` and `dedupeHits` were always `0` in a terminal, because the interactive path resolved packages without the shared context that counts them. Two metrics that are silently zero are worse than two metrics you don't have: they're reassuring.
+
+### Changed
+
+- **Interactive runs now resolve packages concurrently** -- all packages fan out through one shared limiter, with in-flight registry fetches deduplicated across workspace packages. That's the same path piped and JSON output have used since 1.1.0; the progress-bar path had been resolving one package at a time this whole while. Watching a progress bar used to cost you the thing it was measuring.
+
+### Internal
+
+- **Test suite no longer assumes a specific Node version** -- better-sqlite3's native-module tests skip cleanly when the compiled binary doesn't match the running Node, and CLI stderr assertions filter out `DeprecationWarning`/`ExperimentalWarning` noise instead of failing on it. The smoke test now reads the expected version from `package.json` instead of hardcoding one, which is why nobody had to remember to update it today.
+- **Characterization tests for both `run-check` resolution paths** -- written before the two paths were unified, so the unification had something to be measured against rather than vibes.
 
 ## [1.1.2] - 2026-03-31
 
@@ -17,7 +37,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Semver
 
 ## [1.1.0] - 2026-03-29
 
-The "stop lying about where you are and what just failed" release. depfresh now understands project roots instead of blindly trusting the current directory, keeps nested workspace roots visible instead of pretending they don't exist, and stops reporting a clean run when every dependency resolution just exploded. First slice only. Still `Unreleased` until the full fix plan lands.
+The "stop lying about where you are and what just failed" release. depfresh now understands project roots instead of blindly trusting the current directory, keeps nested workspace roots visible instead of pretending they don't exist, and stops reporting a clean run when every dependency resolution just exploded. First slice only.
 
 ### Added
 

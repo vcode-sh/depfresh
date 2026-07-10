@@ -10,11 +10,11 @@ Two entry points: `src/cli/index.ts` (CLI via citty) and `src/index.ts` (library
 
 - **CLI** (`src/cli/`) — Arg parsing with citty, calls `resolveConfig()` then `check()`
 - **Config** (`src/config.ts`) — Merges CLI args > `.depfreshrc`/`package.json#depfresh` > defaults (jiti + defu)
-- **Check** (`src/commands/check/`) — Orchestrates: load packages -> resolve each -> render -> interactive select -> write
-- **Package loading** (`src/io/packages.ts`) — Finds `package.json` files via tinyglobby, detects indentation
-- **Dependency parsing** (`src/io/dependencies.ts`) — Extracts deps from standard fields + overrides/resolutions, handles npm:/jsr: protocols
-- **Resolution** (`src/io/resolve.ts`) — Fetches registry metadata with p-limit concurrency, SQLite cache (`~/.depfresh/cache.db`) with memory fallback
-- **Registry** (`src/io/registry.ts`) — npm (abbreviated metadata) and JSR registries, retry with exponential backoff
+- **Check** (`src/commands/check/`) — Orchestrates: load packages -> resolve all packages concurrently -> render -> interactive select -> write. Resolution fans out across every package through one shared `ResolveContext` (p-limit + in-flight fetch dedup) on every output mode, interactive included; rendering and writing stay ordered.
+- **Package loading** (`src/io/packages/`) — Finds `package.json` files via tinyglobby, detects indentation
+- **Dependency parsing** (`src/io/dependencies/`) — Extracts deps from standard fields + overrides/resolutions, handles npm:/jsr: protocols
+- **Resolution** (`src/io/resolve/`) — Fetches registry metadata with p-limit concurrency, SQLite cache (`~/.depfresh/cache.db`) with memory fallback
+- **Registry** (`src/io/registry.ts`) — npm (full packument, `accept: application/json`) and JSR registries, retry with exponential backoff
 - **Write** (`src/io/write/`) — Writes updated versions preserving formatting and indentation
 - **Catalogs** (`src/io/catalogs/`) — Loaders for pnpm/bun/yarn workspace catalogs
 - **Addons** (`src/addons/`) — Plugin system with lifecycle hooks
@@ -77,7 +77,7 @@ pnpm typecheck         # tsc --noEmit
 
 **Build:** unbuild with rollup, inlines dependencies, externalizes better-sqlite3 (native module)
 
-**Package manager:** pnpm 10.30.1
+**Package manager:** pnpm — see the `packageManager` field in `package.json` for the pinned version (don't copy it here; that's how it drifted last time)
 
 ## Review Guidelines
 
