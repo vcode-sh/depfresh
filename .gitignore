@@ -30,6 +30,7 @@ debug.log
 # Internal docs
 /audit/**
 !/audit/taze-open-backlog-*.json
+/plans/
 
 # AI
 .claude/
