@@ -4,6 +4,16 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Semver
 
 ## Unreleased
 
+### Added
+
+- **Versioned repository model** -- the public read-only `inspectRepository()` API emits stable
+  repository-relative source, manifest, catalog, occurrence, relationship, diagnostic, and
+  evidence-reference entities under schema version `1`. Exact source bytes are SHA-256 hashed,
+  repeated names remain separate by owner and nested path, catalog owners and consumers are linked
+  explicitly, and ambiguous or out-of-root states become deterministic diagnostics. Normal check
+  discovery now consumes the model's compatibility projection instead of maintaining a second
+  package-discovery path.
+
 ### Security
 
 - **Repository discovery is contained to one canonical root** -- workspace patterns containing

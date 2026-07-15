@@ -85,6 +85,28 @@ export default defineConfig({
 
 ---
 
+## `inspectRepository(options)`
+
+Builds the versioned, deterministic, read-only repository model. It reads contained manifests and
+catalogs, hashes exact source bytes, and records exact dependency occurrences and relationships. It
+does not contact registries, write files, run package managers, or exit the process.
+
+```ts
+function inspectRepository(options: InspectRepositoryOptions): Promise<RepositoryModel>
+```
+
+```ts
+import { inspectRepository } from 'depfresh'
+
+const model = await inspectRepository({ cwd: process.cwd() })
+console.log(model.schemaVersion, model.occurrences.length)
+```
+
+See [Repository Model](./repository-model.md) for IDs, hashes, diagnostics, and forward-version
+behavior.
+
+---
+
 ## `loadPackages(options)`
 
 Finds and parses package manifests (`package.json`, `package.yaml`) in your project. Respects `recursive`, `ignorePaths`, `ignoreOtherWorkspaces`. Loads workspace catalogs (pnpm, bun, yarn) only when `recursive: true`, and supports global packages when `global: true` (single detected manager) or `globalAll: true` (npm + pnpm + bun).
@@ -178,7 +200,7 @@ function writePackage(
   pkg: PackageMeta,
   changes: ResolvedDepChange[],
   loglevel?: 'silent' | 'info' | 'debug',
-): void
+): WriteOutcome[]
 ```
 
 ```ts
@@ -190,7 +212,7 @@ const [pkg] = await loadPackages(options)
 const resolved = await resolvePackage(pkg, options)
 const minorOnly = resolved.filter(d => d.diff === 'minor' || d.diff === 'patch')
 
-writePackage(pkg, minorOnly, 'silent')
+const outcomes = writePackage(pkg, minorOnly, 'silent')
 ```
 
 ---
@@ -244,7 +266,7 @@ function writeGlobalPackage(
   pm: PackageManagerName,
   name: string,
   version: string,
-): void
+): boolean
 ```
 
 ```ts

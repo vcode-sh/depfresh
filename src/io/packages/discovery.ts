@@ -11,6 +11,12 @@ import { classifyWorkspaceBoundary } from './workspace-boundary'
 import { getWorkspaceManifestPatterns } from './workspace-discovery'
 
 export async function loadPackages(options: depfreshOptions): Promise<PackageMeta[]> {
+  if (options.global || options.globalAll) return discoverPackages(options)
+  const { inspectRepositoryWithProjection } = await import('../../repository/inspect')
+  return (await inspectRepositoryWithProjection(options)).packages
+}
+
+export async function discoverPackages(options: depfreshOptions): Promise<PackageMeta[]> {
   const logger = createLogger(options.loglevel)
   const discoveryContext = resolveDiscoveryContext(options.cwd)
   const requestedRoot = options.effectiveRoot ?? discoveryContext.effectiveRoot

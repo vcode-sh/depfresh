@@ -18,6 +18,7 @@ export { loadGlobalPackages, loadGlobalPackagesAll, writeGlobalPackage } from '.
 export { loadPackages } from './io/packages'
 export { resolvePackage } from './io/resolve'
 export { writePackage } from './io/write'
+export { inspectRepository } from './repository/inspect'
 export type {
   AddonContext,
   AddonHookName,
@@ -28,6 +29,7 @@ export type {
   DiscoveryReport,
   depfreshAddon,
   depfreshOptions,
+  InspectRepositoryOptions,
   InvocationAuthority,
   NpmrcConfig,
   OutputFormat,
@@ -41,6 +43,21 @@ export type {
   RangeMode,
   RawDep,
   RegistryConfig,
+  RepositoryCatalog,
+  RepositoryCatalogConsumerRelationship,
+  RepositoryCatalogEntry,
+  RepositoryDependencyOccurrence,
+  RepositoryDependencyProtocol,
+  RepositoryDiagnostic,
+  RepositoryDiagnosticCode,
+  RepositoryModel,
+  RepositoryModelSchemaVersion,
+  RepositoryOccurrenceRole,
+  RepositoryPackageManifest,
+  RepositoryParseState,
+  RepositorySourceFile,
+  RepositorySourceFormat,
+  RepositoryWorkspaceRelationship,
   ResolvedDepChange,
   SignaturePresence,
   SortOption,
@@ -50,7 +67,11 @@ export type {
   WriteOutcomeStatus,
   WriteOutcomeSummary,
 } from './types'
-export { DEFAULT_OPTIONS, summarizeWriteOutcomes } from './types'
+export {
+  DEFAULT_OPTIONS,
+  REPOSITORY_MODEL_SCHEMA_VERSION,
+  summarizeWriteOutcomes,
+} from './types'
 
 export function defineConfig(options: Partial<import('./types').depfreshOptions>) {
   return options

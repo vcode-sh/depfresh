@@ -10,4 +10,7 @@ I exposed the internals. On purpose. You can `import` from `depfresh` and do wha
 
 - **[Types](./types.md)** -- The full type catalogue. `depfreshOptions`, `depfreshAddon`, `PackageMeta`, `ResolvedDepChange`, and everything your editor wants to autocomplete.
 
+- **[Repository Model](./repository-model.md)** -- Versioned read-only repository inspection,
+  stable IDs, exact source hashes, occurrences, catalogs, relationships, and diagnostics.
+
 - **[Errors](./errors.md)** -- Structured error classes: `RegistryError`, `CacheError`, `ConfigError`, `WriteError`, `ResolveError`, `AddonError`. All extend `depfreshError`, all have stable codes.

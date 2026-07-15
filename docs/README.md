@@ -20,6 +20,7 @@ Everything I know about depfresh is in here, split into files so you can pretend
   - [Overview](./api/overview.md) -- quick start, defaults, examples
   - [Functions](./api/functions.md) -- every exported function
   - [Types](./api/types.md) -- the type catalogue
+  - [Repository Model](./api/repository-model.md) -- deterministic read-only repository inspection
   - [Errors](./api/errors.md) -- structured error classes
 
 - **[Output Formats](./output-formats/)** -- Table, JSON, exit codes, and AI agent integration. Machines deserve documentation too. They're doing most of the work anyway.

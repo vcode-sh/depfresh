@@ -30,6 +30,25 @@ export type {
   RegistryConfig,
   SignaturePresence,
 } from './registry'
+export {
+  type InspectRepositoryOptions,
+  REPOSITORY_MODEL_SCHEMA_VERSION,
+  type RepositoryCatalog,
+  type RepositoryCatalogConsumerRelationship,
+  type RepositoryCatalogEntry,
+  type RepositoryDependencyOccurrence,
+  type RepositoryDependencyProtocol,
+  type RepositoryDiagnostic,
+  type RepositoryDiagnosticCode,
+  type RepositoryModel,
+  type RepositoryModelSchemaVersion,
+  type RepositoryOccurrenceRole,
+  type RepositoryPackageManifest,
+  type RepositoryParseState,
+  type RepositorySourceFile,
+  type RepositorySourceFormat,
+  type RepositoryWorkspaceRelationship,
+} from './repository'
 export type {
   CanonicalOccurrencePath,
   WriteOutcome,
