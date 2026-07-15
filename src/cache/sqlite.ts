@@ -1,12 +1,10 @@
 import { mkdirSync } from 'node:fs'
 import { homedir } from 'node:os'
-import Database from 'better-sqlite3'
+import { DatabaseSync } from 'node:sqlite'
 import { join } from 'pathe'
 import { CacheError } from '../errors'
 import type { PackageData } from '../types'
 import type { Cache } from './index'
-
-// TODO: Auto-detect Bun runtime and use bun:sqlite for 3-6x faster cache operations
 
 const CACHE_DIR = join(homedir(), '.depfresh')
 const CACHE_DB = join(CACHE_DIR, 'cache.db')
@@ -31,9 +29,9 @@ export function createSqliteCache(): Cache {
     return createMemoryFallback()
   }
 
-  let db: InstanceType<typeof Database>
+  let db: DatabaseSync
   try {
-    db = new Database(CACHE_DB)
+    db = new DatabaseSync(CACHE_DB)
   } catch {
     return createMemoryFallback()
   }
@@ -44,7 +42,9 @@ export function createSqliteCache(): Cache {
     db.exec(SCHEMA)
     db.exec(INDEX)
   } catch {
-    db.close()
+    try {
+      db.close()
+    } catch {}
     return createMemoryFallback()
   }
 
@@ -124,13 +124,13 @@ export function createSqliteCache(): Cache {
     },
 
     stats() {
-      let row: { count: number }
+      let row: { count: number | bigint }
       try {
-        row = countStmt.get(Date.now()) as { count: number }
+        row = countStmt.get(Date.now()) as { count: number | bigint }
       } catch (error) {
         throw new CacheError('Failed to read cache stats', { cause: error })
       }
-      return { hits, misses, size: row.count }
+      return { hits, misses, size: Number(row.count) }
     },
   }
 }

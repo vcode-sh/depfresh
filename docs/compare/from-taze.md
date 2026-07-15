@@ -41,7 +41,7 @@ These are the areas where depfresh works differently from taze. None of them sho
 
 | Area | taze | depfresh |
 |------|------|----------|
-| Node runtime | Lower baseline | `>=24` |
+| Node runtime | Lower baseline | `>=24.15.0` |
 | Structured output | Table-focused | `--output json` envelope |
 | Machine discoverability | Not available | `--help-json` |
 | Retry behavior | Limited retry paths | Exponential backoff with typed errors |
@@ -63,7 +63,7 @@ These are the areas where depfresh works differently from taze. None of them sho
 
 ## Migration Checklist
 
-1. Upgrade Node to `>=24`.
+1. Upgrade Node to `>=24.15.0`.
 2. Install depfresh and replace command invocations in scripts and CI.
 3. Rename config files and config key (`taze` -> `depfresh`).
 4. Update `defineConfig` import path.

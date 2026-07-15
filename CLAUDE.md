@@ -1,6 +1,6 @@
 # depfresh
 
-CLI tool and library for checking/updating npm dependencies. Fast, correct, zero-config. TypeScript, ESM-only, Node >= 24.
+CLI tool and library for checking/updating npm dependencies. Fast, correct, zero-config. TypeScript, ESM-only, Node >= 24.15.0.
 
 ## Architecture
 
@@ -18,7 +18,7 @@ Two entry points: `src/cli/index.ts` (CLI via citty) and `src/index.ts` (library
 - **Write** (`src/io/write/`) — Writes updated versions preserving formatting and indentation
 - **Catalogs** (`src/io/catalogs/`) — Loaders for pnpm/bun/yarn workspace catalogs
 - **Addons** (`src/addons/`) — Plugin system with lifecycle hooks
-- **Cache** (`src/cache/`) — SQLite-backed cache layer (better-sqlite3)
+- **Cache** (`src/cache/`) — SQLite-backed cache layer (`node:sqlite`)
 
 ### Key types (`src/types/`)
 
@@ -71,11 +71,11 @@ pnpm typecheck         # tsc --noEmit
 
 ## Dependencies
 
-**Runtime:** @clack/prompts, ansis, better-sqlite3, citty, defu, detect-indent, find-up-simple, ini, jiti, p-limit, pathe, pnpm-workspace-yaml, semver, tinyglobby, undici, yaml
+**Runtime:** @clack/prompts, ansis, citty, defu, detect-indent, find-up-simple, ini, jiti, p-limit, pathe, pnpm-workspace-yaml, semver, tinyglobby, undici, yaml
 
 **Dev:** @biomejs/biome, @vitest/coverage-v8, tsx, typescript, unbuild, vitest
 
-**Build:** unbuild with rollup, inlines dependencies, externalizes better-sqlite3 (native module)
+**Build:** unbuild with rollup and inlined dependencies; `node:sqlite` remains a built-in import
 
 **Package manager:** pnpm — see the `packageManager` field in `package.json` for the pinned version (don't copy it here; that's how it drifted last time)
 
@@ -86,7 +86,7 @@ pnpm typecheck         # tsc --noEmit
 - **Indentation preservation** — Write operations must preserve original file formatting (detect-indent)
 - **Concurrency** — p-limit controls parallel registry fetches; watch for race conditions in cache writes
 - **Error boundaries** — Custom error hierarchy (RegistryError, CacheError, etc.); errors should never leak raw stack traces to CLI users
-- **Native module fallback** — better-sqlite3 may not be available; memory cache fallback must work identically
+- **SQLite fallback** — the cache directory or database may be unavailable; memory fallback must work identically
 - **Exit codes** — 0 = up-to-date, 1 = outdated found, 2 = error. These are part of the public API.
 - **YAML/JSON write safety** — Catalog writes touch workspace config files; verify no data loss on round-trip
 

@@ -15,5 +15,4 @@ export default defineBuildConfig({
         chunk.fileName === 'cli.mjs' ? '#!/usr/bin/env node' : '',
     },
   },
-  externals: ['better-sqlite3'],
 })

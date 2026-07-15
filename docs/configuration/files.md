@@ -165,11 +165,11 @@ depfresh caches registry responses in a SQLite database at `~/.depfresh/cache.db
 
 ### How it works
 
-- **Engine**: better-sqlite3 with WAL mode for fast concurrent reads
+- **Engine**: Node's built-in `node:sqlite` with WAL mode for fast concurrent reads
 - **Location**: `~/.depfresh/cache.db`
 - **Default TTL**: 30 minutes (`cacheTTL: 1800000`)
 - **Cleanup**: expired entries are pruned automatically on startup
-- **Fallback**: if better-sqlite3 can't load (native module issues, exotic platform), depfresh falls back to an in-memory Map. Same interface, no persistence. You won't even notice unless you check.
+- **Fallback**: if the cache directory or database can't be opened, depfresh falls back to an in-memory Map. Same interface, no persistence. You won't even notice unless you check.
 
 ### Configuration
 

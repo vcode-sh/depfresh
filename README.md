@@ -3,7 +3,7 @@
 [![npm version](https://img.shields.io/npm/v/depfresh)](https://www.npmjs.com/package/depfresh)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9+-3178c6)](https://www.typescriptlang.org/)
-[![Node.js](https://img.shields.io/badge/Node.js-24+-339933)](https://nodejs.org/)
+[![Node.js](https://img.shields.io/badge/Node.js-24.15+-339933)](https://nodejs.org/)
 
 Keep your dependencies fresh. Taze alternative. Zero config, fast, monorepo-ready. Your AI agent already knows how to use this.
 

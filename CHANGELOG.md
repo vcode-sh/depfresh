@@ -2,6 +2,12 @@
 
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Semver because I'm not a psychopath.
 
+## Unreleased
+
+### Changed
+
+- **The registry cache now uses Node's built-in SQLite** -- `node:sqlite` replaces the native `better-sqlite3` dependency while preserving the existing WAL-backed cache and memory fallback. depfresh no longer needs a native cache build or a matching Node ABI. The minimum supported runtime is now Node 24.15.0, the first Node 24 release where `node:sqlite` is a release candidate and imports without an experimental warning.
+
 ## [1.2.0] - 2026-07-10
 
 The "stop rewriting things you don't understand" release. Three security holes closed -- one of which let a registry hand depfresh a string that ended up in a shell -- plus depfresh finally admits that `>=1.2.0` is not a version it knows how to update, and stops flattening it into a pin. Interactive runs got the concurrency the piped ones have had since 1.1.0, which means the progress bar is no longer the slowest way to use this tool. No API breaks.

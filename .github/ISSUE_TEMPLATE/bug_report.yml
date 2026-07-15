@@ -21,8 +21,8 @@ body:
     id: node-version
     attributes:
       label: Node.js version
-      description: "Run `node --version`. Must be >= 24."
-      placeholder: "v24.0.0"
+      description: "Run `node --version`. Must be >= 24.15.0."
+      placeholder: "v24.15.0"
     validations:
       required: true
 

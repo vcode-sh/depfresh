@@ -172,7 +172,7 @@ depfresh uses a SQLite cache at `~/.depfresh/cache.db` with a 30-minute TTL. To 
 rm ~/.depfresh/cache.db
 ```
 
-If `better-sqlite3` isn't available (hello, exotic environments), depfresh falls back to an in-memory cache. It works, but nothing persists between runs.
+If the cache directory or database can't be opened, depfresh falls back to an in-memory cache. It works, but nothing persists between runs.
 
 ### Large monorepos
 

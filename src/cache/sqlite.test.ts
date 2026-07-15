@@ -1,4 +1,8 @@
-import { describe, expect, it, vi } from 'vitest'
+import { execFileSync } from 'node:child_process'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import type { PackageData } from '../types'
 
 const mockData: PackageData = {
@@ -8,17 +12,21 @@ const mockData: PackageData = {
 }
 const cacheKey = 'npm|https://registry.npmjs.org/|test-pkg'
 const scopedCacheKey = 'npm|https://registry.npmjs.org/|@vue/reactivity'
-const sqliteAvailable = await import('better-sqlite3').then(
-  (mod) => {
-    try {
-      new mod.default(':memory:').close()
-      return true
-    } catch {
-      return false
-    }
-  },
-  () => false,
-)
+const originalHome = process.env.HOME
+const testHome = mkdtempSync(join(tmpdir(), 'depfresh-cache-test-'))
+
+beforeAll(() => {
+  process.env.HOME = testHome
+})
+
+afterAll(() => {
+  if (originalHome === undefined) {
+    process.env.HOME = undefined
+  } else {
+    process.env.HOME = originalHome
+  }
+  rmSync(testHome, { recursive: true, force: true })
+})
 
 describe('sqlite cache', () => {
   it('stores and retrieves data', async () => {
@@ -91,6 +99,40 @@ describe('cache round-trip with PackageData', () => {
     expect(result).toEqual(fullData)
     cache.close()
   })
+
+  it('persists data across processes', () => {
+    const writer = [
+      "import { createSqliteCache } from './src/cache/sqlite.ts'",
+      `const data = ${JSON.stringify(mockData)}`,
+      'const cache = createSqliteCache()',
+      "cache.set('npm|test|cross-process', data, 60_000)",
+      'cache.close()',
+    ].join(';')
+    const reader = [
+      "import { createSqliteCache } from './src/cache/sqlite.ts'",
+      'const cache = createSqliteCache()',
+      "process.stdout.write(JSON.stringify(cache.get('npm|test|cross-process'))) ",
+      'cache.close()',
+    ].join(';')
+    const options = {
+      cwd: process.cwd(),
+      encoding: 'utf8' as const,
+      env: { ...process.env, HOME: testHome, NODE_NO_WARNINGS: '1' },
+    }
+
+    execFileSync(
+      process.execPath,
+      ['--import', 'tsx', '--input-type=module', '--eval', writer],
+      options,
+    )
+    const output = execFileSync(
+      process.execPath,
+      ['--import', 'tsx', '--input-type=module', '--eval', reader],
+      options,
+    )
+
+    expect(JSON.parse(output)).toEqual(mockData)
+  })
 })
 
 describe('cache TTL expiration', () => {
@@ -132,9 +174,9 @@ describe('cache stats accuracy', () => {
   })
 })
 
-describe.skipIf(!sqliteAvailable)('corrupt JSON data handling', () => {
+describe('corrupt JSON data handling', () => {
   it('returns undefined for corrupt cache entries', async () => {
-    const Database = (await import('better-sqlite3')).default
+    const { DatabaseSync } = await import('node:sqlite')
     const { mkdirSync } = await import('node:fs')
     const { homedir } = await import('node:os')
     const { join } = await import('pathe')
@@ -143,7 +185,7 @@ describe.skipIf(!sqliteAvailable)('corrupt JSON data handling', () => {
     mkdirSync(cacheDir, { recursive: true })
 
     // Directly insert corrupt data into the DB
-    const db = new Database(join(cacheDir, 'cache.db'))
+    const db = new DatabaseSync(join(cacheDir, 'cache.db'))
     db.exec(`
       CREATE TABLE IF NOT EXISTS registry_cache (
         package TEXT NOT NULL,
@@ -170,7 +212,7 @@ describe.skipIf(!sqliteAvailable)('corrupt JSON data handling', () => {
   })
 
   it('invalidates legacy package-name rows on startup', async () => {
-    const Database = (await import('better-sqlite3')).default
+    const { DatabaseSync } = await import('node:sqlite')
     const { mkdirSync } = await import('node:fs')
     const { homedir } = await import('node:os')
     const { join } = await import('pathe')
@@ -178,7 +220,7 @@ describe.skipIf(!sqliteAvailable)('corrupt JSON data handling', () => {
     const cacheDir = join(homedir(), '.depfresh')
     mkdirSync(cacheDir, { recursive: true })
 
-    const db = new Database(join(cacheDir, 'cache.db'))
+    const db = new DatabaseSync(join(cacheDir, 'cache.db'))
     db.exec(`
       CREATE TABLE IF NOT EXISTS registry_cache (
         package TEXT NOT NULL,
@@ -195,7 +237,7 @@ describe.skipIf(!sqliteAvailable)('corrupt JSON data handling', () => {
 
     const { createSqliteCache } = await import('./sqlite')
     const cache = createSqliteCache()
-    const verifyDb = new Database(join(cacheDir, 'cache.db'))
+    const verifyDb = new DatabaseSync(join(cacheDir, 'cache.db'))
     const row = verifyDb
       .prepare('SELECT COUNT(*) as count FROM registry_cache WHERE package = ?')
       .get('legacy-pkg') as { count: number }
@@ -229,16 +271,16 @@ describe('scoped package names', () => {
 
 describe('memory fallback', () => {
   it('works when Database constructor throws', async () => {
-    // Force memory fallback by mocking Database to throw
-    vi.doMock('better-sqlite3', () => ({
-      default: class {
+    const databaseSyncMock = vi.fn(
+      class {
         constructor() {
           throw new Error('SQLite not available')
         }
       },
-    }))
+    )
+    vi.doMock('node:sqlite', () => ({ DatabaseSync: databaseSyncMock }))
 
-    // Must re-import to pick up the mock
+    vi.resetModules()
     const { createSqliteCache } = await import('./sqlite')
     const cache = createSqliteCache()
 
@@ -252,9 +294,36 @@ describe('memory fallback', () => {
     const stats = cache.stats()
     expect(stats.hits).toBe(1)
     expect(stats.size).toBeGreaterThanOrEqual(1)
+    expect(databaseSyncMock).toHaveBeenCalledTimes(1)
 
     cache.close()
-    vi.doUnmock('better-sqlite3')
+    vi.doUnmock('node:sqlite')
+  })
+
+  it('closes the database and falls back when schema setup fails', async () => {
+    const closeMock = vi.fn()
+    const execMock = vi.fn(() => {
+      throw new Error('schema setup failed')
+    })
+    const databaseSyncMock = vi.fn(
+      class {
+        close = closeMock
+        exec = execMock
+      },
+    )
+    vi.doMock('node:sqlite', () => ({ DatabaseSync: databaseSyncMock }))
+
+    vi.resetModules()
+    const { createSqliteCache } = await import('./sqlite')
+    const cache = createSqliteCache()
+
+    cache.set('schema-fallback', mockData, 60_000)
+    expect(cache.get('schema-fallback')).toEqual(mockData)
+    expect(databaseSyncMock).toHaveBeenCalledTimes(1)
+    expect(closeMock).toHaveBeenCalledTimes(1)
+
+    cache.close()
+    vi.doUnmock('node:sqlite')
   })
 
   it('falls back to memory when the cache directory cannot be created', async () => {
@@ -282,8 +351,8 @@ describe('memory fallback', () => {
   })
 
   it('memory fallback expires entries', async () => {
-    vi.doMock('better-sqlite3', () => ({
-      default: class {
+    vi.doMock('node:sqlite', () => ({
+      DatabaseSync: class {
         constructor() {
           throw new Error('SQLite not available')
         }
@@ -300,6 +369,6 @@ describe('memory fallback', () => {
     expect(result).toBeUndefined()
 
     cache.close()
-    vi.doUnmock('better-sqlite3')
+    vi.doUnmock('node:sqlite')
   })
 })
