@@ -5,6 +5,7 @@ import type {
   ProfileReport,
   ResolvedDepChange,
 } from '../../types'
+import { getSafeErrorDetails, redactSensitiveText } from '../../utils/redact'
 
 export interface JsonPackage {
   name: string
@@ -71,6 +72,7 @@ interface JsonOutput {
 interface JsonErrorOutput {
   error: {
     code: string
+    reason: string
     message: string
     retryable: boolean
   }
@@ -129,7 +131,7 @@ export function outputJsonEnvelope(
       schemaVersion: 1,
       cwd: options.cwd,
       effectiveRoot: options.effectiveRoot ?? options.cwd,
-      mode: options.mode,
+      mode: redactSensitiveText(options.mode),
       timestamp: new Date().toISOString(),
       noPackagesFound: executionState.noPackagesFound,
       hadResolutionErrors: executionState.failedResolutions > 0,
@@ -146,20 +148,19 @@ export function outputJsonEnvelope(
 }
 
 export function outputJsonError(error: unknown, options: { cwd: string; mode: string }): void {
-  const code =
-    error instanceof Error && 'code' in error ? (error as { code: string }).code : 'ERR_UNKNOWN'
-  const message = error instanceof Error ? error.message : String(error)
+  const { code, message, reason } = getSafeErrorDetails(error)
 
   const output: JsonErrorOutput = {
     error: {
       code,
+      reason,
       message,
       retryable: RETRYABLE_CODES.has(code),
     },
     meta: {
       schemaVersion: 1,
-      cwd: options.cwd,
-      mode: options.mode,
+      cwd: redactSensitiveText(options.cwd),
+      mode: redactSensitiveText(options.mode),
       timestamp: new Date().toISOString(),
     },
   }

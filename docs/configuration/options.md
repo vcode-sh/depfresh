@@ -75,7 +75,8 @@ Every option from the `depfreshOptions` interface. I documented all of them beca
 
 ## Post-Write
 
-These only matter when `write: true`.
+These require explicit write authority from the active CLI or API invocation. Values placed in a
+config file are ignored and cannot authorize writes or commands.
 
 | Option | Type | Default | Description |
 |---|---|---|---|

@@ -1,5 +1,5 @@
 import * as semver from 'semver'
-import type { DiffType, ProvenanceLevel, ResolvedDepChange } from '../../../types'
+import type { DiffType, ResolvedDepChange, SignaturePresence } from '../../../types'
 import { timeDifference } from '../../../utils/format'
 import { applyVersionPrefix, getDiff, getVersionPrefix } from '../../../utils/versions'
 
@@ -12,7 +12,7 @@ export interface DetailVersion {
   distTag?: string
   deprecated?: string
   nodeEngines?: string
-  provenance?: ProvenanceLevel
+  signaturePresence?: SignaturePresence
   explain?: string
 }
 
@@ -42,7 +42,7 @@ export function prepareDetailVersions(dep: ResolvedDepChange, explain: boolean):
     const distTag = tagsByVersion.get(version)
     const deprecated = pkgData.deprecated?.[version]
     const nodeEngines = pkgData.engines?.[version]
-    const provenance = pkgData.provenance?.[version]
+    const signaturePresence = pkgData.signaturePresence?.[version]
     const nodeIncompat =
       typeof nodeEngines === 'string' && !semver.satisfies(process.version, nodeEngines)
 
@@ -51,10 +51,15 @@ export function prepareDetailVersions(dep: ResolvedDepChange, explain: boolean):
     if (distTag) result.distTag = distTag
     if (deprecated) result.deprecated = deprecated
     if (nodeEngines) result.nodeEngines = nodeEngines
-    if (provenance) result.provenance = provenance
+    if (signaturePresence) result.signaturePresence = signaturePresence
 
     if (explain) {
-      result.explain = getExplanation(diff, deprecated, provenance === 'none', nodeIncompat)
+      result.explain = getExplanation(
+        diff,
+        deprecated,
+        signaturePresence === 'absent',
+        nodeIncompat,
+      )
     }
 
     return result
@@ -64,7 +69,7 @@ export function prepareDetailVersions(dep: ResolvedDepChange, explain: boolean):
 export function getExplanation(
   diff: DiffType,
   deprecated?: string,
-  provenanceDowngrade?: boolean,
+  signatureMetadataAbsent?: boolean,
   nodeIncompat?: boolean,
 ): string {
   const parts: string[] = []
@@ -82,7 +87,7 @@ export function getExplanation(
   }
 
   if (deprecated) parts.push('Deprecated.')
-  if (provenanceDowngrade) parts.push('Provenance downgrade.')
+  if (signatureMetadataAbsent) parts.push('Signature metadata absent.')
   if (nodeIncompat) parts.push('Node incompatible.')
 
   return parts.join(' ')

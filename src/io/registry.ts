@@ -1,8 +1,9 @@
 import * as semver from 'semver'
 import { RegistryError, ResolveError } from '../errors'
-import type { NpmrcConfig, PackageData, ProvenanceLevel, RegistryConfig } from '../types'
+import type { NpmrcConfig, PackageData, RegistryConfig, SignaturePresence } from '../types'
 import type { Logger } from '../utils/logger'
 import { getRegistryForPackage } from '../utils/npmrc'
+import { redactSensitiveText } from '../utils/redact'
 import { getFetchTransportInit } from './transport'
 
 interface FetchOptions {
@@ -60,7 +61,7 @@ async function fetchNpmPackage(
   const time = (json.time ?? {}) as Record<string, string>
   const deprecated: Record<string, string> = {}
 
-  const provenance: Record<string, ProvenanceLevel> = {}
+  const signaturePresence: Record<string, SignaturePresence> = {}
   const engines: Record<string, string> = {}
 
   for (const [ver, data] of Object.entries(versionsObj)) {
@@ -71,7 +72,7 @@ async function fetchNpmPackage(
     const hasSignatures =
       data.hasSignatures ||
       (Array.isArray(dist?.signatures) && (dist.signatures as unknown[]).length > 0)
-    provenance[ver] = hasSignatures ? 'attested' : 'none'
+    signaturePresence[ver] = hasSignatures ? 'present' : 'absent'
     const enginesObj = data.engines as Record<string, string> | undefined
     if (enginesObj?.node) {
       engines[ver] = enginesObj.node
@@ -84,7 +85,7 @@ async function fetchNpmPackage(
     distTags,
     time,
     deprecated: Object.keys(deprecated).length > 0 ? deprecated : undefined,
-    provenance: Object.keys(provenance).length > 0 ? provenance : undefined,
+    signaturePresence: Object.keys(signaturePresence).length > 0 ? signaturePresence : undefined,
     engines: Object.keys(engines).length > 0 ? engines : undefined,
     description: json.description as string | undefined,
     homepage: json.homepage as string | undefined,
@@ -231,7 +232,9 @@ async function fetchWithRetry(
 
     if (attempt < options.retries) {
       const delay = Math.min(1000 * 2 ** attempt, 5000)
-      options.logger.debug(`Retry ${attempt + 1}/${options.retries} for ${url} in ${delay}ms`)
+      options.logger.debug(
+        `Retry ${attempt + 1}/${options.retries} for ${redactSensitiveText(url)} in ${delay}ms`,
+      )
       await sleep(delay)
       return fetchWithRetry(url, headers, options, attempt + 1)
     }

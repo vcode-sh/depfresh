@@ -2,12 +2,19 @@ import { performance } from 'node:perf_hooks'
 import c from 'ansis'
 import { createAddonLifecycle } from '../../addons'
 import { createSqliteCache } from '../../cache/index'
+import { createInvocationAuthority, snapshotInvocationAuthority } from '../../invocation-authority'
 import { loadPackages } from '../../io/packages'
 import { resolveDiscoveryContext } from '../../io/packages/root-detection'
 import { createResolveContext, resolvePackage } from '../../io/resolve'
-import type { depfreshOptions, PackageMeta, ResolvedDepChange } from '../../types'
+import type {
+  depfreshOptions,
+  InvocationAuthority,
+  PackageMeta,
+  ResolvedDepChange,
+} from '../../types'
 import { createLogger } from '../../utils/logger'
 import { loadNpmrc } from '../../utils/npmrc'
+import { getSafeErrorDetails } from '../../utils/redact'
 import { validateOptions } from '../../validate-options'
 import {
   buildJsonPackage,
@@ -23,7 +30,11 @@ import { type ProcessPackageHooks, processPackage } from './process-package'
 import { createCheckProgress } from './progress'
 import { renderResolutionErrors, renderTable } from './render'
 
-export async function check(options: depfreshOptions): Promise<number> {
+export async function check(
+  options: depfreshOptions,
+  requestedAuthority: InvocationAuthority = createInvocationAuthority(options),
+): Promise<number> {
+  const authority = snapshotInvocationAuthority(requestedAuthority)
   const totalStart = performance.now()
   const logLevel = options.output === 'json' ? 'silent' : options.loglevel
   const addonOptions: depfreshOptions = {
@@ -38,7 +49,7 @@ export async function check(options: depfreshOptions): Promise<number> {
   }
 
   try {
-    validateOptions(runtimeOptions)
+    validateOptions(runtimeOptions, authority)
     await addons.setup()
 
     const discoveryStart = performance.now()
@@ -183,6 +194,7 @@ export async function check(options: depfreshOptions): Promise<number> {
         await processPackage(
           pkg,
           runtimeOptions,
+          authority,
           packageHooks(pkg),
           pendingResolutions.get(pkg),
           true,
@@ -214,16 +226,16 @@ export async function check(options: depfreshOptions): Promise<number> {
     let postWriteFailed = false
     const postWriteStart = performance.now()
 
-    if (options.execute && options.write && didWrite) {
+    if (authority.execute && options.execute && authority.write && didWrite) {
       const executeSucceeded = await runExecute(options.execute, executionRoot, logger)
       postWriteFailed = postWriteFailed || !executeSucceeded
     }
 
-    if (options.write && didWrite) {
-      if (options.update) {
+    if (authority.write && didWrite) {
+      if (authority.update && options.update) {
         const updateSucceeded = await runUpdate(executionRoot, packages, logger)
         postWriteFailed = postWriteFailed || !updateSucceeded
-      } else if (options.install) {
+      } else if (authority.install && options.install) {
         const installSucceeded = await runInstall(executionRoot, packages, logger)
         postWriteFailed = postWriteFailed || !installSucceeded
       }
@@ -282,7 +294,7 @@ export async function check(options: depfreshOptions): Promise<number> {
     if (options.output === 'json') {
       outputJsonError(error, { cwd: options.cwd, mode: options.mode })
     } else {
-      logger.error('Check failed:', error instanceof Error ? error.message : String(error))
+      logger.error('Check failed:', getSafeErrorDetails(error).message)
     }
     return 2
   }

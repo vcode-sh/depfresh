@@ -186,6 +186,44 @@ describe('invalid numeric config values', () => {
   })
 })
 
+describe('invalid enum config values', () => {
+  let tmpDir: string
+
+  afterEach(() => {
+    if (tmpDir) {
+      rmSync(tmpDir, { recursive: true, force: true })
+    }
+  })
+
+  it.each([
+    ['mode', 'everything', '--mode'],
+    ['output', 'xml', '--output'],
+    ['sort', 'random', '--sort'],
+    ['loglevel', 'trace', '--loglevel'],
+  ])('rejects invalid %s from package.json config', async (key, value, flag) => {
+    tmpDir = mkdtempSync(join(tmpdir(), 'depfresh-config-invalid-enum-'))
+    writeFileSync(
+      join(tmpDir, 'package.json'),
+      JSON.stringify({ name: 'root', depfresh: { [key]: value } }, null, 2),
+    )
+
+    await expect(resolveConfig({ cwd: tmpDir })).rejects.toMatchObject({
+      reason: 'INVALID_OPTION_VALUE',
+      message: expect.stringContaining(flag),
+    })
+  })
+
+  it('assigns CONFIG_PARSE_FAILED to malformed JSON without exposing its contents', async () => {
+    tmpDir = mkdtempSync(join(tmpdir(), 'depfresh-config-malformed-json-'))
+    writeFileSync(join(tmpDir, '.depfreshrc.json'), '{"token":"top-secret",')
+
+    await expect(resolveConfig({ cwd: tmpDir })).rejects.toMatchObject({
+      reason: 'CONFIG_PARSE_FAILED',
+      message: expect.not.stringContaining('top-secret'),
+    })
+  })
+})
+
 describe('invalid option combinations from config', () => {
   let tmpDir: string
 
@@ -195,36 +233,68 @@ describe('invalid option combinations from config', () => {
     }
   })
 
-  it('rejects interactive json output from package.json depfresh config', async () => {
+  it('does not let package.json config grant write authority', async () => {
     tmpDir = mkdtempSync(join(tmpdir(), 'depfresh-config-invalid-combo-'))
     writeFileSync(
       join(tmpDir, 'package.json'),
       JSON.stringify(
-        { name: 'root', depfresh: { interactive: true, write: true, output: 'json' } },
+        {
+          name: 'root',
+          depfresh: {
+            write: true,
+            install: true,
+            update: true,
+            execute: 'touch should-not-run',
+            verifyCommand: 'touch should-not-run',
+          },
+        },
         null,
         2,
       ),
     )
 
-    await expect(resolveConfig({ cwd: tmpDir, loglevel: 'silent' })).rejects.toThrow(
-      'Interactive mode cannot be used with JSON output',
-    )
+    const config = await resolveConfig({ cwd: tmpDir, loglevel: 'silent' })
+
+    expect(config).toMatchObject({ write: false, install: false, update: false })
+    expect(config.execute).toBeUndefined()
+    expect(config.verifyCommand).toBeUndefined()
   })
 
-  it('rejects json output with execute from package.json depfresh config', async () => {
-    tmpDir = mkdtempSync(join(tmpdir(), 'depfresh-config-invalid-execute-'))
+  it('does not let config select a global write target', async () => {
+    tmpDir = mkdtempSync(join(tmpdir(), 'depfresh-config-global-authority-'))
     writeFileSync(
       join(tmpDir, 'package.json'),
-      JSON.stringify(
-        { name: 'root', depfresh: { write: true, output: 'json', execute: 'echo done' } },
-        null,
-        2,
-      ),
+      JSON.stringify({ name: 'root', depfresh: { global: true, globalAll: true } }, null, 2),
     )
 
-    await expect(resolveConfig({ cwd: tmpDir, loglevel: 'silent' })).rejects.toThrow(
-      'JSON output cannot be used with --execute, --install, or --update',
-    )
+    const config = await resolveConfig({ cwd: tmpDir, loglevel: 'silent', write: true })
+
+    expect(config.write).toBe(true)
+    expect(config.global).toBe(false)
+    expect(config.globalAll).toBe(false)
+  })
+
+  it('preserves side-effect values supplied explicitly by the library caller', async () => {
+    tmpDir = mkdtempSync(join(tmpdir(), 'depfresh-config-explicit-authority-'))
+    writeFileSync(join(tmpDir, 'package.json'), JSON.stringify({ name: 'root' }))
+
+    const config = await resolveConfig({
+      cwd: tmpDir,
+      loglevel: 'silent',
+      write: true,
+      install: true,
+      execute: 'pnpm test',
+      verifyCommand: 'pnpm typecheck',
+      global: true,
+    })
+
+    expect(config).toMatchObject({
+      write: true,
+      install: true,
+      execute: 'pnpm test',
+      verifyCommand: 'pnpm typecheck',
+      global: true,
+    })
   })
 })
 

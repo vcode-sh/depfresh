@@ -55,7 +55,7 @@ export function renderRows(
       line += `  ${renderTimediff(dep.publishedAt, layout.ageWidth)}`
     }
 
-    if (hasProvenanceDowngrade(dep)) {
+    if (hasSignatureMetadataLoss(dep)) {
       line += `  ${c.yellow('\u26A0')}`
     }
 
@@ -101,9 +101,6 @@ export function renderTimediff(publishedAt: string | undefined, ageWidth: number
   return visualPadStart(colorFn(td.text), ageWidth)
 }
 
-export function hasProvenanceDowngrade(dep: ResolvedDepChange): boolean {
-  return (
-    (dep.currentProvenance === 'trusted' || dep.currentProvenance === 'attested') &&
-    dep.provenance === 'none'
-  )
+export function hasSignatureMetadataLoss(dep: ResolvedDepChange): boolean {
+  return dep.currentSignaturePresence === 'present' && dep.signaturePresence === 'absent'
 }

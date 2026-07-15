@@ -147,6 +147,29 @@ Spits out a single JSON envelope to stdout. All log output is automatically supp
 | `currentVersion` | `string` | The current version/range seen in the manifest |
 | `message` | `string` | Error description |
 
+Fatal input and runtime failures use a single error envelope instead of `packages`:
+
+```json
+{
+  "error": {
+    "code": "ERR_CONFIG",
+    "reason": "UNKNOWN_OPTION",
+    "message": "Unknown option: --wat",
+    "retryable": false
+  },
+  "meta": {
+    "schemaVersion": 1,
+    "cwd": "/path/to/project",
+    "mode": "default",
+    "timestamp": "2026-07-15T12:00:00.000Z"
+  }
+}
+```
+
+`reason` is the stable machine-specific classification. Messages and nested failure details are
+redacted before rendering; credentials, authorization values, and sensitive URL parameters are
+never emitted in this envelope.
+
 ### `discovery`
 
 Present only when `--explain-discovery` is enabled.

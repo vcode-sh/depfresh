@@ -43,7 +43,7 @@ describe('global write dispatch', () => {
     ])
 
     const { check } = await import('./index')
-    await check({ ...baseOptions, write: true })
+    await check({ ...baseOptions, write: true, global: true })
 
     expect(mocks.writeGlobalPackageMock).toHaveBeenCalledWith('npm', 'typescript', '6.0.0')
     expect(mocks.writePackageMock).not.toHaveBeenCalled()
@@ -78,7 +78,7 @@ describe('global write dispatch', () => {
     ])
 
     const { check } = await import('./index')
-    await check({ ...baseOptions, write: true })
+    await check({ ...baseOptions, write: true, global: true })
 
     expect(mocks.writeGlobalPackageMock).toHaveBeenCalledWith('pnpm', 'eslint', '9.0.0')
   })
@@ -101,7 +101,7 @@ describe('global write dispatch', () => {
     ])
 
     const { check } = await import('./index')
-    await check({ ...baseOptions, write: true })
+    await check({ ...baseOptions, write: true, global: true })
 
     expect(mocks.writeGlobalPackageMock).toHaveBeenCalledWith('bun', 'tsx', '4.1.0')
     expect(mocks.writePackageMock).not.toHaveBeenCalled()
@@ -141,7 +141,7 @@ describe('global write dispatch', () => {
     ])
 
     const { check } = await import('./index')
-    await check({ ...baseOptions, write: true })
+    await check({ ...baseOptions, write: true, globalAll: true })
 
     expect(mocks.writeGlobalPackageMock).toHaveBeenCalledWith('npm', 'typescript', '6.0.0')
     expect(mocks.writeGlobalPackageMock).toHaveBeenCalledWith('pnpm', 'typescript', '6.0.0')

@@ -54,7 +54,10 @@ Machine-discoverability command: `depfresh capabilities --json`.
 
 ## Validation Rules
 
-depfresh validates enum flags strictly. Invalid values are rejected with exit code `2`:
+depfresh validates the complete argv contract before discovery, registry requests, writes, or
+commands. Unknown flags, missing values, extra positional arguments, malformed boolean
+assignments, and conflicting repeated singleton values are rejected with exit code `2` and a
+stable reason code. Enum values are also strict:
 
 - `--mode`
 - `--output`
@@ -62,6 +65,10 @@ depfresh validates enum flags strictly. Invalid values are rejected with exit co
 - `--loglevel`
 
 This applies to both normal flag usage and positional mode shorthand (`depfresh <mode>`).
+
+`--deps-only` conflicts with `--dev-only`. `--install` conflicts with `--update`. Every post-write
+flag requires `--write`. `--version` must be used alone. Use `--name=value` when a string value
+intentionally starts with `-`, such as `--include=--write`.
 
 ## Machine Discoverability
 
@@ -125,13 +132,14 @@ The output includes supported flags, defaults, valid enum values, and exit-code 
 
 ## Post-Write
 
-These flags only do anything when `--write` is also present. Without `--write`, they sit there silently judging you.
+These flags require `--write` in the same invocation. Without it, depfresh exits `2` before
+discovery or side effects.
 
 | Flag | Alias | Type | Default | Description |
 |------|-------|------|---------|-------------|
 | `--execute <command>` | `-e` | string | -- | Run a shell command after all updates are written. Runs once, after everything. E.g. `--execute "pnpm test"`. |
-| `--install` | `-i` | boolean | `false` | Auto-detect your package manager and run `install` after writing. Mutually exclusive with `--update` (update wins). |
-| `--update` | `-u` | boolean | `false` | Auto-detect your package manager and run `update` instead of `install` after writing. Takes priority over `--install`. |
+| `--install` | `-i` | boolean | `false` | Auto-detect your package manager and run `install` after writing. Mutually exclusive with `--update`. |
+| `--update` | `-u` | boolean | `false` | Auto-detect your package manager and run `update` after writing. Mutually exclusive with `--install`. |
 | `--strict-post-write` | -- | boolean | `false` | Exit with code `2` when post-write `execute`, `install`, or `update` steps fail. Without this flag, depfresh logs the failure and continues. |
 | `--verify-command <cmd>` | `-V` | string | -- | Run a command after *each individual* dependency update. If the command fails, that update is reverted. The nuclear option for cautious people. See [Verify Command](#verify-command). |
 

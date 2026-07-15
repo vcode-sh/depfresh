@@ -2,12 +2,12 @@
 
 Everything you can import and call. Each one does exactly what the name says, which is more than I can say for most npm packages.
 
-## `check(options)`
+## `check(options, authority?)`
 
 The main event. Loads packages, resolves dependencies against the registry, renders output, and optionally writes updates. Everything the CLI does, minus the argument parsing.
 
 ```ts
-function check(options: depfreshOptions): Promise<number>
+function check(options: depfreshOptions, authority?: InvocationAuthority): Promise<number>
 ```
 
 **Returns** an exit code:
@@ -26,11 +26,17 @@ if (code === 2) {
 }
 ```
 
+When `authority` is omitted, `check()` creates an immutable authority snapshot from the options
+supplied by that direct library call. Config-file values cannot grant authority because
+`resolveConfig()` removes invocation-only options before merging. Advanced wrappers may pass an
+explicit `InvocationAuthority`; an option that requests more than that object grants fails with
+reason `AUTHORITY_REQUIRED` before discovery or side effects.
+
 ---
 
 ## `resolveConfig(overrides?)`
 
-Merges your overrides with config file values (`.depfreshrc`, `depfresh.config.ts`, `package.json#depfresh`) and `DEFAULT_OPTIONS`. Config file wins over defaults. Your overrides win over everything.
+Merges your overrides with config file values (`.depfreshrc`, `depfresh.config.ts`, `package.json#depfresh`) and `DEFAULT_OPTIONS`. Config file wins over defaults. Your overrides win over everything. Invocation-only options are retained only when supplied directly in `overrides`; config-file values for `write`, install/update/command execution, and global writes are ignored.
 
 ```ts
 function resolveConfig(overrides?: Partial<depfreshOptions>): Promise<depfreshOptions>

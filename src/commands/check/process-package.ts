@@ -1,6 +1,11 @@
 import type { createSqliteCache } from '../../cache/index'
 import { resolvePackage } from '../../io/resolve'
-import type { depfreshOptions, PackageMeta, ResolvedDepChange } from '../../types'
+import type {
+  depfreshOptions,
+  InvocationAuthority,
+  PackageMeta,
+  ResolvedDepChange,
+} from '../../types'
 import type { Logger } from '../../utils/logger'
 import type { loadNpmrc } from '../../utils/npmrc'
 import { selectInteractiveUpdates } from './post-write-actions'
@@ -27,6 +32,7 @@ export interface ProcessPackageHooks {
 export async function processPackage(
   pkg: PackageMeta,
   options: depfreshOptions,
+  authority: InvocationAuthority,
   hooks: ProcessPackageHooks,
   preResolved?: Promise<ResolvedDepChange[]> | ResolvedDepChange[],
   skipBeforePackageStart = false,
@@ -65,14 +71,14 @@ export async function processPackage(
       ? await selectInteractiveUpdates(updates, options.explain)
       : updates
 
-    if (!options.write || selected.length === 0) return
+    if (!(options.write && authority.write) || selected.length === 0) return
 
     const shouldWrite = await hooks.beforePackageWrite(pkg, selected)
     if (!shouldWrite) return
 
     hooks.onPlannedUpdates(selected.length)
 
-    const writeResult = await applyPackageWrite(pkg, selected, options, hooks.logger)
+    const writeResult = await applyPackageWrite(pkg, selected, options, authority, hooks.logger)
     hooks.onWriteResult(writeResult)
 
     if (writeResult.didWrite) {

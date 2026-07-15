@@ -71,7 +71,7 @@ describe('renderDetailVersionLine', () => {
           distTag: 'latest',
           explain: 'Breaking change. Check migration guide.',
           deprecated: 'Use v3',
-          provenance: 'none',
+          signaturePresence: 'absent',
           nodeEngines: '>=999.0.0',
           age: { text: '~5d', color: 'yellow' },
         },
@@ -83,7 +83,8 @@ describe('renderDetailVersionLine', () => {
     expect(line).toContain('latest')
     expect(line).toContain('Breaking change. Check migration guide.')
     expect(line).toContain('deprecated')
-    expect(line).toContain('no-provenance')
+    expect(line).toContain('no-signature-metadata')
+    expect(line).not.toContain('provenance')
     expect(line).toContain('node >=999.0.0')
     expect(line).toContain('~5d')
   })

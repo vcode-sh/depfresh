@@ -1,6 +1,9 @@
 # Error Classes
 
-All errors thrown by depfresh extend `depfreshError`, which gives you a stable `code` string for branching and an optional `cause` for wrapping underlying failures. Import them directly:
+All errors thrown by depfresh extend `depfreshError`, which gives you a stable broad `code`, a
+specific `reason`, and an optional `cause` for wrapping underlying failures. Rendered CLI and JSON
+errors redact credentials, authorization values, sensitive query parameters, and nested causes.
+Import them directly:
 
 ```ts
 import {
@@ -16,15 +19,15 @@ import {
 
 ## Error Reference
 
-| Class | Code | When it fires |
-|-------|------|---------------|
-| `depfreshError` | (base) | Abstract base. Use `instanceof depfreshError` to catch everything depfresh throws. |
-| `RegistryError` | `ERR_REGISTRY` | HTTP errors from the npm/JSR registry. Has `.status` (number) and `.url` (string). 4xx errors don't retry. 5xx errors do. |
-| `CacheError` | `ERR_CACHE` | SQLite failures, corrupt entries, connection issues. depfresh logs and falls back to memory cache -- you'll only see this if you're using the cache API directly. |
-| `AddonError` | `ERR_ADDON` | Addon hook failures. Includes `.addon` and `.hook` to identify the failing plugin and lifecycle stage. |
-| `ConfigError` | `ERR_CONFIG` | Invalid config file, malformed regex patterns in `include`/`exclude`, bad `packageMode` entries. Thrown during `resolveConfig()` or `parseDependencies()`. |
-| `WriteError` | `ERR_WRITE` | File system failures during package writes. Permission denied, disk full, the usual suspects. |
-| `ResolveError` | `ERR_RESOLVE` | Network timeouts, DNS failures, fetch errors that aren't HTTP status codes. The "something went wrong between you and the registry" bucket. |
+| Class | Code | Typical reasons | When it fires |
+|-------|------|-----------------|---------------|
+| `depfreshError` | (base) | `UNKNOWN_ERROR` | Abstract base. Use `instanceof depfreshError` to catch everything depfresh throws. |
+| `RegistryError` | `ERR_REGISTRY` | `REGISTRY_REQUEST_FAILED` | HTTP errors from the npm/JSR registry. Has `.status` and a redacted `.url`. |
+| `CacheError` | `ERR_CACHE` | `CACHE_FAILURE` | SQLite failures, corrupt entries, or connection issues. |
+| `AddonError` | `ERR_ADDON` | `ADDON_FAILURE` | Addon hook failures. Includes `.addon` and `.hook`. |
+| `ConfigError` | `ERR_CONFIG` | `UNKNOWN_OPTION`, `MISSING_OPTION_VALUE`, `CONFLICTING_OPTION`, `INVALID_BOOLEAN`, `INVALID_OPTION_VALUE`, `UNSUPPORTED_COMBINATION`, `AUTHORITY_REQUIRED`, `CONFIG_LOAD_FAILED`, `CONFIG_PARSE_FAILED`, `INVALID_CONFIG` | Invalid argv, config, or invocation authority. |
+| `WriteError` | `ERR_WRITE` | `WRITE_FAILURE` | File system failures during package writes. |
+| `ResolveError` | `ERR_RESOLVE` | `RESOLUTION_FAILURE` | Network timeouts, DNS failures, and non-HTTP fetch errors. |
 
 ## Usage
 
@@ -45,4 +48,5 @@ try {
 }
 ```
 
-Every error includes a `cause` property when wrapping a lower-level failure, so `error.cause` gives you the original `SyntaxError`, `TypeError`, or whatever cursed thing the runtime produced.
+Every error includes a `cause` property when wrapping a lower-level failure. Treat raw causes as
+diagnostic data; use the CLI/JSON rendering boundary when output may be visible to untrusted logs.

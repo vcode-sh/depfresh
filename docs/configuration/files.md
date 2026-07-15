@@ -59,8 +59,8 @@ export default defineConfig({
 // depfresh.config.js (also: .mjs, .cjs, .depfreshrc.js)
 export default {
   mode: 'latest',
-  write: true,
-  install: true,
+  recursive: true,
+  exclude: ['webpack'],
 }
 ```
 
@@ -87,6 +87,13 @@ export default {
 ```
 
 All formats are equivalent. Pick one and pretend the others don't exist.
+
+### Invocation-only options
+
+Config files can shape checks, but they cannot authorize side effects. depfresh ignores `write`,
+`install`, `update`, `execute`, `verifyCommand`, `global`, and `globalAll` when those values come
+from any config file or from `package.json#depfresh`. Grant them explicitly for the active CLI run,
+for example `depfresh --write --install`, or as direct overrides in a programmatic invocation.
 
 ## Private Registries
 

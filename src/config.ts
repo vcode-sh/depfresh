@@ -7,10 +7,20 @@ import { resolveDiscoveryContext } from './io/packages/root-detection'
 import type { depfreshOptions } from './types'
 import { DEFAULT_OPTIONS } from './types'
 import { createLogger } from './utils/logger'
+import { redactSensitiveValue } from './utils/redact'
 import { validateOptions } from './validate-options'
 
 const TS_RE = /\.[mc]?ts$/
 const JS_RE = /\.[mc]?js$/
+export const INVOCATION_ONLY_OPTIONS = [
+  'write',
+  'install',
+  'update',
+  'execute',
+  'verifyCommand',
+  'global',
+  'globalAll',
+] as const
 
 export const CONFIG_FILES = [
   'depfresh.config.ts',
@@ -46,7 +56,10 @@ async function loadTsFile(filePath: string): Promise<Partial<depfreshOptions> | 
     const mod = (await jiti.import(filePath)) as Record<string, unknown>
     return (mod.default ?? mod) as Partial<depfreshOptions>
   } catch (error) {
-    throw new ConfigError(`Failed to load config file ${filePath}`, { cause: error })
+    throw new ConfigError(`Failed to load config file ${filePath}`, {
+      cause: error,
+      reason: 'CONFIG_LOAD_FAILED',
+    })
   }
 }
 
@@ -55,7 +68,10 @@ async function loadJsFile(filePath: string): Promise<Partial<depfreshOptions> | 
     const mod = (await import(pathToFileURL(filePath).href)) as Record<string, unknown>
     return (mod.default ?? mod) as Partial<depfreshOptions>
   } catch (error) {
-    throw new ConfigError(`Failed to load config file ${filePath}`, { cause: error })
+    throw new ConfigError(`Failed to load config file ${filePath}`, {
+      cause: error,
+      reason: 'CONFIG_LOAD_FAILED',
+    })
   }
 }
 
@@ -64,7 +80,10 @@ async function loadJsonFile(filePath: string): Promise<Partial<depfreshOptions> 
     const content = await readFile(filePath, 'utf-8')
     return JSON.parse(content) as Partial<depfreshOptions>
   } catch (error) {
-    throw new ConfigError(`Failed to parse JSON config ${filePath}`, { cause: error })
+    throw new ConfigError(`Failed to parse JSON config ${filePath}`, {
+      cause: error,
+      reason: 'CONFIG_PARSE_FAILED',
+    })
   }
 }
 
@@ -85,11 +104,25 @@ async function loadConfigFile(cwd: string): Promise<Partial<depfreshOptions> | u
       const pkg = JSON.parse(content) as Record<string, unknown>
       if (pkg.depfresh) return pkg.depfresh as Partial<depfreshOptions>
     } catch (error) {
-      throw new ConfigError(`Failed to parse package.json at ${pkgPath}`, { cause: error })
+      throw new ConfigError(`Failed to parse package.json at ${pkgPath}`, {
+        cause: error,
+        reason: 'CONFIG_PARSE_FAILED',
+      })
     }
   }
 
   return undefined
+}
+
+function removeInvocationOnlyOptions(
+  config: Partial<depfreshOptions> | undefined,
+): Partial<depfreshOptions> {
+  if (!config) return {}
+  const safeConfig = { ...config }
+  for (const option of INVOCATION_ONLY_OPTIONS) {
+    delete safeConfig[option]
+  }
+  return safeConfig
 }
 
 export async function resolveConfig(
@@ -98,7 +131,11 @@ export async function resolveConfig(
   const requestedCwd = overrides.cwd || process.cwd()
   const discovery = resolveDiscoveryContext(requestedCwd)
   const fileConfig = await loadConfigFile(discovery.effectiveRoot)
-  const merged = defu(overrides, fileConfig ?? {}, DEFAULT_OPTIONS) as depfreshOptions
+  const merged = defu(
+    overrides,
+    removeInvocationOnlyOptions(fileConfig),
+    DEFAULT_OPTIONS,
+  ) as depfreshOptions
   if (overrides.include !== undefined) {
     merged.include = overrides.include
   }
@@ -115,7 +152,7 @@ export async function resolveConfig(
   validateOptions(merged)
 
   const logger = createLogger(merged.loglevel)
-  logger.debug('Config resolved:', JSON.stringify(merged, null, 2))
+  logger.debug('Config resolved:', JSON.stringify(redactSensitiveValue(merged), null, 2))
 
   return merged
 }

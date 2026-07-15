@@ -2,6 +2,15 @@ import type { depfreshAddon } from '../addons/types'
 import type { DepFieldType, RangeMode, ResolvedDepChange, SortOption } from './dependencies'
 import type { OutputFormat, PackageMeta } from './package'
 
+export interface InvocationAuthority {
+  readonly write: boolean
+  readonly install: boolean
+  readonly update: boolean
+  readonly execute: boolean
+  readonly verifyCommand: boolean
+  readonly globalWrite: boolean
+}
+
 export interface depfreshOptions {
   cwd: string
   inputCwd?: string

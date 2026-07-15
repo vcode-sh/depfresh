@@ -455,6 +455,32 @@ describe('JSON error envelope', () => {
     consoleSpy.mockRestore()
   })
 
+  it('redacts credentials from JSON and human error rendering', async () => {
+    const secretMessage =
+      'Authorization: Bearer top-secret at https://user:password@registry.example/pkg?token=top-secret'
+    mocks.loadPackagesMock.mockRejectedValue(new Error(secretMessage))
+    const jsonSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+
+    const { check } = await import('./index')
+    const jsonExitCode = await check({ ...baseOptions, output: 'json' })
+
+    expect(jsonExitCode).toBe(2)
+    const jsonOutput = jsonSpy.mock.calls.map((call) => String(call[0])).join('\n')
+    expect(jsonOutput).toContain('registry.example')
+    expect(jsonOutput).toContain('[REDACTED]')
+    expect(jsonOutput).not.toMatch(/top-secret|user:password/u)
+    jsonSpy.mockRestore()
+
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const humanExitCode = await check({ ...baseOptions, loglevel: 'info', output: 'table' })
+
+    expect(humanExitCode).toBe(2)
+    const humanOutput = errorSpy.mock.calls.flat().map(String).join(' ')
+    expect(humanOutput).toContain('registry.example')
+    expect(humanOutput).toContain('[REDACTED]')
+    expect(humanOutput).not.toMatch(/top-secret|user:password/u)
+  })
+
   it('does not output JSON error in table mode', async () => {
     mocks.loadPackagesMock.mockRejectedValue(new Error('Something went wrong'))
 

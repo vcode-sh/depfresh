@@ -79,7 +79,7 @@ depfresh --fail-on-outdated
 - **JSON output** -- structured envelope for scripts and AI agents. No ANSI noise.
 - **CI mode** -- `--fail-on-outdated` exits with code 1. Plug it into your pipeline.
 - **SQLite cache** -- WAL mode, 30min TTL, auto-fallback to memory
-- **Provenance tracking** -- warnings for unsigned or downgraded attestations
+- **Signature metadata** -- warns when a target lacks signature metadata that the current version has
 - **Node engine compat** -- flags updates that don't match your Node version
 - **Cooldown filter** -- skip versions published less than N days ago
 - **Programmatic API** -- lifecycle callbacks + addon system for custom workflows

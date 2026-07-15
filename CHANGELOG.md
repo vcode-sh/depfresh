@@ -6,6 +6,12 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Semver
 
 ### Security
 
+- **Invocation authority is separate from configuration** -- config files can no longer grant
+  write, install, update, command execution, verification-command, or global-write authority.
+  Unknown and malformed CLI input now fails before discovery or side effects with stable reason
+  codes. Human and JSON failure rendering centrally redact credentials, authorization values,
+  sensitive URLs, environment assignments, and nested causes.
+
 - **The GitHub Action now treats every input as data** -- the Action validates exact booleans,
   modes, Node versions, and workspace-contained directories before installation or writes. The
   shell-split `extra-args` escape hatch is gone, so only `write: 'true'` grants mutation authority.
@@ -15,6 +21,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Semver
   cleaned on every path.
 
 ### Changed
+
+- **Registry signature data is described as presence, not proof** -- current output and public
+  types report `present` or `absent` signature metadata without claiming verification or trust.
+  Legacy provenance fields remain deprecated compatibility input for library callers.
 
 - **The registry cache now uses Node's built-in SQLite** -- `node:sqlite` replaces the native `better-sqlite3` dependency while preserving the existing WAL-backed cache and memory fallback. depfresh no longer needs a native cache build or a matching Node ABI. The minimum supported runtime is now Node 24.15.0, the first Node 24 release where `node:sqlite` is a release candidate and imports without an experimental warning.
 - **The GitHub Action is revision-coupled and self-contained** -- each Action revision reads the

@@ -63,7 +63,7 @@ describe('render overflow handling', () => {
     expect(row).not.toContain('…')
   })
 
-  it('keeps nodecompat and provenance suffixes within terminal width', () => {
+  it('keeps nodecompat and signature metadata suffixes within terminal width', () => {
     Object.defineProperty(process.stdout, 'isTTY', { configurable: true, value: true })
     Object.defineProperty(process.stdout, 'columns', { configurable: true, value: 60 })
 
@@ -75,8 +75,8 @@ describe('render overflow handling', () => {
           deprecated: 'Use another package',
           nodeCompatible: false,
           nodeCompat: '<16',
-          currentProvenance: 'attested',
-          provenance: 'none',
+          currentSignaturePresence: 'present',
+          signaturePresence: 'absent',
         }),
       ],
       { ...baseOptions, long: false, timediff: false, nodecompat: true },

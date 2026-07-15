@@ -71,6 +71,9 @@ describe('normalizeArgs enum validation', () => {
     await expect(normalizeArgs(makeRawArgs({ mode: 'super-major' }))).rejects.toThrow(
       'Invalid value for --mode',
     )
+    await expect(normalizeArgs(makeRawArgs({ mode: 'super-major' }))).rejects.toMatchObject({
+      reason: 'INVALID_OPTION_VALUE',
+    })
   })
 
   it('throws ConfigError for invalid positional mode shorthand', async () => {
@@ -120,6 +123,9 @@ describe('normalizeArgs enum validation', () => {
     await expect(normalizeArgs(makeRawArgs({ concurrency: 'abc' }))).rejects.toThrow(
       'Invalid value for --concurrency',
     )
+    await expect(normalizeArgs(makeRawArgs({ concurrency: 'abc' }))).rejects.toMatchObject({
+      reason: 'INVALID_OPTION_VALUE',
+    })
   })
 
   it('throws ConfigError for invalid --cooldown values', async () => {

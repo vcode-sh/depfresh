@@ -1,6 +1,7 @@
 import type { ArgsDef } from 'citty'
 import { version } from '../../package.json' with { type: 'json' }
-import { CONFIG_FILES } from '../config'
+import { CONFIG_FILES, INVOCATION_ONLY_OPTIONS } from '../config'
+import { DEPFRESH_ERROR_REASONS } from '../errors'
 import { VALID_LOG_LEVELS, VALID_MODES, VALID_OUTPUTS, VALID_SORT_OPTIONS } from './arg-values'
 import { args } from './args-schema'
 
@@ -22,6 +23,11 @@ interface FlagRelationship {
   conflicts?: string[]
 }
 
+interface InvocationGrant {
+  requires?: string[]
+  grants: string[]
+}
+
 interface CliCapabilities {
   schemaVersion: number
   version: string
@@ -38,6 +44,9 @@ interface CliCapabilities {
   flags: Record<string, CapabilityFlag>
   workflows: Record<string, Workflow>
   flagRelationships: Record<string, FlagRelationship>
+  invocationAuthority: Record<string, InvocationGrant>
+  configIgnoredOptions: string[]
+  errorReasons: readonly string[]
   configFiles: string[]
   jsonOutputSchema: Record<string, string>
   discoverability: {
@@ -87,6 +96,16 @@ const FLAG_RELATIONSHIPS: Record<string, FlagRelationship> = {
   'strict-post-write': { requires: ['write'] },
   'deps-only': { conflicts: ['dev-only'] },
   'dev-only': { conflicts: ['deps-only'] },
+}
+
+const INVOCATION_AUTHORITY: Record<string, InvocationGrant> = {
+  write: { grants: ['write'] },
+  install: { requires: ['write'], grants: ['install'] },
+  update: { requires: ['write'], grants: ['update'] },
+  execute: { requires: ['write'], grants: ['execute'] },
+  'verify-command': { requires: ['write'], grants: ['verifyCommand'] },
+  global: { requires: ['write'], grants: ['globalWrite'] },
+  'global-all': { requires: ['write'], grants: ['globalWrite'] },
 }
 
 const JSON_OUTPUT_SCHEMA: Record<string, string> = {
@@ -183,6 +202,9 @@ export function getCliCapabilities(): CliCapabilities {
     flags,
     workflows: WORKFLOWS,
     flagRelationships: FLAG_RELATIONSHIPS,
+    invocationAuthority: INVOCATION_AUTHORITY,
+    configIgnoredOptions: [...INVOCATION_ONLY_OPTIONS],
+    errorReasons: DEPFRESH_ERROR_REASONS,
     configFiles: [...CONFIG_FILES],
     jsonOutputSchema: JSON_OUTPUT_SCHEMA,
     discoverability: {

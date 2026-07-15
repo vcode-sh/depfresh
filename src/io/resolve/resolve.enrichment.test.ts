@@ -102,12 +102,12 @@ const defaultNpmrc: NpmrcConfig = {
   strictSsl: true,
 }
 
-describe('provenance tracking', () => {
+describe('signature-presence tracking', () => {
   beforeEach(() => {
     vi.resetAllMocks()
   })
 
-  it('populates provenance fields from package data', async () => {
+  it('populates passive signature-presence fields from package data', async () => {
     const { fetchPackageData } = await import('../registry')
     const { resolvePackage } = await import('./index')
 
@@ -116,7 +116,7 @@ describe('provenance tracking', () => {
       name: 'test-pkg',
       versions: ['1.0.0', '2.0.0'],
       distTags: { latest: '2.0.0' },
-      provenance: { '1.0.0': 'attested', '2.0.0': 'none' },
+      signaturePresence: { '1.0.0': 'present', '2.0.0': 'absent' },
     }
     vi.mocked(fetchPackageData).mockResolvedValue(pkgData)
 
@@ -127,11 +127,11 @@ describe('provenance tracking', () => {
     const result = await resolvePackage(pkg, options, cache, defaultNpmrc)
 
     expect(result.length).toBe(1)
-    expect(result[0]!.provenance).toBe('none')
-    expect(result[0]!.currentProvenance).toBe('attested')
+    expect(result[0]!.signaturePresence).toBe('absent')
+    expect(result[0]!.currentSignaturePresence).toBe('present')
   })
 
-  it('leaves provenance undefined when package data has no provenance', async () => {
+  it('leaves signature presence undefined when package data has no signature metadata', async () => {
     const { fetchPackageData } = await import('../registry')
     const { resolvePackage } = await import('./index')
 
@@ -145,8 +145,31 @@ describe('provenance tracking', () => {
     const result = await resolvePackage(pkg, options, cache, defaultNpmrc)
 
     expect(result.length).toBe(1)
-    expect(result[0]!.provenance).toBeUndefined()
-    expect(result[0]!.currentProvenance).toBeUndefined()
+    expect(result[0]!.signaturePresence).toBeUndefined()
+    expect(result[0]!.currentSignaturePresence).toBeUndefined()
+  })
+
+  it('accepts deprecated provenance fields as passive compatibility input', async () => {
+    const { fetchPackageData } = await import('../registry')
+    const { resolvePackage } = await import('./index')
+
+    const cache = createMockCache()
+    vi.mocked(fetchPackageData).mockResolvedValue({
+      name: 'test-pkg',
+      versions: ['1.0.0', '2.0.0'],
+      distTags: { latest: '2.0.0' },
+      provenance: { '1.0.0': 'attested', '2.0.0': 'none' },
+    })
+
+    const result = await resolvePackage(
+      makePkg([makeDep({ currentVersion: '^1.0.0' })]),
+      makeOptions({ mode: 'latest' }),
+      cache,
+      defaultNpmrc,
+    )
+
+    expect(result[0]!.currentSignaturePresence).toBe('present')
+    expect(result[0]!.signaturePresence).toBe('absent')
   })
 })
 

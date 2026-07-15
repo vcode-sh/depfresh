@@ -1,6 +1,12 @@
 import * as semver from 'semver'
 import type { Cache } from '../../cache/index'
-import type { depfreshOptions, ProvenanceLevel, RawDep, ResolvedDepChange } from '../../types'
+import type {
+  depfreshOptions,
+  PackageData,
+  RawDep,
+  ResolvedDepChange,
+  SignaturePresence,
+} from '../../types'
 import type { createLogger } from '../../utils/logger'
 import type { loadNpmrc } from '../../utils/npmrc'
 import { getRegistryForPackage } from '../../utils/npmrc'
@@ -152,10 +158,10 @@ export async function resolveDependency(
   }
 
   const cleanCurrent = semver.coerce(currentVersion)?.version ?? undefined
-  const currentProvenance: ProvenanceLevel | undefined = cleanCurrent
-    ? pkgData.provenance?.[cleanCurrent]
+  const currentSignaturePresence = cleanCurrent
+    ? getSignaturePresence(pkgData, cleanCurrent)
     : undefined
-  const targetProvenance: ProvenanceLevel | undefined = pkgData.provenance?.[targetVersion]
+  const signaturePresence = getSignaturePresence(pkgData, targetVersion)
   const nodeCompat: string | undefined = pkgData.engines?.[targetVersion]
   const nodeCompatible: boolean | undefined = nodeCompat
     ? semver.satisfies(process.version, nodeCompat)
@@ -171,11 +177,23 @@ export async function resolveDependency(
     latestVersion: pkgData.distTags.latest,
     publishedAt: pkgData.time?.[targetVersion],
     currentVersionTime: cleanCurrent ? pkgData.time?.[cleanCurrent] : undefined,
-    provenance: targetProvenance,
-    currentProvenance,
+    signaturePresence,
+    currentSignaturePresence,
     nodeCompat,
     nodeCompatible,
   }
+}
+
+function getSignaturePresence(
+  pkgData: PackageData,
+  version: string,
+): SignaturePresence | undefined {
+  const presence = pkgData.signaturePresence?.[version]
+  if (presence) return presence
+
+  const legacy = pkgData.provenance?.[version]
+  if (!legacy) return undefined
+  return legacy === 'none' ? 'absent' : 'present'
 }
 
 function normalizeWorkspaceCurrentVersion(

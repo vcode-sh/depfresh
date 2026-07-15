@@ -5,11 +5,11 @@ import type { Logger } from '../../utils/logger'
 
 export async function runExecute(command: string, cwd: string, logger: Logger): Promise<boolean> {
   try {
-    logger.info(`Running: ${command}`)
+    logger.info('Running configured post-write command...')
     execSync(command, { cwd, stdio: 'inherit' })
     return true
   } catch {
-    logger.error(`Command failed: ${command}`)
+    logger.error('Configured post-write command failed')
     return false
   }
 }

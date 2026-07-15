@@ -46,7 +46,7 @@ describe('renderTable timediff', () => {
   })
 })
 
-describe('renderTable provenance warning', () => {
+describe('renderTable signature-metadata warning', () => {
   let consoleSpy: ReturnType<typeof vi.spyOn>
   let lines: string[]
 
@@ -61,12 +61,12 @@ describe('renderTable provenance warning', () => {
     consoleSpy.mockRestore()
   })
 
-  it('shows warning when provenance downgrades from attested to none', () => {
+  it('shows warning when signature metadata changes from present to absent', () => {
     const updates = [
       makeUpdate({
         name: 'risky-pkg',
-        currentProvenance: 'attested',
-        provenance: 'none',
+        currentSignaturePresence: 'present',
+        signaturePresence: 'absent',
       }),
     ]
 
@@ -77,28 +77,12 @@ describe('renderTable provenance warning', () => {
     expect(depLine).toContain('\u26A0')
   })
 
-  it('shows warning when provenance downgrades from trusted to none', () => {
-    const updates = [
-      makeUpdate({
-        name: 'trusted-pkg',
-        currentProvenance: 'trusted',
-        provenance: 'none',
-      }),
-    ]
-
-    renderTable('test-project', updates, defaultOpts)
-
-    const stripped = lines.map(stripAnsi)
-    const depLine = stripped.find((l) => l.includes('trusted-pkg'))
-    expect(depLine).toContain('\u26A0')
-  })
-
-  it('does not show warning when provenance stays attested', () => {
+  it('does not show warning when signature metadata stays present', () => {
     const updates = [
       makeUpdate({
         name: 'safe-pkg',
-        currentProvenance: 'attested',
-        provenance: 'attested',
+        currentSignaturePresence: 'present',
+        signaturePresence: 'present',
       }),
     ]
 
@@ -109,7 +93,7 @@ describe('renderTable provenance warning', () => {
     expect(depLine).not.toContain('\u26A0')
   })
 
-  it('does not show warning when no provenance data', () => {
+  it('does not show warning when no signature metadata is available', () => {
     const updates = [makeUpdate({ name: 'normal-pkg' })]
 
     renderTable('test-project', updates, defaultOpts)

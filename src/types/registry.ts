@@ -1,3 +1,6 @@
+export type SignaturePresence = 'present' | 'absent'
+
+/** @deprecated Signature metadata is presence-only and does not prove provenance or trust. */
 export type ProvenanceLevel = 'trusted' | 'attested' | 'none'
 
 export interface PackageData {
@@ -9,6 +12,8 @@ export interface PackageData {
   description?: string
   homepage?: string
   repository?: string
+  signaturePresence?: Record<string, SignaturePresence>
+  /** @deprecated Use signaturePresence. Values do not imply verification. */
   provenance?: Record<string, ProvenanceLevel>
   engines?: Record<string, string>
 }

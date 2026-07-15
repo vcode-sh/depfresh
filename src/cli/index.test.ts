@@ -119,3 +119,110 @@ describe('CLI interactive mode validation', () => {
     expect(output.meta.mode).toBe('default')
   })
 })
+
+describe('CLI raw argument validation', () => {
+  it.each([
+    [['--unknown'], 'UNKNOWN_OPTION', 'Unknown option: --unknown'],
+    [['--mode'], 'MISSING_OPTION_VALUE', 'Missing value for --mode'],
+    [['--mode', 'major', '--mode', 'minor'], 'CONFLICTING_OPTION', 'Conflicting values for --mode'],
+    [['--write=maybe'], 'INVALID_BOOLEAN', 'Invalid boolean value for --write'],
+  ])('returns one stable JSON error for malformed argv %j', (argv, reason, message) => {
+    const result = runCli([...argv, '--output', 'json'])
+
+    expect(result.status).toBe(2)
+    expect(significantStderr(result.stderr)).toBe('')
+    const output = JSON.parse(result.stdout) as {
+      error: { code: string; message: string; reason: string; retryable: boolean }
+    }
+    expect(output.error).toMatchObject({
+      code: 'ERR_CONFIG',
+      message: expect.stringContaining(message),
+      reason,
+      retryable: false,
+    })
+  })
+
+  it('renders a human input error without a stack trace', () => {
+    const result = runCli(['--unknown'])
+
+    expect(result.status).toBe(2)
+    expect(result.stdout).toBe('')
+    expect(significantStderr(result.stderr)).toBe('Fatal error: Unknown option: --unknown')
+    expect(result.stderr).not.toMatch(/\n\s+at /u)
+  })
+
+  it.each([
+    ['capabilities', '--json', '--unknown'],
+    ['--help-json', '--unknown'],
+  ])('keeps discoverability failures machine-readable for %j', (...argv) => {
+    const result = runCli(argv)
+
+    expect(result.status).toBe(2)
+    expect(significantStderr(result.stderr)).toBe('')
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      error: { code: 'ERR_CONFIG', reason: 'UNKNOWN_OPTION' },
+    })
+  })
+
+  it('uses INVALID_OPTION_VALUE for malformed enum input', () => {
+    const result = runCli(['--mode', 'everything', '--output', 'json'])
+
+    expect(result.status).toBe(2)
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      error: { code: 'ERR_CONFIG', reason: 'INVALID_OPTION_VALUE' },
+    })
+  })
+
+  it('uses INVALID_OPTION_VALUE for a negative numeric input', () => {
+    const result = runCli(['--cooldown', '-1', '--output', 'json'])
+
+    expect(result.status).toBe(2)
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      error: { code: 'ERR_CONFIG', reason: 'INVALID_OPTION_VALUE' },
+    })
+  })
+
+  it('redacts secret-like invalid mode values from JSON metadata', () => {
+    const result = runCli(['NPM_TOKEN=top-secret', '--unknown', '--output', 'json'])
+
+    expect(result.status).toBe(2)
+    expect(result.stdout).toContain('[REDACTED]')
+    expect(result.stdout).not.toContain('top-secret')
+  })
+})
+
+describe('CLI unsupported combinations', () => {
+  it.each([
+    [['--install'], '--install requires --write'],
+    [['--update'], '--update requires --write'],
+    [['--execute', 'echo done'], '--execute requires --write'],
+    [['--verify-command', 'pnpm test'], '--verify-command requires --write'],
+    [['--write', '--install', '--update'], '--install cannot be combined with --update'],
+    [['--deps-only', '--dev-only'], '--deps-only cannot be combined with --dev-only'],
+    [['--json'], '--json is only valid with the capabilities command'],
+    [['capabilities'], 'capabilities requires --json'],
+  ])('rejects %j before starting a check', (argv, message) => {
+    const result = runCli([...argv, '--output', 'json'])
+
+    expect(result.status).toBe(2)
+    expect(significantStderr(result.stderr)).toBe('')
+    const output = JSON.parse(result.stdout) as {
+      error: { code: string; message: string; reason: string }
+    }
+    expect(output.error).toMatchObject({
+      code: 'ERR_CONFIG',
+      message: expect.stringContaining(message),
+      reason: 'UNSUPPORTED_COMBINATION',
+    })
+  })
+
+  it('requires --version to be the only argument', () => {
+    const result = runCli(['--version', '--write', '--output', 'json'])
+
+    expect(result.status).toBe(2)
+    const output = JSON.parse(result.stdout) as {
+      error: { reason: string }
+    }
+    expect(output.error.reason).toBe('UNSUPPORTED_COMBINATION')
+  })
+})

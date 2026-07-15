@@ -71,7 +71,9 @@ export function renderDetailVersionLine(
   if (version.distTag) line += `  ${c.cyan(version.distTag)}`
   if (version.explain) line += `  ${c.gray(version.explain)}`
   if (version.deprecated) line += `  ${c.red('deprecated')}`
-  if (version.provenance === 'none') line += `  ${c.yellow('no-provenance')}`
+  if (version.signaturePresence === 'absent') {
+    line += `  ${c.yellow('no-signature-metadata')}`
+  }
   if (version.nodeEngines) line += `  ${c.gray(`node ${version.nodeEngines}`)}`
 
   return fitLine(line, state.termCols)

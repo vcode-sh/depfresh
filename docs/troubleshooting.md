@@ -190,7 +190,9 @@ If you're using the programmatic API, all errors thrown by depfresh extend `depf
 | `WriteError` | `ERR_WRITE` | File system failure during write. Permission denied, disk full, read-only filesystem. |
 | `ResolveError` | `ERR_RESOLVE` | Network-level failures. DNS, timeouts, fetch errors that aren't HTTP status codes. |
 
-All errors include `.cause` when wrapping a lower-level failure. If you're debugging a `ConfigError` from a bad regex, `error.cause` gives you the original `SyntaxError`.
+All errors include a stable `.reason`. CLI and JSON rendering redact credentials and nested failure
+details. Raw `.cause` values remain available to library callers for local diagnostics and should
+not be printed directly into shared logs.
 
 ---
 
@@ -198,7 +200,7 @@ All errors include `.cause` when wrapping a lower-level failure. If you're debug
 
 **Yarn global packages.** `--global` and `--global-all` support npm, pnpm, and bun. Yarn global is not supported. I don't make the rules. Actually I do, and I chose not to support it.
 
-**JSR registry.** Works, but metadata is sparser than npm. Some features like provenance tracking or detailed time data may be incomplete.
+**JSR registry.** Works, but metadata is sparser than npm. Signature-presence and detailed time metadata may be unavailable.
 
 **Node compatibility.** The `--nodecompat` flag checks the `engines.node` field in package metadata. This is best-effort — not every package declares engine constraints, and some declarations are optimistic at best.
 

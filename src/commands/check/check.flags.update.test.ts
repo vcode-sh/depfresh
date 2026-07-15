@@ -44,7 +44,7 @@ describe('--update flag', () => {
     expect(mocks.execSyncMock).not.toHaveBeenCalled()
   })
 
-  it('update takes precedence over install', async () => {
+  it('rejects update combined with install before package discovery or commands', async () => {
     const pkg = makePkg('my-app')
     pkg.packageManager = { name: 'npm', version: '10.0.0', raw: 'npm@10.0.0' }
     mocks.loadPackagesMock.mockResolvedValue([pkg])
@@ -53,14 +53,11 @@ describe('--update flag', () => {
     ])
 
     const { check } = await import('./index')
-    await check({ ...baseOptions, write: true, update: true, install: true })
+    const result = await check({ ...baseOptions, write: true, update: true, install: true })
 
-    // Should run update, not install
-    expect(mocks.execSyncMock).toHaveBeenCalledWith('npm update', {
-      cwd: '/tmp/test',
-      stdio: 'inherit',
-    })
-    expect(mocks.execSyncMock).not.toHaveBeenCalledWith('npm install', expect.anything())
+    expect(result).toBe(2)
+    expect(mocks.loadPackagesMock).not.toHaveBeenCalled()
+    expect(mocks.execSyncMock).not.toHaveBeenCalled()
   })
 
   it('does not run update when no updates', async () => {

@@ -12,6 +12,7 @@ function validateEnum<T extends string>(
   if (typeof value !== 'string' || !validValues.includes(value as T)) {
     throw new ConfigError(
       `Invalid value for ${flagName}: "${String(value)}". Expected one of: ${validValues.join(', ')}.`,
+      { reason: 'INVALID_OPTION_VALUE' },
     )
   }
   return value as T
@@ -20,6 +21,12 @@ function validateEnum<T extends string>(
 export async function normalizeArgs(args: Record<string, unknown>): Promise<depfreshOptions> {
   const { resolveConfig } = await import('../config')
   const globalAll = args['global-all'] as boolean
+
+  if (args['deps-only'] && args['dev-only']) {
+    throw new ConfigError('--deps-only cannot be combined with --dev-only.', {
+      reason: 'UNSUPPORTED_COMBINATION',
+    })
+  }
 
   const depFields: Record<string, boolean> = {}
   if (args['deps-only']) {

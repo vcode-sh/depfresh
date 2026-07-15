@@ -64,4 +64,5 @@ depfresh --help-json
 depfresh capabilities --json
 ```
 
-The response includes supported flags, valid enum values, defaults, and exit code semantics.
+The response includes supported flags, valid enum values, defaults, invocation-authority grants,
+config options that cannot grant side effects, stable error reasons, and exit code semantics.

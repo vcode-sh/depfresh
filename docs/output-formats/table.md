@@ -84,7 +84,7 @@ Shows all packages, including the ones that are actually up to date. A confidenc
 Displays Node.js engine compatibility indicators next to each update. A green checkmark means you're fine. A red cross means the target version has opinions about your Node version.
 
 **`--explain` / `-E`** (default: `false`)
-In the interactive detail view (`-I`), shows human-readable explanations next to each version: "Breaking change. Check migration guide." for majors, "Bug fixes only. Safe to update." for patches. Plus deprecation and provenance warnings. Patronising? Maybe. Useful when you're staring at 6 versions of typescript at midnight? Definitely.
+In the interactive detail view (`-I`), shows human-readable explanations next to each version: "Breaking change. Check migration guide." for majors, "Bug fixes only. Safe to update." for patches. Plus deprecation and missing signature-metadata warnings. Signature presence is passive registry metadata, not a verification result. Patronising? Maybe. Useful when you're staring at 6 versions of typescript at midnight? Definitely.
 
 ## Contextual Tips
 

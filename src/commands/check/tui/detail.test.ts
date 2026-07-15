@@ -174,9 +174,10 @@ describe('getExplanation', () => {
     expect(result).toContain('Deprecated.')
   })
 
-  it('appends provenance downgrade warning', () => {
+  it('appends passive signature-metadata warning', () => {
     const result = getExplanation('minor', undefined, true)
-    expect(result).toContain('Provenance downgrade.')
+    expect(result).toContain('Signature metadata absent.')
+    expect(result).not.toContain('Provenance')
   })
 
   it('returns empty string for none diff', () => {

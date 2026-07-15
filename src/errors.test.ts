@@ -9,6 +9,7 @@ import {
   WriteError,
 } from './errors'
 import type { NpmrcConfig } from './types'
+import { getSafeErrorDetails, redactSensitiveValue } from './utils/redact'
 
 const npmrc: NpmrcConfig = {
   registries: new Map(),
@@ -33,10 +34,70 @@ describe('error hierarchy', () => {
     }
   })
 
+  it('redacts nested causes, sensitive keys, URL credentials, and environment values', () => {
+    const cause = new Error(
+      'Bearer nested-secret from https://user:password@example.test/pkg?token=query-secret',
+    )
+    Object.assign(cause, {
+      authorization: 'Basic header-secret',
+      context: {
+        NPM_TOKEN: 'env-secret',
+        apiKey: 'api-key-secret',
+        accessToken: 'access-token-secret',
+        clientSecret: 'client-secret',
+        safeHost: 'registry.example.test',
+      },
+    })
+    const error = new ConfigError('Configuration failed', { cause })
+
+    const details = getSafeErrorDetails(error)
+    const serialized = JSON.stringify(details)
+    expect(details.cause).toMatchObject({
+      name: 'Error',
+      message: expect.stringContaining('example.test'),
+    })
+    expect(serialized).toContain('registry.example.test')
+    expect(serialized).toContain('[REDACTED]')
+    expect(serialized).not.toMatch(
+      /nested-secret|user:password|query-secret|header-secret|env-secret|api-key-secret|access-token-secret|client-secret/u,
+    )
+  })
+
+  it('redacts common key assignment spellings in text', () => {
+    const error = new ConfigError(
+      'API_KEY=api-secret accessToken=access-secret CLIENT_SECRET=client-secret',
+    )
+
+    expect(error.message).not.toMatch(/api-secret|access-secret|client-secret/u)
+    expect(error.message.match(/\[REDACTED\]/gu)).toHaveLength(3)
+  })
+
+  it('redacts circular nested values without mutating the source', () => {
+    const source: Record<string, unknown> = { token: 'top-secret' }
+    source.self = source
+
+    expect(redactSensitiveValue(source)).toEqual({ token: '[REDACTED]', self: '[CIRCULAR]' })
+    expect(source.token).toBe('top-secret')
+    expect(source.self).toBe(source)
+  })
+
   it('RegistryError includes status and url', () => {
     const err = new RegistryError('missing', 404, 'https://registry.npmjs.org/missing')
     expect(err.status).toBe(404)
     expect(err.url).toContain('missing')
+  })
+
+  it('redacts registry URL userinfo, sensitive query values, and authorization text', () => {
+    const error = new RegistryError(
+      'Authorization: Bearer top-secret at https://user:password@registry.example/pkg?token=top-secret',
+      401,
+      'https://user:password@registry.example/pkg?token=top-secret',
+    )
+
+    expect(error.message).toContain('registry.example')
+    expect(error.url).toContain('registry.example')
+    expect(`${error.message} ${error.url}`).toContain('[REDACTED]')
+    expect(`${error.message} ${error.url}`).not.toMatch(/top-secret|user:password/u)
   })
 })
 

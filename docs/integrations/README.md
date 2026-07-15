@@ -48,8 +48,9 @@ Exit handling:
 
 If you want depfresh exposed as a tool in an MCP server, keep the wrapper thin:
 
-1. Accept tool input (cwd, mode, write, failOnOutdated).
-2. Execute depfresh with `--output json`.
+1. Accept typed tool input (cwd, mode, write, failOnOutdated) and reject unknown fields.
+2. Build a shell-safe argument array and execute depfresh with `--output json`; only the active
+   request may add `--write`.
 3. Return parsed JSON directly to the MCP client.
 4. Preserve depfresh exit codes in tool errors/status.
 
@@ -62,7 +63,7 @@ depfresh --output json --cwd /path/to/workspace
 Recommended mapping:
 - Tool success payload: full depfresh JSON envelope
 - Tool warning state: exit code `1` with parsed JSON attached
-- Tool error state: exit code `2` with stderr/error message
+- Tool error state: exit code `2` with the parsed JSON error envelope and stable `error.reason`
 
 For dynamic tool UIs, discover flags and enum values via:
 

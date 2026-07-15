@@ -1,5 +1,16 @@
+import { VALID_LOG_LEVELS, VALID_MODES, VALID_OUTPUTS, VALID_SORT_OPTIONS } from './cli/arg-values'
 import { ConfigError } from './errors'
-import type { depfreshOptions } from './types'
+import { validateInvocationAuthority } from './invocation-authority'
+import type { depfreshOptions, InvocationAuthority } from './types'
+
+function validateEnumOption(value: unknown, flagName: string, allowed: readonly string[]): void {
+  if (typeof value !== 'string' || !allowed.includes(value)) {
+    throw new ConfigError(
+      `Invalid value for ${flagName}: ${JSON.stringify(value)}. Expected one of: ${allowed.join(', ')}.`,
+      { reason: 'INVALID_OPTION_VALUE' },
+    )
+  }
+}
 
 export function parseIntegerOption(value: unknown, flagName: string, minimum: number): number {
   const normalized =
@@ -16,6 +27,7 @@ export function parseIntegerOption(value: unknown, flagName: string, minimum: nu
     const descriptor = minimum === 0 ? 'a non-negative integer' : 'a positive integer'
     throw new ConfigError(
       `Invalid value for ${flagName}: "${String(value)}". Expected ${descriptor}.`,
+      { reason: 'INVALID_OPTION_VALUE' },
     )
   }
 
@@ -27,7 +39,10 @@ export function validateOptions(
     depfreshOptions,
     | 'interactive'
     | 'write'
+    | 'mode'
     | 'output'
+    | 'sort'
+    | 'loglevel'
     | 'execute'
     | 'install'
     | 'update'
@@ -36,18 +51,48 @@ export function validateOptions(
     | 'retries'
     | 'cacheTTL'
     | 'cooldown'
-  >,
+  > &
+    Partial<Pick<depfreshOptions, 'verifyCommand' | 'strictPostWrite' | 'global' | 'globalAll'>>,
+  authority?: InvocationAuthority,
 ): void {
+  validateEnumOption(options.mode, '--mode', VALID_MODES)
+  validateEnumOption(options.output, '--output', VALID_OUTPUTS)
+  validateEnumOption(options.sort, '--sort', VALID_SORT_OPTIONS)
+  validateEnumOption(options.loglevel, '--loglevel', VALID_LOG_LEVELS)
+
   if (options.interactive && !options.write) {
     throw new ConfigError(
       'Interactive mode requires write mode. Pass `--write` with `--interactive`.',
+      { reason: 'UNSUPPORTED_COMBINATION' },
     )
   }
 
   if (options.interactive && options.output === 'json') {
     throw new ConfigError(
       'Interactive mode cannot be used with JSON output. Pass `--output table` or disable `--interactive`.',
+      { reason: 'UNSUPPORTED_COMBINATION' },
     )
+  }
+
+  const writeRequirements: Array<[unknown, string]> = [
+    [options.install, '--install'],
+    [options.update, '--update'],
+    [options.execute, '--execute'],
+    [options.verifyCommand, '--verify-command'],
+    [options.strictPostWrite, '--strict-post-write'],
+  ]
+  for (const [enabled, flag] of writeRequirements) {
+    if (enabled && !options.write) {
+      throw new ConfigError(`${flag} requires --write.`, {
+        reason: 'UNSUPPORTED_COMBINATION',
+      })
+    }
+  }
+
+  if (options.install && options.update) {
+    throw new ConfigError('--install cannot be combined with --update.', {
+      reason: 'UNSUPPORTED_COMBINATION',
+    })
   }
 
   if (
@@ -57,7 +102,12 @@ export function validateOptions(
   ) {
     throw new ConfigError(
       'JSON output cannot be used with --execute, --install, or --update. Pass `--output table` or disable post-write commands.',
+      { reason: 'UNSUPPORTED_COMBINATION' },
     )
+  }
+
+  if (authority) {
+    validateInvocationAuthority(options as depfreshOptions, authority)
   }
 
   parseIntegerOption(options.concurrency, '--concurrency', 1)

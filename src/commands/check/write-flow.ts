@@ -1,7 +1,13 @@
 import { execSync } from 'node:child_process'
 import { posix, win32 } from 'node:path'
+import { ConfigError } from '../../errors'
 import { backupPackageFiles, restorePackageFiles, writePackage } from '../../io/write'
-import type { depfreshOptions, PackageMeta, ResolvedDepChange } from '../../types'
+import type {
+  depfreshOptions,
+  InvocationAuthority,
+  PackageMeta,
+  ResolvedDepChange,
+} from '../../types'
 import type { Logger } from '../../utils/logger'
 
 export interface PackageWriteResult {
@@ -54,6 +60,7 @@ export async function applyPackageWrite(
   pkg: PackageMeta,
   changes: ResolvedDepChange[],
   options: depfreshOptions,
+  authority: InvocationAuthority,
   logger: Logger,
 ): Promise<PackageWriteResult> {
   if (changes.length === 0) {
@@ -65,7 +72,21 @@ export async function applyPackageWrite(
     }
   }
 
+  if (!(options.write && authority.write)) {
+    throw new ConfigError(
+      'Writing requires resolved write intent and explicit invocation authority.',
+      {
+        reason: 'AUTHORITY_REQUIRED',
+      },
+    )
+  }
+
   if (options.verifyCommand) {
+    if (!authority.verifyCommand) {
+      throw new ConfigError('Verification requires explicit invocation authority.', {
+        reason: 'AUTHORITY_REQUIRED',
+      })
+    }
     const result = await verifyAndWrite(pkg, changes, options.verifyCommand, logger)
     logger.info(`  Verify: ${result.applied} applied, ${result.reverted} reverted`)
     return {
@@ -77,6 +98,11 @@ export async function applyPackageWrite(
   }
 
   if (pkg.type === 'global') {
+    if (!(authority.globalWrite && (options.global || options.globalAll))) {
+      throw new ConfigError('Global writes require explicit invocation authority.', {
+        reason: 'AUTHORITY_REQUIRED',
+      })
+    }
     const { getGlobalWriteTargets, writeGlobalPackage } = await import('../../io/global')
     let applied = 0
     for (const change of changes) {

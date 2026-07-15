@@ -99,6 +99,32 @@ describe('--execute flag basics', () => {
     expect(mocks.execSyncMock).toHaveBeenCalled()
   })
 
+  it('does not print a configured command that may contain credentials', async () => {
+    const pkg = makePkg('my-app')
+    mocks.loadPackagesMock.mockResolvedValue([pkg])
+    mocks.resolvePackageMock.mockResolvedValue([
+      makeResolved({ diff: 'minor', targetVersion: '^1.1.0' }),
+    ])
+    mocks.execSyncMock.mockImplementation(() => {
+      throw new Error('command failed')
+    })
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    const { check } = await import('./index')
+    const result = await check({
+      ...baseOptions,
+      write: true,
+      execute: 'deploy --token=top-secret',
+      loglevel: 'info',
+    })
+
+    expect(result).toBe(0)
+    const rendered = [...logSpy.mock.calls, ...errorSpy.mock.calls].flat().map(String).join(' ')
+    expect(rendered).not.toContain('top-secret')
+    expect(rendered).not.toContain('deploy --token')
+  })
+
   it('returns 2 when command fails and strictPostWrite=true', async () => {
     const pkg = makePkg('my-app')
     mocks.loadPackagesMock.mockResolvedValue([pkg])

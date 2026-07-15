@@ -1,4 +1,4 @@
-import type { PackageData, ProvenanceLevel } from './registry'
+import type { PackageData, ProvenanceLevel, SignaturePresence } from './registry'
 
 export type RangeMode =
   | 'default'
@@ -58,7 +58,11 @@ export interface ResolvedDepChange extends RawDep {
   publishedAt?: string
   currentVersionTime?: string
   score?: UpdateScore
+  signaturePresence?: SignaturePresence
+  currentSignaturePresence?: SignaturePresence
+  /** @deprecated Use signaturePresence. Values do not imply verification. */
   provenance?: ProvenanceLevel
+  /** @deprecated Use currentSignaturePresence. Values do not imply verification. */
   currentProvenance?: ProvenanceLevel
   nodeCompat?: string
   nodeCompatible?: boolean

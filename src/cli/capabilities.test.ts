@@ -60,6 +60,20 @@ describe('getCliCapabilities', () => {
     expect(capabilities.flagRelationships.update?.requires).toContain('write')
     expect(capabilities.flagRelationships['deps-only']?.conflicts).toContain('dev-only')
     expect(capabilities.flagRelationships['dev-only']?.conflicts).toContain('deps-only')
+    expect(capabilities.invocationAuthority.write).toEqual({ grants: ['write'] })
+    expect(capabilities.invocationAuthority.install).toEqual({
+      requires: ['write'],
+      grants: ['install'],
+    })
+    expect(capabilities.invocationAuthority.global).toEqual({
+      requires: ['write'],
+      grants: ['globalWrite'],
+    })
+    expect(capabilities.configIgnoredOptions).toEqual(
+      expect.arrayContaining(['write', 'install', 'update', 'execute', 'verifyCommand']),
+    )
+    expect(capabilities.errorReasons).toContain('AUTHORITY_REQUIRED')
+    expect(capabilities.errorReasons).toContain('UNKNOWN_OPTION')
   })
 
   it('includes supported config file patterns', () => {

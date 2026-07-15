@@ -196,7 +196,7 @@ Press `right` or `l` on any dependency to see every available version -- newest 
 - **Dist-tags** (`latest`, `next`, etc.)
 - **Deprecation** warnings
 - **Node engine** requirements
-- **Provenance** level
+- **Signature metadata presence** (presence does not prove verification or trust)
 
 Pick any version with `Space` or `Enter` -- not just the one depfresh suggested. Press `left` / `h` / `Esc` to go back without changing anything.
 
@@ -216,7 +216,7 @@ Add `--explain` (or `-E`) to show human-readable descriptions next to each versi
 - **minor** -- "New features. Backwards compatible."
 - **patch** -- "Bug fixes only. Safe to update."
 
-Plus deprecation, provenance, and Node compatibility warnings when relevant. For the AI agents and juniors who want context, not just numbers.
+Plus deprecation, missing signature-metadata, and Node compatibility warnings when relevant. For the AI agents and juniors who want context, not just numbers.
 
 ### Non-TTY Fallback
 

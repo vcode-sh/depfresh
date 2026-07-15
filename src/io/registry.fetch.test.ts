@@ -279,7 +279,7 @@ describe('fetchPackageData', () => {
     expect(result.deprecated).toEqual({ '1.0.0': 'Use 2.x' })
   })
 
-  it('extracts provenance from hasSignatures field', async () => {
+  it('records signature presence from hasSignatures without claiming verification', async () => {
     const npmResponse = {
       versions: {
         '1.0.0': { hasSignatures: true },
@@ -293,14 +293,15 @@ describe('fetchPackageData', () => {
     const { fetchPackageData } = await import('./registry')
     const result = await fetchPackageData('signed-pkg', defaultOptions)
 
-    expect(result.provenance).toEqual({
-      '1.0.0': 'attested',
-      '2.0.0': 'none',
-      '3.0.0': 'none',
+    expect(result.signaturePresence).toEqual({
+      '1.0.0': 'present',
+      '2.0.0': 'absent',
+      '3.0.0': 'absent',
     })
+    expect(result.provenance).toBeUndefined()
   })
 
-  it('extracts provenance from dist.signatures in full metadata', async () => {
+  it('records signature presence from full metadata without claiming verification', async () => {
     const npmResponse = {
       versions: {
         '1.0.0': { dist: { signatures: [{ sig: 'abc' }] } },
@@ -314,11 +315,12 @@ describe('fetchPackageData', () => {
     const { fetchPackageData } = await import('./registry')
     const result = await fetchPackageData('full-meta-pkg', defaultOptions)
 
-    expect(result.provenance).toEqual({
-      '1.0.0': 'attested',
-      '2.0.0': 'none',
-      '3.0.0': 'none',
+    expect(result.signaturePresence).toEqual({
+      '1.0.0': 'present',
+      '2.0.0': 'absent',
+      '3.0.0': 'absent',
     })
+    expect(result.provenance).toBeUndefined()
   })
 
   it('extracts engines.node per version', async () => {

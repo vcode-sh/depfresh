@@ -11,6 +11,7 @@ The full type catalogue. Every interface, union, and enum that depfresh exports.
 | `CatalogSource` | A workspace catalog entry (pnpm/bun/yarn) with its deps and file path |
 | `DepFieldType` | Union of dependency field names: `'dependencies'`, `'devDependencies'`, `'overrides'`, etc. |
 | `DiffType` | Version diff classification: `'major'` \| `'minor'` \| `'patch'` \| `'none'` \| `'error'` |
+| `InvocationAuthority` | Immutable grants for write, install, update, execute, verification-command, and global-write side effects |
 | `NpmrcConfig` | Parsed `.npmrc` -- registries, auth tokens, proxy settings |
 | `OutputFormat` | Output mode: `'table'` \| `'json'` |
 | `PackageData` | Raw registry metadata for a package -- versions, dist-tags, timestamps, deprecations |
@@ -18,7 +19,8 @@ The full type catalogue. Every interface, union, and enum that depfresh exports.
 | `PackageManagerName` | `'npm'` \| `'pnpm'` \| `'yarn'` \| `'bun'` |
 | `PackageMeta` | A loaded package with its file path, raw deps, resolved changes, and indent info |
 | `PackageType` | `'package.json'` \| `'package.yaml'` \| `'pnpm-workspace'` \| `'bun-workspace'` \| `'yarn-workspace'` \| `'global'` |
-| `ProvenanceLevel` | Provenance attestation: `'trusted'` \| `'attested'` \| `'none'` |
+| `SignaturePresence` | Passive registry metadata: `'present'` \| `'absent'`; presence does not prove verification or trust |
+| `ProvenanceLevel` | Deprecated compatibility input. Its legacy values do not imply verification; use `SignaturePresence` |
 | `RangeMode` | Version resolution strategy: `'default'` \| `'major'` \| `'minor'` \| `'patch'` \| `'latest'` \| `'newest'` \| `'next'` \| `'ignore'` |
 | `RawDep` | A dependency before resolution -- name, current version, source field, update flag |
 | `RegistryConfig` | A single registry entry -- URL, auth token, scope |
