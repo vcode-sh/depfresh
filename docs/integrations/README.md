@@ -28,10 +28,10 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version: 24.15.0
       - run: corepack enable
       - run: pnpm install --frozen-lockfile
-      - run: npx depfresh --output json --fail-on-outdated > depfresh-report.json
+      - run: pnpm exec depfresh --output json --fail-on-outdated > depfresh-report.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:

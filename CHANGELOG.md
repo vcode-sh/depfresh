@@ -4,9 +4,24 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Semver
 
 ## Unreleased
 
+### Security
+
+- **The GitHub Action now treats every input as data** -- the Action validates exact booleans,
+  modes, Node versions, and workspace-contained directories before installation or writes. The
+  shell-split `extra-args` escape hatch is gone, so only `write: 'true'` grants mutation authority.
+  Include and exclude patterns remain single inert arguments even when they contain spaces,
+  quotes, newlines, option-looking text, or shell syntax. Fatal install, runtime, and JSON errors
+  return stable annotations without replaying raw output, and temporary diagnostic files are
+  cleaned on every path.
+
 ### Changed
 
 - **The registry cache now uses Node's built-in SQLite** -- `node:sqlite` replaces the native `better-sqlite3` dependency while preserving the existing WAL-backed cache and memory fallback. depfresh no longer needs a native cache build or a matching Node ABI. The minimum supported runtime is now Node 24.15.0, the first Node 24 release where `node:sqlite` is a release candidate and imports without an experimental warning.
+- **The GitHub Action is revision-coupled and self-contained** -- each Action revision reads the
+  exact depfresh version from its reviewed `package.json`, installs that exact npm release, and
+  verifies the installed CLI version before use. The default runtime is exactly Node 24.15.0,
+  output parsing uses Node instead of assuming `jq`, and cleanup runs even when an earlier step
+  fails.
 
 ## [1.2.0] - 2026-07-10
 

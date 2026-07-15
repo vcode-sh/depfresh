@@ -130,7 +130,7 @@ Migration guide: **[docs/compare/from-taze.md](docs/compare/from-taze.md)** | Fu
 - **[Programmatic API](docs/api/)** -- functions, lifecycle callbacks, addon plugins, types
 - **[Output Formats](docs/output-formats/)** -- table, JSON, exit codes
 - **[Agent Workflows](docs/agents/README.md)** -- quickstarts for AI coding assistants
-- **[Integrations](docs/integrations/README.md)** -- GitHub Actions and MCP wrapper guidance
+- **[Integrations](docs/integrations/README.md)** -- version-coupled GitHub Action and MCP wrapper guidance
 - **[Compare](docs/compare/)** -- coverage matrix, migration guide, solved issues
 - **[Troubleshooting](docs/troubleshooting.md)** -- common issues, workspace gotchas, known limitations
 

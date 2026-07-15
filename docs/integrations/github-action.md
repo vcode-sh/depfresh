@@ -10,12 +10,21 @@ on: pull_request
 jobs:
   depfresh:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
       - uses: vcode-sh/depfresh@v1
         id: depfresh
-      - run: echo "${{ steps.depfresh.outputs.outdated-count }} outdated deps found"
+      - run: printf '%s outdated deps found\n' "$OUTDATED_COUNT"
+        env:
+          OUTDATED_COUNT: ${{ steps.depfresh.outputs.outdated-count }}
 ```
+
+The Action revision reads the exact depfresh version from its own reviewed `package.json`, installs
+that exact npm release, and verifies the installed CLI reports the same version. A moving npm tag is
+never used. If the matching package version is unavailable, the Action fails before running
+depfresh.
 
 ## Inputs
 
@@ -27,9 +36,27 @@ jobs:
 | `include` | `''` | Comma-separated package name patterns to include. |
 | `exclude` | `''` | Comma-separated package name patterns to exclude. |
 | `recursive` | `true` | Scan workspace packages recursively. |
-| `working-directory` | `.` | Path to the project root. |
-| `node-version` | `24` | Node.js version. depfresh requires >= 24. |
-| `extra-args` | `''` | Additional [CLI flags](../cli/flags.md) passed verbatim. |
+| `working-directory` | `.` | Existing directory inside the checked-out workspace. |
+| `node-version` | `24.15.0` | Exact Node.js version. Must be `>=24.15.0`. |
+
+## Input and Authority Contract
+
+- `mode` must be one of `default`, `major`, `minor`, `patch`, `latest`, `newest`, or `next`.
+- Boolean inputs accept only the lowercase strings `true` and `false`.
+- `node-version` must be an exact stable `major.minor.patch` version at or above `24.15.0`.
+  Ranges, aliases, `v` prefixes, prereleases, and floating major versions are rejected.
+- `working-directory` must exist and resolve inside `GITHUB_WORKSPACE`. Traversal and symlinks that
+  escape the checked-out workspace are rejected.
+- `include` and `exclude` are each passed as one argument. Spaces, quotes, newlines,
+  option-looking text, and shell syntax do not create additional flags or commands.
+- There is no arbitrary-argument input. Use the CLI directly when you need flags outside this
+  Action's reviewed contract.
+- `write: 'true'` is the only input that grants file mutation. The Action never exposes
+  `--install`, `--update`, `--execute`, or `--verify-command`.
+
+All validation happens before the package installation and before depfresh can write files.
+Invalid input exits with code `2` and a stable error annotation that does not echo the rejected
+value.
 
 ## Outputs
 
@@ -39,6 +66,9 @@ jobs:
 | `outdated-count` | Number of outdated dependencies. |
 | `exit-code` | Raw exit code: `0` (current), `1` (outdated), `2` (error). |
 | `has-updates` | `true` or `false`. For people who find integers ambiguous. |
+
+The JSON output is transported through `GITHUB_OUTPUT` without being printed as a workflow
+command. Pass it to later scripts through an environment variable, as shown below.
 
 ## Workflow Examples
 
@@ -63,9 +93,11 @@ jobs:
       - name: Comment on PR
         if: steps.depfresh.outputs.has-updates == 'true'
         uses: actions/github-script@v7
+        env:
+          DEPFRESH_JSON: ${{ steps.depfresh.outputs.json }}
         with:
           script: |
-            const output = JSON.parse(`${{ steps.depfresh.outputs.json }}`);
+            const output = JSON.parse(process.env.DEPFRESH_JSON);
             const s = output.summary;
             github.rest.issues.createComment({
               issue_number: context.issue.number,
@@ -100,9 +132,11 @@ jobs:
       - name: Create or update issue
         if: steps.depfresh.outputs.has-updates == 'true'
         uses: actions/github-script@v7
+        env:
+          DEPFRESH_JSON: ${{ steps.depfresh.outputs.json }}
         with:
           script: |
-            const output = JSON.parse(`${{ steps.depfresh.outputs.json }}`);
+            const output = JSON.parse(process.env.DEPFRESH_JSON);
             const s = output.summary;
             const lines = [`**${s.total}** outdated (${s.major} major, ${s.minor} minor, ${s.patch} patch).`, ''];
             for (const pkg of output.packages) {
@@ -148,9 +182,11 @@ jobs:
       - name: Create PR
         if: steps.depfresh.outputs.has-updates == 'true'
         uses: actions/github-script@v7
+        env:
+          DEPFRESH_JSON: ${{ steps.depfresh.outputs.json }}
         with:
           script: |
-            const output = JSON.parse(`${{ steps.depfresh.outputs.json }}`);
+            const output = JSON.parse(process.env.DEPFRESH_JSON);
             const s = output.summary;
             const branch = `depfresh/auto-update-${Date.now()}`;
             await exec.exec('git', ['config', 'user.name', 'github-actions[bot]']);
@@ -200,11 +236,15 @@ jobs:
           working-directory: ${{ matrix.workspace }}
           recursive: 'false'
           fail-on-outdated: 'false'
+      - name: Save result
+        env:
+          DEPFRESH_JSON: ${{ steps.depfresh.outputs.json }}
+        run: printf '%s' "$DEPFRESH_JSON" > "$RUNNER_TEMP/depfresh-result.json"
       - uses: actions/upload-artifact@v4
         with:
           name: depfresh-${{ hashFiles(format('{0}/package.json', matrix.workspace)) }}
-          path: /tmp/depfresh-*.json
-          if-no-files-found: ignore
+          path: ${{ runner.temp }}/depfresh-result.json
+          if-no-files-found: error
   summarise:
     needs: check
     runs-on: ubuntu-latest
@@ -252,6 +292,32 @@ Pass JSON through an env var. Never inline `${{ }}` with untrusted content.
 | `1` | Outdated deps found | `has-updates` = `true`, fails step if `fail-on-outdated` |
 | `2` | Fatal error | Fails immediately with error annotation |
 
-## Tip
+Installation, runtime, and output-processing failures are reported with stable annotations. Raw
+installer output, CLI stderr, and invalid JSON are retained only in temporary runner files and are
+removed by an `always()` cleanup step.
 
-`depfresh --help-json` returns a JSON object with all flags, types, defaults, and valid enum values. Useful for constructing `extra-args` dynamically.
+## Permissions and Write Behaviour
+
+For read-only checks, grant only `contents: read`. The Action does not use `GITHUB_TOKEN` to push,
+open pull requests, or install project dependencies.
+
+With `write: 'true'`, depfresh may modify dependency manifests and workspace catalog files inside
+the validated working directory. It still does not commit or push. Any later commit or pull-request
+step must receive its own explicit permissions and should inspect the changed files first.
+
+## Release Upgrade Procedure
+
+The Action installs the version recorded in the same revision's `package.json`. Maintainers must:
+
+1. Bump the package version and update the changelog.
+2. Build, test, and publish that exact npm version.
+3. Verify the published CLI reports the expected version.
+4. Only then create or move the Action release tag to the reviewed commit.
+
+This order prevents an Action tag from referring to a package version that does not exist yet.
+
+## CLI Escape Hatch
+
+`depfresh --help-json` returns the complete CLI contract. If your workflow needs capabilities that
+the Action intentionally does not expose, install and invoke the CLI directly with a shell array or
+an equivalent argument-array API. Do not reconstruct commands with `eval` or word splitting.

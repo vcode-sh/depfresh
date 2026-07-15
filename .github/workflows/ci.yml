@@ -27,6 +27,9 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      - name: Test Action adversarial harness
+        run: pnpm exec vitest run test/github-action.test.ts
+
       - name: Typecheck
         run: pnpm typecheck
 

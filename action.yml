@@ -36,13 +36,9 @@ inputs:
     required: false
     default: '.'
   node-version:
-    description: 'Node.js version to use'
+    description: 'Exact Node.js version to use (must be >= 24.15.0)'
     required: false
-    default: '24'
-  extra-args:
-    description: 'Additional CLI flags passed directly to depfresh'
-    required: false
-    default: ''
+    default: '24.15.0'
 
 outputs:
   json:
@@ -61,6 +57,69 @@ outputs:
 runs:
   using: composite
   steps:
+    - name: Validate inputs
+      id: validate
+      shell: bash
+      env:
+        INPUT_MODE: ${{ inputs.mode }}
+        INPUT_WRITE: ${{ inputs.write }}
+        INPUT_FAIL_ON_OUTDATED: ${{ inputs.fail-on-outdated }}
+        INPUT_RECURSIVE: ${{ inputs.recursive }}
+        INPUT_WORKING_DIRECTORY: ${{ inputs.working-directory }}
+        INPUT_NODE_VERSION: ${{ inputs.node-version }}
+      run: |
+        fail() {
+          printf '::error title=depfresh input error::%s\n' "$1"
+          exit 2
+        }
+
+        case "$INPUT_MODE" in
+          default|major|minor|patch|latest|newest|next) ;;
+          *) fail 'Invalid mode input' ;;
+        esac
+
+        for value in "$INPUT_WRITE" "$INPUT_FAIL_ON_OUTDATED" "$INPUT_RECURSIVE"; do
+          case "$value" in
+            true|false) ;;
+            *) fail 'Invalid boolean input' ;;
+          esac
+        done
+
+        if [[ ! "$INPUT_NODE_VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+          fail 'Invalid Node version'
+        fi
+        IFS=. read -r node_major node_minor _ <<< "$INPUT_NODE_VERSION"
+        if ((
+          10#$node_major < 24 ||
+          (10#$node_major == 24 && 10#$node_minor < 15)
+        )); then
+          fail 'Invalid Node version'
+        fi
+
+        if [[
+          -z "$INPUT_WORKING_DIRECTORY" ||
+          "$INPUT_WORKING_DIRECTORY" == *$'\n'* ||
+          "$INPUT_WORKING_DIRECTORY" == *$'\r'*
+        ]]; then
+          fail 'Invalid working directory'
+        fi
+        if ! workspace=$(cd -- "$GITHUB_WORKSPACE" 2>/dev/null && pwd -P); then
+          fail 'Invalid working directory'
+        fi
+        case "$INPUT_WORKING_DIRECTORY" in
+          /*) candidate="$INPUT_WORKING_DIRECTORY" ;;
+          *) candidate="$workspace/$INPUT_WORKING_DIRECTORY" ;;
+        esac
+        if ! working_directory=$(cd -- "$candidate" 2>/dev/null && pwd -P); then
+          fail 'Invalid working directory'
+        fi
+        case "$working_directory" in
+          "$workspace"|"$workspace"/*) ;;
+          *) fail 'Invalid working directory' ;;
+        esac
+
+        printf 'working-directory=%s\n' "$working_directory" >> "$GITHUB_OUTPUT"
+
     - name: Setup Node.js
       uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4
       with:
@@ -68,12 +127,38 @@ runs:
 
     - name: Install depfresh
       shell: bash
-      run: npm install -g depfresh
+      env:
+        DEPFRESH_PACKAGE_JSON: ${{ github.action_path }}/package.json
+      run: |
+        INSTALL_LOG=$(mktemp "$RUNNER_TEMP/depfresh-install.XXXXXX")
+        trap 'rm -f -- "$INSTALL_LOG"' EXIT
+
+        if ! DEPFRESH_VERSION=$(node --input-type=module --eval '
+          import { readFileSync } from "node:fs"
+          const packageJson = JSON.parse(readFileSync(process.env.DEPFRESH_PACKAGE_JSON, "utf8"))
+          process.stdout.write(packageJson.version)
+        ' 2>> "$INSTALL_LOG"); then
+          echo '::error title=depfresh install error::Invalid release metadata'
+          exit 2
+        fi
+        if ! npm install --global --ignore-scripts "depfresh@$DEPFRESH_VERSION" \
+          >> "$INSTALL_LOG" 2>&1; then
+          echo '::error title=depfresh install error::Installation failed'
+          exit 2
+        fi
+        if ! INSTALLED_VERSION=$(depfresh --version 2>> "$INSTALL_LOG"); then
+          echo '::error title=depfresh install error::Version check failed'
+          exit 2
+        fi
+        if [ "$INSTALLED_VERSION" != "$DEPFRESH_VERSION" ]; then
+          echo '::error title=depfresh install error::Version mismatch'
+          exit 2
+        fi
 
     - name: Run depfresh
       id: run
       shell: bash
-      working-directory: ${{ inputs.working-directory }}
+      working-directory: ${{ steps.validate.outputs.working-directory }}
       env:
         INPUT_MODE: ${{ inputs.mode }}
         INPUT_WRITE: ${{ inputs.write }}
@@ -81,79 +166,82 @@ runs:
         INPUT_RECURSIVE: ${{ inputs.recursive }}
         INPUT_INCLUDE: ${{ inputs.include }}
         INPUT_EXCLUDE: ${{ inputs.exclude }}
-        INPUT_EXTRA_ARGS: ${{ inputs.extra-args }}
       run: |
-        case "$INPUT_MODE" in
-          default|major|minor|patch|latest|newest|next) ;;
-          *) echo "::error::Invalid mode: $INPUT_MODE"; exit 2 ;;
-        esac
-
         ARGS=(--output json)
         if [ "$INPUT_MODE" != "default" ]; then ARGS+=(--mode "$INPUT_MODE"); fi
         if [ "$INPUT_WRITE" = "true" ]; then ARGS+=(--write); fi
         if [ "$INPUT_FAIL_ON_OUTDATED" = "true" ] && [ "$INPUT_WRITE" != "true" ]; then ARGS+=(--fail-on-outdated); fi
         if [ "$INPUT_RECURSIVE" = "false" ]; then ARGS+=(--no-recursive); fi
-        if [ -n "$INPUT_INCLUDE" ]; then ARGS+=(--include "$INPUT_INCLUDE"); fi
-        if [ -n "$INPUT_EXCLUDE" ]; then ARGS+=(--exclude "$INPUT_EXCLUDE"); fi
-        if [ -n "$INPUT_EXTRA_ARGS" ]; then
-          # Intentional word-splitting: extra-args carries multiple flags.
-          # shellcheck disable=SC2206
-          ARGS+=($INPUT_EXTRA_ARGS)
-        fi
+        if [ -n "$INPUT_INCLUDE" ]; then ARGS+=("--include=$INPUT_INCLUDE"); fi
+        if [ -n "$INPUT_EXCLUDE" ]; then ARGS+=("--exclude=$INPUT_EXCLUDE"); fi
 
-        DEPFRESH_OUTPUT=$(mktemp)
+        DEPFRESH_OUTPUT=$(mktemp "$RUNNER_TEMP/depfresh-output.XXXXXX")
+        DEPFRESH_ERROR=$(mktemp "$RUNNER_TEMP/depfresh-error.XXXXXX")
+        printf 'output-file=%s\n' "$DEPFRESH_OUTPUT" >> "$GITHUB_OUTPUT"
+        printf 'error-file=%s\n' "$DEPFRESH_ERROR" >> "$GITHUB_OUTPUT"
         EXIT_CODE=0
 
-        depfresh "${ARGS[@]}" > "$DEPFRESH_OUTPUT" || EXIT_CODE=$?
+        depfresh "${ARGS[@]}" > "$DEPFRESH_OUTPUT" 2> "$DEPFRESH_ERROR" || EXIT_CODE=$?
 
-        echo "exit-code=$EXIT_CODE" >> "$GITHUB_OUTPUT"
-        echo "output-file=$DEPFRESH_OUTPUT" >> "$GITHUB_OUTPUT"
+        printf 'exit-code=%s\n' "$EXIT_CODE" >> "$GITHUB_OUTPUT"
 
-        if [ "$EXIT_CODE" -eq 2 ]; then
-          echo "::error::depfresh encountered a fatal error (exit code 2)"
-          cat "$DEPFRESH_OUTPUT"
+        if [ "$EXIT_CODE" -ne 0 ] && [ "$EXIT_CODE" -ne 1 ]; then
+          echo '::error title=depfresh runtime error::Fatal exit code 2'
           exit 2
         fi
 
     - name: Parse outputs
       id: parse
       shell: bash
+      env:
+        OUTPUT_FILE: ${{ steps.run.outputs.output-file }}
+        ERROR_FILE: ${{ steps.run.outputs.error-file }}
       run: |
-        OUTPUT_FILE="${{ steps.run.outputs.output-file }}"
-        EXIT_CODE="${{ steps.run.outputs.exit-code }}"
+        # JavaScript is intentionally single-quoted shell data.
+        # shellcheck disable=SC2016
+        if ! node --input-type=module --eval '
+          import { randomUUID } from "node:crypto"
+          import { appendFileSync, readFileSync } from "node:fs"
 
-        if [ ! -s "$OUTPUT_FILE" ]; then
-          echo "json={}" >> "$GITHUB_OUTPUT"
-          echo "outdated-count=0" >> "$GITHUB_OUTPUT"
-          echo "has-updates=false" >> "$GITHUB_OUTPUT"
-          exit 0
+          const content = readFileSync(process.env.OUTPUT_FILE, "utf8")
+          const data = JSON.parse(content)
+          const total = data?.summary?.total
+          if (!Number.isSafeInteger(total) || total < 0) {
+            throw new Error("Invalid summary.total")
+          }
+
+          const lines = new Set(content.split(/\r?\n/u))
+          let delimiter
+          do delimiter = `DEPFRESH_JSON_${randomUUID()}`
+          while (lines.has(delimiter))
+
+          const terminator = content.endsWith("\n") ? "" : "\n"
+          appendFileSync(
+            process.env.GITHUB_OUTPUT,
+            `json<<${delimiter}\n${content}${terminator}${delimiter}\n` +
+              `outdated-count=${total}\n` +
+              `has-updates=${total > 0}\n`,
+          )
+        ' 2>> "$ERROR_FILE"; then
+          echo '::error title=depfresh output error::Invalid JSON output'
+          exit 2
         fi
-
-        JSON_CONTENT=$(cat "$OUTPUT_FILE")
-
-        # Store JSON output (escape for GitHub Actions)
-        {
-          echo "json<<DEPFRESH_JSON_EOF"
-          echo "$JSON_CONTENT"
-          echo "DEPFRESH_JSON_EOF"
-        } >> "$GITHUB_OUTPUT"
-
-        # Extract outdated count from summary.total
-        OUTDATED_COUNT=$(echo "$JSON_CONTENT" | jq -r '.summary.total // 0')
-        echo "outdated-count=$OUTDATED_COUNT" >> "$GITHUB_OUTPUT"
-
-        if [ "$OUTDATED_COUNT" -gt 0 ]; then
-          echo "has-updates=true" >> "$GITHUB_OUTPUT"
-        else
-          echo "has-updates=false" >> "$GITHUB_OUTPUT"
-        fi
-
-        # Clean up temp file
-        rm -f "$OUTPUT_FILE"
 
     - name: Handle fail-on-outdated
       if: ${{ steps.run.outputs.exit-code == '1' && inputs.fail-on-outdated == 'true' && inputs.write != 'true' }}
       shell: bash
+      env:
+        OUTDATED_COUNT: ${{ steps.parse.outputs.outdated-count }}
       run: |
-        echo "::warning::depfresh found ${{ steps.parse.outputs.outdated-count }} outdated dependencies"
+        printf '::warning::depfresh found %s outdated dependencies\n' "$OUTDATED_COUNT"
         exit 1
+
+    - name: Clean up
+      if: ${{ always() }}
+      shell: bash
+      env:
+        OUTPUT_FILE: ${{ steps.run.outputs.output-file }}
+        ERROR_FILE: ${{ steps.run.outputs.error-file }}
+      run: |
+        if [ -n "$OUTPUT_FILE" ]; then rm -f -- "$OUTPUT_FILE"; fi
+        if [ -n "$ERROR_FILE" ]; then rm -f -- "$ERROR_FILE"; fi
