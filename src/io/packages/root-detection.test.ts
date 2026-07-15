@@ -2,7 +2,21 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSyn
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { resolveDiscoveryContext } from './root-detection'
+import { isPathWithinBoundary, resolveDiscoveryContext } from './root-detection'
+
+describe('isPathWithinBoundary', () => {
+  it.each([
+    ['/repo', '/repo', true],
+    ['/repo/package', '/repo', true],
+    ['/repo-sibling', '/repo', false],
+    ['C:\\repo', 'C:/repo', true],
+    ['C:\\repo\\package', 'C:/repo', true],
+    ['C:\\repo-sibling', 'C:/repo', false],
+    ['D:\\repo\\package', 'C:/repo', false],
+  ])('classifies candidate %s against boundary %s', (candidate, boundary, expected) => {
+    expect(isPathWithinBoundary(candidate, boundary)).toBe(expected)
+  })
+})
 
 describe('resolveDiscoveryContext', () => {
   let tmpDir: string

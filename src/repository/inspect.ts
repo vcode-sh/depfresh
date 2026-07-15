@@ -25,7 +25,7 @@ export async function inspectRepositoryWithProjection(
   if (!report) {
     throw new Error('Repository inspection requires a discovery report')
   }
-  return { model: buildRepositoryModel(root, packages, report), packages }
+  return { model: buildRepositoryModel(root, packages, report, options.ignorePaths), packages }
 }
 
 function createInspectOptions(options: InspectRepositoryOptions): depfreshOptions {

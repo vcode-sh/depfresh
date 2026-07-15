@@ -76,6 +76,24 @@ export default defineConfig({
 })
 ```
 
+## Repository Evidence Boundaries
+
+`inspectRepository()` exposes the effective root as `.` and represents contained nested workspace
+and Git roots as first-class boundaries. Every contained marker is retained with a canonical
+repository-relative path. Packages and lockfiles link to their nearest owning boundary, so a
+nested lockfile never changes the parent boundary's package-manager conclusion.
+
+Workspace declarations from a boundary-root manifest and `pnpm-workspace.yaml` are compared as
+evidence. Distinct authoritative declarations remain `ambiguous`; filename order never selects a
+winner. Malformed supported declarations are `unsupported`, while unreadable declarations are
+`unavailable`; neither is silently treated as missing. Catalog-only `pnpm-workspace.yaml` files and
+empty `.yarnrc.yml` markers remain valid. Workspace evidence retains only pnpm `packages` patterns
+and stable marker metadata: pnpm catalog values and unrelated Yarn configuration, including
+registry credentials, are never serialized into the evidence conclusion. A nested `.git` marker
+also prevents inspection started inside that repository from being attributed to an outer
+workspace. Each nested Git boundary is probed separately, and escaped marker symlinks are diagnosed
+and never followed.
+
 ## Workspace Catalogs
 
 depfresh understands workspace catalogs for **pnpm**, **bun**, and **yarn**. These are centralised version declarations that individual packages reference instead of specifying versions directly.

@@ -69,7 +69,8 @@ depfresh --fail-on-outdated
 - **Zero config** -- run `depfresh` and it works. No YAML. No PhD.
 - **Monorepo & workspace support** -- pnpm, bun, yarn, npm. Auto-detected. Catalogs included.
 - **Repository model** -- deterministic read-only inspection with stable IDs, exact byte hashes,
-  occurrences, catalogs, and relationships.
+  boundaries, package-manager and lockfile conclusions, declared Node runtimes, and read-only Git
+  state per effective or nested repository boundary.
 - **7 range modes** -- `default`, `major`, `minor`, `patch`, `latest`, `newest`, `next`
 - **Interactive cherry-picking** -- grouped multiselect with colour-coded severity
 - **Per-package modes** -- `packageMode` with exact, glob, or regex patterns per dependency

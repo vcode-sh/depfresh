@@ -87,9 +87,13 @@ export default defineConfig({
 
 ## `inspectRepository(options)`
 
-Builds the versioned, deterministic, read-only repository model. It reads contained manifests and
-catalogs, hashes exact source bytes, and records exact dependency occurrences and relationships. It
-does not contact registries, write files, run package managers, or exit the process.
+Builds the versioned, deterministic, read-only repository model. It reads contained manifests,
+workspace markers, catalogs, supported lockfiles, and declared Node runtime files; hashes exact
+source bytes; and records exact dependency occurrences, boundary ownership, evidence conclusions,
+and target-file Git state. The fixed Git adapter uses argument arrays, sanitizes inherited Git
+control variables, probes nested Git boundaries separately, disables optional locks and helper
+features, and does not refresh or mutate the index. It does not contact registries, evaluate runtime
+compatibility, write files, run lifecycle scripts or package managers, or exit the process.
 
 ```ts
 function inspectRepository(options: InspectRepositoryOptions): Promise<RepositoryModel>

@@ -16,6 +16,7 @@ import type {
   RepositorySourceFile,
 } from '../types/repository'
 import { REPOSITORY_MODEL_SCHEMA_VERSION } from '../types/repository'
+import { collectRepositoryEvidence } from './evidence'
 import { createRepositoryId, hashSourceBytes, toRepositoryRelativePath } from './identity'
 
 const DEPENDENCY_FIELDS = [
@@ -45,6 +46,7 @@ export function buildRepositoryModel(
   root: string,
   projection: PackageMeta[],
   report: DiscoveryReport,
+  ignorePaths: readonly string[] = [],
 ): RepositoryModel {
   const diagnostics = diagnosticsFromDiscovery(root, report)
   const sourcePaths = collectSourcePaths(root, projection, report)
@@ -110,16 +112,38 @@ export function buildRepositoryModel(
         a.catalogId.localeCompare(b.catalogId) || a.occurrenceId.localeCompare(b.occurrenceId),
     )
 
+  const sourceFiles = parsedSources.map((parsed) => parsed.source).sort(compareByPath)
+  const sortedPackages = packages.sort(compareByPath)
+  const extension = collectRepositoryEvidence(
+    root,
+    report,
+    sourceFiles,
+    sortedPackages,
+    diagnostics,
+    ignorePaths,
+  )
+
   const model: RepositoryModel = {
     schemaVersion: REPOSITORY_MODEL_SCHEMA_VERSION,
     rootId: createRepositoryId('repository', '.'),
-    sourceFiles: parsedSources.map((parsed) => parsed.source).sort(compareByPath),
-    packages: packages.sort(compareByPath),
+    root: extension.root,
+    boundaries: extension.boundaries,
+    sourceFiles,
+    packages: sortedPackages,
     catalogs: catalogs.sort((a, b) => a.id.localeCompare(b.id)),
+    lockfiles: extension.lockfiles,
+    runtimeDeclarations: extension.runtimeDeclarations,
+    vcs: extension.vcs,
+    evidence: extension.evidence,
     occurrences: occurrences.sort((a, b) => a.id.localeCompare(b.id)),
-    relationships: { workspaceMembers, catalogConsumers },
+    relationships: {
+      workspaceMembers,
+      catalogConsumers,
+      boundaryPackages: extension.boundaryPackages,
+      lockfileBoundaries: extension.lockfileBoundaries,
+    },
     diagnostics: diagnostics.sort(compareDiagnostics),
-    evidenceRefs: [],
+    evidenceRefs: extension.evidence.map((conclusion) => conclusion.id),
   }
   recordIdCollisions(model)
   model.diagnostics.sort(compareDiagnostics)
@@ -482,6 +506,16 @@ function recordIdCollisions(model: RepositoryModel): void {
     ...model.packages.map((value) => ({ id: value.id, path: value.path })),
     ...model.catalogs.map((value) => ({ id: value.id, path: value.sourceFileId })),
     ...model.occurrences.map((value) => ({ id: value.id, path: value.sourceFileId })),
+    ...(model.boundaries ?? []).flatMap((boundary) => [
+      { id: boundary.id, path: boundary.path },
+      ...boundary.markers.map((marker) => ({ id: marker.id, path: marker.path })),
+    ]),
+    ...(model.lockfiles ?? []).map((value) => ({ id: value.id, path: value.path })),
+    ...(model.runtimeDeclarations ?? []).map((value) => ({ id: value.id, path: value.path })),
+    ...(model.evidence ?? []).map((conclusion) => ({
+      id: conclusion.id,
+      path: conclusion.boundaryId ?? '.',
+    })),
   ]
   const seen = new Set<string>()
   for (const identity of identities) {

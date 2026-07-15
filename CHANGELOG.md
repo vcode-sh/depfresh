@@ -13,6 +13,16 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Semver
   explicitly, and ambiguous or out-of-root states become deterministic diagnostics. Normal check
   discovery now consumes the model's compatibility projection instead of maintaining a second
   package-discovery path.
+- **Repository evidence conclusions** -- schema version `1` now additively emits effective and
+  nested boundaries, boundary-owned package-manager and lockfile conclusions, exact lockfile byte
+  hashes and parse states, repository-declared Node constraints, and read-only Git target states.
+  Ambiguous, missing, unsupported, and unavailable evidence remains explicit; inspection never
+  runs package managers or lifecycle scripts, evaluates compatibility, synchronizes lockfiles, or
+  mutates Git state. Bun JSONC lockfiles, unreadable evidence, ignored targets, rename endpoints,
+  nested Git repositories, hostile Git environment variables, and per-boundary shallow state are
+  handled without guessing or invoking repository helpers. Partial directory and nested Git probe
+  failures preserve known evidence without reporting unknown state as confirmed, and workspace
+  conclusions never expose unrelated pnpm catalog or Yarn configuration values.
 
 ### Security
 

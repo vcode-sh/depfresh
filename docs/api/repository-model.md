@@ -1,7 +1,7 @@
 # Repository Model
 
 `inspectRepository()` returns a deterministic, read-only description of the repository without
-contacting registries or running write/install/update commands.
+contacting registries or running write, install, update, package-manager, or lifecycle commands.
 
 ```ts
 import { inspectRepository } from 'depfresh'
@@ -16,85 +16,134 @@ if (model.schemaVersion !== 1) {
 ## Version and identity
 
 The current `schemaVersion` is `1`. Consumers should check it before interpreting the model and
-reject versions they do not understand. New optional fields may be added compatibly; incompatible
+reject versions they do not understand. The Plan 016 fields are additive and optional in the public
+schema-v1 producer type for older producers; the current inspector always emits them. Incompatible
 shape or identity changes require a new schema version.
 
-Every entity ID is a SHA-256-derived identifier over:
+Every entity ID is a SHA-256-derived identifier over the schema version, entity kind, and canonical
+repository-relative identity. IDs never include absolute paths, timestamps, enumeration order,
+inode values, or the executor Node version. `rootId` represents the repository-relative identity
+`.` and is not a machine-specific locator.
 
-1. schema version;
-2. entity kind;
-3. canonical repository-relative identity.
+## Evidence conclusions
 
-IDs never include absolute paths, timestamps, enumeration order, or inode values. Source-file IDs
-derive from their canonical relative paths; package IDs derive from their manifest paths; catalog
-IDs add manager and catalog name; occurrence IDs add their owner and exact nested declaration path.
+Every conclusion has a stable ID, one of five statuses (`confirmed`, `ambiguous`, `missing`,
+`unsupported`, or `unavailable`), a candidate-array `value`, sorted sources, and sorted stable
+diagnostics. `evidenceRefs` contains every emitted conclusion ID.
 
-`rootId` represents the versioned repository-relative identity `.`. It is intentionally not a
-machine-specific repository locator.
+File and field sources retain canonical repository-relative paths. Field sources also retain the
+exact nested path as string segments. Probe sources are named (`discovery` or `git`) and never
+serialize an executable path or raw command stderr.
 
 ## Entities
 
-### `sourceFiles`
+### `root` and `boundaries`
+
+The effective root is represented as `.` with its discovery mode. Boundaries classify the
+effective root and each contained nested workspace or Git root, retaining every canonical marker.
+`boundaryPackages` and `lockfileBoundaries` record explicit ownership. Ownership always uses the
+nearest boundary, so a nested lockfile cannot make its parent ambiguous. Inspection never crosses
+the canonical root or follows an escaped marker symlink.
+
+### `sourceFiles` and `packages`
 
 Each supported JSON or YAML source records its canonical relative path, exact SHA-256 byte hash,
-parse state, indentation, newline style, and trailing-newline state. The hash covers the original
-bytes, before parsing or newline normalization.
+parse state, indentation, newline style, and trailing-newline state. The hash covers original bytes
+before parsing or normalization.
 
-### `packages`
+Each selected `package.json` or `package.yaml` records a stable ID, source ID, manifest path,
+workspace path, name, and `private` flag. Existing manifest priority remains unchanged:
+`package.yaml` wins when both formats exist in one directory.
 
-Each selected `package.json` or `package.yaml` manifest records a stable ID, source-file ID,
-repository-relative manifest path, workspace path, name, and `private` flag. Existing manifest
-priority remains unchanged: `package.yaml` wins when both formats exist in one directory.
+### `occurrences` and `catalogs`
 
-### `occurrences`
+One occurrence represents one exact declaration. Identity includes its owner and full nested path,
+so repeated names in another field, manifest, override branch, or catalog remain separate. Roles
+cover direct dependencies, overrides, package-manager fields, catalog owners, and catalog
+consumers.
 
-One occurrence represents one exact declaration. Identity includes the owner and full nested path,
-so repeated names in another field, manifest, override branch, or catalog remain separate.
+pnpm, Bun, and Yarn default/named catalogs record their source, manager, format, name, and entry
+occurrence IDs. Ambiguous consumers remain unlinked with `CATALOG_REFERENCE_AMBIGUOUS`.
 
-Roles are:
+### `lockfiles`
 
-- `dependency` for direct standard dependency fields;
-- `override` for exact nested override/resolution leaves;
-- `package-manager` for the manifest `packageManager` field;
-- `catalog-owner` for a catalog entry;
-- `catalog-consumer` for a `catalog:` declaration.
+Supported exact names are:
 
-The model retains the exact `declaredText`, protocol, field, catalog link, and whether the current
-writer can address the declaration safely.
+- npm: `package-lock.json` and `npm-shrinkwrap.json`;
+- pnpm: `pnpm-lock.yaml`;
+- Yarn: `yarn.lock`;
+- Bun: `bun.lock` and legacy `bun.lockb`.
 
-### `catalogs`
+Each readable entity records its manager, canonical path, exact SHA-256 byte hash, owning boundary,
+parse state, and safely detected format version. JSON, JSONC, and YAML/text formats are parsed
+without lifecycle execution. Modern `bun.lock` is JSONC, including comments and trailing commas.
+Binary `bun.lockb` is hashed and marked `unsupported`; Bun is never invoked. Malformed known formats
+are `error`, while a known but unreadable file is retained as `unavailable` without a fabricated
+hash. Escaped symlinks and duplicate physical aliases produce diagnostics instead of extra
+entities. A direct canonical lockfile wins over its aliases; cross-manager aliases without a direct
+canonical lockfile remain explicitly ambiguous.
 
-pnpm, Bun, and Yarn default/named catalogs record their source file, manager, format, name, and
-entry occurrence IDs. Consumer relationships link exact declarations to catalog owners. A direct
-dependency with the same package name is not linked. If more than one loaded format defines the
-same referenced catalog name, the consumer remains unlinked and receives
-`CATALOG_REFERENCE_AMBIGUOUS`.
+Lockfile selection is `missing` for zero candidates, `confirmed` for one parsed candidate, and
+`ambiguous` for multiple candidates, including multiple lockfiles for one manager. With no valid
+boundary-root field, one represented manager is confirmed and distinct managers are ambiguous.
+If an owned directory cannot be enumerated, lockfile selection is `unavailable`; manager evidence
+is also `unavailable` unless a valid boundary-root `packageManager` field remains authoritative.
+
+### `runtimeDeclarations`
+
+Repository runtime evidence is limited to manifest `engines.node`, `.nvmrc`, `.node-version`, and
+the `nodejs` entry in `.tool-versions`. Exact declared text is retained; tool files also carry exact
+byte hashes. One unique declaration is confirmed, distinct declarations remain ambiguous, no
+declaration is missing, and malformed supported syntax is unsupported. A single `.tool-versions`
+`nodejs` entry may retain multiple fallback values as exact text; evaluation is deferred. Any
+unreadable declaration keeps the boundary conclusion unavailable, and unsupported syntax keeps it
+unsupported even when another declaration is valid. The Node version executing depfresh is not
+evidence. Compatibility evaluation remains outside this model.
+
+### `vcs`
+
+The focused Git adapter uses the fixed `git` executable with argument arrays and NUL-delimited
+porcelain output. It removes inherited `GIT_*` routing, object, config, helper, and trace variables;
+then disables optional locks, preload-index refresh behavior, filesystem monitors, untracked-cache
+updates, filesystem caching, and automatic maintenance. Every modeled nested Git boundary is
+probed separately. The aggregate `shallow` field describes the effective root and is omitted when
+that state is unavailable, while `repositories` retains status and shallow state per boundary.
+Confirmed results from readable boundaries remain in the conclusion when another boundary probe
+is unavailable.
+
+Target states cover clean, ignored, staged, unstaged, staged-plus-unstaged, added, deleted, renamed,
+conflicted, and untracked files. Rename evidence retains both the destination and original path.
+Clean is emitted only for a tracked modeled target; exact ignored targets are queried separately.
+Sorted dirty paths outside the modeled target set are retained, and unusual paths are NUL-safe.
+
+Missing Git, a non-Git directory, and a failed or corrupt probe are distinct unavailable
+diagnostics. The adapter never stages, restores, cleans, checks out, runs `update-index`, invokes a
+configured filesystem-monitor helper, or reads unrelated dirty file contents.
 
 ### `relationships`
 
-`workspaceMembers` links the root manifest to discovered workspace package manifests.
-`catalogConsumers` links a catalog ID to each exact consumer occurrence.
+`workspaceMembers` preserves the compatibility projection's workspace links.
+`catalogConsumers` links catalog IDs to exact consumer occurrences. `boundaryPackages` and
+`lockfileBoundaries` expose first-class evidence ownership.
 
-## Diagnostics
+## Manager precedence and diagnostics
 
-Diagnostics are deterministic and repository-relative:
+A single valid boundary-root `packageManager` field is authoritative only when no other
+boundary-root field conflicts. Exact manager, version, hash, and raw text are retained. Invalid or
+unknown syntax is unsupported; the model never defaults to npm. A declared-manager/lockfile
+mismatch is diagnosed without overriding the authoritative field.
 
-- `SOURCE_PARSE_FAILED` -- a supported source could be read but not parsed as an object;
-- `ROOT_NOT_FOUND` -- the requested inspection root does not exist;
-- `SOURCE_OUTSIDE_ROOT` -- a candidate failed containment or escaped through a symlink;
-- `CATALOG_REFERENCE_UNRESOLVED` -- a `catalog:` declaration has no matching owner;
-- `CATALOG_REFERENCE_AMBIGUOUS` -- more than one loaded catalog could own the declaration;
-- `ID_COLLISION` -- two entities produced the same stable ID.
+Diagnostics are deterministic and repository-relative. In addition to the existing root, source,
+catalog, and collision diagnostics, evidence can report workspace conflicts, unsupported or
+unavailable declarations, invalid package-manager fields, manager/lockfile mismatches, lockfile
+parse/unsupported/unavailable/containment states, runtime syntax or I/O failures, unreadable
+directories, and the three unavailable Git outcomes.
 
-An unsupported or ambiguous state is reported instead of guessed. Plan 016 adds manager, lockfile,
-runtime, VCS, and evidence interpretation; the current `evidenceRefs` array is empty by design.
+## Compatibility projection and limitations
 
-## Compatibility projection
+Normal `loadPackages()` and `check()` discovery consume the same `PackageMeta[]` compatibility
+projection. Existing filtering, catalog loading, callbacks, and callers remain unchanged. Global
+package discovery remains on its existing non-filesystem projection.
 
-Normal `loadPackages()` and `check()` discovery now run through the same inspection pass and consume
-its explicit `PackageMeta[]` compatibility projection. This preserves existing filtering, catalog
-loading, callbacks, and callers while the versioned model becomes the source of discovery truth.
-
-Global package discovery remains on its existing non-filesystem projection until the global state
-model is introduced. Registry resolution and every write path remain outside
-`inspectRepository()`.
+Repository inspection does not resolve registry versions, choose a compatibility policy,
+synchronize lockfiles, apply manifest changes, run installs, or mutate Git state.

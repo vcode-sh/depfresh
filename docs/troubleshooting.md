@@ -90,6 +90,28 @@ If you hit GitHub API rate limits:
 
 ## Workspace issues
 
+### Repository inspection says evidence is ambiguous or unavailable
+
+`inspectRepository()` does not default an unknown package manager to npm. Conflicting valid
+boundary-root `packageManager` fields, distinct lockfile managers, multiple lockfiles, workspace
+declarations, or declared Node constraints remain explicit `ambiguous` conclusions with every
+candidate retained. Invalid manager or supported runtime syntax is `unsupported`; absent evidence
+is `missing`.
+
+Git evidence is `unavailable` with a distinct stable diagnostic when Git is missing, the target is
+not a Git repository, or a read-only probe fails or is corrupt. Raw Git stderr is not serialized.
+Inspection sanitizes inherited Git control and trace variables, probes nested Git repositories
+separately, and disables configured filesystem monitors and untracked-cache updates. It never
+stages, restores, cleans, checks out, refreshes the index, runs a package manager, or executes
+lifecycle scripts. Registry resolution, Node compatibility policy, lockfile synchronization,
+installs, and apply behavior remain separate operations.
+
+Supported lockfile names are `package-lock.json`, `npm-shrinkwrap.json`, `pnpm-lock.yaml`,
+`yarn.lock`, `bun.lock`, and legacy `bun.lockb`. Modern `bun.lock` is parsed as JSONC; the binary
+`bun.lockb` format is hashed but marked `unsupported`, and Bun is never invoked to interpret either
+format. Declared Node evidence is limited to
+`engines.node`, `.nvmrc`, `.node-version`, and the `nodejs` entry in `.tool-versions`.
+
 ### Catalogs not updating
 
 depfresh handles workspace catalogs (pnpm, bun, yarn) by updating them in-place in their respective source files — `pnpm-workspace.yaml`, root `package.json` (`workspaces.catalog` / `workspaces.catalogs`), or `.yarnrc.yml`. If your catalog entries aren't updating, make sure `--write` is set and that depfresh actually detected the catalog. Check debug output with `--loglevel debug`.

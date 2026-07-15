@@ -26,6 +26,13 @@ The full type catalogue. Every interface, union, and enum that depfresh exports.
 | `RawDep` | A dependency before resolution -- name, current version, source field, update flag |
 | `RegistryConfig` | A single registry entry -- URL, auth token, scope |
 | `RepositoryModel` | Versioned deterministic repository source, manifest, catalog, occurrence, relationship, diagnostic, and evidence-reference graph |
+| `RepositoryEvidenceConclusion<T>` | Stable `confirmed`, `ambiguous`, `missing`, `unsupported`, or `unavailable` conclusion with candidate values, sources, and diagnostics |
+| `RepositoryEvidenceSource` | Stable repository-relative file, nested field path, or named read-only probe source |
+| `RepositoryBoundary` | Effective-root or nested workspace/Git boundary with every canonical marker |
+| `RepositoryLockfile` | Owned npm/pnpm/Yarn/Bun lockfile with parse state, detected format version, and exact byte hash when readable |
+| `RepositoryRuntimeDeclaration` | Exact repository-declared Node text from a manifest or supported tool-version file |
+| `RepositoryVcsBoundaryEvidence` | Read-only status and shallow state for one effective or nested Git boundary |
+| `RepositoryVcsEvidence` | Read-only per-boundary Git state, aggregate target-file states, unrelated dirty paths, and unavailable diagnostics |
 | `RepositorySourceFile` | Canonical relative source path with exact byte hash and formatting metadata |
 | `RepositoryPackageManifest` | Stable package-manifest identity and workspace location |
 | `RepositoryDependencyOccurrence` | One exact declaration path, owner, role, protocol, text, catalog link, and writeability state |

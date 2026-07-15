@@ -1,5 +1,5 @@
 import { existsSync, readFileSync, realpathSync } from 'node:fs'
-import { dirname, join, resolve } from 'pathe'
+import { dirname, isAbsolute, join, normalize, relative, resolve } from 'pathe'
 import YAML from 'yaml'
 import { resolveContainedPath } from './containment'
 
@@ -15,20 +15,36 @@ export function resolveDiscoveryContext(inputCwd: string): DiscoveryContext {
   const normalizedInput = canonicalizeExistingPath(inputCwd)
   const nearestWorkspaceRoot = findNearestAncestor(normalizedInput, isWorkspaceRoot)
   const nearestPackageRoot = findNearestAncestor(normalizedInput, hasManifest)
+  const nearestGitRoot = findNearestAncestor(normalizedInput, hasGitMarker)
 
-  if (nearestWorkspaceRoot) {
+  const workspaceRoot = withinGitBoundary(nearestWorkspaceRoot, nearestGitRoot)
+    ? nearestWorkspaceRoot
+    : undefined
+  const packageRoot = withinGitBoundary(nearestPackageRoot, nearestGitRoot)
+    ? nearestPackageRoot
+    : undefined
+
+  if (workspaceRoot) {
     return {
       inputCwd,
-      effectiveRoot: nearestWorkspaceRoot,
-      discoveryMode: nearestWorkspaceRoot === normalizedInput ? 'direct-root' : 'inside-project',
+      effectiveRoot: workspaceRoot,
+      discoveryMode: workspaceRoot === normalizedInput ? 'direct-root' : 'inside-project',
     }
   }
 
-  if (nearestPackageRoot) {
+  if (packageRoot) {
     return {
       inputCwd,
-      effectiveRoot: nearestPackageRoot,
-      discoveryMode: nearestPackageRoot === normalizedInput ? 'direct-root' : 'inside-project',
+      effectiveRoot: packageRoot,
+      discoveryMode: packageRoot === normalizedInput ? 'direct-root' : 'inside-project',
+    }
+  }
+
+  if (nearestGitRoot) {
+    return {
+      inputCwd,
+      effectiveRoot: nearestGitRoot,
+      discoveryMode: nearestGitRoot === normalizedInput ? 'direct-root' : 'inside-project',
     }
   }
 
@@ -37,6 +53,24 @@ export function resolveDiscoveryContext(inputCwd: string): DiscoveryContext {
     effectiveRoot: normalizedInput,
     discoveryMode: 'parent-folder',
   }
+}
+
+function withinGitBoundary(candidate: string | undefined, gitRoot: string | undefined): boolean {
+  if (!(candidate && gitRoot)) return !!candidate
+  return isPathWithinBoundary(candidate, gitRoot)
+}
+
+export function isPathWithinBoundary(candidate: string, boundary: string): boolean {
+  const difference = relative(normalize(boundary), normalize(candidate))
+  return (
+    difference === '' ||
+    (!isAbsolute(difference) && difference !== '..' && !difference.startsWith('../'))
+  )
+}
+
+function hasGitMarker(dir: string): boolean {
+  const marker = join(dir, '.git')
+  return existsSync(marker) && resolveContainedPath(dir, marker).allowed
 }
 
 function findNearestAncestor(
