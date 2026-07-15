@@ -1,5 +1,5 @@
 import * as semver from 'semver'
-import type { DiffType, RangeMode } from '../types'
+import type { DiffType } from '../types'
 
 export type SpecShape = 'simple' | 'x-range' | 'complex'
 
@@ -55,72 +55,27 @@ export function getMaxVersion(versions: string[]): string | null {
   return versions.reduce((max, v) => (semver.gt(v, max) ? v : max), versions[0]!)
 }
 
+export function normalizeVersion(version: string): string | null {
+  const range = semver.validRange(version)
+  return range ? (semver.minVersion(range)?.version ?? null) : null
+}
+
 export function getDiff(current: string, target: string): DiffType {
-  const c = semver.coerce(current)
-  const t = semver.coerce(target)
+  const normalizedCurrent = normalizeVersion(current)
+  const normalizedTarget = normalizeVersion(target)
+  if (!(normalizedCurrent && normalizedTarget)) return 'error'
+
+  const c = semver.parse(normalizedCurrent)
+  const t = semver.parse(normalizedTarget)
   if (!(c && t)) return 'error'
 
   if (semver.eq(c, t)) return 'none'
-
-  const diff = semver.diff(c, t)
-  if (!diff) return 'none'
-
-  if (diff.startsWith('major') || diff === 'premajor') return 'major'
-  if (diff.startsWith('minor') || diff === 'preminor') return 'minor'
-  if (diff.startsWith('patch') || diff === 'prepatch' || diff === 'prerelease') return 'patch'
-
+  if (c.major !== t.major) return 'major'
+  if (c.minor !== t.minor) return 'minor'
   return 'patch'
 }
 
 export function applyVersionPrefix(version: string, prefix: string): string {
   if (!prefix) return version
   return `${prefix}${version}`
-}
-
-function validDistTag(value: string | undefined): string | null {
-  return value && semver.valid(value) ? value : null
-}
-
-export function resolveTargetVersion(
-  currentVersion: string,
-  versions: string[],
-  distTags: Record<string, string>,
-  mode: RangeMode,
-): string | null {
-  switch (mode) {
-    case 'latest':
-      return validDistTag(distTags.latest)
-
-    case 'newest': {
-      return getMaxVersion(versions)
-    }
-
-    case 'next':
-      return validDistTag(distTags.next) ?? validDistTag(distTags.latest)
-
-    case 'major':
-      return getMaxVersion(versions)
-
-    case 'minor': {
-      const current = semver.coerce(currentVersion)
-      if (!current) return null
-      const minor = versions.filter((v) => {
-        const parsed = semver.parse(v)
-        return parsed && parsed.major === current.major
-      })
-      return getMaxVersion(minor)
-    }
-
-    case 'patch': {
-      const current = semver.coerce(currentVersion)
-      if (!current) return null
-      const patch = versions.filter((v) => {
-        const parsed = semver.parse(v)
-        return parsed && parsed.major === current.major && parsed.minor === current.minor
-      })
-      return getMaxVersion(patch)
-    }
-    default:
-      return getMaxSatisfying(versions, currentVersion) ?? validDistTag(distTags.latest)
-  }
 }

@@ -107,8 +107,8 @@ The output includes supported flags, defaults, valid enum values, and exit-code 
 | `--deps-only` | -- | boolean | `false` | Only check `dependencies`. Ignores devDependencies, peerDependencies, and optionalDependencies. |
 | `--dev-only` | -- | boolean | `false` | Only check `devDependencies`. The inverse of `--deps-only`. Using both simultaneously is not recommended unless you enjoy empty results. |
 | `--peer` | `-P` | boolean | `false` | Include peer dependencies in the check. Also enables peer-scoped workspace catalogs (`catalog:peers` / `workspaces.catalogs.peers`) that are skipped by default. |
-| `--include-locked` | `-l` | boolean | `false` | Include pinned (locked) dependencies -- those without a range prefix like `^` or `~`. Normally skipped because someone pinned them for a reason. Probably. |
-| `--cooldown <days>` | -- | string | `0` | Skip versions published less than N days ago. A paranoia dial. Set to `7` if you prefer your packages slightly aged, like cheese. `0` disables it. |
+| `--include-locked` | `-l` | boolean | `false` | Include pinned dependencies. They follow the selected mode; in `default` mode an exact pin can advance to the highest eligible version. |
+| `--cooldown <days>` | -- | string | `0` | Require candidate versions to be at least N days old. Candidates with missing or invalid publish-time metadata are skipped while cooldown is active. `0` disables it. |
 
 ## Display
 

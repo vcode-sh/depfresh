@@ -258,8 +258,7 @@ describe('dist-tag version handling', () => {
       distTags: { latest: '2.0.0' },
     })
 
-    // "beta" is not in distTags, so it should not be skipped
-    // (it will fail resolution as an invalid semver, resulting in error diff)
+    // "beta" is not in distTags, but it still lacks a provable current version.
     const dep = makeDep({
       name: 'test-pkg',
       currentVersion: 'beta',
@@ -269,11 +268,6 @@ describe('dist-tag version handling', () => {
 
     const result = await resolvePackage(pkg, options, cache, defaultNpmrc)
 
-    // "beta" as currentVersion: resolveTargetVersion returns distTags.latest fallback
-    // getDiff("beta", "2.0.0") returns "error" since semver.coerce("beta") is null
-    expect(result).toHaveLength(1)
-    expect(result[0]).toMatchObject({
-      diff: 'error',
-    })
+    expect(result).toEqual([])
   })
 })

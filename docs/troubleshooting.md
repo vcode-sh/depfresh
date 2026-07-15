@@ -76,7 +76,9 @@ Note the trailing slashes. Note the `//` prefix. npm invented this syntax and I 
 
 **Check the registry URL.** If a package lives on a custom registry and you haven't configured `.npmrc` correctly, depfresh will look for it on the default npm registry and come back empty-handed.
 
-**JSR packages.** depfresh supports `jsr:` protocol packages, but JSR metadata is more limited than npm's. Some fields may be missing.
+**JSR packages.** depfresh reads the explicit JSR `latest` value, per-version `createdAt` values, and
+the `yanked` flag. It never guesses `latest` from object insertion order. A missing or inconsistent
+latest value is skipped in `latest` mode; yanked versions are filtered like deprecated npm versions.
 
 **GitHub dependencies.** depfresh supports `github:owner/repo#tag` when `tag` is semver-like (`v1.2.3`, `1.2.3`, `refs/tags/v1.2.3`). Branches, commits, and non-semver tags are skipped on purpose.
 
@@ -200,7 +202,9 @@ not be printed directly into shared logs.
 
 **Yarn global packages.** `--global` and `--global-all` support npm, pnpm, and bun. Yarn global is not supported. I don't make the rules. Actually I do, and I chose not to support it.
 
-**JSR registry.** Works, but metadata is sparser than npm. Signature-presence and detailed time metadata may be unavailable.
+**JSR registry.** Works, but metadata is sparser than npm. Signature-presence and some passive
+metadata may be unavailable. When `--cooldown` needs a missing publish time, the candidate is
+skipped as unknown rather than assumed mature.
 
 **Node compatibility.** The `--nodecompat` flag checks the `engines.node` field in package metadata. This is best-effort — not every package declares engine constraints, and some declarations are optimistic at best.
 

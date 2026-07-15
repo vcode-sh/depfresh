@@ -39,7 +39,7 @@ export function dedupeGlobalPackageRecords(records: GlobalPackageRecord[]): {
     }
     existing.managers.add(record.manager)
     if (semver.valid(record.version) && semver.valid(existing.version)) {
-      if (semver.lt(record.version, existing.version)) {
+      if (semver.gt(record.version, existing.version)) {
         existing.version = record.version
       }
       continue

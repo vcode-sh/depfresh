@@ -78,7 +78,12 @@ describe('fetchPackageData', () => {
 
   it('routes jsr: packages to jsr.io', async () => {
     const jsrResponse = {
-      versions: { '1.0.0': {}, '2.0.0': {} },
+      versions: {
+        '2.0.0': { createdAt: '2025-02-01T00:00:00.000Z' },
+        invalid: { createdAt: '2025-03-01T00:00:00.000Z' },
+        '1.0.0': { createdAt: '2025-01-01T00:00:00.000Z' },
+        '3.0.0': { createdAt: '2025-03-01T00:00:00.000Z', yanked: true },
+      },
       latest: '2.0.0',
     }
     globalThis.fetch = mockFetchResponse(jsrResponse)
@@ -91,7 +96,42 @@ describe('fetchPackageData', () => {
       expect.any(Object),
     )
     expect(result.name).toBe('jsr:@std/path')
+    expect(result.versions).toEqual(['2.0.0', '1.0.0', '3.0.0'])
     expect(result.distTags.latest).toBe('2.0.0')
+    expect(result.time).toEqual({
+      '2.0.0': '2025-02-01T00:00:00.000Z',
+      '1.0.0': '2025-01-01T00:00:00.000Z',
+      '3.0.0': '2025-03-01T00:00:00.000Z',
+    })
+    expect(result.deprecated).toEqual({ '3.0.0': 'Version is yanked' })
+
+    const { selectVersionCandidate } = await import('./resolve')
+    expect(
+      selectVersionCandidate({
+        currentVersion: '1.0.0',
+        pkgData: result,
+        mode: 'newest',
+        includeLocked: true,
+        cooldown: 0,
+      }),
+    ).toMatchObject({
+      targetVersion: '2.0.0',
+      reason: 'SELECTED',
+    })
+  })
+
+  it('does not fabricate JSR latest from object insertion order', async () => {
+    globalThis.fetch = mockFetchResponse({
+      versions: {
+        '9.0.0': { createdAt: '2025-02-01T00:00:00.000Z' },
+        '1.0.0': { createdAt: '2025-01-01T00:00:00.000Z' },
+      },
+    })
+
+    const { fetchPackageData } = await import('./registry')
+    const result = await fetchPackageData('jsr:@std/path', defaultOptions)
+
+    expect(result.distTags).toEqual({})
   })
 
   it('routes github: packages to GitHub tags API and normalizes semver tags', async () => {

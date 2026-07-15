@@ -59,7 +59,7 @@ Every option from the `depfreshOptions` interface. I documented all of them beca
 | `group` | `boolean` | `true` | Group results by package file. |
 | `sort` | `SortOption` | `'diff-asc'` | Sort order. Options: `diff-asc`, `diff-desc`, `time-asc`, `time-desc`, `name-asc`, `name-desc`. |
 | `timediff` | `boolean` | `true` | Show time since last publish. Guilt-trip yourself into updating. |
-| `cooldown` | `number` | `0` | Minimum age in days before suggesting an update. Wait for the early adopters to find the bugs first. |
+| `cooldown` | `number` | `0` | Minimum proven age in days before suggesting an update. Missing or invalid publish-time metadata is skipped while enabled. |
 | `nodecompat` | `boolean` | `true` | Check Node engine compatibility and warn about incompatible updates. |
 | `long` | `boolean` | `false` | Extended display with the package homepage URL. |
 | `explain` | `boolean` | `false` | Show human-readable explanations in the interactive detail view. "Breaking change." for majors, "Bug fixes only." for patches. Only does anything with `interactive: true`. |

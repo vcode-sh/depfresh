@@ -82,6 +82,7 @@ depfresh --fail-on-outdated
 - **Signature metadata** -- warns when a target lacks signature metadata that the current version has
 - **Node engine compat** -- flags updates that don't match your Node version
 - **Cooldown filter** -- skip versions published less than N days ago
+- **Candidate safety** -- filtered versions never re-enter through tags or fallbacks, and updates never implicitly downgrade
 - **Programmatic API** -- lifecycle callbacks + addon system for custom workflows
 
 Full CLI reference: **[docs/cli/](docs/cli/)**

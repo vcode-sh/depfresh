@@ -110,7 +110,7 @@ describe('filterVersionsByMaturityPeriod', () => {
     expect(result).toEqual(['1.0.0'])
   })
 
-  it('keeps versions with no time data', () => {
+  it('rejects both missing and too-recent publish-time evidence', () => {
     const now = Date.now()
     const threeDaysAgo = new Date(now - 3 * 86_400_000).toISOString()
 
@@ -118,15 +118,15 @@ describe('filterVersionsByMaturityPeriod', () => {
     const time = { '2.0.0': threeDaysAgo }
 
     const result = filterVersionsByMaturityPeriod(versions, time, 7)
-    expect(result).toEqual(['1.0.0'])
+    expect(result).toEqual([])
   })
 
-  it('returns original list when no time data exists', () => {
+  it('rejects versions when no publish-time evidence exists', () => {
     const versions = ['1.0.0', '2.0.0']
-    expect(filterVersionsByMaturityPeriod(versions, undefined, 7)).toEqual(versions)
+    expect(filterVersionsByMaturityPeriod(versions, undefined, 7)).toEqual([])
   })
 
-  it('falls back to original list when all versions are filtered', () => {
+  it('returns no candidates when all versions are too recent', () => {
     const now = Date.now()
     const oneDayAgo = new Date(now - 1 * 86_400_000).toISOString()
 
@@ -134,7 +134,7 @@ describe('filterVersionsByMaturityPeriod', () => {
     const time = { '1.0.0': oneDayAgo, '2.0.0': oneDayAgo }
 
     const result = filterVersionsByMaturityPeriod(versions, time, 7)
-    expect(result).toEqual(versions)
+    expect(result).toEqual([])
   })
 })
 

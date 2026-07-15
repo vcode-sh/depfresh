@@ -105,13 +105,30 @@ async function fetchJsrPackage(name: string, options: FetchOptions): Promise<Pac
   const json = payload as Record<string, unknown>
 
   const versionsObj = (json.versions ?? {}) as Record<string, unknown>
-  const versions = Object.keys(versionsObj)
-  const latest = (json.latest as string) ?? versions[versions.length - 1] ?? ''
+  const versions = Object.keys(versionsObj).filter((version) => semver.valid(version))
+  const versionSet = new Set(versions)
+  const latest = typeof json.latest === 'string' ? semver.valid(json.latest) : null
+  const time: Record<string, string> = {}
+  const deprecated: Record<string, string> = {}
+
+  for (const version of versions) {
+    const metadata = versionsObj[version]
+    if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) continue
+    const record = metadata as Record<string, unknown>
+    if (typeof record.createdAt === 'string') {
+      time[version] = record.createdAt
+    }
+    if (record.yanked === true) {
+      deprecated[version] = 'Version is yanked'
+    }
+  }
 
   return {
     name: `jsr:${name}`,
     versions,
-    distTags: { latest },
+    distTags: latest && versionSet.has(latest) ? { latest } : {},
+    time: Object.keys(time).length > 0 ? time : undefined,
+    deprecated: Object.keys(deprecated).length > 0 ? deprecated : undefined,
   }
 }
 

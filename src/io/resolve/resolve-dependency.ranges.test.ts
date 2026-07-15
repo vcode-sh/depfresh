@@ -119,6 +119,25 @@ describe('resolveDependency range shape preservation', () => {
     expect(result?.diff).toBe('major')
   })
 
+  it('preserves the default-mode x-range fallback when no registry version satisfies it', async () => {
+    const cache = makeCache({
+      name: 'test-dep',
+      versions: ['2.4.1'],
+      distTags: { latest: '2.4.1' },
+    })
+
+    const result = await resolveDependency(
+      makeDep({ currentVersion: '1.x' }),
+      makeOptions(),
+      cache,
+      npmrc,
+      logger,
+    )
+
+    expect(result?.targetVersion).toBe('2.x')
+    expect(result?.diff).toBe('major')
+  })
+
   it('skips x-ranges when the target still satisfies the current range', async () => {
     const cache = makeCache({
       name: 'test-dep',
@@ -155,7 +174,7 @@ describe('resolveDependency range shape preservation', () => {
     expect(result).toBe(null)
   })
 
-  it('keeps invalid complex-shaped specs on the error diff path', async () => {
+  it('skips invalid complex-shaped specs when current-version truth is unavailable', async () => {
     const cache = makeCache({
       name: 'test-dep',
       versions: ['1.0.0', '2.4.1'],
@@ -170,8 +189,7 @@ describe('resolveDependency range shape preservation', () => {
       logger,
     )
 
-    expect(result?.diff).toBe('error')
-    expect(result?.targetVersion).toBe('2.4.1')
+    expect(result).toBe(null)
   })
 
   it('still preserves simple prefixes and bare exact versions', async () => {

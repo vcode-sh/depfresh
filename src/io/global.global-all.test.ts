@@ -43,8 +43,8 @@ describe('loadGlobalPackagesAll', () => {
     const pkg = result[0]
     expect(pkg?.filepath).toBe('global:npm+pnpm+bun')
     expect(pkg?.deps.map((dep) => dep.name)).toEqual(['bun-types', 'eslint', 'tsx', 'typescript'])
-    expect(pkg?.deps.find((dep) => dep.name === 'eslint')?.currentVersion).toBe('8.57.0')
-    expect(pkg?.deps.find((dep) => dep.name === 'typescript')?.currentVersion).toBe('5.7.2')
+    expect(pkg?.deps.find((dep) => dep.name === 'eslint')?.currentVersion).toBe('9.0.0')
+    expect(pkg?.deps.find((dep) => dep.name === 'typescript')?.currentVersion).toBe('5.8.0')
 
     expect(getGlobalWriteTargets(pkg!, 'eslint')).toEqual(['npm', 'bun'])
     expect(getGlobalWriteTargets(pkg!, 'typescript')).toEqual(['npm', 'pnpm'])
@@ -52,7 +52,7 @@ describe('loadGlobalPackagesAll', () => {
     expect(getGlobalWriteTargets(pkg!, 'bun-types')).toEqual(['bun'])
   })
 
-  it('keeps the lowest installed version when the same package differs across managers', () => {
+  it('keeps the highest installed version so shared resolution cannot downgrade a manager', () => {
     mockedExecSync.mockImplementation((cmd: string) => {
       if (cmd === 'npm list -g --depth=0 --json') {
         return JSON.stringify({
@@ -83,7 +83,7 @@ describe('loadGlobalPackagesAll', () => {
     expect(result).toHaveLength(1)
     const pkg = result[0]
     expect(pkg?.deps[0]?.name).toBe('shared')
-    expect(pkg?.deps[0]?.currentVersion).toBe('1.0.0')
+    expect(pkg?.deps[0]?.currentVersion).toBe('2.0.0')
     expect(getGlobalWriteTargets(pkg!, 'shared')).toEqual(['npm', 'pnpm'])
   })
 

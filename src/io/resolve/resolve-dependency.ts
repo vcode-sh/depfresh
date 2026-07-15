@@ -15,14 +15,14 @@ import {
   getDiff,
   getSpecShape,
   getVersionPrefix,
+  normalizeVersion,
   rebuildXRange,
-  resolveTargetVersion,
 } from '../../utils/versions'
 import { fetchPackageData } from '../registry'
 import { getPackageMode } from '../resolve-mode'
 import { getResolveCachePolicy } from './cache-policy'
 import type { ResolveContext } from './context'
-import { filterVersions } from './version-filter'
+import { selectVersionCandidate } from './version-filter'
 
 export async function resolveDependency(
   dep: RawDep,
@@ -128,11 +128,15 @@ export async function resolveDependency(
     return null
   }
 
-  // Filter out deprecated, immature, and wrong-channel prerelease versions
-  const versions = filterVersions(pkgData, dep, options)
-
-  // Resolve the target version based on mode
-  const targetVersion = resolveTargetVersion(currentVersion, versions, pkgData.distTags, mode)
+  const selection = selectVersionCandidate({
+    currentVersion,
+    pkgData,
+    mode,
+    includeLocked: options.includeLocked,
+    cooldown: options.cooldown,
+  })
+  logger.debug(`Candidate selection for ${packageName}: ${selection.reason}`)
+  const targetVersion = selection.targetVersion
 
   if (!targetVersion) {
     return null
@@ -157,7 +161,7 @@ export async function resolveDependency(
     return null
   }
 
-  const cleanCurrent = semver.coerce(currentVersion)?.version ?? undefined
+  const cleanCurrent = normalizeVersion(currentVersion) ?? undefined
   const currentSignaturePresence = cleanCurrent
     ? getSignaturePresence(pkgData, cleanCurrent)
     : undefined

@@ -7,8 +7,8 @@ import {
   getVersionPrefix,
   isLocked,
   isRange,
+  normalizeVersion,
   rebuildXRange,
-  resolveTargetVersion,
 } from './versions'
 
 describe('getVersionPrefix', () => {
@@ -180,11 +180,15 @@ describe('getDiff', () => {
   })
 
   it('handles prerelease diff as patch', () => {
-    expect(getDiff('1.0.0-beta.1', '1.0.0-beta.2')).toBe('none')
+    expect(getDiff('1.0.0-beta.1', '1.0.0-beta.2')).toBe('patch')
   })
 
   it('handles prerelease to release as patch', () => {
     expect(getDiff('1.0.0-beta.1', '1.0.1')).toBe('patch')
+  })
+
+  it('handles prerelease to stable at the same core version as patch', () => {
+    expect(getDiff('1.0.0-rc.1', '1.0.0')).toBe('patch')
   })
 
   it('handles invalid versions', () => {
@@ -196,72 +200,10 @@ describe('getDiff', () => {
   })
 })
 
-describe('resolveTargetVersion', () => {
-  const versions = ['1.0.0', '1.1.0', '1.2.0', '2.0.0', '2.1.0', '3.0.0-beta.1']
-  const distTags = { latest: '2.1.0', next: '3.0.0-beta.1' }
-
-  it('resolves latest mode', () => {
-    expect(resolveTargetVersion('^1.0.0', versions, distTags, 'latest')).toBe('2.1.0')
-  })
-
-  it('resolves newest mode', () => {
-    expect(resolveTargetVersion('^1.0.0', versions, distTags, 'newest')).toBe('3.0.0-beta.1')
-  })
-
-  it('resolves next mode', () => {
-    expect(resolveTargetVersion('^1.0.0', versions, distTags, 'next')).toBe('3.0.0-beta.1')
-  })
-
-  it('resolves minor mode — stays within major', () => {
-    expect(resolveTargetVersion('^1.0.0', versions, distTags, 'minor')).toBe('1.2.0')
-  })
-
-  it('resolves patch mode — stays within minor', () => {
-    expect(resolveTargetVersion('^1.0.0', versions, distTags, 'patch')).toBe('1.0.0')
-  })
-
-  it('resolves default mode using semver range', () => {
-    expect(resolveTargetVersion('^1.0.0', versions, distTags, 'default')).toBe('1.2.0')
-  })
-
-  it('resolves major mode — picks highest version', () => {
-    expect(resolveTargetVersion('^1.0.0', versions, distTags, 'major')).toBe('3.0.0-beta.1')
-  })
-
-  it('resolves next mode — falls back to latest when no next tag', () => {
-    const tagsNoNext = { latest: '2.1.0' }
-    expect(resolveTargetVersion('^1.0.0', versions, tagsNoNext, 'next')).toBe('2.1.0')
-  })
-
-  it('resolves latest mode — returns null when no latest tag', () => {
-    expect(resolveTargetVersion('^1.0.0', versions, {}, 'latest')).toBe(null)
-  })
-
-  it('resolves default mode — falls back to latest when no range match', () => {
-    expect(resolveTargetVersion('^99.0.0', versions, distTags, 'default')).toBe('2.1.0')
-  })
-
-  it('resolves minor mode with invalid currentVersion', () => {
-    expect(resolveTargetVersion('invalid', versions, distTags, 'minor')).toBe(null)
-  })
-
-  it('resolves patch mode with invalid currentVersion', () => {
-    expect(resolveTargetVersion('invalid', versions, distTags, 'patch')).toBe(null)
-  })
-
-  it('resolves latest mode with a valid dist-tag', () => {
-    expect(resolveTargetVersion('1.0.0', [], { latest: '2.0.0' }, 'latest')).toBe('2.0.0')
-  })
-
-  it('rejects a non-semver latest dist-tag', () => {
-    expect(
-      resolveTargetVersion('1.0.0', [], { latest: 'not-a-version; rm -rf /tmp/x' }, 'latest'),
-    ).toBe(null)
-  })
-
-  it('falls back to a valid latest when the next dist-tag is invalid', () => {
-    expect(resolveTargetVersion('1.0.0', [], { next: 'garbage', latest: '2.0.0' }, 'next')).toBe(
-      '2.0.0',
-    )
+describe('normalizeVersion', () => {
+  it('normalizes exact versions and ranges without erasing prerelease identity', () => {
+    expect(normalizeVersion('^1.2.3')).toBe('1.2.3')
+    expect(normalizeVersion('1.2.3-rc.1')).toBe('1.2.3-rc.1')
+    expect(normalizeVersion('invalid')).toBe(null)
   })
 })
