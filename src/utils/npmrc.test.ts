@@ -65,9 +65,7 @@ describe('loadNpmrc npm_config_userconfig', () => {
     process.env.npm_config_userconfig = customRcPath
     // Clear registry env vars so applyEnvOverrides doesn't clobber the file config
     // (pnpm sets npm_config_registry when running scripts)
-    // biome-ignore lint/performance/noDelete: must actually remove env var
     delete process.env.npm_config_registry
-    // biome-ignore lint/performance/noDelete: must actually remove env var
     delete process.env.NPM_CONFIG_REGISTRY
 
     const config = loadNpmrc(tmpDir)
@@ -75,7 +73,6 @@ describe('loadNpmrc npm_config_userconfig', () => {
   })
 
   it('falls back to ~/.npmrc when env var is not set', () => {
-    // biome-ignore lint/performance/noDelete: must actually remove env var, not set to "undefined"
     delete process.env.npm_config_userconfig
 
     // loadNpmrc should not throw even if ~/.npmrc doesn't exist
@@ -119,17 +116,11 @@ describe('loadNpmrc strict-ssl parsing', () => {
       ].join('\n'),
     )
 
-    // biome-ignore lint/performance/noDelete: must actually remove env var
     delete process.env.npm_config_registry
-    // biome-ignore lint/performance/noDelete: must actually remove env var
     delete process.env.NPM_CONFIG_REGISTRY
-    // biome-ignore lint/performance/noDelete: must actually remove env var
     delete process.env.HTTP_PROXY
-    // biome-ignore lint/performance/noDelete: must actually remove env var
     delete process.env.http_proxy
-    // biome-ignore lint/performance/noDelete: must actually remove env var
     delete process.env.HTTPS_PROXY
-    // biome-ignore lint/performance/noDelete: must actually remove env var
     delete process.env.https_proxy
 
     const config = loadNpmrc(tmpDir)
@@ -166,9 +157,7 @@ describe('loadNpmrc environment variable expansion', () => {
       ),
     )
 
-    // biome-ignore lint/performance/noDelete: test must remove env override completely
     delete process.env.npm_config_registry
-    // biome-ignore lint/performance/noDelete: test must remove env override completely
     delete process.env.NPM_CONFIG_REGISTRY
     process.env.NPM_TOKEN = 'secret123'
 
@@ -186,9 +175,7 @@ describe('loadNpmrc environment variable expansion', () => {
       ['registry=https://example.com/', `//example.com/:_authToken=\${NPM_TOKEN}`].join('\n'),
     )
 
-    // biome-ignore lint/performance/noDelete: test must remove env override completely
     delete process.env.npm_config_registry
-    // biome-ignore lint/performance/noDelete: test must remove env override completely
     delete process.env.NPM_CONFIG_REGISTRY
     process.env.NPM_TOKEN = 'secret456'
 
@@ -227,9 +214,7 @@ describe('loadNpmrc registry auth matching', () => {
       ].join('\n'),
     )
 
-    // biome-ignore lint/performance/noDelete: test must remove env override completely
     delete process.env.npm_config_registry
-    // biome-ignore lint/performance/noDelete: test must remove env override completely
     delete process.env.NPM_CONFIG_REGISTRY
 
     const config = loadNpmrc(tmpDir)
@@ -250,9 +235,7 @@ describe('loadNpmrc registry auth matching', () => {
       ].join('\n'),
     )
 
-    // biome-ignore lint/performance/noDelete: test must remove env override completely
     delete process.env.npm_config_registry
-    // biome-ignore lint/performance/noDelete: test must remove env override completely
     delete process.env.NPM_CONFIG_REGISTRY
 
     const config = loadNpmrc(tmpDir)
@@ -288,9 +271,7 @@ describe('loadNpmrc basic auth support', () => {
       ),
     )
 
-    // biome-ignore lint/performance/noDelete: test must remove env override completely
     delete process.env.npm_config_registry
-    // biome-ignore lint/performance/noDelete: test must remove env override completely
     delete process.env.NPM_CONFIG_REGISTRY
 
     const config = loadNpmrc(tmpDir)
@@ -311,9 +292,7 @@ describe('loadNpmrc basic auth support', () => {
       ].join('\n'),
     )
 
-    // biome-ignore lint/performance/noDelete: test must remove env override completely
     delete process.env.npm_config_registry
-    // biome-ignore lint/performance/noDelete: test must remove env override completely
     delete process.env.NPM_CONFIG_REGISTRY
 
     const config = loadNpmrc(tmpDir)
@@ -334,9 +313,7 @@ describe('loadNpmrc basic auth support', () => {
       ].join('\n'),
     )
 
-    // biome-ignore lint/performance/noDelete: test must remove env override completely
     delete process.env.npm_config_registry
-    // biome-ignore lint/performance/noDelete: test must remove env override completely
     delete process.env.NPM_CONFIG_REGISTRY
 
     const config = loadNpmrc(tmpDir)
