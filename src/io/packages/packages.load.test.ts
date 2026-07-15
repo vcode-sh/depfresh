@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -245,18 +245,19 @@ describe('loadPackages', () => {
     expect(packages.map((pkg) => pkg.name).sort()).toEqual(['other', 'root'])
     expect(options.discoveryReport).toBeDefined()
     expect(options.discoveryReport?.inputCwd).toBe(tmpDir)
-    expect(options.discoveryReport?.effectiveRoot).toBe(tmpDir)
+    const canonicalRoot = realpathSync(tmpDir)
+    expect(options.discoveryReport?.effectiveRoot).toBe(canonicalRoot)
     expect(options.discoveryReport?.matchedManifests.length).toBeGreaterThan(0)
     expect(options.discoveryReport?.loadedPackages).toEqual(
       expect.arrayContaining([
-        join(tmpDir, 'package.json'),
-        join(tmpDir, 'vendor', 'other', 'package.json'),
+        join(canonicalRoot, 'package.json'),
+        join(canonicalRoot, 'vendor', 'other', 'package.json'),
       ]),
     )
     expect(options.discoveryReport?.skippedManifests).toEqual(
       expect.arrayContaining([
         {
-          path: join(tmpDir, 'vendor', 'other', 'packages', 'b', 'package.json'),
+          path: join(canonicalRoot, 'vendor', 'other', 'packages', 'b', 'package.json'),
           reason: 'nested-descendant:pnpm-workspace',
         },
       ]),

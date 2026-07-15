@@ -3,6 +3,7 @@ import { glob } from 'tinyglobby'
 import type { depfreshOptions, PackageMeta } from '../../types'
 import { createLogger } from '../../utils/logger'
 import { loadCatalogs } from '../catalogs/index'
+import { resolveContainedPath } from './containment'
 import { loadPackage } from './load-package'
 import { sortManifestsByPriority } from './manifest-priority'
 import { resolveDiscoveryContext } from './root-detection'
@@ -11,17 +12,22 @@ import { getWorkspaceManifestPatterns } from './workspace-discovery'
 
 export async function loadPackages(options: depfreshOptions): Promise<PackageMeta[]> {
   const logger = createLogger(options.loglevel)
-  const discoveryRoot = options.effectiveRoot ?? resolveDiscoveryContext(options.cwd).effectiveRoot
+  const discoveryContext = resolveDiscoveryContext(options.cwd)
+  const requestedRoot = options.effectiveRoot ?? discoveryContext.effectiveRoot
+  const rootResolution = resolveContainedPath(requestedRoot, requestedRoot)
+  const discoveryRoot = rootResolution.allowed ? rootResolution.path : resolve(requestedRoot)
   const report = options.discoveryReport ?? {
     inputCwd: options.inputCwd ?? options.cwd,
     effectiveRoot: discoveryRoot,
-    discoveryMode: options.discoveryMode ?? resolveDiscoveryContext(options.cwd).discoveryMode,
+    discoveryMode: options.discoveryMode ?? discoveryContext.discoveryMode,
     matchedManifests: [],
     loadedPackages: [],
     skippedManifests: [],
     loadedCatalogs: [],
   }
   options.discoveryReport = report
+  options.effectiveRoot = discoveryRoot
+  report.effectiveRoot = discoveryRoot
 
   // Global packages mode — skip filesystem scan
   if (options.global || options.globalAll) {
@@ -33,13 +39,34 @@ export async function loadPackages(options: depfreshOptions): Promise<PackageMet
     return packages
   }
 
+  if (!rootResolution.allowed) {
+    report.skippedManifests.push({
+      path: rootResolution.path,
+      reason: `containment:${rootResolution.reason}`,
+    })
+    return []
+  }
+
   const packages: PackageMeta[] = []
 
+  const workspaceDiscovery = getWorkspaceManifestPatterns(discoveryRoot)
+  for (const blocked of workspaceDiscovery.blockedPatterns) {
+    report.skippedManifests.push({
+      path: blocked.pattern,
+      reason: `workspace-pattern:${blocked.reason}`,
+    })
+  }
+  for (const blocked of workspaceDiscovery.blockedPaths) {
+    report.skippedManifests.push({
+      path: blocked.path,
+      reason: `containment:${blocked.reason}`,
+    })
+  }
+
   const packagePatterns = options.recursive
-    ? (getWorkspaceManifestPatterns(discoveryRoot)?.patterns ?? [
-        '**/package.json',
-        '**/package.yaml',
-      ])
+    ? workspaceDiscovery.patterns.length > 0
+      ? workspaceDiscovery.patterns
+      : ['**/package.json', '**/package.yaml']
     : ['package.json', 'package.yaml']
 
   let packageFiles = await glob(packagePatterns, {
@@ -47,18 +74,47 @@ export async function loadPackages(options: depfreshOptions): Promise<PackageMet
     ignore: options.ignorePaths,
     absolute: true,
   })
+  packageFiles.sort((a, b) => a.localeCompare(b))
   report.matchedManifests = [...packageFiles]
 
+  const canonicalFiles: string[] = []
+  const seenPhysicalFiles = new Set<string>()
+  for (const filepath of packageFiles) {
+    const contained = resolveContainedPath(discoveryRoot, filepath)
+    if (!contained.allowed) {
+      report.skippedManifests.push({
+        path: filepath,
+        reason: `containment:${contained.reason}`,
+      })
+      continue
+    }
+    if (seenPhysicalFiles.has(contained.path)) {
+      report.skippedManifests.push({
+        path: filepath,
+        reason: 'containment:DUPLICATE_IDENTITY',
+      })
+      continue
+    }
+    seenPhysicalFiles.add(contained.path)
+    canonicalFiles.push(contained.path)
+  }
+  packageFiles = canonicalFiles
+
   // Filter out packages belonging to nested/separate workspaces
-  if (options.ignoreOtherWorkspaces) {
+  if (options.ignoreOtherWorkspaces || options.write) {
     const rootDir = resolve(discoveryRoot)
     const keptFiles: string[] = []
     for (const filepath of packageFiles) {
       const boundary = classifyWorkspaceBoundary(filepath, rootDir)
-      if (boundary.classification === 'nested-descendant') {
+      if (
+        boundary.classification === 'nested-descendant' ||
+        (options.write && boundary.classification === 'nested-root')
+      ) {
         report.skippedManifests.push({
           path: filepath,
-          reason: boundary.marker ? `nested-descendant:${boundary.marker}` : 'nested-descendant',
+          reason: boundary.marker
+            ? `${boundary.classification}:${boundary.marker}`
+            : boundary.classification,
         })
       } else {
         keptFiles.push(filepath)

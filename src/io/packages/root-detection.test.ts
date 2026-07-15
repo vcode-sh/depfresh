@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -22,7 +22,7 @@ describe('resolveDiscoveryContext', () => {
 
     expect(context).toEqual({
       inputCwd: tmpDir,
-      effectiveRoot: tmpDir,
+      effectiveRoot: realpathSync(tmpDir),
       discoveryMode: 'direct-root',
     })
   })
@@ -36,7 +36,7 @@ describe('resolveDiscoveryContext', () => {
 
     expect(context).toEqual({
       inputCwd: subdir,
-      effectiveRoot: tmpDir,
+      effectiveRoot: realpathSync(tmpDir),
       discoveryMode: 'inside-project',
     })
   })
@@ -57,7 +57,7 @@ describe('resolveDiscoveryContext', () => {
 
     expect(context).toEqual({
       inputCwd: subdir,
-      effectiveRoot: tmpDir,
+      effectiveRoot: realpathSync(tmpDir),
       discoveryMode: 'inside-project',
     })
   })
@@ -73,8 +73,50 @@ describe('resolveDiscoveryContext', () => {
 
     expect(context).toEqual({
       inputCwd: tmpDir,
-      effectiveRoot: tmpDir,
+      effectiveRoot: realpathSync(tmpDir),
       discoveryMode: 'parent-folder',
     })
+  })
+
+  it('returns one canonical root when invoked through a descendant symlink', () => {
+    writeFileSync(
+      join(tmpDir, 'package.json'),
+      JSON.stringify({ name: 'root', workspaces: ['packages/*'] }, null, 2),
+    )
+    mkdirSync(join(tmpDir, 'packages', 'app', 'src'), { recursive: true })
+    const alias = `${tmpDir}-alias`
+    symlinkSync(tmpDir, alias)
+
+    try {
+      const inputCwd = join(alias, 'packages', 'app', 'src')
+      const context = resolveDiscoveryContext(inputCwd)
+
+      expect(context).toEqual({
+        inputCwd,
+        effectiveRoot: realpathSync(tmpDir),
+        discoveryMode: 'inside-project',
+      })
+    } finally {
+      rmSync(alias, { force: true })
+    }
+  })
+
+  it('does not use an external symlinked manifest as root evidence', () => {
+    const externalManifest = `${tmpDir}-external-package.json`
+    writeFileSync(
+      externalManifest,
+      JSON.stringify({ name: 'external', workspaces: ['packages/*'] }),
+    )
+    symlinkSync(externalManifest, join(tmpDir, 'package.json'))
+
+    try {
+      expect(resolveDiscoveryContext(tmpDir)).toEqual({
+        inputCwd: tmpDir,
+        effectiveRoot: realpathSync(tmpDir),
+        discoveryMode: 'parent-folder',
+      })
+    } finally {
+      rmSync(externalManifest, { force: true })
+    }
   })
 })

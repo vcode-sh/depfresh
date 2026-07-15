@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -256,5 +256,42 @@ describe('detectPackageManager', () => {
 
     const { detectPackageManager } = await import('./index')
     expect(detectPackageManager(join(tmpDir, 'packages', 'app'), [pnpmPkg, yarnPkg])).toBe('npm')
+  })
+
+  it('does not cross an explicit repository root for parent lockfiles', async () => {
+    const container = mkdtempSync(join(tmpdir(), 'depfresh-pm-containment-'))
+    tmpDirs.push(container)
+    const rootDir = join(container, 'project')
+    mkdirSync(rootDir)
+    writeFileSync(join(container, 'pnpm-lock.yaml'), 'lockfileVersion: 9.0\n')
+
+    const { detectPackageManager } = await import('./index')
+    expect(detectPackageManager(rootDir, [], rootDir)).toBe('npm')
+  })
+
+  it('ignores a lockfile symlink that resolves outside an explicit repository root', async () => {
+    const container = mkdtempSync(join(tmpdir(), 'depfresh-pm-containment-'))
+    tmpDirs.push(container)
+    const rootDir = join(container, 'project')
+    mkdirSync(rootDir)
+    const externalLock = join(container, 'external-yarn.lock')
+    writeFileSync(externalLock, '')
+    symlinkSync(externalLock, join(rootDir, 'yarn.lock'))
+
+    const { detectPackageManager } = await import('./index')
+    expect(detectPackageManager(rootDir, [], rootDir)).toBe('npm')
+  })
+
+  it('ignores a packageManager manifest symlink outside an explicit repository root', async () => {
+    const container = mkdtempSync(join(tmpdir(), 'depfresh-pm-containment-'))
+    tmpDirs.push(container)
+    const rootDir = join(container, 'project')
+    mkdirSync(rootDir)
+    const externalManifest = join(container, 'external-package.json')
+    writeFileSync(externalManifest, JSON.stringify({ packageManager: 'bun@1.3.10' }))
+    symlinkSync(externalManifest, join(rootDir, 'package.json'))
+
+    const { detectPackageManager } = await import('./index')
+    expect(detectPackageManager(rootDir, [], rootDir)).toBe('npm')
   })
 })

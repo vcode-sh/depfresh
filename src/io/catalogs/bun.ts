@@ -1,9 +1,14 @@
-import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { readFileSync, writeFileSync } from 'node:fs'
 import detectIndent from 'detect-indent'
-import { dirname, join, resolve } from 'pathe'
+import { dirname, join } from 'pathe'
 import type { CatalogSource, depfreshOptions, RawDep } from '../../types'
 import { isLocked } from '../../utils/versions'
 import { detectLineEnding } from '../write/text'
+import {
+  catalogCandidateExists,
+  resolveCatalogCandidate,
+  resolveCatalogSearchContext,
+} from './catalog-path'
 import type { CatalogLoader } from './index'
 
 function isPeerScopedCatalog(name: string): boolean {
@@ -30,20 +35,12 @@ function parseCatalogDeps(
 
 export const bunCatalogLoader: CatalogLoader = {
   async detect(cwd: string, options?: depfreshOptions): Promise<boolean> {
-    const pkgPath = findBunCatalogManifest(cwd, getCatalogSearchRoot(options))
-    if (!existsSync(pkgPath)) return false
-
-    try {
-      const raw = JSON.parse(readFileSync(pkgPath, 'utf-8'))
-      return !!raw.workspaces?.catalog || !!raw.workspaces?.catalogs
-    } catch {
-      return false
-    }
+    return !!findBunCatalogManifest(cwd, options)
   },
 
   async load(cwd: string, options: depfreshOptions): Promise<CatalogSource[]> {
-    const filepath = findBunCatalogManifest(cwd, getCatalogSearchRoot(options))
-    if (!existsSync(filepath)) return []
+    const filepath = findBunCatalogManifest(cwd, options)
+    if (!filepath) return []
     const content = readFileSync(filepath, 'utf-8')
     const raw = JSON.parse(content)
     const indent = detectIndent(content).indent || '  '
@@ -114,22 +111,30 @@ export const bunCatalogLoader: CatalogLoader = {
   },
 }
 
-function findBunCatalogManifest(startDir: string, stopAt?: string): string {
-  let current = startDir
+function findBunCatalogManifest(
+  cwd: string,
+  options: depfreshOptions | undefined,
+): string | undefined {
+  const context = resolveCatalogSearchContext(cwd, options)
+  if (!context) return undefined
+  let current = context.start
 
   while (true) {
     const candidate = join(current, 'package.json')
-    if (existsSync(candidate) && manifestHasCatalog(candidate)) {
-      return candidate
+    if (catalogCandidateExists(candidate)) {
+      const contained = resolveCatalogCandidate(context.root, candidate, options)
+      if (contained && manifestHasCatalog(contained.path)) {
+        return contained.path
+      }
     }
 
-    if (stopAt && resolve(current) === resolve(stopAt)) {
-      return candidate
+    if (current === context.root) {
+      return undefined
     }
 
     const parent = dirname(current)
     if (parent === current) {
-      return candidate
+      return undefined
     }
     current = parent
   }
@@ -142,8 +147,4 @@ function manifestHasCatalog(filepath: string): boolean {
   } catch {
     return false
   }
-}
-
-function getCatalogSearchRoot(options: depfreshOptions | undefined): string | undefined {
-  return options?.discoveryReport?.effectiveRoot
 }

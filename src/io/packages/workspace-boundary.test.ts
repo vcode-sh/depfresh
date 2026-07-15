@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -214,5 +214,23 @@ describe('belongsToNestedWorkspace', () => {
     expect(
       belongsToNestedWorkspace(join(tmpDir, 'mixed', 'packages', 'm', 'package.json'), tmpDir),
     ).toBe(true)
+  })
+
+  it('ignores a nested workspace marker symlink that resolves outside the root', () => {
+    const packageDir = join(tmpDir, 'ordinary-child')
+    mkdirSync(packageDir)
+    const manifest = join(packageDir, 'package.json')
+    writeFileSync(manifest, JSON.stringify({ name: 'ordinary-child' }))
+    const externalMarker = `${tmpDir}-external-workspace.yaml`
+    writeFileSync(externalMarker, "packages:\n  - 'packages/*'\n")
+    symlinkSync(externalMarker, join(packageDir, 'pnpm-workspace.yaml'))
+
+    try {
+      expect(classifyWorkspaceBoundary(manifest, tmpDir)).toEqual({
+        classification: 'plain-child',
+      })
+    } finally {
+      rmSync(externalMarker, { force: true })
+    }
   })
 })

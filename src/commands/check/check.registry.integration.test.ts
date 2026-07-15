@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import {
   createServer,
   type IncomingHttpHeaders,
@@ -233,7 +233,7 @@ describe('check registry integration (mocked real registries)', () => {
     expect(payload.errors).toHaveLength(1)
     expect(payload.errors[0]?.name).toBe('missing-only')
     expect(payload.meta?.hadResolutionErrors).toBe(true)
-    expect(payload.meta?.effectiveRoot).toBe(cwd)
+    expect(payload.meta?.effectiveRoot).toBe(realpathSync(cwd))
     expect(registry.count('missing-only')).toBe(1)
   })
 

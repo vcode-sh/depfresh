@@ -2,7 +2,14 @@
 
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import {
+  chmodSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  writeFileSync,
+} from 'node:fs'
 import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -357,7 +364,7 @@ await record('profile and explain-discovery', async () => {
   ])
   assert.equal(result.status, 0)
   const payload = parseJsonStdout(result)
-  assert.equal(payload.meta.effectiveRoot, workspaceRoot)
+  assert.equal(payload.meta.effectiveRoot, realpathSync(workspaceRoot))
   assert.ok(payload.discovery)
   assert.ok(payload.profile)
 })

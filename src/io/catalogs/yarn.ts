@@ -1,24 +1,17 @@
 import { readFileSync, writeFileSync } from 'node:fs'
-import { findUpSync } from 'find-up-simple'
 import YAML from 'yaml'
 import type { CatalogSource, depfreshOptions, RawDep } from '../../types'
 import { isLocked } from '../../utils/versions'
+import { findContainedCatalogFile } from './catalog-path'
 import type { CatalogLoader } from './index'
 
 export const yarnCatalogLoader: CatalogLoader = {
   async detect(cwd: string, options?: depfreshOptions): Promise<boolean> {
-    const rcFile = findUpSync('.yarnrc.yml', {
-      cwd,
-      stopAt: getCatalogSearchRoot(options),
-    })
-    return !!rcFile
+    return !!findContainedCatalogFile('.yarnrc.yml', cwd, options)
   },
 
   async load(cwd: string, options: depfreshOptions): Promise<CatalogSource[]> {
-    const filepath = findUpSync('.yarnrc.yml', {
-      cwd,
-      stopAt: getCatalogSearchRoot(options),
-    })
+    const filepath = findContainedCatalogFile('.yarnrc.yml', cwd, options)
     if (!filepath) return []
 
     const content = readFileSync(filepath, 'utf-8')
@@ -66,8 +59,4 @@ export const yarnCatalogLoader: CatalogLoader = {
 
     writeFileSync(catalog.filepath, doc.toString(), 'utf-8')
   },
-}
-
-function getCatalogSearchRoot(options: depfreshOptions | undefined): string | undefined {
-  return options?.discoveryReport?.effectiveRoot
 }

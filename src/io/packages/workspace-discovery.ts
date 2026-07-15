@@ -1,56 +1,87 @@
 import { existsSync, readFileSync } from 'node:fs'
+import { isAbsolute } from 'node:path'
 import { join } from 'pathe'
 import { parsePnpmWorkspaceYaml } from 'pnpm-workspace-yaml'
 import YAML from 'yaml'
+import type { ContainmentReason } from './containment'
+import { resolveContainedPath } from './containment'
 
 const ROOT_MANIFESTS = ['package.json', 'package.yaml'] as const
 
 export interface WorkspaceDiscoveryResult {
   patterns: string[]
-  source: 'pnpm-workspace' | 'manifest-workspaces'
+  source: 'pnpm-workspace' | 'manifest-workspaces' | null
+  blockedPatterns: Array<{ pattern: string; reason: WorkspacePatternReason }>
+  blockedPaths: Array<{ path: string; reason: ContainmentReason }>
 }
 
-export function getWorkspaceManifestPatterns(rootDir: string): WorkspaceDiscoveryResult | null {
+export type WorkspacePatternReason = 'ABSOLUTE_PATTERN' | 'PARENT_TRAVERSAL'
+
+export function getWorkspaceManifestPatterns(rootDir: string): WorkspaceDiscoveryResult {
+  const blockedPaths: WorkspaceDiscoveryResult['blockedPaths'] = []
   const pnpmWorkspacePath = join(rootDir, 'pnpm-workspace.yaml')
   if (existsSync(pnpmWorkspacePath)) {
-    try {
-      const content = readFileSync(pnpmWorkspacePath, 'utf-8')
-      const workspace = parsePnpmWorkspaceYaml(content).toJSON()
-      const patterns = normalizeWorkspacePatterns(workspace.packages)
-      if (patterns.length > 0) {
-        return {
-          patterns: buildManifestPatterns(patterns),
-          source: 'pnpm-workspace',
+    const contained = resolveContainedPath(rootDir, pnpmWorkspacePath)
+    if (contained.allowed) {
+      try {
+        const content = readFileSync(contained.path, 'utf-8')
+        const workspace = parsePnpmWorkspaceYaml(content).toJSON()
+        const result = sanitizeWorkspacePatterns(normalizeWorkspacePatterns(workspace.packages))
+        if (result.patterns.length > 0 || result.blockedPatterns.length > 0) {
+          return {
+            patterns: buildManifestPatterns(result.patterns),
+            source: 'pnpm-workspace',
+            blockedPatterns: result.blockedPatterns,
+            blockedPaths,
+          }
         }
+      } catch {
+        // Fall through to manifest-based workspaces.
       }
-    } catch {
-      // Fall through to manifest-based workspaces.
+    } else {
+      blockedPaths.push({ path: pnpmWorkspacePath, reason: contained.reason })
     }
   }
 
-  const rootManifest = readRootManifest(rootDir)
+  const rootManifest = readRootManifest(rootDir, blockedPaths)
   if (!rootManifest) {
-    return null
+    return { patterns: [], source: null, blockedPatterns: [], blockedPaths }
   }
 
-  const patterns = extractManifestWorkspacePatterns(rootManifest)
-  if (patterns.length === 0) {
-    return null
+  const result = sanitizeWorkspacePatterns(extractManifestWorkspacePatterns(rootManifest))
+  if (result.patterns.length === 0 && result.blockedPatterns.length === 0) {
+    return {
+      patterns: [],
+      source: null,
+      blockedPatterns: result.blockedPatterns,
+      blockedPaths,
+    }
   }
 
   return {
-    patterns: buildManifestPatterns(patterns),
+    patterns: buildManifestPatterns(result.patterns),
     source: 'manifest-workspaces',
+    blockedPatterns: result.blockedPatterns,
+    blockedPaths,
   }
 }
 
-function readRootManifest(rootDir: string): Record<string, unknown> | null {
+function readRootManifest(
+  rootDir: string,
+  blockedPaths: WorkspaceDiscoveryResult['blockedPaths'],
+): Record<string, unknown> | null {
   for (const filename of ROOT_MANIFESTS) {
     const filepath = join(rootDir, filename)
     if (!existsSync(filepath)) continue
 
+    const contained = resolveContainedPath(rootDir, filepath)
+    if (!contained.allowed) {
+      blockedPaths.push({ path: filepath, reason: contained.reason })
+      continue
+    }
+
     try {
-      const content = readFileSync(filepath, 'utf-8')
+      const content = readFileSync(contained.path, 'utf-8')
       if (filename.endsWith('.yaml')) {
         const doc = YAML.parseDocument(content)
         if (doc.errors.length > 0) return null
@@ -65,6 +96,31 @@ function readRootManifest(rootDir: string): Record<string, unknown> | null {
   }
 
   return null
+}
+
+function sanitizeWorkspacePatterns(patterns: string[]): {
+  patterns: string[]
+  blockedPatterns: WorkspaceDiscoveryResult['blockedPatterns']
+} {
+  const safePatterns: string[] = []
+  const blockedPatterns: WorkspaceDiscoveryResult['blockedPatterns'] = []
+
+  for (const pattern of patterns) {
+    const body = pattern.startsWith('!') ? pattern.slice(1) : pattern
+    if (isAbsoluteWorkspacePattern(body)) {
+      blockedPatterns.push({ pattern, reason: 'ABSOLUTE_PATTERN' })
+    } else if (body.split(/[\\/]+/u).includes('..')) {
+      blockedPatterns.push({ pattern, reason: 'PARENT_TRAVERSAL' })
+    } else {
+      safePatterns.push(pattern)
+    }
+  }
+
+  return { patterns: safePatterns, blockedPatterns }
+}
+
+function isAbsoluteWorkspacePattern(pattern: string): boolean {
+  return isAbsolute(pattern) || pattern.startsWith('\\\\') || /^[A-Za-z]:[\\/]/u.test(pattern)
 }
 
 function extractManifestWorkspacePatterns(raw: Record<string, unknown>): string[] {

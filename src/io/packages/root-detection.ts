@@ -1,6 +1,7 @@
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync, realpathSync } from 'node:fs'
 import { dirname, join, resolve } from 'pathe'
 import YAML from 'yaml'
+import { resolveContainedPath } from './containment'
 
 export type DiscoveryMode = 'direct-root' | 'inside-project' | 'parent-folder'
 
@@ -11,7 +12,7 @@ export interface DiscoveryContext {
 }
 
 export function resolveDiscoveryContext(inputCwd: string): DiscoveryContext {
-  const normalizedInput = resolve(inputCwd)
+  const normalizedInput = canonicalizeExistingPath(inputCwd)
   const nearestWorkspaceRoot = findNearestAncestor(normalizedInput, isWorkspaceRoot)
   const nearestPackageRoot = findNearestAncestor(normalizedInput, hasManifest)
 
@@ -58,13 +59,16 @@ function findNearestAncestor(
 }
 
 function hasManifest(dir: string): boolean {
-  return existsSync(join(dir, 'package.json')) || existsSync(join(dir, 'package.yaml'))
+  return (
+    hasContainedPath(dir, join(dir, 'package.json')) ||
+    hasContainedPath(dir, join(dir, 'package.yaml'))
+  )
 }
 
 function isWorkspaceRoot(dir: string): boolean {
   return (
-    existsSync(join(dir, 'pnpm-workspace.yaml')) ||
-    existsSync(join(dir, '.yarnrc.yml')) ||
+    hasContainedPath(dir, join(dir, 'pnpm-workspace.yaml')) ||
+    hasContainedPath(dir, join(dir, '.yarnrc.yml')) ||
     manifestHasWorkspaces(join(dir, 'package.json')) ||
     manifestHasWorkspaces(join(dir, 'package.yaml'))
   )
@@ -75,9 +79,12 @@ function manifestHasWorkspaces(filepath: string): boolean {
     return false
   }
 
+  const contained = resolveContainedPath(dirname(filepath), filepath)
+  if (!contained.allowed) return false
+
   try {
-    const content = readFileSync(filepath, 'utf-8')
-    if (filepath.endsWith('.yaml')) {
+    const content = readFileSync(contained.path, 'utf-8')
+    if (contained.path.endsWith('.yaml')) {
       const doc = YAML.parseDocument(content)
       if (doc.errors.length > 0) return false
       return hasWorkspacesField(doc.toJSON())
@@ -86,6 +93,18 @@ function manifestHasWorkspaces(filepath: string): boolean {
     return hasWorkspacesField(JSON.parse(content))
   } catch {
     return false
+  }
+}
+
+function hasContainedPath(root: string, filepath: string): boolean {
+  return existsSync(filepath) && resolveContainedPath(root, filepath).allowed
+}
+
+function canonicalizeExistingPath(path: string): string {
+  try {
+    return realpathSync.native(path)
+  } catch {
+    return resolve(path)
   }
 }
 

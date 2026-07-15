@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -126,7 +126,7 @@ describe('root auto-detection in config resolution', () => {
 
     expect(config.cwd).toBe(join(tmpDir, 'src', 'deep'))
     expect(config.inputCwd).toBe(join(tmpDir, 'src', 'deep'))
-    expect(config.effectiveRoot).toBe(tmpDir)
+    expect(config.effectiveRoot).toBe(realpathSync(tmpDir))
     expect(config.discoveryMode).toBe('inside-project')
     expect(config.mode).toBe('latest')
     expect(config.concurrency).toBe(4)
@@ -154,7 +154,7 @@ describe('root auto-detection in config resolution', () => {
       loglevel: 'silent',
     })
 
-    expect(config.effectiveRoot).toBe(tmpDir)
+    expect(config.effectiveRoot).toBe(realpathSync(tmpDir))
     expect(config.discoveryMode).toBe('inside-project')
     expect(config.mode).toBe('minor')
   })

@@ -32,22 +32,47 @@ export default defineConfig({
 })
 ```
 
+## Repository Containment
+
+depfresh resolves one repository root before discovery and canonicalises it using the filesystem's
+real path. Running from a descendant directory or through an in-root symlink therefore resolves to
+the same physical root and the same manifest identities.
+
+Every discovered manifest, workspace marker, lockfile, and catalog must remain inside that root by
+path component. depfresh rejects:
+
+- workspace patterns containing a `..` component;
+- absolute workspace patterns;
+- paths that only share the root's string prefix;
+- symlinks whose target is outside the selected root;
+- catalog or package-manager files found above the selected root.
+
+These candidates are blocked before their contents are parsed. `--explain-discovery` reports stable
+reasons such as `workspace-pattern:PARENT_TRAVERSAL`, `workspace-pattern:ABSOLUTE_PATTERN`, and
+`containment:SYMLINK_ESCAPE` without reading the external file. Symlinks that resolve to a target
+inside the root remain supported; their real path is used so duplicate spellings cannot produce
+duplicate packages or write targets.
+
 ## Nested Workspace Detection
 
-`ignoreOtherWorkspaces` (default: `true`) detects when a subdirectory belongs to a separate workspace and skips it. depfresh looks for these markers:
+`ignoreOtherWorkspaces` (default: `true`) detects when a subdirectory belongs to a separate workspace. In read-only discovery, the nested root remains visible while its descendants are skipped. depfresh looks for these markers:
 
 - `pnpm-workspace.yaml`
 - `.yarnrc.yml`
 - `workspaces` field in `package.json` or `package.yaml`
 - `.git` directories between the package and your root
 
-This prevents depfresh from double-processing packages in monorepo-within-monorepo setups. If you genuinely want to scan everything, set it to `false`. But you probably don't.
+This prevents depfresh from double-processing packages in monorepo-within-monorepo setups. Set it to `false` for a broad read-only report.
+
+Write runs always exclude both a nested root and its descendants, even when
+`ignoreOtherWorkspaces` is `false`. A nested repository is a separate authority boundary; target it
+explicitly in another invocation, for example `depfresh -C vendor/other-project --write`.
 
 ```typescript
 import { defineConfig } from 'depfresh'
 
 export default defineConfig({
-  ignoreOtherWorkspaces: false, // scan ALL the things
+  ignoreOtherWorkspaces: false, // include nested packages in read-only discovery
 })
 ```
 

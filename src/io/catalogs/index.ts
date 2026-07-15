@@ -1,4 +1,5 @@
 import type { CatalogSource, depfreshOptions } from '../../types'
+import { resolveCatalogCandidate, resolveCatalogSearchContext } from './catalog-path'
 
 /**
  * Unified catalog interface.
@@ -36,5 +37,19 @@ export async function loadCatalogs(
     catalogs.push(...result)
   }
 
-  return catalogs
+  const context = resolveCatalogSearchContext(cwd, options)
+  if (!context) return []
+
+  const containedCatalogs: CatalogSource[] = []
+  const seen = new Set<string>()
+  for (const catalog of catalogs) {
+    const contained = resolveCatalogCandidate(context.root, catalog.filepath, options)
+    if (!contained) continue
+    const identity = `${catalog.type}\u0000${catalog.name}\u0000${contained.path}`
+    if (seen.has(identity)) continue
+    seen.add(identity)
+    containedCatalogs.push({ ...catalog, filepath: contained.path })
+  }
+
+  return containedCatalogs
 }

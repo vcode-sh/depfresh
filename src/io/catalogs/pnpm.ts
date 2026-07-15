@@ -1,8 +1,8 @@
 import { readFileSync, writeFileSync } from 'node:fs'
-import { findUpSync } from 'find-up-simple'
 import { parsePnpmWorkspaceYaml } from 'pnpm-workspace-yaml'
 import type { CatalogSource, depfreshOptions, RawDep } from '../../types'
 import { isLocked } from '../../utils/versions'
+import { findContainedCatalogFile } from './catalog-path'
 import type { CatalogLoader } from './index'
 
 function isPeerScopedCatalog(name: string): boolean {
@@ -11,17 +11,11 @@ function isPeerScopedCatalog(name: string): boolean {
 
 export const pnpmCatalogLoader: CatalogLoader = {
   async detect(cwd: string, options?: depfreshOptions): Promise<boolean> {
-    return !!findUpSync('pnpm-workspace.yaml', {
-      cwd,
-      stopAt: getCatalogSearchRoot(options),
-    })
+    return !!findContainedCatalogFile('pnpm-workspace.yaml', cwd, options)
   },
 
   async load(cwd: string, options: depfreshOptions): Promise<CatalogSource[]> {
-    const filepath = findUpSync('pnpm-workspace.yaml', {
-      cwd,
-      stopAt: getCatalogSearchRoot(options),
-    })
+    const filepath = findContainedCatalogFile('pnpm-workspace.yaml', cwd, options)
     if (!filepath) return []
 
     const content = readFileSync(filepath, 'utf-8')
@@ -87,8 +81,4 @@ function parseCatalogSection(
     raw: rawContent,
     indent: '  ',
   }
-}
-
-function getCatalogSearchRoot(options: depfreshOptions | undefined): string | undefined {
-  return options?.discoveryReport?.effectiveRoot
 }
