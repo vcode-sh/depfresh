@@ -38,6 +38,7 @@ Spits out a single JSON envelope to stdout. All log output is automatically supp
     }
   ],
   "errors": [],
+  "writeOutcomes": [],
   "summary": {
     "total": 2,
     "major": 0,
@@ -49,6 +50,10 @@ Spits out a single JSON envelope to stdout. All log output is automatically supp
     "plannedUpdates": 0,
     "appliedUpdates": 0,
     "revertedUpdates": 0,
+    "skippedUpdates": 0,
+    "conflictedUpdates": 0,
+    "failedWrites": 0,
+    "unknownWrites": 0,
     "failedResolutions": 0
   },
   "meta": {
@@ -123,7 +128,31 @@ Spits out a single JSON envelope to stdout. All log output is automatically supp
 | `plannedUpdates` | `number` | Number of dependency updates planned for write attempts (`--write`) |
 | `appliedUpdates` | `number` | Number of planned updates successfully applied |
 | `revertedUpdates` | `number` | Number of planned updates reverted by `--verify-command` |
+| `skippedUpdates` | `number` | Number of physical occurrences intentionally left unchanged |
+| `conflictedUpdates` | `number` | Number of occurrences whose observed pre-write value differed from the expected value |
+| `failedWrites` | `number` | Number of occurrences with a definite read, parse, write, or observation failure |
+| `unknownWrites` | `number` | Number of occurrences whose final physical state could not be proven |
 | `failedResolutions` | `number` | Number of dependencies that failed to resolve from the registry |
+
+The six write-state counts are derived from `writeOutcomes`; they always add up to
+`plannedUpdates`.
+
+### `writeOutcomes[]`
+
+Each write request is reported by canonical physical occurrence rather than package name alone.
+Repeated names in another field, file, catalog, nested override, or global package manager remain
+separate records.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `name` | `string` | Dependency name at this occurrence |
+| `occurrence.file` | `string` | Canonical physical file path, or `global:<manager>` for a global occurrence |
+| `occurrence.path` | `string[]` | Exact nested field/key path within the physical source |
+| `expectedValue` | `string` | Exact value required before mutation |
+| `requestedValue` | `string` | Exact value requested by the write |
+| `observedValue` | `string` | Value observed after the attempt, when observation succeeded |
+| `status` | `string` | `applied`, `skipped`, `conflicted`, `reverted`, `failed`, or `unknown` |
+| `reason` | `string` | Stable machine-readable reason for the terminal status |
 
 ### `meta`
 
@@ -213,6 +242,8 @@ Present only when `--profile` is enabled.
   - `meta.noPackagesFound: false` and `summary.total: 0` means packages were found but already up to date.
   - `meta.hadResolutionErrors: true` means the run had registry resolution failures even if `summary.total` is `0`.
   - `summary.plannedUpdates > 0` and `summary.appliedUpdates: 0` with `summary.revertedUpdates > 0` means verify-command reverted everything.
+  - Any conflicted, failed, or unknown write exits with code `2`; post-write commands do not run
+    after such an outcome.
 
 ## AI Agent Integration
 

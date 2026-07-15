@@ -67,6 +67,7 @@ function parseCatalogSection(
     parsed.push({
       name: depName,
       currentVersion: version,
+      rawVersion: version,
       source: 'catalog',
       update: !isLocked(version) || options.includeLocked,
       parents: [name === 'default' ? 'catalog' : `catalogs.${name}`],

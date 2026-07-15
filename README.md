@@ -71,12 +71,14 @@ depfresh --fail-on-outdated
 - **7 range modes** -- `default`, `major`, `minor`, `patch`, `latest`, `newest`, `next`
 - **Interactive cherry-picking** -- grouped multiselect with colour-coded severity
 - **Per-package modes** -- `packageMode` with exact, glob, or regex patterns per dependency
-- **Write safely** -- `--write` updates files. `--verify-command` tests each dep and reverts failures.
+- **Write safely** -- exact manifest/catalog occurrences are preconditioned and re-read after writes;
+  `--verify-command` tests each dependency and proves rollback outcomes.
 - **Post-write hooks** -- `--execute`, `--install`, `--update`. Chain commands after writing.
 - **Global packages** -- `--global` for one manager, `--global-all` scans npm + pnpm + bun (deduped)
 - **Private registries** -- full `.npmrc` support. Scoped registries, auth tokens, env vars.
 - **GitHub dependencies** -- `github:owner/repo#tag` with protocol-preserving writes
-- **JSON output** -- structured envelope for scripts and AI agents. No ANSI noise.
+- **JSON output** -- structured envelope with itemized physical write outcomes for scripts and AI
+  agents. No ANSI noise.
 - **CI mode** -- `--fail-on-outdated` exits with code 1. Plug it into your pipeline.
 - **SQLite cache** -- WAL mode, 30min TTL, auto-fallback to memory
 - **Signature metadata** -- warns when a target lacks signature metadata that the current version has

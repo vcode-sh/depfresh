@@ -29,6 +29,14 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Semver
 
 ### Changed
 
+- **Writes now report observed physical outcomes** -- manifest, YAML, catalog, nested override,
+  package-manager, and global writes use canonical file-plus-path identities, require the exact
+  pre-write value, and re-read the physical source before reporting `applied`. JSON and human
+  summaries are derived from itemized `applied`, `skipped`, `conflicted`, `reverted`, `failed`, and
+  `unknown` records. Repeated package names remain separate across fields, catalog owners, files,
+  and global managers; global updates are guarded individually against downgrades and partial
+  failure is reported without transactional claims.
+
 - **Resolution now selects from one authoritative eligible set** -- direct dependencies, catalogs,
   overrides, and global occurrences share normalization, prerelease-channel, mode, deprecation,
   cooldown, and downgrade checks. Exact pins included with `--include-locked` now advance correctly,

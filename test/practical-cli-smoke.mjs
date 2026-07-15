@@ -133,11 +133,22 @@ function writeExecutable(name, content) {
 
 function createPmScript(name) {
   const version = name === 'bun' ? '1.1.38' : name === 'pnpm' ? '10.33.0' : '10.9.0'
+  const initialDependencies =
+    name === 'npm'
+      ? { 'glob-a': '1.2.0', 'shared-glob': '2.1.0' }
+      : name === 'pnpm'
+        ? { 'glob-b': '1.0.0', 'shared-glob': '1.9.0' }
+        : { 'glob-c': '0.5.0' }
 
   return `#!/usr/bin/env node
-const { appendFileSync } = require('node:fs')
+const { appendFileSync, existsSync, readFileSync, writeFileSync } = require('node:fs')
 const args = process.argv.slice(2)
 appendFileSync(process.env.DEPFRESH_PM_LOG, JSON.stringify({ pm: '${name}', args }) + '\\n')
+const stateFile = process.env.DEPFRESH_PM_LOG + '.${name}.json'
+const initialDependencies = ${JSON.stringify(initialDependencies)}
+const dependencies = existsSync(stateFile)
+  ? JSON.parse(readFileSync(stateFile, 'utf8'))
+  : initialDependencies
 
 if (args[0] === '--version') {
   process.stdout.write('${version}\\n')
@@ -146,26 +157,49 @@ if (args[0] === '--version') {
 
 if ('${name}' === 'npm' && args.join(' ') === 'list -g --depth=0 --json') {
   process.stdout.write(JSON.stringify({
-    dependencies: {
-      'glob-a': { version: '1.2.0' },
-      'shared-glob': { version: '2.1.0' },
-    },
+    dependencies: Object.fromEntries(
+      Object.entries(dependencies).map(([packageName, packageVersion]) => [
+        packageName,
+        { version: packageVersion },
+      ]),
+    ),
   }))
   process.exit(0)
 }
 
 if ('${name}' === 'pnpm' && args.join(' ') === 'list -g --json') {
   process.stdout.write(JSON.stringify([{
-    dependencies: {
-      'glob-b': { version: '1.0.0' },
-      'shared-glob': { version: '1.9.0' },
-    },
+    dependencies: Object.fromEntries(
+      Object.entries(dependencies).map(([packageName, packageVersion]) => [
+        packageName,
+        { version: packageVersion },
+      ]),
+    ),
   }]))
   process.exit(0)
 }
 
 if ('${name}' === 'bun' && args.join(' ') === 'pm ls -g') {
-  process.stdout.write('└── glob-c@0.5.0\\n')
+  process.stdout.write(
+    Object.entries(dependencies)
+      .map(([packageName, packageVersion], index, entries) =>
+        (index === entries.length - 1 ? '└' : '├') + '── ' + packageName + '@' + packageVersion,
+      )
+      .join('\\n') + '\\n',
+  )
+  process.exit(0)
+}
+
+const writeCommand =
+  ('${name}' === 'npm' && args[0] === 'install' && args[1] === '-g') ||
+  (('${name}' === 'pnpm' || '${name}' === 'bun') && args[0] === 'add' && args[1] === '-g')
+if (writeCommand) {
+  const spec = args[2] ?? ''
+  const separator = spec.lastIndexOf('@')
+  if (separator > 0) {
+    dependencies[spec.slice(0, separator)] = spec.slice(separator + 1)
+    writeFileSync(stateFile, JSON.stringify(dependencies))
+  }
   process.exit(0)
 }
 

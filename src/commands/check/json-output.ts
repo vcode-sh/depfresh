@@ -4,6 +4,7 @@ import type {
   depfreshOptions,
   ProfileReport,
   ResolvedDepChange,
+  WriteOutcome,
 } from '../../types'
 import { getSafeErrorDetails, redactSensitiveText } from '../../utils/redact'
 
@@ -34,6 +35,11 @@ export interface JsonExecutionState {
   plannedUpdates: number
   appliedUpdates: number
   revertedUpdates: number
+  skippedUpdates: number
+  conflictedUpdates: number
+  failedWrites: number
+  unknownWrites: number
+  writeOutcomes: WriteOutcome[]
   failedResolutions: number
   noPackagesFound: boolean
   didWrite: boolean
@@ -42,6 +48,7 @@ export interface JsonExecutionState {
 interface JsonOutput {
   packages: JsonPackage[]
   errors: JsonError[]
+  writeOutcomes: WriteOutcome[]
   summary: {
     total: number
     major: number
@@ -53,6 +60,10 @@ interface JsonOutput {
     plannedUpdates: number
     appliedUpdates: number
     revertedUpdates: number
+    skippedUpdates: number
+    conflictedUpdates: number
+    failedWrites: number
+    unknownWrites: number
     failedResolutions: number
   }
   meta: {
@@ -114,6 +125,7 @@ export function outputJsonEnvelope(
   const output: JsonOutput = {
     packages,
     errors,
+    writeOutcomes: executionState.writeOutcomes,
     summary: {
       total: allUpdates.length,
       major: count('major'),
@@ -125,6 +137,10 @@ export function outputJsonEnvelope(
       plannedUpdates: executionState.plannedUpdates,
       appliedUpdates: executionState.appliedUpdates,
       revertedUpdates: executionState.revertedUpdates,
+      skippedUpdates: executionState.skippedUpdates,
+      conflictedUpdates: executionState.conflictedUpdates,
+      failedWrites: executionState.failedWrites,
+      unknownWrites: executionState.unknownWrites,
       failedResolutions: executionState.failedResolutions,
     },
     meta: {

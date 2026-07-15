@@ -34,6 +34,8 @@ export type DepFieldType =
 export interface RawDep {
   name: string
   currentVersion: string
+  /** Exact value observed in the physical source before protocol/range normalization. */
+  rawVersion?: string
   source: DepFieldType
   update: boolean
   parents: string[]

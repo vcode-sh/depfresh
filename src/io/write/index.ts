@@ -1,4 +1,4 @@
-import type { PackageMeta, ResolvedDepChange } from '../../types'
+import type { PackageMeta, ResolvedDepChange, WriteOutcome } from '../../types'
 import { createLogger } from '../../utils/logger'
 import { writeCatalogPackage } from './catalog'
 import { writePackageJson } from './package-json'
@@ -16,16 +16,25 @@ export function writePackage(
   pkg: PackageMeta,
   changes: ResolvedDepChange[],
   loglevel: 'silent' | 'info' | 'debug' = 'info',
-): void {
+): WriteOutcome[] {
   const logger = createLogger(loglevel)
 
-  if (changes.length === 0) return
+  if (changes.length === 0) return []
 
   if (pkg.type === 'package.json') {
-    writePackageJson(pkg, changes, logger)
+    return writePackageJson(pkg, changes, logger)
   } else if (pkg.type === 'package.yaml') {
-    writePackageYaml(pkg, changes, logger)
+    return writePackageYaml(pkg, changes, logger)
   } else if (pkg.catalogs?.length) {
-    writeCatalogPackage(pkg, changes, logger)
+    return writeCatalogPackage(pkg, changes, logger)
   }
+
+  return changes.map((change) => ({
+    name: change.name,
+    occurrence: { file: pkg.filepath, path: [change.source, ...change.parents, change.name] },
+    expectedValue: change.rawVersion ?? change.currentVersion,
+    requestedValue: change.targetVersion,
+    status: 'failed',
+    reason: 'UNSUPPORTED_WRITE_SOURCE',
+  }))
 }

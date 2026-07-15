@@ -5,6 +5,7 @@ import { createLogger } from '../utils/logger'
 import {
   dedupeGlobalPackageRecords,
   GLOBAL_ALL_PACKAGE_MANAGERS,
+  getGlobalExpectedVersion,
   getGlobalWriteTargets,
 } from './global-targets'
 
@@ -119,6 +120,7 @@ export function loadGlobalPackages(pm?: string): PackageMeta[] {
   const deps: RawDep[] = packages.map((pkg) => ({
     name: pkg.name,
     currentVersion: pkg.version,
+    rawVersion: pkg.version,
     source: 'dependencies' as const,
     update: true,
     parents: [],
@@ -131,7 +133,12 @@ export function loadGlobalPackages(pm?: string): PackageMeta[] {
       filepath: `global:${detectedPm}`,
       deps,
       resolved: [],
-      raw: {},
+      raw: {
+        managersByDependency: Object.fromEntries(packages.map((pkg) => [pkg.name, [detectedPm]])),
+        versionsByDependency: Object.fromEntries(
+          packages.map((pkg) => [pkg.name, { [detectedPm]: pkg.version }]),
+        ),
+      },
       indent: '  ',
     },
   ]
@@ -154,6 +161,7 @@ export function loadGlobalPackagesAll(): PackageMeta[] {
   const deps: RawDep[] = deduped.packages.map((pkg) => ({
     name: pkg.name,
     currentVersion: pkg.version,
+    rawVersion: pkg.version,
     source: 'dependencies' as const,
     update: true,
     parents: [],
@@ -168,6 +176,7 @@ export function loadGlobalPackagesAll(): PackageMeta[] {
       resolved: [],
       raw: {
         managersByDependency: deduped.managersByDependency,
+        versionsByDependency: deduped.versionsByDependency,
       },
       indent: '  ',
     },
@@ -182,12 +191,50 @@ export function isValidGlobalWriteTarget(name: string, version: string): boolean
   return semver.valid(bare) !== null
 }
 
-export function writeGlobalPackage(pm: PackageManagerName, name: string, version: string): void {
+export interface GlobalPackageObservation {
+  known: boolean
+  version?: string
+}
+
+export function observeGlobalPackageVersion(
+  pm: PackageManagerName,
+  name: string,
+): GlobalPackageObservation {
+  try {
+    let packages: Array<{ name: string; version: string }>
+    switch (pm) {
+      case 'npm': {
+        const output = execSync('npm list -g --depth=0 --json', { encoding: 'utf-8' })
+        JSON.parse(output)
+        packages = parseNpmGlobalList(output)
+        break
+      }
+      case 'pnpm': {
+        const output = execSync('pnpm list -g --json', { encoding: 'utf-8' })
+        JSON.parse(output)
+        packages = parsePnpmGlobalList(output)
+        break
+      }
+      case 'bun': {
+        const output = execSync('bun pm ls -g', { encoding: 'utf-8' })
+        packages = parseBunGlobalList(output)
+        break
+      }
+      case 'yarn':
+        return { known: false }
+    }
+    return { known: true, version: packages.find((pkg) => pkg.name === name)?.version }
+  } catch {
+    return { known: false }
+  }
+}
+
+export function writeGlobalPackage(pm: PackageManagerName, name: string, version: string): boolean {
   const logger = createLogger('info')
 
   if (!isValidGlobalWriteTarget(name, version)) {
     logger.warn(`Skipped global update for ${name}: invalid package name or version`)
-    return
+    return false
   }
 
   const spec = `${name}@${version}`
@@ -203,8 +250,9 @@ export function writeGlobalPackage(pm: PackageManagerName, name: string, version
       break
     case 'yarn':
       logger.warn('Yarn global packages not supported')
-      break
+      return false
   }
+  return true
 }
 
-export { getGlobalWriteTargets }
+export { getGlobalExpectedVersion, getGlobalWriteTargets }

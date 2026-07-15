@@ -21,6 +21,7 @@ export { writePackage } from './io/write'
 export type {
   AddonContext,
   AddonHookName,
+  CanonicalOccurrencePath,
   CatalogSource,
   DepFieldType,
   DiffType,
@@ -44,8 +45,12 @@ export type {
   SignaturePresence,
   SortOption,
   UpdateScore,
+  WriteOutcome,
+  WriteOutcomeReason,
+  WriteOutcomeStatus,
+  WriteOutcomeSummary,
 } from './types'
-export { DEFAULT_OPTIONS } from './types'
+export { DEFAULT_OPTIONS, summarizeWriteOutcomes } from './types'
 
 export function defineConfig(options: Partial<import('./types').depfreshOptions>) {
   return options

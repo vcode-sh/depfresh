@@ -12,6 +12,7 @@ import type {
   PackageMeta,
   ResolvedDepChange,
 } from '../../types'
+import { summarizeWriteOutcomes } from '../../types'
 import { createLogger } from '../../utils/logger'
 import { loadNpmrc } from '../../utils/npmrc'
 import { getSafeErrorDetails } from '../../utils/redact'
@@ -64,6 +65,11 @@ export async function check(
       plannedUpdates: 0,
       appliedUpdates: 0,
       revertedUpdates: 0,
+      skippedUpdates: 0,
+      conflictedUpdates: 0,
+      failedWrites: 0,
+      unknownWrites: 0,
+      writeOutcomes: [],
       failedResolutions: 0,
       noPackagesFound: packages.length === 0,
       didWrite: false,
@@ -158,9 +164,24 @@ export async function check(
       onPlannedUpdates: (count: number) => {
         executionState.plannedUpdates += count
       },
-      onWriteResult: (result: { applied: number; reverted: number }) => {
-        executionState.appliedUpdates += result.applied
-        executionState.revertedUpdates += result.reverted
+      onWriteResult: (result) => {
+        executionState.writeOutcomes.push(...result.outcomes)
+        if (options.output === 'table') {
+          for (const outcome of result.outcomes) {
+            if (outcome.status === 'applied') continue
+            logger.warn(
+              `Write ${outcome.status}: ${outcome.occurrence.file}#${outcome.occurrence.path.join('.')} (${outcome.reason})`,
+            )
+          }
+        }
+        const summary = summarizeWriteOutcomes(executionState.writeOutcomes)
+        executionState.plannedUpdates = summary.planned
+        executionState.appliedUpdates = summary.applied
+        executionState.skippedUpdates = summary.skipped
+        executionState.conflictedUpdates = summary.conflicted
+        executionState.revertedUpdates = summary.reverted
+        executionState.failedWrites = summary.failed
+        executionState.unknownWrites = summary.unknown
       },
       onDidWrite: () => {
         didWrite = true
@@ -225,13 +246,17 @@ export async function check(
 
     let postWriteFailed = false
     const postWriteStart = performance.now()
+    const writeFailed =
+      executionState.conflictedUpdates > 0 ||
+      executionState.failedWrites > 0 ||
+      executionState.unknownWrites > 0
 
-    if (authority.execute && options.execute && authority.write && didWrite) {
+    if (authority.execute && options.execute && authority.write && didWrite && !writeFailed) {
       const executeSucceeded = await runExecute(options.execute, executionRoot, logger)
       postWriteFailed = postWriteFailed || !executeSucceeded
     }
 
-    if (authority.write && didWrite) {
+    if (authority.write && didWrite && !writeFailed) {
       if (authority.update && options.update) {
         const updateSucceeded = await runUpdate(executionRoot, packages, logger)
         postWriteFailed = postWriteFailed || !updateSucceeded
@@ -249,6 +274,10 @@ export async function check(
 
     if (options.output === 'json') {
       outputJsonEnvelope(jsonPackages, runtimeOptions, executionState, jsonErrors)
+    } else if (executionState.plannedUpdates > 0) {
+      logger.info(
+        `Writes: ${executionState.appliedUpdates} applied, ${executionState.skippedUpdates} skipped, ${executionState.conflictedUpdates} conflicted, ${executionState.revertedUpdates} reverted, ${executionState.failedWrites} failed, ${executionState.unknownWrites} unknown`,
+      )
     }
 
     if (!hasUpdates && executionState.failedResolutions === 0) {
@@ -276,6 +305,8 @@ export async function check(
     if (executionState.failedResolutions > 0 && options.failOnResolutionErrors) {
       return 2
     }
+
+    if (writeFailed) return 2
 
     if (
       runtimeOptions.profile &&

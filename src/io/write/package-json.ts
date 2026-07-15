@@ -1,88 +1,205 @@
 import { readFileSync, writeFileSync } from 'node:fs'
 import detectIndent from 'detect-indent'
-import { WriteError } from '../../errors'
-import type { PackageMeta, ResolvedDepChange } from '../../types'
+import type { PackageMeta, ResolvedDepChange, WriteOutcome } from '../../types'
 import type { createLogger } from '../../utils/logger'
+import {
+  createPackageWriteRequest,
+  createWriteOutcome,
+  getStringAtPath,
+  observeFileOccurrence,
+  resolvePhysicalValues,
+  setStringAtPath,
+} from './occurrence'
 import { detectLineEnding } from './text'
-import { rebuildVersion } from './version-utils'
 
 export function writePackageJson(
   pkg: PackageMeta,
   changes: ResolvedDepChange[],
   logger: ReturnType<typeof createLogger>,
-): void {
-  // Read fresh content for formatting detection
+): WriteOutcome[] {
+  const requests = changes.map((change) => createPackageWriteRequest(pkg, change))
   let content: string
+
   try {
     content = readFileSync(pkg.filepath, 'utf-8')
-  } catch (error) {
-    throw new WriteError(`Failed to read ${pkg.filepath}`, { cause: error })
+  } catch {
+    return requests.map((request) => {
+      const values = resolvePhysicalValues(request, undefined)
+      return createWriteOutcome(
+        request,
+        'failed',
+        'READ_FAILED',
+        values.expectedValue,
+        values.requestedValue,
+      )
+    })
   }
 
-  const indent = detectIndent(content).indent || pkg.indent
   let raw: Record<string, unknown>
   try {
     raw = JSON.parse(content) as Record<string, unknown>
-  } catch (error) {
-    throw new WriteError(`Failed to parse JSON in ${pkg.filepath}`, { cause: error })
+  } catch {
+    return requests.map((request) => {
+      const values = resolvePhysicalValues(request, undefined)
+      return createWriteOutcome(
+        request,
+        'failed',
+        'PARSE_FAILED',
+        values.expectedValue,
+        values.requestedValue,
+      )
+    })
   }
 
-  // Group changes by source field
-  const bySource = new Map<string, ResolvedDepChange[]>()
-  for (const change of changes) {
-    const group = bySource.get(change.source) ?? []
-    group.push(change)
-    bySource.set(change.source, group)
-  }
+  const outcomes: WriteOutcome[] = []
+  const pending: Array<{
+    request: (typeof requests)[number]
+    expectedValue: string
+    requestedValue: string
+  }> = []
 
-  // Apply all mutations to the single parsed object
-  for (const [source, sourceChanges] of bySource) {
-    const section = getSection(raw, source)
-    if (!section) continue
+  for (const request of requests) {
+    const observedValue = getStringAtPath(raw, request.occurrence.path)
+    const { expectedValue, requestedValue } = resolvePhysicalValues(request, observedValue)
 
-    for (const change of sourceChanges) {
-      if (change.name in section) {
-        const oldVersion = section[change.name]!
-        section[change.name] = rebuildVersion(oldVersion, change.targetVersion)
-        logger.debug(`  ${change.name}: ${oldVersion} -> ${section[change.name]}`)
-      }
+    if (observedValue === undefined) {
+      outcomes.push(
+        createWriteOutcome(
+          request,
+          'conflicted',
+          'OCCURRENCE_NOT_FOUND',
+          expectedValue,
+          requestedValue,
+        ),
+      )
+      continue
     }
+    if (observedValue !== expectedValue) {
+      outcomes.push(
+        createWriteOutcome(
+          request,
+          'conflicted',
+          'EXPECTED_VALUE_MISMATCH',
+          expectedValue,
+          requestedValue,
+          observedValue,
+        ),
+      )
+      continue
+    }
+    if (observedValue === requestedValue) {
+      outcomes.push(
+        createWriteOutcome(
+          request,
+          'skipped',
+          'NO_CHANGE',
+          expectedValue,
+          requestedValue,
+          observedValue,
+        ),
+      )
+      continue
+    }
+    if (!setStringAtPath(raw, request.occurrence.path, requestedValue)) {
+      outcomes.push(
+        createWriteOutcome(
+          request,
+          'failed',
+          'OCCURRENCE_NOT_FOUND',
+          expectedValue,
+          requestedValue,
+          observedValue,
+        ),
+      )
+      continue
+    }
+    pending.push({ request, expectedValue, requestedValue })
   }
 
-  // Handle packageManager field
-  const pmChange = changes.find((c) => c.source === 'packageManager')
-  if (pmChange && pkg.packageManager) {
-    const newPm = pkg.packageManager.hash
-      ? `${pkg.packageManager.name}@${pmChange.targetVersion}+${pkg.packageManager.hash}`
-      : `${pkg.packageManager.name}@${pmChange.targetVersion}`
-    raw.packageManager = newPm
-  }
+  if (pending.length === 0) return outcomes
 
-  // Preserve key order by serializing with the original key order
+  const indent = detectIndent(content).indent || pkg.indent
   const lineEnding = detectLineEnding(content)
-  const newContent = JSON.stringify(raw, null, indent)
-  const withTrailing = content.endsWith('\n') ? `${newContent}\n` : newContent
+  const serialized = JSON.stringify(raw, null, indent)
+  const withTrailing = content.endsWith('\n') ? `${serialized}\n` : serialized
   const finalContent = lineEnding === '\r\n' ? withTrailing.replace(/\n/g, '\r\n') : withTrailing
 
   try {
     writeFileSync(pkg.filepath, finalContent, 'utf-8')
-  } catch (error) {
-    throw new WriteError(`Failed to write ${pkg.filepath}`, { cause: error })
+  } catch {
+    outcomes.push(
+      ...pending.map(({ request, expectedValue, requestedValue }) => {
+        const observation = observeFileOccurrence(request.occurrence)
+        if (!observation.known) {
+          return createWriteOutcome(
+            request,
+            'unknown',
+            'OBSERVATION_FAILED',
+            expectedValue,
+            requestedValue,
+          )
+        }
+        return createWriteOutcome(
+          request,
+          observation.value === requestedValue ? 'applied' : 'failed',
+          observation.value === requestedValue ? 'APPLIED' : 'WRITE_FAILED',
+          expectedValue,
+          requestedValue,
+          observation.value,
+        )
+      }),
+    )
+    return orderOutcomes(requests, outcomes)
   }
-  logger.success(`Updated ${pkg.filepath} (${changes.length} changes)`)
+
+  for (const { request, expectedValue, requestedValue } of pending) {
+    const observation = observeFileOccurrence(request.occurrence)
+    if (!observation.known) {
+      outcomes.push(
+        createWriteOutcome(request, 'unknown', 'OBSERVATION_FAILED', expectedValue, requestedValue),
+      )
+    } else if (observation.value === requestedValue) {
+      outcomes.push(
+        createWriteOutcome(
+          request,
+          'applied',
+          'APPLIED',
+          expectedValue,
+          requestedValue,
+          observation.value,
+        ),
+      )
+      logger.debug(`  ${request.change.name}: ${expectedValue} -> ${requestedValue}`)
+    } else {
+      outcomes.push(
+        createWriteOutcome(
+          request,
+          'failed',
+          'WRITE_FAILED',
+          expectedValue,
+          requestedValue,
+          observation.value,
+        ),
+      )
+    }
+  }
+
+  const applied = outcomes.filter((outcome) => outcome.status === 'applied').length
+  if (applied > 0) logger.success(`Updated ${pkg.filepath} (${applied} changes)`)
+  return orderOutcomes(requests, outcomes)
 }
 
-function getSection(raw: Record<string, unknown>, source: string): Record<string, string> | null {
-  if (source.includes('.')) {
-    const parts = source.split('.')
-    let current: unknown = raw
-    for (const part of parts) {
-      if (!current || typeof current !== 'object') return null
-      current = (current as Record<string, unknown>)[part]
-    }
-    return current as Record<string, string> | null
-  }
-  const value = raw[source]
-  if (!value || typeof value !== 'object') return null
-  return value as Record<string, string>
+function orderOutcomes(
+  requests: ReturnType<typeof createPackageWriteRequest>[],
+  outcomes: WriteOutcome[],
+): WriteOutcome[] {
+  return requests.flatMap((request) => {
+    const outcome = outcomes.find(
+      (candidate) =>
+        candidate.name === request.change.name &&
+        candidate.occurrence.file === request.occurrence.file &&
+        candidate.occurrence.path.join('\0') === request.occurrence.path.join('\0'),
+    )
+    return outcome ? [outcome] : []
+  })
 }

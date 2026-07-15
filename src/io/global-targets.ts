@@ -16,6 +16,7 @@ interface DedupedPackage {
 
 interface GlobalPackageRaw {
   managersByDependency?: Record<string, PackageManagerName[]>
+  versionsByDependency?: Record<string, Partial<Record<PackageManagerName, string>>>
 }
 
 function isPackageManagerName(value: string): value is PackageManagerName {
@@ -25,8 +26,16 @@ function isPackageManagerName(value: string): value is PackageManagerName {
 export function dedupeGlobalPackageRecords(records: GlobalPackageRecord[]): {
   packages: DedupedPackage[]
   managersByDependency: Record<string, PackageManagerName[]>
+  versionsByDependency: Record<string, Partial<Record<PackageManagerName, string>>>
 } {
-  const byName = new Map<string, { version: string; managers: Set<PackageManagerName> }>()
+  const byName = new Map<
+    string,
+    {
+      version: string
+      managers: Set<PackageManagerName>
+      versions: Partial<Record<PackageManagerName, string>>
+    }
+  >()
 
   for (const record of records) {
     const existing = byName.get(record.name)
@@ -34,10 +43,12 @@ export function dedupeGlobalPackageRecords(records: GlobalPackageRecord[]): {
       byName.set(record.name, {
         version: record.version,
         managers: new Set([record.manager]),
+        versions: { [record.manager]: record.version },
       })
       continue
     }
     existing.managers.add(record.manager)
+    existing.versions[record.manager] = record.version
     if (semver.valid(record.version) && semver.valid(existing.version)) {
       if (semver.gt(record.version, existing.version)) {
         existing.version = record.version
@@ -60,7 +71,20 @@ export function dedupeGlobalPackageRecords(records: GlobalPackageRecord[]): {
     sortedEntries.map(([name, value]) => [name, [...value.managers]]),
   ) as Record<string, PackageManagerName[]>
 
-  return { packages, managersByDependency }
+  const versionsByDependency = Object.fromEntries(
+    sortedEntries.map(([name, value]) => [name, value.versions]),
+  ) as Record<string, Partial<Record<PackageManagerName, string>>>
+
+  return { packages, managersByDependency, versionsByDependency }
+}
+
+export function getGlobalExpectedVersion(
+  pkg: PackageMeta,
+  depName: string,
+  manager: PackageManagerName,
+): string | undefined {
+  const raw = pkg.raw as GlobalPackageRaw
+  return raw.versionsByDependency?.[depName]?.[manager]
 }
 
 export function getGlobalWriteTargets(pkg: PackageMeta, depName: string): PackageManagerName[] {

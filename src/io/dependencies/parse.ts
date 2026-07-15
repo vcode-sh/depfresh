@@ -76,6 +76,7 @@ export function parseDependencies(
       deps.push({
         name,
         currentVersion: protocol.currentVersion,
+        rawVersion,
         aliasName: protocol.aliasName,
         source: field,
         update: !isLocked(protocol.currentVersion) || options.includeLocked,
@@ -100,6 +101,7 @@ export function parseDependencies(
       deps.push({
         name: packageManager.name,
         currentVersion: packageManager.version,
+        rawVersion: raw.packageManager,
         source: 'packageManager',
         update: true,
         parents: [],

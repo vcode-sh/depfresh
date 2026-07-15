@@ -76,9 +76,8 @@ export async function processPackage(
     const shouldWrite = await hooks.beforePackageWrite(pkg, selected)
     if (!shouldWrite) return
 
-    hooks.onPlannedUpdates(selected.length)
-
     const writeResult = await applyPackageWrite(pkg, selected, options, authority, hooks.logger)
+    hooks.onPlannedUpdates(writeResult.planned)
     hooks.onWriteResult(writeResult)
 
     if (writeResult.didWrite) {

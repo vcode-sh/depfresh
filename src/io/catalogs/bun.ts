@@ -25,6 +25,7 @@ function parseCatalogDeps(
     deps.push({
       name,
       currentVersion: version,
+      rawVersion: version,
       source: 'catalog',
       update: !isLocked(version) || options.includeLocked,
       parents: [parentPath],

@@ -26,6 +26,10 @@ vi.mock('../../io/write', () => ({
   restorePackageFiles: vi.fn(),
 }))
 
+vi.mock('../../io/write/occurrence', () => ({
+  observeFileOccurrence: vi.fn(),
+}))
+
 vi.mock('../../cache/index', () => ({
   createSqliteCache: vi.fn(() => ({
     get: vi.fn(),
@@ -59,6 +63,7 @@ vi.mock('node:fs', async () => {
 
 vi.mock('../../io/global', () => ({
   writeGlobalPackage: vi.fn(),
+  observeGlobalPackageVersion: vi.fn(),
   getGlobalWriteTargets: vi.fn((pkg: { filepath: string; raw: unknown }, depName: string) => {
     const raw = pkg.raw as { managersByDependency?: Record<string, string[]> }
     const fromRaw = raw.managersByDependency?.[depName]
@@ -177,6 +182,7 @@ export interface CheckMocks {
   backupPackageFilesMock: ReturnType<typeof vi.fn>
   restorePackageFilesMock: ReturnType<typeof vi.fn>
   writeGlobalPackageMock: ReturnType<typeof vi.fn>
+  observeGlobalPackageVersionMock: ReturnType<typeof vi.fn>
 }
 
 export async function setupMocks(): Promise<CheckMocks> {
@@ -186,15 +192,58 @@ export async function setupMocks(): Promise<CheckMocks> {
   const cp = await import('node:child_process')
   const fs = await import('node:fs')
   const globalModule = await import('../../io/global')
+  const occurrenceModule = await import('../../io/write/occurrence')
+  const writePackageMock = writeModule.writePackage as ReturnType<typeof vi.fn>
+  const writeGlobalPackageMock = globalModule.writeGlobalPackage as ReturnType<typeof vi.fn>
+  const observeGlobalPackageVersionMock = globalModule.observeGlobalPackageVersion as ReturnType<
+    typeof vi.fn
+  >
+
+  writePackageMock.mockImplementation((pkg: PackageMeta, changes: ResolvedDepChange[]) =>
+    changes.map((change) => ({
+      name: change.name,
+      occurrence: { file: pkg.filepath, path: [change.source, ...change.parents, change.name] },
+      expectedValue: change.rawVersion ?? change.currentVersion,
+      requestedValue: change.targetVersion,
+      observedValue: change.targetVersion,
+      status: 'applied',
+      reason: 'APPLIED',
+    })),
+  )
+  ;(occurrenceModule.observeFileOccurrence as ReturnType<typeof vi.fn>).mockImplementation(() => {
+    const lastResult = writePackageMock.mock.results.at(-1)?.value as
+      | Array<{ expectedValue: string }>
+      | undefined
+    return {
+      known: true,
+      version: lastResult?.[0]?.expectedValue,
+      value: lastResult?.[0]?.expectedValue,
+    }
+  })
+
+  writeGlobalPackageMock.mockReturnValue(true)
+  const initialGlobalVersions: Record<string, string> = {
+    typescript: '5.0.0',
+    eslint: '8.0.0',
+    tsx: '4.0.0',
+  }
+  observeGlobalPackageVersionMock.mockImplementation((manager: string, name: string) => {
+    const matchingCalls = writeGlobalPackageMock.mock.calls.filter(
+      ([calledManager, calledName]) => calledManager === manager && calledName === name,
+    )
+    const target = matchingCalls.at(-1)?.[2]
+    return { known: true, version: target ?? initialGlobalVersions[name] ?? '1.0.0' }
+  })
 
   return {
     loadPackagesMock: packagesModule.loadPackages as ReturnType<typeof vi.fn>,
     resolvePackageMock: resolveModule.resolvePackage as ReturnType<typeof vi.fn>,
-    writePackageMock: writeModule.writePackage as ReturnType<typeof vi.fn>,
+    writePackageMock,
     execSyncMock: cp.execSync as ReturnType<typeof vi.fn>,
     existsSyncMock: fs.existsSync as ReturnType<typeof vi.fn>,
     backupPackageFilesMock: writeModule.backupPackageFiles as ReturnType<typeof vi.fn>,
     restorePackageFilesMock: writeModule.restorePackageFiles as ReturnType<typeof vi.fn>,
-    writeGlobalPackageMock: globalModule.writeGlobalPackage as ReturnType<typeof vi.fn>,
+    writeGlobalPackageMock,
+    observeGlobalPackageVersionMock,
   }
 }

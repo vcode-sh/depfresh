@@ -30,3 +30,11 @@ export type {
   RegistryConfig,
   SignaturePresence,
 } from './registry'
+export type {
+  CanonicalOccurrencePath,
+  WriteOutcome,
+  WriteOutcomeReason,
+  WriteOutcomeStatus,
+  WriteOutcomeSummary,
+} from './write'
+export { summarizeWriteOutcomes } from './write'
