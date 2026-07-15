@@ -192,23 +192,18 @@ describe('GitHub Action input validation', () => {
     expect(readOutputValue(output, 'working-directory')).toBe(realpathSync(fixture.project))
   })
 
-  it.each([
-    '24.14.1',
-    '23.99.99',
-    '24',
-    '24.x',
-    'v24.15.0',
-    'lts/*',
-    ' 24.15.0',
-  ])('rejects unsupported or non-exact Node version %j', (nodeVersion) => {
-    const fixture = createFixture()
-    const env = { ...validInputEnv(fixture), INPUT_NODE_VERSION: nodeVersion }
-    const result = runStep('Validate inputs', env)
+  it.each(['24.14.1', '23.99.99', '24', '24.x', 'v24.15.0', 'lts/*', ' 24.15.0'])(
+    'rejects unsupported or non-exact Node version %j',
+    (nodeVersion) => {
+      const fixture = createFixture()
+      const env = { ...validInputEnv(fixture), INPUT_NODE_VERSION: nodeVersion }
+      const result = runStep('Validate inputs', env)
 
-    expect(result.status).toBe(2)
-    expect(result.stdout).toContain('::error title=depfresh input error::Invalid Node version')
-    expect(result.stdout).not.toContain(nodeVersion)
-  })
+      expect(result.status).toBe(2)
+      expect(result.stdout).toContain('::error title=depfresh input error::Invalid Node version')
+      expect(result.stdout).not.toContain(nodeVersion)
+    },
+  )
 
   it('does not execute shell syntax embedded in the Node version', () => {
     const fixture = createFixture()
@@ -223,70 +218,61 @@ describe('GitHub Action input validation', () => {
     expect(() => readFileSync(sentinel)).toThrow()
   })
 
-  it.each([
-    '24.15.0',
-    '24.15.1',
-    '25.0.0',
-    '26.5.0',
-  ])('accepts supported exact Node version %s', (nodeVersion) => {
-    const fixture = createFixture()
-    const result = runStep('Validate inputs', {
-      ...validInputEnv(fixture),
-      INPUT_NODE_VERSION: nodeVersion,
-    })
+  it.each(['24.15.0', '24.15.1', '25.0.0', '26.5.0'])(
+    'accepts supported exact Node version %s',
+    (nodeVersion) => {
+      const fixture = createFixture()
+      const result = runStep('Validate inputs', {
+        ...validInputEnv(fixture),
+        INPUT_NODE_VERSION: nodeVersion,
+      })
 
-    expect(result.status).toBe(0)
-  })
+      expect(result.status).toBe(0)
+    },
+  )
 
-  it.each([
-    'write',
-    'fail-on-outdated',
-    'recursive',
-  ])('rejects malformed %s boolean values before side effects', (inputName) => {
-    const fixture = createFixture()
-    const envName = `INPUT_${inputName.replaceAll('-', '_').toUpperCase()}`
-    const env = { ...validInputEnv(fixture), [envName]: 'yes please' }
-    const result = runStep('Validate inputs', env)
+  it.each(['write', 'fail-on-outdated', 'recursive'])(
+    'rejects malformed %s boolean values before side effects',
+    (inputName) => {
+      const fixture = createFixture()
+      const envName = `INPUT_${inputName.replaceAll('-', '_').toUpperCase()}`
+      const env = { ...validInputEnv(fixture), [envName]: 'yes please' }
+      const result = runStep('Validate inputs', env)
 
-    expect(result.status).toBe(2)
-    expect(result.stdout).toContain('::error title=depfresh input error::Invalid boolean input')
-    expect(result.stdout).not.toContain('yes please')
-  })
+      expect(result.status).toBe(2)
+      expect(result.stdout).toContain('::error title=depfresh input error::Invalid boolean input')
+      expect(result.stdout).not.toContain('yes please')
+    },
+  )
 
-  it.each([
-    'TRUE',
-    'False',
-    '1',
-    '0',
-    '--write',
-    'true\nfalse',
-  ])('rejects real-world malformed boolean value %j', (value) => {
-    const fixture = createFixture()
-    const result = runStep('Validate inputs', {
-      ...validInputEnv(fixture),
-      INPUT_WRITE: value,
-    })
+  it.each(['TRUE', 'False', '1', '0', '--write', 'true\nfalse'])(
+    'rejects real-world malformed boolean value %j',
+    (value) => {
+      const fixture = createFixture()
+      const result = runStep('Validate inputs', {
+        ...validInputEnv(fixture),
+        INPUT_WRITE: value,
+      })
 
-    expect(result.status).toBe(2)
-    expect(result.stdout).not.toContain(value)
-  })
+      expect(result.status).toBe(2)
+      expect(result.stdout).not.toContain(value)
+    },
+  )
 
-  it.each([
-    'wat',
-    'major --write',
-    '$(touch mode-injected)',
-    'major\n--write',
-  ])('rejects malformed mode %j without reflecting it', (mode) => {
-    const fixture = createFixture()
-    const result = runStep('Validate inputs', {
-      ...validInputEnv(fixture),
-      INPUT_MODE: mode,
-    })
+  it.each(['wat', 'major --write', '$(touch mode-injected)', 'major\n--write'])(
+    'rejects malformed mode %j without reflecting it',
+    (mode) => {
+      const fixture = createFixture()
+      const result = runStep('Validate inputs', {
+        ...validInputEnv(fixture),
+        INPUT_MODE: mode,
+      })
 
-    expect(result.status).toBe(2)
-    expect(result.stdout).toContain('::error title=depfresh input error::Invalid mode input')
-    expect(result.stdout).not.toContain(mode)
-  })
+      expect(result.status).toBe(2)
+      expect(result.stdout).toContain('::error title=depfresh input error::Invalid mode input')
+      expect(result.stdout).not.toContain(mode)
+    },
+  )
 
   it('rejects missing, escaping, control-character, and symlinked working directories', () => {
     const fixture = createFixture()

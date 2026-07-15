@@ -91,22 +91,28 @@ describe('check option validation', () => {
         globalWrite: false,
       },
     ],
-  ])('rejects %s options without matching immutable invocation authority', async (_, options, authority) => {
-    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-    const { check } = await import('./index')
+  ])(
+    'rejects %s options without matching immutable invocation authority',
+    async (_, options, authority) => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      const { check } = await import('./index')
 
-    const result = await check({ ...baseOptions, ...options, loglevel: 'info' }, authority as never)
+      const result = await check(
+        { ...baseOptions, ...options, loglevel: 'info' },
+        authority as never,
+      )
 
-    expect(result).toBe(2)
-    expect(mocks.loadPackagesMock).not.toHaveBeenCalled()
-    expect(mocks.writePackageMock).not.toHaveBeenCalled()
-    expect(mocks.execSyncMock).not.toHaveBeenCalled()
-    expect(errorSpy).toHaveBeenCalledWith(
-      expect.any(String),
-      'Check failed:',
-      expect.stringContaining('explicit invocation authority'),
-    )
-  })
+      expect(result).toBe(2)
+      expect(mocks.loadPackagesMock).not.toHaveBeenCalled()
+      expect(mocks.writePackageMock).not.toHaveBeenCalled()
+      expect(mocks.execSyncMock).not.toHaveBeenCalled()
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.any(String),
+        'Check failed:',
+        expect.stringContaining('explicit invocation authority'),
+      )
+    },
+  )
 
   it.each([
     [{ install: true }, '--install requires --write'],

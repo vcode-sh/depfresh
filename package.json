@@ -59,32 +59,32 @@
     "prepublishOnly": "pnpm run build"
   },
   "dependencies": {
-    "@clack/prompts": "^1.1.0",
-    "ansis": "^4.2.0",
-    "citty": "^0.2.1",
+    "@clack/prompts": "^1.7.0",
+    "ansis": "^4.3.1",
+    "citty": "^0.2.2",
     "defu": "^6.1.7",
     "detect-indent": "^7.0.2",
     "find-up-simple": "^1.0.1",
     "ini": "^6.0.0",
-    "jiti": "^2.6.1",
+    "jiti": "^2.7.0",
     "p-limit": "^7.3.0",
     "pathe": "^2.0.3",
-    "pnpm-workspace-yaml": "^1.6.0",
-    "semver": "^7.7.4",
+    "pnpm-workspace-yaml": "^1.6.1",
+    "semver": "^7.8.5",
     "tinyglobby": "^0.2.17",
     "undici": "^7.28.0",
-    "yaml": "^2.8.3"
+    "yaml": "^2.9.0"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.4.9",
+    "@biomejs/biome": "^2.5.4",
     "@types/ini": "^4.1.1",
-    "@types/node": "^24.12.0",
+    "@types/node": "^24.13.3",
     "@types/semver": "^7.7.1",
-    "@vitest/coverage-v8": "^4.1.2",
-    "tsx": "^4.21.0",
+    "@vitest/coverage-v8": "^4.1.10",
+    "tsx": "^4.23.1",
     "typescript": "^5.9.3",
     "unbuild": "^3.6.1",
-    "vitest": "^4.1.2"
+    "vitest": "^4.1.10"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

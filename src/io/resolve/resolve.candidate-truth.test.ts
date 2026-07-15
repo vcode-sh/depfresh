@@ -176,24 +176,23 @@ describe('authoritative resolution candidate truth', () => {
     }
   })
 
-  it.each([
-    'dependencies',
-    'catalog',
-    'overrides',
-  ] as const)('updates an included locked %s occurrence through the same candidate set', async (source) => {
-    const result = await resolveFromCache(
-      {
-        name: 'test-dep',
-        versions: ['1.0.0', '1.1.0', '2.0.0'],
-        distTags: { latest: '2.0.0' },
-      },
-      makeDep({ currentVersion: '1.0.0', source }),
-      { includeLocked: true },
-    )
+  it.each(['dependencies', 'catalog', 'overrides'] as const)(
+    'updates an included locked %s occurrence through the same candidate set',
+    async (source) => {
+      const result = await resolveFromCache(
+        {
+          name: 'test-dep',
+          versions: ['1.0.0', '1.1.0', '2.0.0'],
+          distTags: { latest: '2.0.0' },
+        },
+        makeDep({ currentVersion: '1.0.0', source }),
+        { includeLocked: true },
+      )
 
-    expect(result?.targetVersion).toBe('2.0.0')
-    expect(result?.diff).toBe('major')
-  })
+      expect(result?.targetVersion).toBe('2.0.0')
+      expect(result?.diff).toBe('major')
+    },
+  )
 
   it('uses the normalized current version to allow escape from deprecation', async () => {
     const result = await resolveFromCache(
