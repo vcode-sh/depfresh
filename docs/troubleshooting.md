@@ -253,7 +253,11 @@ not be printed directly into shared logs.
 
 ## Known limitations
 
-**Yarn global packages.** `--global` and `--global-all` support npm, pnpm, and bun. Yarn global is not supported. I don't make the rules. Actually I do, and I chose not to support it.
+**Global packages.** `--global` and `--global-all` support npm 10/11, pnpm 10/11, and Bun
+`>=1.2.0 <2.0.0`. Yarn global is unsupported. Missing executables, unsupported versions, malformed
+or timed-out inventory, a changed executable/global root, or lost post-command inventory fail
+closed as unavailable, conflicted, or unknown. Re-run read-only inventory and create a fresh plan;
+do not treat a successful process exit as proof that the package changed.
 
 **JSR registry.** Works, but metadata is sparser than npm. Signature-presence and some passive
 metadata may be unavailable. When `--cooldown` needs a missing publish time, the candidate is
@@ -261,4 +265,8 @@ skipped as unknown rather than assumed mature.
 
 **Node compatibility.** The `--nodecompat` flag checks the `engines.node` field in package metadata. This is best-effort — not every package declares engine constraints, and some declarations are optimistic at best.
 
-**Exit codes.** For the automation crowd: `0` means no updates (or written successfully), `1` means updates available (with `--fail-on-outdated`), `2` means something actually broke.
+**Exit codes.** Legacy check uses `0` for a complete check or fully observed write, optional `1` for
+outdated results with `--fail-on-outdated`, and `2` for fatal or incomplete writes. Inspect/plan use
+`1` for a valid actionable/incomplete document; repository apply uses `1` for a schema-valid
+non-success result. Global compatibility writes use `2` when any selected item is conflicted,
+failed, or unknown; inspect `globalResults` instead of treating that as an absent result.

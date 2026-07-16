@@ -3,6 +3,7 @@ import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { canonicalJson } from './canonical-json'
 import { createPlanFingerprint, createRepositoryFingerprint, hashExactBytes } from './fingerprint'
+import { globalApplySchema, globalPlanSchema } from './global-schemas'
 import {
   applyResultSchema,
   commandErrorSchema,
@@ -44,6 +45,8 @@ describe('shipped contract schemas', () => {
     ['schemas/plan-v1.json', planResultSchema],
     ['schemas/apply-v1.json', applyResultSchema],
     ['schemas/error-v1.json', commandErrorSchema],
+    ['schemas/global-plan-v1.json', globalPlanSchema],
+    ['schemas/global-apply-v1.json', globalApplySchema],
   ])('matches the authoritative descriptor for %s', (path, schema) => {
     expect(JSON.parse(readFileSync(resolve(root, path), 'utf8'))).toEqual(schema)
   })

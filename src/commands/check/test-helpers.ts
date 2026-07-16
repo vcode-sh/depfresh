@@ -3,6 +3,8 @@ import type { depfreshOptions, PackageMeta, ResolvedDepChange } from '../../type
 import { DEFAULT_OPTIONS } from '../../types'
 
 const physicalWriteMock = vi.hoisted(() => vi.fn())
+const createGlobalApplyPlanMock = vi.hoisted(() => vi.fn())
+const applyGlobalPlanMock = vi.hoisted(() => vi.fn())
 
 vi.mock('../../io/packages', () => ({
   loadPackages: vi.fn(),
@@ -68,8 +70,6 @@ vi.mock('node:fs', async () => {
 })
 
 vi.mock('../../io/global', () => ({
-  writeGlobalPackage: vi.fn(),
-  observeGlobalPackageVersion: vi.fn(),
   getGlobalWriteTargets: vi.fn((pkg: { filepath: string; raw: unknown }, depName: string) => {
     const raw = pkg.raw as { managersByDependency?: Record<string, string[]> }
     const fromRaw = raw.managersByDependency?.[depName]
@@ -85,6 +85,12 @@ vi.mock('../../io/global', () => ({
       .map((pm) => pm.trim())
       .filter((pm) => pm.length > 0)
   }),
+}))
+
+vi.mock('../global-apply', () => ({
+  createGlobalApplyPlan: createGlobalApplyPlanMock,
+  applyGlobalPlan: applyGlobalPlanMock,
+  createGlobalInvocationAuthority: vi.fn((managers, grants) => ({ managers, ...grants })),
 }))
 
 export const baseOptions: depfreshOptions = {
@@ -187,8 +193,8 @@ export interface CheckMocks {
   existsSyncMock: ReturnType<typeof vi.fn>
   backupPackageFilesMock: ReturnType<typeof vi.fn>
   restorePackageFilesMock: ReturnType<typeof vi.fn>
-  writeGlobalPackageMock: ReturnType<typeof vi.fn>
-  observeGlobalPackageVersionMock: ReturnType<typeof vi.fn>
+  createGlobalApplyPlanMock: ReturnType<typeof vi.fn>
+  applyGlobalPlanMock: ReturnType<typeof vi.fn>
 }
 
 export async function setupMocks(): Promise<CheckMocks> {
@@ -197,13 +203,8 @@ export async function setupMocks(): Promise<CheckMocks> {
   const writeModule = await import('../../io/write')
   const cp = await import('node:child_process')
   const fs = await import('node:fs')
-  const globalModule = await import('../../io/global')
   const occurrenceModule = await import('../../io/write/occurrence')
   const writePackageMock = physicalWriteMock
-  const writeGlobalPackageMock = globalModule.writeGlobalPackage as ReturnType<typeof vi.fn>
-  const observeGlobalPackageVersionMock = globalModule.observeGlobalPackageVersion as ReturnType<
-    typeof vi.fn
-  >
 
   writePackageMock.mockImplementation((pkg: PackageMeta, changes: ResolvedDepChange[]) =>
     changes.map((change) => ({
@@ -227,19 +228,41 @@ export async function setupMocks(): Promise<CheckMocks> {
     }
   })
 
-  writeGlobalPackageMock.mockReturnValue(true)
-  const initialGlobalVersions: Record<string, string> = {
-    typescript: '5.0.0',
-    eslint: '8.0.0',
-    tsx: '4.0.0',
-  }
-  observeGlobalPackageVersionMock.mockImplementation((manager: string, name: string) => {
-    const matchingCalls = writeGlobalPackageMock.mock.calls.filter(
-      ([calledManager, calledName]) => calledManager === manager && calledName === name,
-    )
-    const target = matchingCalls.at(-1)?.[2]
-    return { known: true, version: target ?? initialGlobalVersions[name] ?? '1.0.0' }
-  })
+  createGlobalApplyPlanMock.mockImplementation((requests: unknown[]) => ({ requests }))
+  applyGlobalPlanMock.mockImplementation(
+    async (plan: { requests: Array<Record<string, string>> }) => {
+      const items = plan.requests.map((request, index) => ({
+        operationId: `operation-${index}`,
+        occurrenceId: `occurrence-${index}`,
+        manager: request.manager,
+        name: request.name,
+        expectedVersion: request.expectedVersion,
+        targetVersion: request.targetVersion,
+        observedVersion: request.targetVersion,
+        status: 'applied',
+        reason: 'APPLIED',
+      }))
+      return {
+        contract: 'depfresh.global-apply',
+        schemaVersion: 1,
+        toolVersion: '1.2.0',
+        planFingerprint: 'a'.repeat(64),
+        status: 'applied',
+        items,
+        commands: [],
+        summary: {
+          planned: items.length,
+          applied: items.length,
+          skipped: 0,
+          conflicted: 0,
+          failed: 0,
+          unknown: 0,
+        },
+        requiredCapabilities: ['global-write', 'process-execute'],
+        rollback: 'not-supported',
+      }
+    },
+  )
 
   return {
     loadPackagesMock: packagesModule.loadPackages as ReturnType<typeof vi.fn>,
@@ -249,7 +272,7 @@ export async function setupMocks(): Promise<CheckMocks> {
     existsSyncMock: fs.existsSync as ReturnType<typeof vi.fn>,
     backupPackageFilesMock: writeModule.backupPackageFiles as ReturnType<typeof vi.fn>,
     restorePackageFilesMock: writeModule.restorePackageFiles as ReturnType<typeof vi.fn>,
-    writeGlobalPackageMock,
-    observeGlobalPackageVersionMock,
+    createGlobalApplyPlanMock,
+    applyGlobalPlanMock,
   }
 }

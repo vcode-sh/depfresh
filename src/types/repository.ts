@@ -164,6 +164,7 @@ export type RepositoryOccurrenceRole =
   | 'package-manager'
   | 'catalog-owner'
   | 'catalog-consumer'
+  | 'global'
 
 export type RepositoryDependencyProtocol =
   | 'semver'

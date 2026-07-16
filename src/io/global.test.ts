@@ -1,21 +1,18 @@
-import { execFileSync, execSync } from 'node:child_process'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { execSync } from 'node:child_process'
+import { describe, expect, it, vi } from 'vitest'
 import {
   detectGlobalPackageManager,
   loadGlobalPackages,
   parseBunGlobalList,
   parseNpmGlobalList,
   parsePnpmGlobalList,
-  writeGlobalPackage,
 } from './global'
 
 vi.mock('node:child_process', () => ({
   execSync: vi.fn(),
-  execFileSync: vi.fn(),
 }))
 
 const mockedExecSync = vi.mocked(execSync)
-const mockedExecFileSync = vi.mocked(execFileSync)
 
 describe('parseNpmGlobalList', () => {
   it('parses valid JSON with dependencies', () => {
@@ -171,65 +168,5 @@ describe('loadGlobalPackages', () => {
 
     const result = loadGlobalPackages('npm')
     expect(result).toEqual([])
-  })
-})
-
-describe('writeGlobalPackage', () => {
-  beforeEach(() => {
-    mockedExecFileSync.mockReset()
-    mockedExecSync.mockReset()
-  })
-
-  it('executes npm without a shell using an argument array', () => {
-    mockedExecFileSync.mockReturnValue(Buffer.from(''))
-    writeGlobalPackage('npm', 'typescript', '5.9.3')
-    expect(mockedExecFileSync).toHaveBeenCalledWith('npm', ['install', '-g', 'typescript@5.9.3'], {
-      stdio: 'inherit',
-    })
-    expect(mockedExecSync).not.toHaveBeenCalled()
-  })
-
-  it('executes pnpm without a shell using an argument array', () => {
-    mockedExecFileSync.mockReturnValue(Buffer.from(''))
-    writeGlobalPackage('pnpm', 'tsx', '4.7.0')
-    expect(mockedExecFileSync).toHaveBeenCalledWith('pnpm', ['add', '-g', 'tsx@4.7.0'], {
-      stdio: 'inherit',
-    })
-    expect(mockedExecSync).not.toHaveBeenCalled()
-  })
-
-  it('executes bun without a shell using an argument array', () => {
-    mockedExecFileSync.mockReturnValue(Buffer.from(''))
-    writeGlobalPackage('bun', 'turbo', '1.12.0')
-    expect(mockedExecFileSync).toHaveBeenCalledWith('bun', ['add', '-g', 'turbo@1.12.0'], {
-      stdio: 'inherit',
-    })
-    expect(mockedExecSync).not.toHaveBeenCalled()
-  })
-
-  it('accepts a version carrying a range prefix', () => {
-    mockedExecFileSync.mockReturnValue(Buffer.from(''))
-    writeGlobalPackage('npm', 'typescript', '^5.9.3')
-    expect(mockedExecFileSync).toHaveBeenCalledWith('npm', ['install', '-g', 'typescript@^5.9.3'], {
-      stdio: 'inherit',
-    })
-  })
-
-  it('skips writing when the version contains shell metacharacters', () => {
-    mockedExecFileSync.mockReturnValue(Buffer.from(''))
-    writeGlobalPackage('npm', 'typescript', '1.0.0; touch owned')
-    expect(mockedExecFileSync).not.toHaveBeenCalled()
-  })
-
-  it('skips writing when the package name violates npm grammar', () => {
-    mockedExecFileSync.mockReturnValue(Buffer.from(''))
-    writeGlobalPackage('npm', 'foo bar', '1.0.0')
-    writeGlobalPackage('npm', 'FOO', '1.0.0')
-    writeGlobalPackage('npm', 'foo$(x)', '1.0.0')
-    expect(mockedExecFileSync).not.toHaveBeenCalled()
-  })
-
-  it('warns for yarn without throwing', () => {
-    expect(() => writeGlobalPackage('yarn', 'pkg', '1.0.0')).not.toThrow()
   })
 })

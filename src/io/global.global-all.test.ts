@@ -111,3 +111,16 @@ describe('getGlobalWriteTargets', () => {
     expect(targets).toEqual(['npm', 'pnpm'])
   })
 })
+
+describe('deduped global identity ordering', () => {
+  it('is independent of manager record enumeration order', async () => {
+    const { dedupeGlobalPackageRecords } = await import('./global-targets')
+    const records = [
+      { manager: 'pnpm' as const, name: 'shared', version: '1.0.0' },
+      { manager: 'npm' as const, name: 'shared', version: '2.0.0' },
+    ]
+    expect(dedupeGlobalPackageRecords(records)).toEqual(
+      dedupeGlobalPackageRecords([...records].reverse()),
+    )
+  })
+})

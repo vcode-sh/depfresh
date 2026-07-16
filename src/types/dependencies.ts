@@ -1,3 +1,4 @@
+import type { GlobalManagerName } from './global'
 import type { PolicyDecision } from './policy'
 import type { PackageData, ProvenanceLevel, SignaturePresence } from './registry'
 
@@ -44,6 +45,8 @@ export interface RawDep {
   protocol?: string
   occurrenceId?: string
   policyDecision?: PolicyDecision
+  /** Physical global manager identity for versioned global occurrences. */
+  globalManager?: GlobalManagerName
 }
 
 export interface UpdateScore {

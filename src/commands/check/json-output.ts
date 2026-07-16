@@ -2,6 +2,7 @@ import type {
   DiffType,
   DiscoveryReport,
   depfreshOptions,
+  GlobalApplyResult,
   ProfileReport,
   ResolvedDepChange,
   WriteOutcome,
@@ -40,6 +41,7 @@ export interface JsonExecutionState {
   failedWrites: number
   unknownWrites: number
   writeOutcomes: WriteOutcome[]
+  globalResults: GlobalApplyResult[]
   failedResolutions: number
   noPackagesFound: boolean
   didWrite: boolean
@@ -49,6 +51,7 @@ export interface LegacyCheckJsonResult {
   packages: JsonPackage[]
   errors: JsonError[]
   writeOutcomes: WriteOutcome[]
+  globalResults?: GlobalApplyResult[]
   summary: {
     total: number
     major: number
@@ -139,6 +142,9 @@ export function buildLegacyCheckJsonResult(
     packages,
     errors,
     writeOutcomes: executionState.writeOutcomes,
+    ...(executionState.globalResults.length > 0
+      ? { globalResults: executionState.globalResults }
+      : {}),
     summary: {
       total: allUpdates.length,
       major: count('major'),

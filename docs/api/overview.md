@@ -47,6 +47,30 @@ These functions return data and never exit the process. `inspect()` and `plan()`
 `apply()` requires a separate explicit authority snapshot and exact file preconditions. Fatal
 input/configuration/runtime failures throw structured errors for the caller to handle.
 
+Global mutation has its own contract and authority:
+
+```ts
+import {
+  applyGlobalPlan,
+  createGlobalApplyPlan,
+  createGlobalInvocationAuthority,
+} from 'depfresh'
+
+const globalPlan = await createGlobalApplyPlan(
+  [{ manager: 'pnpm', name: 'typescript', expectedVersion: '5.7.2', targetVersion: '5.8.3' }],
+  { cwd: process.cwd() },
+)
+const globalResult = await applyGlobalPlan(
+  globalPlan,
+  { cwd: process.cwd() },
+  createGlobalInvocationAuthority(['pnpm'], { globalWrite: true, processExecute: true }),
+)
+```
+
+Planning inventories the exact manager executable, supported version, global realm, and installed
+package. Apply preflights all items and derives terminal truth from fresh post-command inventory.
+It never claims rollback for global package-manager effects.
+
 The legacy check API remains available:
 
 ```ts

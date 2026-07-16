@@ -91,14 +91,14 @@ when recovery is incomplete or ownership is unknown.
 # Global package audit
 depfresh -g --all
 
-# Global audit across npm + pnpm + bun (deduped names)
+# Global audit across npm + pnpm + bun
 depfresh --global-all --all
 
 # Update all global packages
 depfresh -gw
 
 # Update all global package managers in one run
-depfresh --global-all -w
+depfresh --global-all --write --output json
 ```
 
 ## Monorepos

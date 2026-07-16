@@ -6,6 +6,17 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Semver
 
 ### Added
 
+- **Observed global apply state machine** -- strict `depfresh.global-plan` and
+  `depfresh.global-apply` schema-v1 contracts retain stable manager/package/version occurrence
+  identity, executable and global-realm evidence, fixed no-shell argv, and explicit npm 10/11,
+  pnpm 10/11, and Bun `>=1.2.0 <2.0.0` support. Apply requires separate global-write, process, and
+  exact manager authority; preflights every requested manager before the first command; forbids
+  downgrades; rechecks before each command; and derives applied truth only from post-command
+  inventory. Per-item applied, skipped, conflicted, failed, and unknown outcomes reconcile into
+  honest applied/noop/partial/conflicted/failed/unknown run states with
+  `rollback: "not-supported"`. Legacy `--global[-all] --write` now routes through this engine and
+  JSON output exposes the versioned `globalResults`.
+
 - **Reviewed lockfile synchronization and verification phases** -- immutable plans can fingerprint
   supported npm 10/11, pnpm 10/11, or Bun 1.x manager/version evidence, one selected parsed
   lockfile per affected boundary, fixed lifecycle-disabled argv, permitted paths, timeout, and one
@@ -135,7 +146,8 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Semver
   selected occurrences use their policy mode. True current/no-match outcomes become unchanged,
   unsupported declarations are skipped, safety-filtered candidates are blocked, and incomplete or
   inconsistent candidate evidence remains unknown. Every result retains the exact candidate
-  reason. Versioned global occurrence policy remains deferred.
+  reason. Global manager/package occurrences now evaluate independently from their own observed
+  version and confirmed manager; grouped presentation never replaces physical policy identity.
 
 - **Writes now report observed physical outcomes** -- manifest, YAML, catalog, nested override,
   package-manager, and global writes use canonical file-plus-path identities, require the exact
@@ -149,9 +161,9 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Semver
   overrides, and global occurrences share normalization, prerelease-channel, mode, deprecation,
   cooldown, and downgrade checks. Every exact semver spelling, including equals-prefixed and
   prerelease pins, requires `--include-locked` for manifest updates, while globally observed exact
-  versions still resolve in default mode. Global-all compares from the highest installed manager
-  version, and missing or malformed publish times remain unknown while cooldown is active instead
-  of being treated as safe.
+  versions still resolve in default mode. Global-all retains each manager's installed version for
+  candidate selection and downgrade checks; missing or malformed publish times remain unknown while
+  cooldown is active instead of being treated as safe.
 
 - **Registry signature data is described as presence, not proof** -- current output and public
   types report `present` or `absent` signature metadata without claiming verification or trust.

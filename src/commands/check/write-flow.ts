@@ -1,7 +1,9 @@
-import * as semver from 'semver'
 import { ConfigError } from '../../errors'
 import type {
   depfreshOptions,
+  GlobalApplyResult,
+  GlobalItemReason,
+  GlobalManagerName,
   InvocationAuthority,
   PackageManagerName,
   PackageMeta,
@@ -16,6 +18,7 @@ import { applyLegacyPackageWrite } from '../apply/legacy'
 export interface PackageWriteResult extends WriteOutcomeSummary {
   outcomes: WriteOutcome[]
   didWrite: boolean
+  globalResult?: GlobalApplyResult
 }
 
 function resultFromOutcomes(outcomes: WriteOutcome[]): PackageWriteResult {
@@ -73,7 +76,7 @@ export async function applyPackageWrite(
         reason: 'AUTHORITY_REQUIRED',
       })
     }
-    return applyGlobalWrites(pkg, changes, logger)
+    return applyGlobalWrites(pkg, changes, options, authority, logger)
   }
 
   return resultFromOutcomes(
@@ -84,17 +87,28 @@ export async function applyPackageWrite(
 async function applyGlobalWrites(
   pkg: PackageMeta,
   changes: ResolvedDepChange[],
+  options: depfreshOptions,
+  authority: InvocationAuthority,
   logger: Logger,
 ): Promise<PackageWriteResult> {
-  const { getGlobalWriteTargets, observeGlobalPackageVersion, writeGlobalPackage } = await import(
-    '../../io/global'
+  const { getGlobalWriteTargets } = await import('../../io/global')
+  const { applyGlobalPlan, createGlobalApplyPlan, createGlobalInvocationAuthority } = await import(
+    '../global-apply'
   )
-  const outcomes: WriteOutcome[] = []
+  const requests: Array<{
+    manager: GlobalManagerName
+    name: string
+    expectedVersion: string
+    targetVersion: string
+  }> = []
+  const incomplete: WriteOutcome[] = []
 
   for (const change of changes) {
-    const targets = getGlobalWriteTargets(pkg, change.name)
+    const targets = change.globalManager
+      ? [change.globalManager]
+      : getGlobalWriteTargets(pkg, change.name)
     if (targets.length === 0) {
-      outcomes.push(
+      incomplete.push(
         globalOutcome(
           change,
           'unknown',
@@ -107,112 +121,88 @@ async function applyGlobalWrites(
     }
 
     for (const manager of targets) {
-      const expectedValue =
-        getExpectedGlobalVersion(pkg, change.name, manager) ??
-        change.rawVersion ??
-        change.currentVersion
-      const before = observeGlobalPackageVersion(manager, change.name)
-      if (!before.known) {
-        outcomes.push(
-          globalOutcome(change, 'unknown', 'GLOBAL_OBSERVATION_FAILED', expectedValue, manager),
+      if (manager === 'yarn') {
+        incomplete.push(
+          globalOutcome(change, 'unknown', 'GLOBAL_TARGET_MISSING', change.currentVersion, manager),
         )
         continue
       }
-      if (before.version === undefined) {
-        outcomes.push(
-          globalOutcome(change, 'conflicted', 'EXPECTED_VALUE_MISMATCH', expectedValue, manager),
-        )
+      const expectedValue = getExpectedGlobalVersion(pkg, change.name, manager)
+      if (!expectedValue) {
+        incomplete.push(globalOutcome(change, 'unknown', 'GLOBAL_OBSERVATION_FAILED', '', manager))
         continue
       }
-      if (before.version !== expectedValue) {
-        outcomes.push(
-          globalOutcome(
-            change,
-            'conflicted',
-            'EXPECTED_VALUE_MISMATCH',
-            expectedValue,
-            manager,
-            before.version,
-          ),
-        )
-        continue
-      }
-      if (isDowngrade(before.version, change.targetVersion)) {
-        outcomes.push(
-          globalOutcome(
-            change,
-            'skipped',
-            'DOWNGRADE_BLOCKED',
-            expectedValue,
-            manager,
-            before.version,
-          ),
-        )
-        continue
-      }
-      if (before.version === change.targetVersion) {
-        outcomes.push(
-          globalOutcome(change, 'skipped', 'NO_CHANGE', expectedValue, manager, before.version),
-        )
-        continue
-      }
-
-      try {
-        if (writeGlobalPackage(manager, change.name, change.targetVersion) === false) {
-          outcomes.push(
-            globalOutcome(change, 'failed', 'WRITE_FAILED', expectedValue, manager, before.version),
-          )
-          continue
-        }
-      } catch {
-        const afterFailure = observeGlobalPackageVersion(manager, change.name)
-        outcomes.push(
-          !afterFailure.known
-            ? globalOutcome(change, 'unknown', 'GLOBAL_OBSERVATION_FAILED', expectedValue, manager)
-            : afterFailure.version === change.targetVersion
-              ? globalOutcome(
-                  change,
-                  'applied',
-                  'APPLIED',
-                  expectedValue,
-                  manager,
-                  afterFailure.version,
-                )
-              : globalOutcome(
-                  change,
-                  'failed',
-                  'WRITE_FAILED',
-                  expectedValue,
-                  manager,
-                  afterFailure.version,
-                ),
-        )
-        continue
-      }
-
-      const after = observeGlobalPackageVersion(manager, change.name)
-      outcomes.push(
-        !after.known
-          ? globalOutcome(change, 'unknown', 'GLOBAL_OBSERVATION_FAILED', expectedValue, manager)
-          : after.version === change.targetVersion
-            ? globalOutcome(change, 'applied', 'APPLIED', expectedValue, manager, after.version)
-            : globalOutcome(
-                change,
-                'failed',
-                'WRITE_FAILED',
-                expectedValue,
-                manager,
-                after.version,
-              ),
-      )
+      requests.push({
+        manager,
+        name: change.name,
+        expectedVersion: expectedValue,
+        targetVersion: change.targetVersion,
+      })
     }
   }
 
-  const result = resultFromOutcomes(outcomes)
+  const managerNames = [...new Set(requests.map((request) => request.manager))]
+  const globalResult =
+    requests.length === 0
+      ? undefined
+      : await applyGlobalPlan(
+          await createGlobalApplyPlan(requests, {
+            cwd: options.cwd,
+            timeoutMs: options.phaseTimeout ?? 120_000,
+          }),
+          { cwd: options.cwd },
+          createGlobalInvocationAuthority(managerNames, {
+            globalWrite: authority.globalWrite,
+            processExecute: authority.processExecute,
+          }),
+        )
+  const outcomes = [
+    ...incomplete,
+    ...(globalResult?.items.map((entry) => ({
+      name: entry.name,
+      occurrence: {
+        file: `global:${entry.manager}`,
+        path: ['dependencies', entry.name],
+      },
+      expectedValue: entry.expectedVersion,
+      requestedValue: entry.targetVersion,
+      ...(entry.observedVersion === undefined ? {} : { observedValue: entry.observedVersion }),
+      status: entry.status,
+      reason: legacyGlobalReason(entry.reason),
+    })) ?? []),
+  ] satisfies WriteOutcome[]
+  const result = { ...resultFromOutcomes(outcomes), ...(globalResult ? { globalResult } : {}) }
   logger.info(
     `  Global writes: ${result.applied} applied, ${result.skipped} skipped, ${result.failed} failed, ${result.unknown} unknown`,
   )
   return result
+}
+
+function legacyGlobalReason(reason: GlobalItemReason): WriteOutcome['reason'] {
+  if (reason === 'APPLIED') return 'APPLIED'
+  if (reason === 'NO_CHANGE') return 'NO_CHANGE'
+  if (reason === 'DOWNGRADE_BLOCKED') return 'DOWNGRADE_BLOCKED'
+  if (
+    reason === 'EXPECTED_VALUE_MISMATCH' ||
+    reason === 'PACKAGE_MISSING' ||
+    reason === 'POST_STATE_MISMATCH'
+  ) {
+    return 'EXPECTED_VALUE_MISMATCH'
+  }
+  if (
+    reason === 'MANAGER_UNAVAILABLE' ||
+    reason === 'INVENTORY_MALFORMED' ||
+    reason === 'INVENTORY_TIMEOUT' ||
+    reason === 'INVENTORY_UNKNOWN' ||
+    reason === 'EXECUTABLE_CHANGED' ||
+    reason === 'COMMAND_UNOBSERVABLE'
+  ) {
+    return 'GLOBAL_OBSERVATION_FAILED'
+  }
+  if (reason === 'INVALID_PACKAGE' || reason === 'INVALID_VERSION') {
+    return 'UNSUPPORTED_WRITE_SOURCE'
+  }
+  return 'WRITE_FAILED'
 }
 
 function globalOutcome(
@@ -243,12 +233,4 @@ function getExpectedGlobalVersion(
     versionsByDependency?: Record<string, Partial<Record<PackageManagerName, string>>>
   }
   return raw.versionsByDependency?.[name]?.[manager]
-}
-
-function isDowngrade(current: string, target: string): boolean {
-  const currentVersion = semver.valid(current.replace(/^[~^]/, ''))
-  const targetVersion = semver.valid(target.replace(/^[~^]/, ''))
-  return (
-    currentVersion !== null && targetVersion !== null && semver.gt(currentVersion, targetVersion)
-  )
 }

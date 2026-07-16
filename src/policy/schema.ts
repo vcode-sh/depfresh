@@ -36,7 +36,14 @@ const EXACT_ENUMS = new Map<string, ReadonlySet<string>>([
   ['catalogRole', new Set(['direct', 'owner', 'consumer'])],
   [
     'role',
-    new Set(['dependency', 'override', 'package-manager', 'catalog-owner', 'catalog-consumer']),
+    new Set([
+      'dependency',
+      'override',
+      'package-manager',
+      'catalog-owner',
+      'catalog-consumer',
+      'global',
+    ]),
   ],
   ['manager', new Set(['npm', 'pnpm', 'yarn', 'bun'])],
   [

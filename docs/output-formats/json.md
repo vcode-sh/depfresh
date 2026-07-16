@@ -163,6 +163,14 @@ The complete JSON envelope is redacted immediately before serialization. Credent
 dependency values, observed write outcomes, authorization assignments, URL userinfo, and sensitive
 query parameters retain their structural fields but replace secret material with `[REDACTED]`.
 
+### `globalResults[]`
+
+Global write runs add one strict `depfresh.global-apply` result for each compatibility write
+projection. Each result contains manager-specific items and commands, reconciled summary totals,
+`rollback: "not-supported"`, and a run status derived only from item outcomes. Consumers must not
+infer global success from `writeOutcomes` alone. The full contract is documented in
+[Global Apply](./global-apply.md).
+
 ### `meta`
 
 | Field | Type | Description |

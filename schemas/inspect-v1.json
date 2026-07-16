@@ -626,7 +626,8 @@
             "override",
             "package-manager",
             "catalog-owner",
-            "catalog-consumer"
+            "catalog-consumer",
+            "global"
           ]
         },
         "protocol": {

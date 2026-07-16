@@ -37,8 +37,15 @@ export async function discoverPackages(options: depfreshOptions): Promise<Packag
 
   // Global packages mode — skip filesystem scan
   if (options.global || options.globalAll) {
-    const { loadGlobalPackages, loadGlobalPackagesAll } = await import('../global')
-    const packages = options.globalAll ? loadGlobalPackagesAll() : loadGlobalPackages()
+    const { loadGlobalPackagesObserved, loadGlobalPackagesAllObserved } = await import('../global')
+    const loadOptions = {
+      cwd: discoveryRoot,
+      timeoutMs: options.phaseTimeout ?? options.timeout,
+      compiledPolicy: options.compiledPolicy,
+    }
+    const packages = options.globalAll
+      ? await loadGlobalPackagesAllObserved(loadOptions)
+      : await loadGlobalPackagesObserved(undefined, loadOptions)
     logger.info(
       `Found ${packages.length} packages with ${packages.reduce((sum, p) => sum + p.deps.length, 0)} dependencies`,
     )

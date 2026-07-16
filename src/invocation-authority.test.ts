@@ -52,4 +52,16 @@ describe('createInvocationAuthority', () => {
       globalWrite: false,
     })
   })
+
+  it('grants process execution only for an explicitly requested global write', () => {
+    expect(createInvocationAuthority({ write: true, globalAll: true })).toMatchObject({
+      globalWrite: true,
+      processExecute: true,
+      lockfileWrite: false,
+    })
+    expect(createInvocationAuthority({ globalAll: true })).toMatchObject({
+      globalWrite: false,
+      processExecute: false,
+    })
+  })
 })

@@ -45,6 +45,10 @@ write, interactive, legacy post-write, and global flags before discovery. Apply 
 [Apply Contract](../output-formats/apply.md) for schemas, fingerprints, side-effect boundaries,
 recovery, and exit codes.
 
+Global checks remain available through `--global` and `--global-all`. Adding `--write` routes every
+physical manager/package occurrence through the separate non-transactional global state machine;
+see [Global Apply Contract](../output-formats/global-apply.md).
+
 ## See Also
 
 - [Configuration](../configuration/) -- `.depfreshrc`, `depfresh.config.ts`, and `package.json#depfresh`

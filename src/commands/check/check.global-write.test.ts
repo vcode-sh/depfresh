@@ -14,7 +14,7 @@ describe('global write dispatch', () => {
     vi.restoreAllMocks()
   })
 
-  it('calls writeGlobalPackage for global type packages', async () => {
+  it('routes npm global updates through the state-machine plan', async () => {
     const pkg: PackageMeta = {
       name: 'Global packages',
       type: 'global',
@@ -29,7 +29,7 @@ describe('global write dispatch', () => {
         },
       ],
       resolved: [],
-      raw: {},
+      raw: { versionsByDependency: { typescript: { npm: '5.0.0' } } },
       indent: '  ',
     }
     mocks.loadPackagesMock.mockResolvedValue([pkg])
@@ -45,7 +45,18 @@ describe('global write dispatch', () => {
     const { check } = await import('./index')
     await check({ ...baseOptions, write: true, global: true })
 
-    expect(mocks.writeGlobalPackageMock).toHaveBeenCalledWith('npm', 'typescript', '6.0.0')
+    expect(mocks.createGlobalApplyPlanMock).toHaveBeenCalledWith(
+      [
+        {
+          manager: 'npm',
+          name: 'typescript',
+          expectedVersion: '5.0.0',
+          targetVersion: '6.0.0',
+        },
+      ],
+      { cwd: '/tmp/test', timeoutMs: 120_000 },
+    )
+    expect(mocks.applyGlobalPlanMock).toHaveBeenCalledTimes(1)
     expect(mocks.writePackageMock).not.toHaveBeenCalled()
   })
 
@@ -64,7 +75,7 @@ describe('global write dispatch', () => {
         },
       ],
       resolved: [],
-      raw: {},
+      raw: { versionsByDependency: { eslint: { pnpm: '8.0.0' } } },
       indent: '  ',
     }
     mocks.loadPackagesMock.mockResolvedValue([pkg])
@@ -80,7 +91,17 @@ describe('global write dispatch', () => {
     const { check } = await import('./index')
     await check({ ...baseOptions, write: true, global: true })
 
-    expect(mocks.writeGlobalPackageMock).toHaveBeenCalledWith('pnpm', 'eslint', '9.0.0')
+    expect(mocks.createGlobalApplyPlanMock).toHaveBeenCalledWith(
+      [
+        {
+          manager: 'pnpm',
+          name: 'eslint',
+          expectedVersion: '8.0.0',
+          targetVersion: '9.0.0',
+        },
+      ],
+      { cwd: '/tmp/test', timeoutMs: 120_000 },
+    )
   })
 
   it('skips regular writePackage for global type', async () => {
@@ -92,7 +113,7 @@ describe('global write dispatch', () => {
         { name: 'tsx', currentVersion: '4.0.0', source: 'dependencies', update: true, parents: [] },
       ],
       resolved: [],
-      raw: {},
+      raw: { versionsByDependency: { tsx: { bun: '4.0.0' } } },
       indent: '  ',
     }
     mocks.loadPackagesMock.mockResolvedValue([globalPkg])
@@ -103,7 +124,17 @@ describe('global write dispatch', () => {
     const { check } = await import('./index')
     await check({ ...baseOptions, write: true, global: true })
 
-    expect(mocks.writeGlobalPackageMock).toHaveBeenCalledWith('bun', 'tsx', '4.1.0')
+    expect(mocks.createGlobalApplyPlanMock).toHaveBeenCalledWith(
+      [
+        {
+          manager: 'bun',
+          name: 'tsx',
+          expectedVersion: '4.0.0',
+          targetVersion: '4.1.0',
+        },
+      ],
+      { cwd: '/tmp/test', timeoutMs: 120_000 },
+    )
     expect(mocks.writePackageMock).not.toHaveBeenCalled()
   })
 
@@ -126,6 +157,9 @@ describe('global write dispatch', () => {
         managersByDependency: {
           typescript: ['npm', 'pnpm'],
         },
+        versionsByDependency: {
+          typescript: { npm: '5.0.0', pnpm: '4.9.0' },
+        },
       },
       indent: '  ',
     }
@@ -143,9 +177,63 @@ describe('global write dispatch', () => {
     const { check } = await import('./index')
     await check({ ...baseOptions, write: true, globalAll: true })
 
-    expect(mocks.writeGlobalPackageMock).toHaveBeenCalledWith('npm', 'typescript', '6.0.0')
-    expect(mocks.writeGlobalPackageMock).toHaveBeenCalledWith('pnpm', 'typescript', '6.0.0')
-    expect(mocks.writeGlobalPackageMock).toHaveBeenCalledTimes(2)
+    expect(mocks.createGlobalApplyPlanMock).toHaveBeenCalledWith(
+      [
+        {
+          manager: 'npm',
+          name: 'typescript',
+          expectedVersion: '5.0.0',
+          targetVersion: '6.0.0',
+        },
+        {
+          manager: 'pnpm',
+          name: 'typescript',
+          expectedVersion: '4.9.0',
+          targetVersion: '6.0.0',
+        },
+      ],
+      { cwd: '/tmp/test', timeoutMs: 120_000 },
+    )
     expect(mocks.writePackageMock).not.toHaveBeenCalled()
+  })
+
+  it('exposes the state-machine run result in legacy JSON output', async () => {
+    const pkg: PackageMeta = {
+      name: 'Global packages',
+      type: 'global',
+      filepath: 'global:npm',
+      deps: [
+        {
+          name: 'typescript',
+          currentVersion: '5.0.0',
+          source: 'dependencies',
+          update: true,
+          parents: [],
+        },
+      ],
+      resolved: [],
+      raw: { versionsByDependency: { typescript: { npm: '5.0.0' } } },
+      indent: '  ',
+    }
+    mocks.loadPackagesMock.mockResolvedValue([pkg])
+    mocks.resolvePackageMock.mockResolvedValue([
+      makeResolved({
+        name: 'typescript',
+        diff: 'major',
+        currentVersion: '5.0.0',
+        targetVersion: '6.0.0',
+      }),
+    ])
+    const output = vi.spyOn(console, 'log').mockImplementation(() => {})
+    const { check } = await import('./index')
+
+    await check({ ...baseOptions, write: true, global: true, output: 'json' })
+
+    const envelope = output.mock.calls
+      .map(([value]) => (typeof value === 'string' ? JSON.parse(value) : undefined))
+      .find((value) => value?.packages)
+    expect(envelope.globalResults).toMatchObject([
+      { contract: 'depfresh.global-apply', status: 'applied', rollback: 'not-supported' },
+    ])
   })
 })

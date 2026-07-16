@@ -10,6 +10,16 @@ export {
   buildLegacyCheckJsonError,
   buildLegacyCheckJsonResult,
 } from './commands/check/json-output'
+export type { GlobalApplyOptions, GlobalPlanOptions } from './commands/global-apply'
+export {
+  applyGlobalPlan,
+  assertGlobalApplyPlan,
+  assertGlobalApplyResult,
+  createGlobalApplyPlan,
+  createGlobalInvocationAuthority,
+  validateGlobalApplyPlan,
+  validateGlobalApplyResult,
+} from './commands/global-apply'
 export type { InspectOptions } from './commands/inspect'
 export { inspect } from './commands/inspect'
 export type { PlanOptions } from './commands/plan'
@@ -21,6 +31,12 @@ export {
   createRepositoryFingerprint,
   hashExactBytes,
 } from './contracts/fingerprint'
+export {
+  GLOBAL_APPLY_SCHEMA_ID,
+  GLOBAL_PLAN_SCHEMA_ID,
+  globalApplySchema,
+  globalPlanSchema,
+} from './contracts/global-schemas'
 export type {
   ApplyResult,
   InspectResult,
@@ -61,7 +77,13 @@ export {
 } from './errors'
 export { createInvocationAuthority } from './invocation-authority'
 export { parseDependencies } from './io/dependencies'
-export { loadGlobalPackages, loadGlobalPackagesAll, writeGlobalPackage } from './io/global'
+export type { GlobalLoadOptions } from './io/global'
+export {
+  loadGlobalPackagesAllObserved as loadGlobalPackagesAll,
+  loadGlobalPackagesAllObserved,
+  loadGlobalPackagesObserved as loadGlobalPackages,
+  loadGlobalPackagesObserved,
+} from './io/global'
 export { loadPackages } from './io/packages'
 export { resolvePackage } from './io/resolve'
 export { writePackage } from './io/write'
@@ -86,6 +108,21 @@ export type {
   DiscoveryReport,
   depfreshAddon,
   depfreshOptions,
+  GlobalApplyPlan,
+  GlobalApplyResult,
+  GlobalApplyStatus,
+  GlobalApplySummary,
+  GlobalCommandResult,
+  GlobalInventoryPackage,
+  GlobalInventoryStatus,
+  GlobalInvocationAuthority,
+  GlobalItemReason,
+  GlobalItemResult,
+  GlobalItemStatus,
+  GlobalManagerEvidence,
+  GlobalManagerName,
+  GlobalPlanOperation,
+  GlobalUpdateRequest,
   InspectRepositoryOptions,
   InvocationAuthority,
   NpmrcConfig,

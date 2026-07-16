@@ -1,0 +1,230 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://depfresh.dev/schemas/global-apply-v1.schema.json",
+  "title": "depfresh global apply contract v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract",
+    "schemaVersion",
+    "toolVersion",
+    "planFingerprint",
+    "status",
+    "items",
+    "commands",
+    "summary",
+    "requiredCapabilities",
+    "rollback"
+  ],
+  "properties": {
+    "contract": {
+      "const": "depfresh.global-apply"
+    },
+    "schemaVersion": {
+      "const": 1
+    },
+    "toolVersion": {
+      "type": "string",
+      "minLength": 1
+    },
+    "planFingerprint": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "status": {
+      "enum": [
+        "applied",
+        "noop",
+        "partial",
+        "conflicted",
+        "failed",
+        "unknown"
+      ]
+    },
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "operationId",
+          "occurrenceId",
+          "manager",
+          "name",
+          "expectedVersion",
+          "targetVersion",
+          "status",
+          "reason"
+        ],
+        "properties": {
+          "operationId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "occurrenceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "manager": {
+            "enum": [
+              "npm",
+              "pnpm",
+              "bun"
+            ]
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "expectedVersion": {
+            "type": "string",
+            "minLength": 1
+          },
+          "targetVersion": {
+            "type": "string",
+            "minLength": 1
+          },
+          "observedVersion": {
+            "type": "string",
+            "minLength": 1
+          },
+          "status": {
+            "enum": [
+              "applied",
+              "skipped",
+              "conflicted",
+              "failed",
+              "unknown"
+            ]
+          },
+          "reason": {
+            "enum": [
+              "APPLIED",
+              "NO_CHANGE",
+              "DOWNGRADE_BLOCKED",
+              "EXPECTED_VALUE_MISMATCH",
+              "PACKAGE_MISSING",
+              "INVALID_PACKAGE",
+              "INVALID_VERSION",
+              "MANAGER_UNAVAILABLE",
+              "MANAGER_UNSUPPORTED",
+              "INVENTORY_MALFORMED",
+              "INVENTORY_TIMEOUT",
+              "INVENTORY_UNKNOWN",
+              "EXECUTABLE_CHANGED",
+              "COMMAND_FAILED",
+              "COMMAND_TIMEOUT",
+              "COMMAND_UNOBSERVABLE",
+              "POST_STATE_MISMATCH"
+            ]
+          }
+        }
+      }
+    },
+    "commands": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "operationId",
+          "manager",
+          "executable",
+          "args",
+          "termination",
+          "terminationConfirmed"
+        ],
+        "properties": {
+          "operationId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "manager": {
+            "enum": [
+              "npm",
+              "pnpm",
+              "bun"
+            ]
+          },
+          "executable": {
+            "type": "string",
+            "minLength": 1
+          },
+          "args": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string"
+            }
+          },
+          "termination": {
+            "enum": [
+              "exit",
+              "signal",
+              "timeout",
+              "unavailable",
+              "unknown"
+            ]
+          },
+          "terminationConfirmed": {
+            "type": "boolean"
+          },
+          "exitCode": {
+            "type": "integer"
+          },
+          "signal": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "planned",
+        "applied",
+        "skipped",
+        "conflicted",
+        "failed",
+        "unknown"
+      ],
+      "properties": {
+        "planned": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "applied": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "skipped": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "conflicted": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "failed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "unknown": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "requiredCapabilities": {
+      "const": [
+        "global-write",
+        "process-execute"
+      ]
+    },
+    "rollback": {
+      "const": "not-supported"
+    }
+  }
+}

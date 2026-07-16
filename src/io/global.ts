@@ -1,13 +1,34 @@
-import { execFileSync, execSync } from 'node:child_process'
+import { execSync } from 'node:child_process'
 import * as semver from 'semver'
-import type { PackageManagerName, PackageMeta, RawDep } from '../types'
-import { createLogger } from '../utils/logger'
+import { canonicalJson } from '../contracts/canonical-json'
+import { hashExactBytes } from '../contracts/fingerprint'
+import { ConfigError } from '../errors'
+import { evaluatePolicy } from '../policy'
+import type {
+  CompiledPolicy,
+  GlobalManagerName,
+  PackageManagerName,
+  PackageMeta,
+  RawDep,
+} from '../types'
+import {
+  defaultGlobalProcessRuntime,
+  type GlobalProcessRuntime,
+  inspectGlobalManager,
+} from './global-manager'
 import {
   dedupeGlobalPackageRecords,
   GLOBAL_ALL_PACKAGE_MANAGERS,
   getGlobalExpectedVersion,
   getGlobalWriteTargets,
 } from './global-targets'
+
+export interface GlobalLoadOptions {
+  cwd?: string
+  timeoutMs?: number
+  inheritedEnv?: NodeJS.ProcessEnv
+  compiledPolicy?: CompiledPolicy
+}
 
 export function detectGlobalPackageManager(pm?: string): PackageManagerName {
   if (pm && (pm === 'npm' || pm === 'pnpm' || pm === 'bun')) {
@@ -183,12 +204,136 @@ export function loadGlobalPackagesAll(): PackageMeta[] {
   ]
 }
 
-const NPM_NAME_RE = /^(@[a-z0-9-~][a-z0-9-._~]*\/)?[a-z0-9-~][a-z0-9-._~]*$/
+export async function loadGlobalPackagesObserved(
+  pm?: string,
+  options: GlobalLoadOptions = {},
+  runtime: GlobalProcessRuntime = defaultGlobalProcessRuntime,
+): Promise<PackageMeta[]> {
+  const manager = isGlobalManager(pm) ? pm : await detectObservedManager(options, runtime)
+  const inspected = await inspectGlobalManager(manager, observedOptions(options), runtime)
+  if (inspected.evidence.status !== 'confirmed') {
+    throw new ConfigError(`Global ${manager} inventory is ${inspected.evidence.status}.`, {
+      reason: 'GLOBAL_INVENTORY_UNAVAILABLE',
+    })
+  }
+  return globalPackageMeta(
+    inspected.evidence.packages.map((pkg) => ({ manager, ...pkg })),
+    [inspected.evidence],
+    [manager],
+    options.compiledPolicy,
+  )
+}
 
-export function isValidGlobalWriteTarget(name: string, version: string): boolean {
-  if (!NPM_NAME_RE.test(name)) return false
-  const bare = version.replace(/^[\^~]/, '')
-  return semver.valid(bare) !== null
+export async function loadGlobalPackagesAllObserved(
+  options: GlobalLoadOptions = {},
+  runtime: GlobalProcessRuntime = defaultGlobalProcessRuntime,
+): Promise<PackageMeta[]> {
+  const evidence = []
+  const records: Array<{ manager: GlobalManagerName; name: string; version: string }> = []
+  for (const manager of GLOBAL_ALL_PACKAGE_MANAGERS) {
+    if (!isGlobalManager(manager)) continue
+    const inspected = await inspectGlobalManager(manager, observedOptions(options), runtime)
+    evidence.push(inspected.evidence)
+    if (inspected.evidence.status !== 'confirmed') continue
+    for (const pkg of inspected.evidence.packages) records.push({ manager, ...pkg })
+  }
+  return globalPackageMeta(records, evidence, GLOBAL_ALL_PACKAGE_MANAGERS, options.compiledPolicy)
+}
+
+async function detectObservedManager(
+  options: GlobalLoadOptions,
+  runtime: GlobalProcessRuntime,
+): Promise<GlobalManagerName> {
+  for (const manager of ['pnpm', 'bun', 'npm'] as const) {
+    const inspected = await inspectGlobalManager(manager, observedOptions(options), runtime)
+    if (inspected.evidence.status === 'confirmed') return manager
+  }
+  throw new ConfigError('No supported global package manager inventory is available.', {
+    reason: 'GLOBAL_INVENTORY_UNAVAILABLE',
+  })
+}
+
+function globalPackageMeta(
+  records: Array<{ manager: GlobalManagerName; name: string; version: string }>,
+  evidence: unknown[],
+  managers: PackageManagerName[],
+  policy: CompiledPolicy | undefined,
+): PackageMeta[] {
+  if (records.length === 0) return []
+  const deduped = dedupeGlobalPackageRecords(records)
+  const sortedRecords = [...records].sort(
+    (left, right) =>
+      GLOBAL_ALL_PACKAGE_MANAGERS.indexOf(left.manager) -
+        GLOBAL_ALL_PACKAGE_MANAGERS.indexOf(right.manager) ||
+      (left.name < right.name ? -1 : left.name > right.name ? 1 : 0),
+  )
+  return [
+    {
+      name: 'Global packages',
+      type: 'global',
+      filepath: `global:${managers.join('+')}`,
+      deps: sortedRecords.map((pkg) => globalDependency(pkg, policy)),
+      resolved: [],
+      raw: {
+        managersByDependency: deduped.managersByDependency,
+        versionsByDependency: deduped.versionsByDependency,
+        managerEvidence: evidence,
+      },
+      indent: '  ',
+    },
+  ]
+}
+
+function globalDependency(
+  pkg: { manager: GlobalManagerName; name: string; version: string },
+  policy: CompiledPolicy | undefined,
+): RawDep {
+  const occurrenceId = `global-occurrence-${hashExactBytes(
+    canonicalJson({ manager: pkg.manager, name: pkg.name, expectedVersion: pkg.version }),
+  ).slice(0, 24)}`
+  const prerelease = semver.prerelease(pkg.version)
+  const policyDecision = policy
+    ? evaluatePolicy(policy, {
+        occurrenceId,
+        dependencyName: pkg.name,
+        catalogRole: 'direct',
+        field: 'dependencies',
+        role: 'global',
+        protocol: 'semver',
+        currentVersion: pkg.version,
+        currentChannel: prerelease?.[0] === undefined ? 'stable' : String(prerelease[0]),
+        specifierStatus: 'locked',
+        manager: pkg.manager,
+        managerEvidenceStatus: 'confirmed',
+      })
+    : undefined
+  return {
+    name: pkg.name,
+    currentVersion: pkg.version,
+    rawVersion: pkg.version,
+    source: 'dependencies',
+    update: policyDecision?.status !== 'skipped' && policyDecision?.status !== 'blocked',
+    parents: [],
+    occurrenceId,
+    globalManager: pkg.manager,
+    ...(policyDecision ? { policyDecision } : {}),
+  }
+}
+
+function observedOptions(options: GlobalLoadOptions): {
+  cwd: string
+  timeoutMs: number
+  inheritedEnv?: NodeJS.ProcessEnv
+} {
+  return {
+    cwd: options.cwd ?? process.cwd(),
+    timeoutMs: options.timeoutMs ?? 30_000,
+    ...(options.inheritedEnv ? { inheritedEnv: options.inheritedEnv } : {}),
+  }
+}
+
+function isGlobalManager(value: string | undefined): value is GlobalManagerName {
+  return value === 'npm' || value === 'pnpm' || value === 'bun'
 }
 
 export interface GlobalPackageObservation {
@@ -227,32 +372,6 @@ export function observeGlobalPackageVersion(
   } catch {
     return { known: false }
   }
-}
-
-export function writeGlobalPackage(pm: PackageManagerName, name: string, version: string): boolean {
-  const logger = createLogger('info')
-
-  if (!isValidGlobalWriteTarget(name, version)) {
-    logger.warn(`Skipped global update for ${name}: invalid package name or version`)
-    return false
-  }
-
-  const spec = `${name}@${version}`
-  switch (pm) {
-    case 'npm':
-      execFileSync('npm', ['install', '-g', spec], { stdio: 'inherit' })
-      break
-    case 'pnpm':
-      execFileSync('pnpm', ['add', '-g', spec], { stdio: 'inherit' })
-      break
-    case 'bun':
-      execFileSync('bun', ['add', '-g', spec], { stdio: 'inherit' })
-      break
-    case 'yarn':
-      logger.warn('Yarn global packages not supported')
-      return false
-  }
-  return true
 }
 
 export { getGlobalExpectedVersion, getGlobalWriteTargets }

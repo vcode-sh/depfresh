@@ -44,7 +44,9 @@
     "./schemas/inspect-v1.json": "./dist/schemas/inspect-v1.json",
     "./schemas/plan-v1.json": "./dist/schemas/plan-v1.json",
     "./schemas/apply-v1.json": "./dist/schemas/apply-v1.json",
-    "./schemas/error-v1.json": "./dist/schemas/error-v1.json"
+    "./schemas/error-v1.json": "./dist/schemas/error-v1.json",
+    "./schemas/global-plan-v1.json": "./dist/schemas/global-plan-v1.json",
+    "./schemas/global-apply-v1.json": "./dist/schemas/global-apply-v1.json"
   },
   "files": [
     "dist"

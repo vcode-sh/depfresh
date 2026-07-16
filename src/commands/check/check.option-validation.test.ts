@@ -59,6 +59,20 @@ describe('check option validation', () => {
         globalWrite: false,
       },
     ],
+    [
+      'global process-execute',
+      { write: true, global: true },
+      {
+        write: true,
+        install: false,
+        update: false,
+        execute: false,
+        processExecute: false,
+        lockfileWrite: false,
+        verifyCommand: false,
+        globalWrite: true,
+      },
+    ],
   ])(
     'rejects %s options without matching immutable invocation authority',
     async (_, options, authority) => {

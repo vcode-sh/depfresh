@@ -70,6 +70,7 @@ export async function check(
       failedWrites: 0,
       unknownWrites: 0,
       writeOutcomes: [],
+      globalResults: [],
       failedResolutions: 0,
       noPackagesFound: packages.length === 0,
       didWrite: false,
@@ -166,6 +167,7 @@ export async function check(
       },
       onWriteResult: (result) => {
         executionState.writeOutcomes.push(...result.outcomes)
+        if (result.globalResult) executionState.globalResults.push(result.globalResult)
         if (options.output === 'table') {
           for (const outcome of result.outcomes) {
             if (outcome.status === 'applied') continue

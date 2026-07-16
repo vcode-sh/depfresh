@@ -100,7 +100,9 @@ depfresh --fail-on-outdated
 - **Write safely** -- exact manifest/catalog occurrences are preconditioned and re-read after writes.
   Legacy `--write` file changes delegate to the same stale-safe file engine. Legacy shell-string
   post-write flags are rejected; manager and verification work uses the reviewed plan/apply flow.
-- **Global packages** -- `--global` for one manager, `--global-all` scans npm + pnpm + bun (deduped)
+- **Observed global updates** -- `--global` inspects one supported manager and `--global-all`
+  scans npm, pnpm, and Bun. Writes preflight every manager, block downgrades, and report each
+  occurrence from post-command inventory without claiming rollback.
 - **Private registries** -- full `.npmrc` support. Scoped registries, auth tokens, env vars.
 - **GitHub dependencies** -- `github:owner/repo#tag` with protocol-preserving writes
 - **JSON output** -- structured envelope with itemized physical write outcomes for scripts and AI

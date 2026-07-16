@@ -46,6 +46,7 @@ describe('getCliCapabilities', () => {
       'safeUpdate',
       'fullUpdate',
       'selective',
+      'globalUpdate',
     ])
 
     for (const workflow of Object.values(capabilities.workflows)) {
@@ -65,6 +66,8 @@ describe('getCliCapabilities', () => {
     expect(capabilities.commands.plan?.schema).toBe('depfresh/schemas/plan-v1.json')
     expect(capabilities.commands.apply?.schema).toBe('depfresh/schemas/apply-v1.json')
     expect(capabilities.contractSchemas.error).toBe('depfresh/schemas/error-v1.json')
+    expect(capabilities.contractSchemas.globalPlan).toBe('depfresh/schemas/global-plan-v1.json')
+    expect(capabilities.contractSchemas.globalApply).toBe('depfresh/schemas/global-apply-v1.json')
     expect(capabilities.machineExitCodes['0']).toContain('applied')
     expect(capabilities.machineExitCodes['1']).toContain('conflicted')
   })
@@ -88,7 +91,7 @@ describe('getCliCapabilities', () => {
     })
     expect(capabilities.invocationAuthority.global).toEqual({
       requires: ['write'],
-      grants: ['globalWrite'],
+      grants: ['globalWrite', 'processExecute'],
     })
     expect(capabilities.configIgnoredOptions).toEqual(
       expect.arrayContaining([

@@ -15,6 +15,10 @@ The full type catalogue. Every interface, union, and enum that depfresh exports.
 | `InspectOptions` / `InspectResult` | Process-free schema-v1 repository evidence input and schema-derived result |
 | `PlanOptions` / `PlanResult` | Registry-aware non-mutating planner input, including optional manager/verification intent, and schema-derived semantic plan result |
 | `ApplyOptions` / `ApplyResult` | Explicit root selection and schema-derived observed file, manager, verification, and recovery result for one authorized immutable plan |
+| `GlobalPlanOptions` / `GlobalApplyOptions` | Explicit working directory, timeout, and environment inputs for global inventory/apply operations |
+| `GlobalApplyPlan` / `GlobalApplyResult` | Strict schema-v1 manager-specific global plan and observed non-transactional result |
+| `GlobalInvocationAuthority` | Immutable global-write, process-execute, and exact manager grants |
+| `GlobalUpdateRequest` / `GlobalManagerEvidence` | One expected-to-target occurrence request and its explicit confirmed/unavailable/malformed/timeout/unknown/unsupported inventory evidence |
 | `MachineCommandError` | Schema-derived fatal `inspect`/`plan`/`apply` CLI error document |
 | `LegacyCheckJsonResult` / `LegacyCheckJsonError` | Compatibility schema-v1 check report and fatal error shapes; not immutable plans |
 | `InspectRepositoryOptions` | Read-only repository inspection options; contains no side-effect grants |

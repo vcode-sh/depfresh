@@ -14,6 +14,8 @@ table, a legacy check JSON envelope, and versioned inspect/plan/apply machine co
   immutable plan operations with canonical fingerprints.
 - **[Apply](./apply.md)** -- Explicitly authorized stale-safe file application, phase evidence,
   observed outcomes, and recovery limits.
+- **[Global Apply](./global-apply.md)** -- Manager-specific immutable global plans, observed item
+  results, honest partial/unknown states, and non-transactional limits.
 
 ## Exit Codes
 
@@ -32,6 +34,10 @@ non-fatal incomplete decisions; `2` means a fatal error prevented a trustworthy 
 
 `apply` exits `0` for an observed `applied` or `noop` result, `1` for a schema-valid `conflicted`,
 `reverted`, `failed`, or `unknown` result, and `2` for a fatal command-error document.
+
+Legacy `--global[-all] --write` exits `0` only when every selected global item is observed applied
+or skipped. Any conflicted, failed, or unknown item makes the compatibility command exit `2`; the
+embedded `globalResults` retain the versioned item truth.
 
 ## Quick Reference
 

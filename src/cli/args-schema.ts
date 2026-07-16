@@ -56,12 +56,12 @@ export const args: ArgsDef = {
   global: {
     type: 'boolean',
     alias: 'g',
-    description: 'Check global packages for one detected package manager',
+    description: 'Inspect one supported global manager; --write uses observed global apply',
     default: false,
   },
   'global-all': {
     type: 'boolean',
-    description: 'Check global packages across npm, pnpm, and bun with deduped names',
+    description: 'Inspect npm, pnpm, and bun globals; --write applies each occurrence separately',
     default: false,
   },
   peer: {

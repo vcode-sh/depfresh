@@ -268,7 +268,7 @@ describe('loadPackages', () => {
 describe('loadPackages with global flag', () => {
   it('returns global packages when global=true', async () => {
     vi.doMock('../global', () => ({
-      loadGlobalPackages: () => [
+      loadGlobalPackagesObserved: async () => [
         {
           name: 'Global packages',
           type: 'global',
@@ -287,7 +287,7 @@ describe('loadPackages with global flag', () => {
           indent: '  ',
         },
       ],
-      loadGlobalPackagesAll: () => [],
+      loadGlobalPackagesAllObserved: async () => [],
     }))
 
     const packages = await loadPackages({
@@ -305,8 +305,8 @@ describe('loadPackages with global flag', () => {
 
   it('skips filesystem scan when global=true', async () => {
     vi.doMock('../global', () => ({
-      loadGlobalPackages: () => [],
-      loadGlobalPackagesAll: () => [],
+      loadGlobalPackagesObserved: async () => [],
+      loadGlobalPackagesAllObserved: async () => [],
     }))
 
     const packages = await loadPackages({

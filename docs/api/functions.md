@@ -109,8 +109,9 @@ const policy = compilePolicy([
 const decisions = evaluateRepositoryPolicy(model, policy)
 ```
 
-Policy provenance does not grant authority. Named reusable profiles, inspect/plan envelopes, and
-versioned global occurrences are outside this API contract.
+Policy provenance does not grant authority. Named reusable profiles and inspect/plan envelopes are
+outside this pure policy API; versioned global occurrences use the same evaluator through the
+observed global loader and the separate global plan/apply APIs below.
 
 ---
 
@@ -345,63 +346,72 @@ const outcomes = writePackage(pkg, minorOnly, 'silent')
 
 ---
 
-## `loadGlobalPackages(pm?)`
+## `loadGlobalPackages(pm?, options?)`
 
-Lists globally installed packages for one package manager. Auto-detects which PM is available if you don't specify (tries pnpm, then bun, then npm).
+Asynchronously inventories globally installed packages for one package manager and returns the
+compatibility `PackageMeta[]` projection. Auto-detection tries pnpm, then Bun, then npm. A selected
+manager with missing, malformed, timed-out, unknown, or unsupported evidence throws
+`ConfigError` with reason `GLOBAL_INVENTORY_UNAVAILABLE` instead of returning an empty success.
 
 ```ts
-function loadGlobalPackages(pm?: string): PackageMeta[]
+function loadGlobalPackages(pm?: GlobalManagerName, options?: GlobalLoadOptions): Promise<PackageMeta[]>
 ```
 
 ```ts
 import { loadGlobalPackages } from 'depfresh'
 
-const packages = loadGlobalPackages('npm')
-for (const pkg of packages) {
-  for (const dep of pkg.deps) {
-    console.log(`${dep.name}@${dep.currentVersion}`)
-  }
-}
+const packages = await loadGlobalPackages('npm', { cwd: process.cwd() })
+for (const dep of packages[0]?.deps ?? []) console.log(`${dep.name}@${dep.currentVersion}`)
 ```
 
 ---
 
-## `loadGlobalPackagesAll()`
+## `loadGlobalPackagesAll(options?)`
 
-Lists globally installed packages across npm, pnpm, and bun in one pass. Results are deduplicated by package name. If a package exists in multiple managers, write mode targets every matching manager.
+Asynchronously inventories npm, pnpm, and Bun and returns the compatibility `PackageMeta[]`
+projection. Dependencies retain separate `globalManager` and installed-version fields. When at
+least one package is present, `packages[0].raw.managerEvidence` retains every confirmed and
+non-confirmed manager observation.
 
 ```ts
-function loadGlobalPackagesAll(): PackageMeta[]
+function loadGlobalPackagesAll(options?: GlobalLoadOptions): Promise<PackageMeta[]>
 ```
 
 ```ts
 import { loadGlobalPackagesAll } from 'depfresh'
 
-const packages = loadGlobalPackagesAll()
+const packages = await loadGlobalPackagesAll({ cwd: process.cwd() })
 for (const dep of packages[0]?.deps ?? []) {
-  console.log(`${dep.name}@${dep.currentVersion}`)
+  console.log(dep.globalManager, dep.name, dep.currentVersion)
 }
 ```
 
 ---
 
-## `writeGlobalPackage(pm, name, version)`
+## `createGlobalApplyPlan()` / `applyGlobalPlan()`
 
-Updates a single global package. Shells out to the relevant package manager's install command. Not subtle.
-
-```ts
-function writeGlobalPackage(
-  pm: PackageManagerName,
-  name: string,
-  version: string,
-): boolean
-```
+Create and apply the strict versioned global contract. Requests name an exact manager, package,
+expected installed version, and target. Planning records executable/version/realm evidence and
+fixed no-shell argv. Apply requires separate global-write, process, and exact manager authority;
+it preflights all operations, forbids downgrades, and derives each result from post-command
+inventory. Global effects are never rolled back.
 
 ```ts
-import { writeGlobalPackage } from 'depfresh'
+import {
+  applyGlobalPlan,
+  createGlobalApplyPlan,
+  createGlobalInvocationAuthority,
+} from 'depfresh'
 
-writeGlobalPackage('npm', 'typescript', '5.7.0')
-// Runs: npm install -g typescript@5.7.0
+const plan = await createGlobalApplyPlan(
+  [{ manager: 'npm', name: 'typescript', expectedVersion: '5.7.2', targetVersion: '5.8.3' }],
+  { cwd: process.cwd() },
+)
+const result = await applyGlobalPlan(
+  plan,
+  { cwd: process.cwd() },
+  createGlobalInvocationAuthority(['npm'], { globalWrite: true, processExecute: true }),
+)
 ```
 
 ---

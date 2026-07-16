@@ -12,16 +12,20 @@ import { DEFAULT_OPTIONS } from '../../types'
 import { createLogger } from '../../utils/logger'
 import { applyPackageWrite } from './write-flow'
 
-const writeGlobalPackageMock = vi.fn()
-const observeGlobalPackageVersionMock = vi.fn()
+const createGlobalApplyPlanMock = vi.hoisted(() => vi.fn())
+const applyGlobalPlanMock = vi.hoisted(() => vi.fn())
 
 vi.mock('../../io/global', () => ({
   getGlobalWriteTargets: vi.fn((pkg: PackageMeta, name: string) => {
     const raw = pkg.raw as { managersByDependency?: Record<string, string[]> }
     return raw.managersByDependency?.[name] ?? []
   }),
-  observeGlobalPackageVersion: observeGlobalPackageVersionMock,
-  writeGlobalPackage: writeGlobalPackageMock,
+}))
+
+vi.mock('../global-apply', () => ({
+  createGlobalApplyPlan: createGlobalApplyPlanMock,
+  applyGlobalPlan: applyGlobalPlanMock,
+  createGlobalInvocationAuthority: vi.fn((managers, grants) => ({ managers, ...grants })),
 }))
 
 interface Outcome {
@@ -78,6 +82,7 @@ describe('applyPackageWrite observed outcome accounting', () => {
   beforeEach(() => {
     tmpDir = mkdtempSync(join(tmpdir(), 'depfresh-write-flow-observed-'))
     vi.clearAllMocks()
+    createGlobalApplyPlanMock.mockImplementation((requests: unknown[]) => ({ requests }))
   })
 
   afterEach(() => {
@@ -125,16 +130,13 @@ describe('applyPackageWrite observed outcome accounting', () => {
   })
 
   it('reports mixed global manager states individually without claiming a transaction', async () => {
-    const managerCalls = new Map<string, number>()
-    observeGlobalPackageVersionMock.mockImplementation((manager: string) => {
-      const call = managerCalls.get(manager) ?? 0
-      managerCalls.set(manager, call + 1)
-      if (manager === 'npm') return { known: true, version: '3.0.0' }
-      if (manager === 'pnpm') {
-        return call === 0 ? { known: true, version: '1.0.0' } : { known: true, version: '2.0.0' }
-      }
-      return { known: false }
-    })
+    applyGlobalPlanMock.mockResolvedValue(
+      globalResult([
+        globalItem('npm', 'shared', '3.0.0', '2.0.0', 'skipped', 'DOWNGRADE_BLOCKED', '3.0.0'),
+        globalItem('pnpm', 'shared', '1.0.0', '2.0.0', 'applied', 'APPLIED', '2.0.0'),
+        globalItem('bun', 'shared', '1.0.0', '2.0.0', 'unknown', 'INVENTORY_UNKNOWN'),
+      ]),
+    )
 
     const pkg: PackageMeta = {
       name: 'Global packages',
@@ -155,7 +157,7 @@ describe('applyPackageWrite observed outcome accounting', () => {
       pkg,
       [makeChange()],
       { ...options, globalAll: true },
-      authority,
+      { ...authority, processExecute: true },
       createLogger('silent'),
     )) as ResultWithOutcomes
 
@@ -188,21 +190,16 @@ describe('applyPackageWrite observed outcome accounting', () => {
       unknown: 1,
       didWrite: true,
     })
-    expect(writeGlobalPackageMock).toHaveBeenCalledTimes(1)
-    expect(writeGlobalPackageMock).toHaveBeenCalledWith('pnpm', 'shared', '2.0.0')
+    expect(applyGlobalPlanMock).toHaveBeenCalledTimes(1)
   })
 
   it('continues after one global command fails and keeps the outcomes non-transactional', async () => {
-    const managerCalls = new Map<string, number>()
-    observeGlobalPackageVersionMock.mockImplementation((manager: string) => {
-      const call = managerCalls.get(manager) ?? 0
-      managerCalls.set(manager, call + 1)
-      if (manager === 'npm') return { known: true, version: '1.0.0' }
-      return { known: true, version: call === 0 ? '1.0.0' : '2.0.0' }
-    })
-    writeGlobalPackageMock.mockImplementation((manager: string) => {
-      if (manager === 'npm') throw new Error('command failed')
-    })
+    applyGlobalPlanMock.mockResolvedValue(
+      globalResult([
+        globalItem('npm', 'shared', '1.0.0', '2.0.0', 'failed', 'COMMAND_FAILED', '1.0.0'),
+        globalItem('pnpm', 'shared', '1.0.0', '2.0.0', 'applied', 'APPLIED', '2.0.0'),
+      ]),
+    )
     const pkg: PackageMeta = {
       name: 'Global packages',
       type: 'global',
@@ -220,24 +217,19 @@ describe('applyPackageWrite observed outcome accounting', () => {
       pkg,
       [makeChange()],
       { ...options, globalAll: true },
-      authority,
+      { ...authority, processExecute: true },
       createLogger('silent'),
     )) as ResultWithOutcomes
 
     expect(result.outcomes.map((outcome) => outcome.status)).toEqual(['failed', 'applied'])
     expect(result).toMatchObject({ planned: 2, applied: 1, failed: 1, didWrite: true })
-    expect(writeGlobalPackageMock).toHaveBeenCalledTimes(2)
+    expect(applyGlobalPlanMock).toHaveBeenCalledTimes(1)
   })
 
   it('reports applied when a failing global command still reaches the requested state', async () => {
-    let observations = 0
-    observeGlobalPackageVersionMock.mockImplementation(() => {
-      observations++
-      return { known: true, version: observations === 1 ? '1.0.0' : '2.0.0' }
-    })
-    writeGlobalPackageMock.mockImplementation(() => {
-      throw new Error('command exited after applying')
-    })
+    applyGlobalPlanMock.mockResolvedValue(
+      globalResult([globalItem('npm', 'shared', '1.0.0', '2.0.0', 'applied', 'APPLIED', '2.0.0')]),
+    )
     const pkg: PackageMeta = {
       name: 'Global packages',
       type: 'global',
@@ -255,7 +247,7 @@ describe('applyPackageWrite observed outcome accounting', () => {
       pkg,
       [makeChange()],
       { ...options, global: true },
-      authority,
+      { ...authority, processExecute: true },
       createLogger('silent'),
     )) as ResultWithOutcomes
 
@@ -267,3 +259,49 @@ describe('applyPackageWrite observed outcome accounting', () => {
     })
   })
 })
+
+function globalItem(
+  manager: 'npm' | 'pnpm' | 'bun',
+  name: string,
+  expectedVersion: string,
+  targetVersion: string,
+  status: 'applied' | 'skipped' | 'conflicted' | 'failed' | 'unknown',
+  reason: string,
+  observedVersion?: string,
+) {
+  return {
+    operationId: `${manager}-${name}`,
+    occurrenceId: `${manager}-${name}-occurrence`,
+    manager,
+    name,
+    expectedVersion,
+    targetVersion,
+    ...(observedVersion === undefined ? {} : { observedVersion }),
+    status,
+    reason,
+  }
+}
+
+function globalResult(items: ReturnType<typeof globalItem>[]) {
+  const count = (status: string) => items.filter((item) => item.status === status).length
+  const summary = {
+    planned: items.length,
+    applied: count('applied'),
+    skipped: count('skipped'),
+    conflicted: count('conflicted'),
+    failed: count('failed'),
+    unknown: count('unknown'),
+  }
+  return {
+    contract: 'depfresh.global-apply',
+    schemaVersion: 1,
+    toolVersion: '1.2.0',
+    planFingerprint: 'a'.repeat(64),
+    status: summary.applied > 0 && summary.failed + summary.unknown > 0 ? 'partial' : 'applied',
+    items,
+    commands: [],
+    summary,
+    requiredCapabilities: ['global-write', 'process-execute'],
+    rollback: 'not-supported',
+  }
+}

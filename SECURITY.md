@@ -47,6 +47,11 @@ So you don't have to:
   a supported exact manager/version, selected lockfile hash, fixed argument array, allowed paths,
   timeout, and optional verification argv. Apply requires separate process, lockfile-write,
   install, and verification grants; configuration cannot supply them.
+- **Observed global mutation** -- global writes require a separate global-write grant, process
+  grant, and exact selected-manager authority. Supported manager executables, versions, and global
+  roots are fingerprinted; fixed argument arrays run without a shell in a sanitized environment.
+  Every command is followed by fresh inventory, and process success without observed target state
+  is never reported as applied.
 
 ## Stale-safe file apply
 
@@ -91,6 +96,14 @@ specifier, and exact version, so a same-version identity swap fails. The sanitiz
 excludes arbitrary credential and proxy variables, so private registries must use manager-readable
 configuration and some proxy setups require an explicit future contract. These phases do not
 establish package trust or update global packages.
+
+Global updates use a separate non-transactional state machine for npm 10/11, pnpm 10/11, and Bun
+`>=1.2.0 <2.0.0`. It preflights every selected occurrence, immediately rechecks its manager before
+execution, forbids downgrades, and re-inventories after every fixed-argv command. Applied items are
+not rolled back if a later item fails. Missing, malformed, timed-out, changed-realm, or otherwise
+unobservable evidence remains conflicted, failed, or unknown. No configuration value grants the
+global-write or process authority, and the sanitized environment excludes ambient credential and
+proxy variables; manager-readable configuration is required for private registries.
 
 ## Disclosure
 

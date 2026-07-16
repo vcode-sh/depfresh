@@ -137,7 +137,9 @@ CLI exit `0` means `applied` or `noop`; exit `1` is a schema-valid conflicted, r
 unknown result; exit `2` is a fatal input, authority, contract, or runtime error emitted as one
 redacted `depfresh.error` document. Missing or mismatched grants are fatal. A wrong manager version,
 stale lockfile, nonzero exit, signal, timeout, unexpected mutation, or recovery problem is a
-schema-valid non-success result. Global updates and package trust remain outside this contract.
+schema-valid non-success result. Global updates use the separate
+[`depfresh.global-plan`/`depfresh.global-apply` contract](./global-apply.md); package trust remains
+outside this contract.
 
 An operation-free plan can still return top-level `unknown` with zero operation counts when
 retained or ambiguous apply state prevents a trustworthy no-op. The preflight phase and recovery

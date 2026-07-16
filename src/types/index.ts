@@ -9,6 +9,23 @@ export type {
   UpdateScore,
 } from './dependencies'
 export type {
+  GlobalApplyPlan,
+  GlobalApplyResult,
+  GlobalApplyStatus,
+  GlobalApplySummary,
+  GlobalCommandResult,
+  GlobalInventoryPackage,
+  GlobalInventoryStatus,
+  GlobalInvocationAuthority,
+  GlobalItemReason,
+  GlobalItemResult,
+  GlobalItemStatus,
+  GlobalManagerEvidence,
+  GlobalManagerName,
+  GlobalPlanOperation,
+  GlobalUpdateRequest,
+} from './global'
+export type {
   DiscoveryReport,
   depfreshOptions,
   InvocationAuthority,

@@ -100,6 +100,11 @@ const WORKFLOWS: Record<string, Workflow> = {
     description: 'Update specific packages by name',
     command: 'depfresh --write --include "pkg1,pkg2" --output json',
   },
+  globalUpdate: {
+    description:
+      'Apply observed per-manager global updates with explicit global-write and process authority',
+    command: 'depfresh --global-all --write --output json',
+  },
 }
 
 const FLAG_RELATIONSHIPS: Record<string, FlagRelationship> = {
@@ -122,8 +127,8 @@ const INVOCATION_AUTHORITY: Record<string, InvocationGrant> = {
     grants: ['processExecute', 'lockfileWrite', 'install'],
   },
   verify: { requires: ['write', 'plan-file'], grants: ['verifyCommand'] },
-  global: { requires: ['write'], grants: ['globalWrite'] },
-  'global-all': { requires: ['write'], grants: ['globalWrite'] },
+  global: { requires: ['write'], grants: ['globalWrite', 'processExecute'] },
+  'global-all': { requires: ['write'], grants: ['globalWrite', 'processExecute'] },
 }
 
 const JSON_OUTPUT_SCHEMA: Record<string, string> = {
@@ -241,6 +246,8 @@ export function getCliCapabilities(): CliCapabilities {
       plan: 'depfresh/schemas/plan-v1.json',
       apply: 'depfresh/schemas/apply-v1.json',
       error: 'depfresh/schemas/error-v1.json',
+      globalPlan: 'depfresh/schemas/global-plan-v1.json',
+      globalApply: 'depfresh/schemas/global-apply-v1.json',
     },
     positional,
     flags,

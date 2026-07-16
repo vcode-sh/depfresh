@@ -130,8 +130,8 @@ Apply exits `0` only for `applied` or `noop`, `1` for a schema-valid `conflicted
 | `--interactive` | `-I` | boolean | `false` | Interactive mode -- a grouped multiselect for hand-picking which deps to update. Requires a TTY, obviously. |
 | `--mode <mode>` | `-m` | string | `default` | Version range mode. See [Mode Reference](./modes.md) for the full existential breakdown. |
 | `--force` | `-f` | boolean | `false` | Force update even when the current version satisfies the range. Does not bypass cache reads. |
-| `--global` | `-g` | boolean | `false` | Check globally installed packages for one detected package manager. See [Global Packages](#global-packages). |
-| `--global-all` | -- | boolean | `false` | Check globals across npm, pnpm, and bun in one pass, deduplicated by package name. |
+| `--global` | `-g` | boolean | `false` | Inspect one supported detected global manager; with `--write`, use observed global apply. See [Global Packages](#global-packages). |
+| `--global-all` | -- | boolean | `false` | Inspect npm, pnpm, and Bun while retaining each manager-specific occurrence. |
 
 ## Filtering
 
@@ -218,7 +218,9 @@ The `--sort` flag accepts six strategies. Default is `diff-asc`.
 
 `--global` checks globally installed packages for one detected package manager.
 
-`--global-all` checks globals across npm, pnpm, and bun in one run. Results are deduplicated by package name, and writes target every manager where that package was found.
+`--global-all` checks globals across npm, pnpm, and Bun in one run. Presentation may group equal
+names, but every manager/package/version remains a distinct physical occurrence for policy and
+write decisions.
 
 ```bash
 # Check global packages
@@ -241,21 +243,28 @@ Supported package managers: **npm**, **pnpm**, **bun**. Yarn global packages are
 
 `--global` detection order: if `pnpm` is installed, it checks pnpm globals. Then `bun`. Falls back to `npm`.
 
-`--global-all` always scans all three managers and deduplicates by package name. For a package found
-in multiple managers, the version shown is the highest valid installed version so shared resolution
-cannot propose a downgrade for a manager that is already ahead.
+`--global-all` scans all three managers. Each occurrence resolves from its own installed version;
+an aggregate displayed version never becomes another manager's expected value or target authority.
+No occurrence may downgrade.
 
 depfresh runs the appropriate list command for each:
 
-- npm: `npm list -g --depth=0 --json`
-- pnpm: `pnpm list -g --json`
+- npm: `npm list -g --depth=0 --json --ignore-scripts`, plus `npm root -g`
+- pnpm: `pnpm list -g --depth=0 --json --ignore-scripts`, plus `pnpm root -g`
 - bun: `bun pm ls -g`
 
 When writing global updates (`-gw`), depfresh runs the corresponding install command:
 
-- npm: `npm install -g <pkg>@<version>`
-- pnpm: `pnpm add -g <pkg>@<version>`
-- bun: `bun add -g <pkg>@<version>`
+- npm: `npm install -g --ignore-scripts --no-audit --no-fund -- <pkg>@<version>`
+- pnpm: `pnpm add -g --ignore-scripts --ignore-pnpmfile -- <pkg>@<version>`
+- bun: `bun add -g --ignore-scripts <pkg>@<version>`
+
+Supported versions are npm 10/11, pnpm 10/11, and Bun `>=1.2.0 <2.0.0`. Before any command,
+depfresh inventories every requested manager and checks explicit global-write, process, and exact
+manager authority. It re-inventories immediately before and after each command. Only the observed
+post-command version determines `applied`; a zero exit alone does not. Missing/stale/downgrade
+preconditions are skipped or conflicted, malformed or lost evidence is unknown, and a later failure
+does not roll back an earlier applied global item. See [Global Apply](../output-formats/global-apply.md).
 
 ---
 

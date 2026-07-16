@@ -7,8 +7,8 @@ const baseOptions = { ...DEFAULT_OPTIONS } as depfreshOptions
 
 describe('loadPackages global mode variants', () => {
   it('uses loadGlobalPackagesAll when globalAll=true', async () => {
-    const loadGlobalPackages = vi.fn(() => [])
-    const loadGlobalPackagesAll = vi.fn(() => [
+    const loadGlobalPackagesObserved = vi.fn(async () => [])
+    const loadGlobalPackagesAllObserved = vi.fn(async () => [
       {
         name: 'Global packages',
         type: 'global' as const,
@@ -21,8 +21,8 @@ describe('loadPackages global mode variants', () => {
     ])
 
     vi.doMock('../global', () => ({
-      loadGlobalPackages,
-      loadGlobalPackagesAll,
+      loadGlobalPackagesObserved,
+      loadGlobalPackagesAllObserved,
     }))
 
     const packages = await loadPackages({
@@ -34,14 +34,14 @@ describe('loadPackages global mode variants', () => {
 
     expect(packages).toHaveLength(1)
     expect(packages[0]?.filepath).toBe('global:npm+pnpm+bun')
-    expect(loadGlobalPackagesAll).toHaveBeenCalledTimes(1)
-    expect(loadGlobalPackages).not.toHaveBeenCalled()
+    expect(loadGlobalPackagesAllObserved).toHaveBeenCalledTimes(1)
+    expect(loadGlobalPackagesObserved).not.toHaveBeenCalled()
 
     vi.doUnmock('../global')
   })
 
   it('uses loadGlobalPackages when globalAll=false', async () => {
-    const loadGlobalPackages = vi.fn(() => [
+    const loadGlobalPackagesObserved = vi.fn(async () => [
       {
         name: 'Global packages',
         type: 'global' as const,
@@ -52,11 +52,11 @@ describe('loadPackages global mode variants', () => {
         indent: '  ',
       },
     ])
-    const loadGlobalPackagesAll = vi.fn(() => [])
+    const loadGlobalPackagesAllObserved = vi.fn(async () => [])
 
     vi.doMock('../global', () => ({
-      loadGlobalPackages,
-      loadGlobalPackagesAll,
+      loadGlobalPackagesObserved,
+      loadGlobalPackagesAllObserved,
     }))
 
     const packages = await loadPackages({
@@ -68,15 +68,15 @@ describe('loadPackages global mode variants', () => {
 
     expect(packages).toHaveLength(1)
     expect(packages[0]?.filepath).toBe('global:npm')
-    expect(loadGlobalPackages).toHaveBeenCalledTimes(1)
-    expect(loadGlobalPackagesAll).not.toHaveBeenCalled()
+    expect(loadGlobalPackagesObserved).toHaveBeenCalledTimes(1)
+    expect(loadGlobalPackagesAllObserved).not.toHaveBeenCalled()
 
     vi.doUnmock('../global')
   })
 
   it('treats globalAll=true as global mode even when global=false', async () => {
-    const loadGlobalPackages = vi.fn(() => [])
-    const loadGlobalPackagesAll = vi.fn(() => [
+    const loadGlobalPackagesObserved = vi.fn(async () => [])
+    const loadGlobalPackagesAllObserved = vi.fn(async () => [
       {
         name: 'Global packages',
         type: 'global' as const,
@@ -89,8 +89,8 @@ describe('loadPackages global mode variants', () => {
     ])
 
     vi.doMock('../global', () => ({
-      loadGlobalPackages,
-      loadGlobalPackagesAll,
+      loadGlobalPackagesObserved,
+      loadGlobalPackagesAllObserved,
     }))
 
     const packages = await loadPackages({
@@ -102,8 +102,8 @@ describe('loadPackages global mode variants', () => {
 
     expect(packages).toHaveLength(1)
     expect(packages[0]?.filepath).toBe('global:npm+pnpm+bun')
-    expect(loadGlobalPackagesAll).toHaveBeenCalledTimes(1)
-    expect(loadGlobalPackages).not.toHaveBeenCalled()
+    expect(loadGlobalPackagesAllObserved).toHaveBeenCalledTimes(1)
+    expect(loadGlobalPackagesObserved).not.toHaveBeenCalled()
 
     vi.doUnmock('../global')
   })

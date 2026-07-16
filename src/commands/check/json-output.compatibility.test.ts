@@ -19,6 +19,7 @@ const executionState: JsonExecutionState = {
   failedWrites: 0,
   unknownWrites: 0,
   writeOutcomes: [],
+  globalResults: [],
   failedResolutions: 0,
   noPackagesFound: true,
   didWrite: false,

@@ -42,8 +42,8 @@ Every option from the `depfreshOptions` interface. I documented all of them beca
 | `output` | `'table' \| 'json'` | `'table'` | Output format. `json` for machines, `table` for humans who enjoy ASCII art. |
 | `loglevel` | `'silent' \| 'info' \| 'debug'` | `'info'` | How chatty depfresh should be. `debug` for when you need to file a bug report. |
 | `peer` | `boolean` | `false` | Show peer dependency hints. |
-| `global` | `boolean` | `false` | Check globally installed packages for one detected package manager. |
-| `globalAll` | `boolean` | `false` | Scan npm, pnpm, and bun globals together and deduplicate by package name. |
+| `global` | `boolean` | `false` | Inspect globally installed packages for one supported detected manager. With an explicit invocation `write`, apply each selected physical occurrence through observed global apply. |
+| `globalAll` | `boolean` | `false` | Inspect npm, pnpm, and Bun globals while retaining manager-specific occurrences. With an explicit invocation `write`, apply each selected occurrence separately. |
 
 ## Paths
 
@@ -186,10 +186,11 @@ owning boundary has one confirmed manager. If a manager-specific rule otherwise 
 missing, unsupported, or unavailable evidence, the decision is blocked unless a later definite
 rule overrides the same dimension. Manager-agnostic rules remain evaluable.
 
-Current version, channel, and specifier status come only from the repository declaration. Policy
-inspection does not invent registry-derived status. Global packages retain their legacy
-`mode`/`packageMode` path until versioned global occurrences are introduced. Configuration can
-shape policy but never grants side-effect authority.
+Current version, channel, and specifier status come only from the repository or observed global
+declaration. Policy inspection does not invent registry-derived status. Each global manager/package
+occurrence is evaluated independently with its confirmed manager and installed version;
+deduplicated presentation never replaces physical identity. Configuration can shape policy but
+never grants global-write or process authority.
 
 ---
 

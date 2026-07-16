@@ -81,7 +81,8 @@ depfresh apply --json --write --sync-lockfile --verify --plan-file depfresh-plan
 
 The plan fingerprints exact file operations, manager/version/lockfile evidence, fixed no-shell argv,
 and verification intent. Apply cannot add or weaken a phase. Legacy shell-string post-write flags
-are rejected; global updates remain a separate workflow and authority boundary.
+are rejected. Global updates use a separate versioned plan/result contract with manager-specific
+authority, pre/post inventory, no downgrade, and no rollback claim.
 
 **CI enforcement:**
 

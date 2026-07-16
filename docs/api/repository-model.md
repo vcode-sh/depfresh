@@ -3,6 +3,10 @@
 `inspectRepository()` returns a deterministic, read-only description of the repository without
 contacting registries or running write, install, update, package-manager, or lifecycle commands.
 
+Global package occurrences are intentionally outside this repository file graph. Their stable
+manager/package/version identities and executable/realm evidence live in the separate
+`depfresh.global-plan` contract, so repository inspection remains process-free.
+
 ```ts
 import { inspectRepository } from 'depfresh'
 

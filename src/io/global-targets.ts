@@ -2,6 +2,9 @@ import * as semver from 'semver'
 import type { PackageManagerName, PackageMeta } from '../types'
 
 export const GLOBAL_ALL_PACKAGE_MANAGERS: PackageManagerName[] = ['npm', 'pnpm', 'bun']
+const GLOBAL_MANAGER_RANK = new Map(
+  GLOBAL_ALL_PACKAGE_MANAGERS.map((manager, index) => [manager, index]),
+)
 
 export interface GlobalPackageRecord {
   manager: PackageManagerName
@@ -61,21 +64,37 @@ export function dedupeGlobalPackageRecords(records: GlobalPackageRecord[]): {
     }
   }
 
-  const sortedEntries = [...byName.entries()].sort(([a], [b]) => a.localeCompare(b))
+  const sortedEntries = [...byName.entries()].sort(([a], [b]) => compareText(a, b))
   const packages = sortedEntries.map(([name, value]) => ({
     name,
     version: value.version,
   }))
 
   const managersByDependency = Object.fromEntries(
-    sortedEntries.map(([name, value]) => [name, [...value.managers]]),
+    sortedEntries.map(([name, value]) => [name, [...value.managers].sort(compareManagers)]),
   ) as Record<string, PackageManagerName[]>
 
   const versionsByDependency = Object.fromEntries(
-    sortedEntries.map(([name, value]) => [name, value.versions]),
+    sortedEntries.map(([name, value]) => [
+      name,
+      Object.fromEntries(
+        Object.entries(value.versions).sort(([left], [right]) => compareManagers(left, right)),
+      ),
+    ]),
   ) as Record<string, Partial<Record<PackageManagerName, string>>>
 
   return { packages, managersByDependency, versionsByDependency }
+}
+
+function compareText(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0
+}
+
+function compareManagers(left: string, right: string): number {
+  return (
+    (GLOBAL_MANAGER_RANK.get(left as PackageManagerName) ?? 99) -
+    (GLOBAL_MANAGER_RANK.get(right as PackageManagerName) ?? 99)
+  )
 }
 
 export function getGlobalExpectedVersion(

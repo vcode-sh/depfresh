@@ -249,7 +249,14 @@ const commonDefinitions = {
       path: { type: 'array', minItems: 1, items: { type: 'string' } },
       field: { type: 'string', minLength: 1 },
       role: {
-        enum: ['dependency', 'override', 'package-manager', 'catalog-owner', 'catalog-consumer'],
+        enum: [
+          'dependency',
+          'override',
+          'package-manager',
+          'catalog-owner',
+          'catalog-consumer',
+          'global',
+        ],
       },
       protocol: {
         enum: [

@@ -4,6 +4,7 @@ import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import {
   chmodSync,
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -76,6 +77,10 @@ const registryData = {
     versions: ['1.9.0', '2.1.0', '2.2.0'],
     latest: '2.2.0',
   },
+  'cache-probe': {
+    versions: ['1.0.0', '1.0.1'],
+    latest: '1.0.1',
+  },
 }
 
 function getRegistryMetadata(name) {
@@ -136,7 +141,7 @@ function writeExecutable(name, content) {
 }
 
 function createPmScript(name) {
-  const version = name === 'bun' ? '1.1.38' : name === 'pnpm' ? '10.33.0' : '10.9.0'
+  const version = name === 'bun' ? '1.2.0' : name === 'pnpm' ? '10.33.0' : '10.9.0'
   const initialDependencies =
     name === 'npm'
       ? { 'glob-a': '1.2.0', 'shared-glob': '2.1.0' }
@@ -182,7 +187,7 @@ if ('${name}' === 'npm' && args[0] === 'install' && !args.includes('-g')) {
   process.exit(0)
 }
 
-if ('${name}' === 'npm' && args.join(' ') === 'list -g --depth=0 --json') {
+if ('${name}' === 'npm' && args.join(' ') === 'list -g --depth=0 --json --ignore-scripts') {
   process.stdout.write(JSON.stringify({
     dependencies: Object.fromEntries(
       Object.entries(dependencies).map(([packageName, packageVersion]) => [
@@ -194,7 +199,7 @@ if ('${name}' === 'npm' && args.join(' ') === 'list -g --depth=0 --json') {
   process.exit(0)
 }
 
-if ('${name}' === 'pnpm' && args.join(' ') === 'list -g --json') {
+if ('${name}' === 'pnpm' && args.join(' ') === 'list -g --depth=0 --json --ignore-scripts') {
   process.stdout.write(JSON.stringify([{
     dependencies: Object.fromEntries(
       Object.entries(dependencies).map(([packageName, packageVersion]) => [
@@ -208,12 +213,17 @@ if ('${name}' === 'pnpm' && args.join(' ') === 'list -g --json') {
 
 if ('${name}' === 'bun' && args.join(' ') === 'pm ls -g') {
   process.stdout.write(
-    Object.entries(dependencies)
+    [logFile + '.bun-global', ...Object.entries(dependencies)
       .map(([packageName, packageVersion], index, entries) =>
         (index === entries.length - 1 ? '└' : '├') + '── ' + packageName + '@' + packageVersion,
-      )
+      )]
       .join('\\n') + '\\n',
   )
+  process.exit(0)
+}
+
+if (('${name}' === 'npm' || '${name}' === 'pnpm') && args.join(' ') === 'root -g') {
+  process.stdout.write(logFile + '.${name}-global\\n')
   process.exit(0)
 }
 
@@ -221,7 +231,7 @@ const writeCommand =
   ('${name}' === 'npm' && args[0] === 'install' && args[1] === '-g') ||
   (('${name}' === 'pnpm' || '${name}' === 'bun') && args[0] === 'add' && args[1] === '-g')
 if (writeCommand) {
-  const spec = args[2] ?? ''
+  const spec = args.at(-1) ?? ''
   const separator = spec.lastIndexOf('@')
   if (separator > 0) {
     dependencies[spec.slice(0, separator)] = spec.slice(separator + 1)
@@ -282,7 +292,7 @@ async function runCli(args, extra = {}) {
     const needsCache = !args.some((a) =>
       ['--help', '--help-json', '--version', 'help', 'capabilities'].includes(a),
     )
-    const cacheArgs = needsCache ? ['--refresh-cache'] : []
+    const cacheArgs = needsCache && extra.refreshCache !== false ? ['--refresh-cache'] : []
     const child = spawn(process.execPath, [cliPath, ...cacheArgs, ...args], {
       cwd: repoRoot,
       env: {
@@ -614,14 +624,39 @@ await record('global-all write', async () => {
     .map((line) => JSON.parse(line))
   assert.ok(
     entries.some(
-      (entry) => entry.pm === 'npm' && entry.args.join(' ') === 'install -g shared-glob@2.2.0',
+      (entry) =>
+        entry.pm === 'npm' &&
+        entry.args.join(' ') ===
+          'install -g --ignore-scripts --no-audit --no-fund -- shared-glob@2.2.0',
     ),
   )
   assert.ok(
     entries.some(
-      (entry) => entry.pm === 'pnpm' && entry.args.join(' ') === 'add -g shared-glob@2.2.0',
+      (entry) =>
+        entry.pm === 'pnpm' &&
+        entry.args.join(' ') === 'add -g --ignore-scripts --ignore-pnpmfile -- shared-glob@2.2.0',
     ),
   )
+})
+
+await record('cold and warm isolated cache', async () => {
+  const repo = join(tmpRoot, 'cache-probe-repo')
+  mkdirSync(repo, { recursive: true })
+  writeJson(join(repo, 'package.json'), {
+    name: 'cache-probe-repo',
+    private: true,
+    dependencies: { 'cache-probe': '^1.0.0' },
+  })
+  writeFileSync(join(repo, '.npmrc'), `registry=${registryUrl}\n`, 'utf8')
+
+  const before = requests.length
+  const cold = await runCli(['--cwd', repo, '--output', 'json'], { refreshCache: false })
+  assert.equal(cold.status, 0)
+  assert.equal(requests.length, before + 1)
+  const warm = await runCli(['--cwd', repo, '--output', 'json'], { refreshCache: false })
+  assert.equal(warm.status, 0)
+  assert.equal(requests.length, before + 1)
+  assert.ok(existsSync(join(homeDir, '.depfresh', 'cache.db')))
 })
 
 await record('invalid json combo rejected', async () => {

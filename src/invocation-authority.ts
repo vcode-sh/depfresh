@@ -4,12 +4,13 @@ import type { depfreshOptions, InvocationAuthority } from './types'
 export function createInvocationAuthority(options: Partial<depfreshOptions>): InvocationAuthority {
   const write = options.write === true
   const managerPhase = options.syncLockfile === true || options.install === true
+  const globalPhase = write && (options.global === true || options.globalAll === true)
   return Object.freeze({
     write,
     install: options.install === true,
     update: options.update === true,
     execute: typeof options.execute === 'string' && options.execute.length > 0,
-    processExecute: managerPhase,
+    processExecute: managerPhase || globalPhase,
     lockfileWrite: managerPhase,
     verifyCommand:
       options.verify === true ||
@@ -47,6 +48,11 @@ export function validateInvocationAuthority(
       options.write && (options.global || options.globalAll === true),
       authority.globalWrite,
       'global-write',
+    ],
+    [
+      options.write && (options.global || options.globalAll === true),
+      authority.processExecute,
+      'process-execute',
     ],
   ]
 

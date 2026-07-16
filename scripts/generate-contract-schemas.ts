@@ -6,6 +6,7 @@ import {
   inspectResultSchema,
   planResultSchema,
 } from '../src/contracts/schemas'
+import { globalApplySchema, globalPlanSchema } from '../src/contracts/global-schemas'
 
 const root = resolve(import.meta.dirname, '..')
 const artifacts = [
@@ -13,6 +14,8 @@ const artifacts = [
   ['schemas/plan-v1.json', planResultSchema],
   ['schemas/apply-v1.json', applyResultSchema],
   ['schemas/error-v1.json', commandErrorSchema],
+  ['schemas/global-plan-v1.json', globalPlanSchema],
+  ['schemas/global-apply-v1.json', globalApplySchema],
 ] as const
 const check = process.argv.includes('--check')
 

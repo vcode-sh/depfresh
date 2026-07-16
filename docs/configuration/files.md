@@ -112,6 +112,10 @@ Config files can shape checks, but they cannot authorize side effects. depfresh 
 argv, then grant only the matching phase on `depfresh apply`; direct library callers pass an
 explicit immutable `InvocationAuthority`.
 
+Global mutation additionally requires an explicit active-invocation global-write grant, process
+grant, and exact manager set. A configured `global` or `globalAll` value cannot provide any of
+those grants.
+
 ## Private Registries
 
 depfresh reads your `.npmrc` files automatically. No extra config needed -- if npm can reach your private registry, so can depfresh.
