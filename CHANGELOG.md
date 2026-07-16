@@ -4,6 +4,17 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Semver
 
 ## Unreleased
 
+### Fixed
+
+- **Portable exact-Node CI evidence** -- the permission-sensitive repository evidence suite now
+  runs on an unprivileged hosted Linux worker for both pushes and pull requests instead of relying
+  on a root self-hosted account that can read mode-`000` fixtures. The bounded private verifier
+  test still captures and validates an exact 128 KiB payload, but creates it inside the child
+  process so Linux's single-argument limit no longer prevents the verifier from starting.
+- **Tracked implementation progress** -- numbered plans are no longer excluded from Git, and the
+  tracked development snapshot now records Plans 020-024 and release preparation instead of
+  incorrectly presenting Plan 020 as future work.
+
 ## [2.0.0] - 2026-07-16
 
 ### Added

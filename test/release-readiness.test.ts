@@ -20,6 +20,7 @@ interface WorkflowStep {
 }
 
 interface WorkflowJob {
+  'runs-on'?: unknown
   steps?: WorkflowStep[]
 }
 
@@ -68,6 +69,10 @@ describe('2.0 release readiness', () => {
         if (step.uses) expect(step.uses, path).toMatch(/@[a-f0-9]{40}(?:\s|$)/u)
       }
     }
+  })
+
+  it('runs permission-sensitive repository evidence tests as an unprivileged hosted user', () => {
+    expect(workflow('.github/workflows/ci.yml').jobs?.test?.['runs-on']).toBe('ubuntu-latest')
   })
 
   it('runs the complete release gate before publishing the exact verified tarball', () => {

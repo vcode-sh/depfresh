@@ -1,14 +1,14 @@
 # Development progress
 
-Warning cleanup: complete (commit 6346f32, independent audit clean)
-Plans 011-017: complete and committed
-Plan 018 implementation: complete
-Plan 018 adversarial/code review: APPROVED
-Plan 018 documentation review: APPROVED
-Plan 018 verification and packaging gates: complete
-Plan 018 commit: 4114f97
-Plan 019 implementation: complete
-Plan 019 fault/code/documentation review: APPROVED
-Plan 019 verification and packaging gates: complete
-Plan 019 commit: c37c169
-Next: start Plan 020
+Plans 011-019: complete and committed
+Plan 020: complete in b91883a
+Plan 021: complete in 2694899
+Plan 022: complete in 643b0a8
+Plan 023: complete in 1ba8f6e
+Plan 024: complete in 3742573
+Release preparation: committed in d905747; Action examples pinned in 5a8e5a9
+
+CI regression evidence: run 29530434379 failed on the self-hosted root Linux runner.
+Plan 025: complete; exact-Node local/Linux/package gates and independent review passed.
+Next: Plan 026 repository inspection performance and premium progress UX.
+Release status: preparation requires a fresh hosted green replay after local maintenance.

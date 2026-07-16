@@ -295,7 +295,7 @@ describe('Plan 020 no-shell process runner', () => {
       executable: process.execPath,
       args: [
         '-e',
-        `process.stdout.write(JSON.stringify({home:process.env.HOME,cache:process.env.npm_config_cache,secret:process.env.DEPFRESH_SECRET,payload:${JSON.stringify(payload)}}));process.stderr.write(JSON.stringify({error:{code:'ENETUNREACH'}}))`,
+        `const payload='x'.repeat(128*1024);process.stdout.write(JSON.stringify({home:process.env.HOME,cache:process.env.npm_config_cache,secret:process.env.DEPFRESH_SECRET,payload}));process.stderr.write(JSON.stringify({error:{code:'ENETUNREACH'}}))`,
       ],
       cwd: root,
       timeoutMs: 10_000,

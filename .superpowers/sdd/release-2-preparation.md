@@ -5,6 +5,11 @@
 > This is the local release-preparation record for the verified 2.0.0 candidate. It does not
 > authorize a tag, push, package publication, hosted release, movable Action tag, or announcement.
 
+> **CURRENT CORRECTION:** CI run `29530434379` exposed root-runner permission-fixture and Linux argv
+> portability defects after this record was written. Plan 025 contains the local corrections. A
+> fresh hosted green replay is required before this draft can again be treated as release-ready;
+> no push is authorized by this document.
+
 ## Version lock
 
 The package version changed exactly once from `1.2.0` to **`2.0.0`** after Plans 011 through 024
@@ -18,7 +23,8 @@ The version bump was permitted because all of the following became true:
 - Plans 017–024 are implemented, verified, and marked `DONE`.
 - Every current documentation claim has been checked against the built CLI, library exports,
   packaged schemas/assets, and observed runtime behavior.
-- The complete release-readiness checklist in this document is green.
+- The complete release-readiness checklist was green locally before the first hosted push. Plan
+  025 requires a fresh hosted replay before release readiness is current again.
 
 ## Big announcement draft
 
