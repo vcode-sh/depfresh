@@ -39,6 +39,9 @@ jobs:
       - name: Lint with zero warnings
         run: pnpm exec biome check --error-on-warnings .
 
+      - name: Build test distribution
+        run: pnpm build
+
       - name: Run tests
         run: pnpm test:run --coverage
 

@@ -85,14 +85,14 @@ jobs:
       - name: Lint with zero warnings
         run: pnpm exec biome check --error-on-warnings .
 
+      - name: Build
+        run: pnpm build
+
       - name: Release-focused adversarial tests
         run: pnpm test:release
 
       - name: Full tests and coverage
         run: pnpm test:run --coverage
-
-      - name: Build
-        run: pnpm build
 
       - name: Practical CLI smoke tests
         run: pnpm test:smoke

@@ -76,6 +76,20 @@ describe('2.0 release readiness', () => {
     expect(workflow('.github/workflows/ci.yml').jobs?.test?.['runs-on']).toBe('ubuntu-latest')
   })
 
+  it.each([
+    ['.github/workflows/ci.yml', 'test', ['pnpm test:run --coverage']],
+    ['.github/workflows/pr-validation.yml', 'validate', ['pnpm test:run']],
+    ['.github/workflows/release.yml', 'verify', ['pnpm test:release', 'pnpm test:run --coverage']],
+  ] as const)('builds the distribution before tests in %s', (path, job, testCommands) => {
+    const jobSteps = workflow(path).jobs?.[job]?.steps ?? []
+    const buildIndex = jobSteps.findIndex((step) => step.run === 'pnpm build')
+
+    expect(buildIndex).toBeGreaterThanOrEqual(0)
+    for (const testCommand of testCommands) {
+      expect(jobSteps.findIndex((step) => step.run === testCommand)).toBeGreaterThan(buildIndex)
+    }
+  })
+
   it('retains the repository-evidence phase notification in the built CLI', () => {
     const builtJavaScript = globSync('dist/**/*.mjs', { cwd: root, absolute: true })
       .map((path) => readFileSync(path, 'utf8'))

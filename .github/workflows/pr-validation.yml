@@ -38,11 +38,11 @@ jobs:
       - name: Lint with zero warnings
         run: pnpm exec biome check --error-on-warnings .
 
-      - name: Test
-        run: pnpm test:run
-
       - name: Build
         run: pnpm build
+
+      - name: Test
+        run: pnpm test:run
 
       - name: Practical CLI smoke tests
         run: pnpm test:smoke
