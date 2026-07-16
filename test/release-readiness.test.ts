@@ -21,6 +21,7 @@ interface WorkflowStep {
 }
 
 interface WorkflowJob {
+  environment?: unknown
   'runs-on'?: unknown
   steps?: WorkflowStep[]
 }
@@ -138,6 +139,7 @@ describe('2.0 release readiness', () => {
       'pnpm test:run --coverage',
       'pnpm build',
       'pnpm test:smoke',
+      'pnpm test:demo',
       'npm pack --dry-run --json',
       'scripts/verify-packed-package.mjs',
     ]) {
@@ -149,6 +151,9 @@ describe('2.0 release readiness', () => {
     expect(release).toContain('body_path: docs/releases/v2.0.0.md')
     expect(release).toContain('npm view "depfresh@$' + '{PACKAGE_VERSION}" dist.integrity')
     expect(release).toContain('--install-spec "depfresh@$PACKAGE_VERSION"')
+    expect(release).toContain(
+      'DEPFRESH_CLI_PATH="$DEMO_INSTALL_ROOT/node_modules/depfresh/dist/cli.mjs"',
+    )
     expect(release).toContain('package-integrity: $' + '{{ steps.pack.outputs.package-integrity }}')
     expect(release).toContain(
       'PACKAGE_INTEGRITY: $' + '{{ needs.verify.outputs.package-integrity }}',
@@ -168,7 +173,13 @@ describe('2.0 release readiness', () => {
       )
     }
     expect(release).toContain('runs-on: ubuntu-24.04')
-    expect(release).toContain('environment: release-hosted')
+  })
+
+  it('keeps OIDC publishing coupled to the workflow without undeclared environments', () => {
+    const releaseJobs = workflow('.github/workflows/release.yml').jobs
+
+    expect(releaseJobs?.publish?.environment).toBeUndefined()
+    expect(releaseJobs?.release?.environment).toBeUndefined()
   })
 
   it('never runs a floating depfresh package in dependency freshness automation', () => {

@@ -57,8 +57,8 @@ its clean baseline so it remains useful for manual commands.
 | Requirement | Implementation owner | RED/proof owner |
 | --- | --- | --- |
 | complete large piped machine JSON | `src/cli/index.ts` | `src/cli/machine-commands.test.ts` backpressure subprocess |
-| CLI ignore additions retain safety defaults | `src/config.ts` | `src/config.test.ts` array-precedence regression |
-| WUN-shaped catalogs and native exclusions | `test/wun-demo-proof.mjs` | packed built-CLI plan/check/write assertions |
+| CLI ignore additions retain safety defaults | `src/config.ts`, `src/repository/inspect.ts` | config precedence plus machine inspect discovery regressions |
+| WUN-shaped catalogs and native exclusions | `test/wun-demo-proof.mjs` | built and packed CLI plan/check/write assertions |
 | cold/warm cache and Git boundaries | `test/wun-demo-proof.mjs` | request counts, hashes, and status assertions |
 | human-first quickstart and native recipe | `README.md` | release/docs truth review and command replay |
 | honest release and automation records | changelog, release draft, workflow/docs | release-readiness tests and hosted CI |
@@ -66,8 +66,8 @@ its clean baseline so it remains useful for manual commands.
 
 ## Implementation tasks
 
-1. Add an asynchronous subprocess RED test that pauses stdout while a synthetic inspect document
-   grows beyond 64 KiB. Require complete schema-valid JSON and the correct exit code. Replace
+1. Add asynchronous subprocess RED tests that pause stdout while synthetic inspect and plan
+   documents grow beyond 64 KiB. Require complete schema-valid JSON and the correct exit code. Replace
    immediate normal-path CLI exits with `process.exitCode` plus returns so Node drains stdout;
    retain explicit signal exits.
 2. Change the CLI array-precedence RED test to require `--ignore-paths` to replace configured

@@ -4,32 +4,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Semver
 
 ## Unreleased
 
-### Changed
-
-- **Immediate large-repository progress** -- recursive checks now inventory only files that can
-  contribute repository evidence instead of retaining and glob-testing every repository file.
-  Unavailable-directory, containment, boundary, lockfile, runtime, and Git evidence remains
-  conservative. Interactive output starts with discovery and repository-inspection phases,
-  coalesces registry ticks, distinguishes declared, eligible, pinned, and other skipped
-  declarations, suspends cursor ownership around durable tables, and finishes with one compact run
-  summary. JSON, redirected output, exit codes, cache behavior, and library results are unchanged.
-
-### Fixed
-
-- **Contained terminal rendering** -- manifest and registry text is stripped of terminal control,
-  OSC/CSI, zero-width, and bidirectional-control payloads before table, error, interactive, and
-  detail rendering. Narrow progress and package-title rows now stay within the reported terminal
-  width, while selections still return the original dependency records.
-- **Portable exact-Node CI evidence** -- the permission-sensitive repository evidence suite now
-  runs on an unprivileged hosted Linux worker for both pushes and pull requests instead of relying
-  on a root self-hosted account that can read mode-`000` fixtures. The bounded private verifier
-  test still captures and validates an exact 128 KiB payload, but creates it inside the child
-  process so Linux's single-argument limit no longer prevents the verifier from starting.
-- **Tracked implementation progress** -- numbered plans are no longer excluded from Git, and the
-  tracked development snapshot now records Plans 020-024 and release preparation instead of
-  incorrectly presenting Plan 020 as future work.
-
-## [2.0.0] - 2026-07-16
+## [2.0.0] - 2026-07-17
 
 ### Added
 
@@ -186,6 +161,31 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Semver
 
 ### Changed
 
+- **Immediate large-repository progress** -- recursive checks now inventory only files that can
+  contribute repository evidence instead of retaining and glob-testing every repository file.
+  Unavailable-directory, containment, boundary, lockfile, runtime, and Git evidence remains
+  conservative. Interactive output starts with discovery and repository-inspection phases,
+  coalesces registry ticks, distinguishes declared, eligible, pinned, and other skipped
+  declarations, suspends cursor ownership around durable tables, and finishes with one compact run
+  summary. JSON, redirected output, exit codes, cache behavior, and library results are unchanged.
+
+- **Simpler human-first documentation** -- the README now leads with exact one-off commands,
+  everyday check/write usage, safe plan/apply, and a copy-paste Bun native/Expo exclusion policy.
+  It makes recursive discovery, physical catalog ownership, machine exit codes, and deliberate
+  platform/trust limits explicit without hiding the advanced reference documentation.
+
+- **Deterministic Bun monorepo proof** -- a sanitized WUN-shaped demo exercises a default catalog,
+  named `native` catalog, direct native declarations, and local workspace links against a fixed
+  registry. It proves native owner/consumer and direct-app exclusions, ordinary catalog updates,
+  explicit apply authority, stale-plan conflicts, zero-fetch warm cache reuse, byte-identical
+  native files, and unchanged read-only Git state with both the built and packed CLI.
+
+- **Hosted, lower-cost automation** -- CI uses GitHub-hosted Ubuntu workers only, no longer uploads
+  coverage to Codecov, and pins every checkout consumer to the reviewed `actions/checkout` v7
+  commit. The release workflow retains exact Node, isolated npm, immutable artifact, trusted
+  publishing, and post-publication verification gates without claiming undeclared GitHub
+  environments.
+
 - **Legacy local writes use the stale-safe file engine** -- normal manifest and catalog `--write`
   calls now block every replacement in that package/apply invocation if any selected occurrence is
   stale, instead of applying a known subset within that invocation. Earlier package invocations are
@@ -242,6 +242,25 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Semver
 
 ### Fixed
 
+- **Large machine JSON is fully drained** -- inspect, plan, apply, capabilities, and compatibility
+  JSON no longer call immediate normal-path process exits that could truncate piped output at 64
+  KiB. A backpressure subprocess regression proves a schema-valid inspect document larger than the
+  pipe buffer reaches the reader intact.
+- **CLI ignore additions retain containment defaults** -- `--ignore-paths` continues to replace
+  project-specific configured paths, but now always retains the built-in `node_modules`, `dist`,
+  `coverage`, and `.git` exclusions with stable deduplication.
+- **Contained terminal rendering** -- manifest and registry text is stripped of terminal control,
+  OSC/CSI, zero-width, and bidirectional-control payloads before table, error, interactive, and
+  detail rendering. Narrow progress and package-title rows stay within the reported terminal width,
+  while selections still return the original dependency records.
+- **Portable exact-Node CI evidence** -- permission-sensitive repository tests run on an
+  unprivileged hosted Linux worker, and the bounded 128 KiB verifier fixture is created inside the
+  child so Linux's single-argument limit cannot prevent startup.
+- **npm 12 dry-run compatibility** -- package verification accepts npm 12's current pack manifest
+  representation while preserving exact file, size, integrity, export, schema, and installed
+  artifact checks.
+- **Tracked implementation progress** -- numbered plans are versioned again and the plan ledger
+  reflects the completed implementation instead of presenting Plans 020-024 as future work.
 - **Rejected registry candidates cannot return through a fallback** -- deprecated, too-recent,
   unknown-age, wrong-channel, missing-tag, and downgrade candidates remain rejected after mode
   selection. A present valid `next` tag never falls back after rejection, named and numeric

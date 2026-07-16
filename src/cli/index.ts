@@ -78,7 +78,8 @@ const main = defineCommand({
       if (args.mode_arg === 'help') {
         const { showUsage } = await import('citty')
         await showUsage(main)
-        process.exit(0)
+        process.exitCode = 0
+        return
       }
 
       if (args.mode_arg !== 'apply' && typeof args['plan-file'] === 'string') {
@@ -90,7 +91,8 @@ const main = defineCommand({
       if (args['help-json']) {
         const { outputCliCapabilities } = await import('./capabilities')
         outputCliCapabilities()
-        process.exit(0)
+        process.exitCode = 0
+        return
       }
 
       if (args.mode_arg === 'capabilities') {
@@ -102,7 +104,8 @@ const main = defineCommand({
 
         const { outputCliCapabilities } = await import('./capabilities')
         outputCliCapabilities()
-        process.exit(0)
+        process.exitCode = 0
+        return
       }
 
       const { assertMachineCommandSafety, getMachineCommand } = await import('./machine-commands')
@@ -131,7 +134,8 @@ const main = defineCommand({
           })
           // biome-ignore lint/suspicious/noConsole: intentional stable machine output
           console.log(JSON.stringify(result, null, 2))
-          process.exit(result.risks.length > 0 || result.errors.length > 0 ? 1 : 0)
+          process.exitCode = result.risks.length > 0 || result.errors.length > 0 ? 1 : 0
+          return
         }
         if (machineCommand === 'apply') {
           const { readFileSync } = await import('node:fs')
@@ -157,7 +161,8 @@ const main = defineCommand({
           )
           // biome-ignore lint/suspicious/noConsole: intentional stable machine output
           console.log(JSON.stringify(result, null, 2))
-          process.exit(result.status === 'applied' || result.status === 'noop' ? 0 : 1)
+          process.exitCode = result.status === 'applied' || result.status === 'noop' ? 0 : 1
+          return
         }
         const { planForInvocation } = await import('../commands/plan')
         const { normalizePlanCommandArgs } = await import('./machine-commands')
@@ -170,7 +175,8 @@ const main = defineCommand({
           result.summary.unknown > 0 ||
           result.summary.errors > 0 ||
           result.risks.length > 0
-        process.exit(findings ? 1 : 0)
+        process.exitCode = findings ? 1 : 0
+        return
       }
 
       if (args.json) {
@@ -184,7 +190,7 @@ const main = defineCommand({
 
       const options = await normalizeArgs(args)
       const exitCode = await checkFromCli(options)
-      process.exit(exitCode)
+      process.exitCode = exitCode
     } catch (error) {
       const machineCommand =
         args.mode_arg === 'inspect' || args.mode_arg === 'plan' || args.mode_arg === 'apply'
@@ -194,7 +200,8 @@ const main = defineCommand({
         const { buildMachineCommandError } = await import('../contracts/error-document')
         // biome-ignore lint/suspicious/noConsole: intentional stable machine output
         console.log(JSON.stringify(buildMachineCommandError(machineCommand, error), null, 2))
-        process.exit(2)
+        process.exitCode = 2
+        return
       }
       if (args.output === 'json') {
         const { outputJsonError } = await import('../commands/check/json-output')
@@ -202,11 +209,12 @@ const main = defineCommand({
           cwd: typeof args.cwd === 'string' ? args.cwd : process.cwd(),
           mode: typeof args.mode === 'string' ? args.mode : 'default',
         })
-        process.exit(2)
+        process.exitCode = 2
+        return
       }
       // biome-ignore lint/suspicious/noConsole: intentional error output
       console.error('Fatal error:', error instanceof Error ? error.message : String(error))
-      process.exit(2)
+      process.exitCode = 2
     }
   },
 })

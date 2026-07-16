@@ -69,7 +69,9 @@ function createInspectOptions(options: InspectRepositoryOptions): depfreshOption
     peer: true,
     includeLocked: true,
     includeWorkspace: true,
-    ignorePaths: options.ignorePaths ?? DEFAULT_OPTIONS.ignorePaths ?? [],
+    ignorePaths: [
+      ...new Set([...(DEFAULT_OPTIONS.ignorePaths ?? []), ...(options.ignorePaths ?? [])]),
+    ],
     ignoreOtherWorkspaces: options.ignoreOtherWorkspaces ?? true,
     repositoryVcs: options.vcs ?? 'probe',
     write: false,

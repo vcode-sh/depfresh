@@ -17,7 +17,8 @@ The most popular cry for help. depfresh scans for package manifests (`package.js
 **/.git/**
 ```
 
-If your package manifest lives somewhere exotic that matches one of these patterns, depfresh will politely pretend it doesn't exist. Override with `ignorePaths` in your `.depfreshrc` config.
+Add project-specific exclusions with `ignorePaths` in `.depfreshrc` or `--ignore-paths`. The four
+built-in safety exclusions remain active.
 
 **Recursive is on by default.** `recursive: true` means depfresh walks subdirectories. If you only want the root package, set `--no-recursive`. If you DO want subdirectories and still see nothing — re-read the ignorePaths section. I'll wait.
 In non-recursive mode, depfresh only checks root manifest files (`package.json`, `package.yaml`) and skips workspace catalog files.

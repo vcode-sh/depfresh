@@ -311,7 +311,7 @@ describe('CLI array overrides', () => {
     }
   })
 
-  it('lets CLI array options override config arrays instead of concatenating them', async () => {
+  it('lets CLI arrays replace configured arrays while retaining safety ignore defaults', async () => {
     tmpDir = mkdtempSync(join(tmpdir(), 'depfresh-config-array-override-'))
     writeFileSync(
       join(tmpDir, 'package.json'),
@@ -339,7 +339,13 @@ describe('CLI array overrides', () => {
 
     expect(config.include).toEqual(['from-cli'])
     expect(config.exclude).toEqual(['exclude-cli'])
-    expect(config.ignorePaths).toEqual(['**/cli-only/**'])
+    expect(config.ignorePaths).toEqual([
+      '**/node_modules/**',
+      '**/dist/**',
+      '**/coverage/**',
+      '**/.git/**',
+      '**/cli-only/**',
+    ])
   })
 })
 

@@ -181,7 +181,9 @@ async function resolveConfigWithLoader(
     merged.exclude = overrides.exclude
   }
   if (overrides.ignorePaths !== undefined) {
-    merged.ignorePaths = overrides.ignorePaths
+    merged.ignorePaths = [
+      ...new Set([...(DEFAULT_OPTIONS.ignorePaths ?? []), ...overrides.ignorePaths]),
+    ]
   }
   if (overrides.cohorts !== undefined) {
     merged.cohorts = overrides.cohorts

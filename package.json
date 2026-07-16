@@ -72,6 +72,7 @@
     "lint:fix": "biome check --write .",
     "format": "biome format --write .",
     "typecheck": "tsc --noEmit",
+    "test:demo": "node test/wun-demo-proof.mjs",
     "test:smoke": "node test/practical-cli-smoke.mjs",
     "test:release": "vitest run test/release-readiness.test.ts test/github-action.test.ts test/official-workflow.test.ts test/package-assets.test.ts test/packaged-skill.test.ts",
     "verify:package": "node scripts/verify-packed-package.mjs",

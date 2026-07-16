@@ -36,7 +36,8 @@ global prefix. A same-version executable earlier in `PATH` is not used.
 
 ## Read-only plan gate
 
-Replace the placeholder with a reviewed full commit SHA before use:
+Pin a reviewed full commit SHA before use. This example uses the immutable reviewed 2.0 Action
+anchor:
 
 ```yaml
 name: Dependency plan
@@ -86,12 +87,13 @@ CLI with an argument array when that separately reviewed capability is required.
 
 The repository release workflow accepts only `v${package.json.version}`, uses exact Node 24.15.0
 and an isolated npm 11.12.0 tool, then runs schemas, types, zero-warning lint, adversarial and full
-tests, coverage, build, smoke, dry-run packaging, and installed-tarball verification. It uploads one
-verified tarball and publishes only those exact bytes after approval of the `release` environment.
+tests, coverage, build, smoke, the deterministic WUN-shaped workspace proof, dry-run packaging, and
+installed-tarball verification. It uploads one verified tarball and publishes only those exact
+bytes through npm trusted publishing.
 Safe reruns skip publication only when the existing public version has identical SHA-512 integrity.
 The public artifact is then installed and its CLI, library exports, capabilities version, and every
 package export are rechecked.
 
-Curated hosted release creation is a separate `release-hosted` environment boundary with only
-repository-content permission. The workflow does not create or move a mutable Action tag; that is a
-separate manual decision after the exact public package has been verified.
+Curated hosted release creation is a separate least-privilege job with only repository-content
+permission. The workflow does not create or move a mutable Action tag; this repository releases
+only the immutable version tag.

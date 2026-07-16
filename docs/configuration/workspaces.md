@@ -13,7 +13,9 @@ Monorepos, catalogs, and the art of scanning too many directories. This page cov
 **/.git/**
 ```
 
-Set `recursive: false` if you only want root manifest files (`package.json`, `package.yaml`). In non-recursive mode, depfresh does not load workspace catalogs. Override `ignorePaths` if your project structure is... creative.
+Set `recursive: false` if you only want root manifest files (`package.json`, `package.yaml`). In
+non-recursive mode, depfresh does not load workspace catalogs. Add repository-specific
+`ignorePaths` as needed; the four built-in safety exclusions remain active.
 
 If both `package.yaml` and `package.json` exist in the same directory, depfresh prefers `package.yaml`.
 
@@ -23,10 +25,6 @@ import { defineConfig } from 'depfresh'
 export default defineConfig({
   recursive: true,
   ignorePaths: [
-    '**/node_modules/**',
-    '**/dist/**',
-    '**/coverage/**',
-    '**/.git/**',
     '**/fixtures/**', // skip test fixtures
   ],
 })
@@ -199,6 +197,32 @@ export default defineConfig({
   ],
 })
 ```
+
+To freeze a named native catalog and direct declarations in one native app while leaving the
+default catalog eligible, use two explicit exclusions:
+
+```json
+{
+  "policyRules": [
+    {
+      "id": "skip-native-catalog",
+      "selectors": { "catalogName": "^native$" },
+      "action": "exclude"
+    },
+    {
+      "id": "skip-native-direct",
+      "selectors": {
+        "workspacePath": "^apps/native$",
+        "catalogRole": "direct"
+      },
+      "action": "exclude"
+    }
+  ]
+}
+```
+
+A workspace-path rule on a catalog consumer does not freeze the shared physical owner. Put
+native-only dependencies in the named catalog or target their physical owner explicitly.
 
 ## Workspace Protocol
 

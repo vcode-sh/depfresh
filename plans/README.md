@@ -91,8 +91,8 @@ demotion passed exact-Node/package/smoke gates and independent skill/full-diff a
 single authorized package bump to `2.0.0`, passed the exact-Node, full-coverage, package, cache,
 Git-immutability, workflow, documentation, and independent-review gates, and was committed as
 `d905747`. The shipped and documented Action examples were then pinned to that immutable release
-anchor with retained RED/GREEN coverage and committed as `5a8e5a9`. Release preparation is complete;
-tagging, pushing, publishing, hosted release creation, and movable Action tags remain unauthorized.
+anchor with retained RED/GREEN coverage and committed as `5a8e5a9`. At that checkpoint, tagging,
+pushing, publishing, hosted release creation, and movable Action tags remained unauthorized.
 
 Plan 025 was opened after the first post-release-preparation push exposed two portability defects:
 permission-denial tests assumed a non-root Linux runner, and one process-runner test exceeded
@@ -105,8 +105,8 @@ Plan 025 tracked the numbered ledger, corrected the stale tracked progress snaps
 permission-sensitive test job to an unprivileged hosted Linux worker, and removed the Linux
 single-argument overflow from the 128 KiB private-output fixture. Exact-Node local and Linux
 non-root tests, full coverage, build, smoke, packed-package verification, and independent review
-passed. A hosted replay remains pending because pushing and hosted workflow mutation are outside
-the authorized scope; release preparation therefore remains locally corrected but not hosted-green.
+passed. At that checkpoint, its hosted replay remained pending because pushing and hosted workflow
+mutation were outside the authorized scope.
 
 Plan 026 was opened from a real 29-package/232-dependency WUN run that appeared frozen after its
 discovery message. Exact profiling showed manifest discovery at about 87 ms and the subsequent
@@ -116,7 +116,8 @@ it does not add repository-specific ignore defaults or a Bun-only native TUI dep
 It completed with a 1.35-second median repository inspection, immediate four-phase built-CLI
 feedback, coordinated durable tables, exact candidate/symlink/unavailable truth, terminal display
 containment, full exact-Node/package gates, and two independent approvals. The final WUN replay
-preserved Git state and the isolated tarball verifier passed.
+preserved Git state and the isolated tarball verifier passed. The subsequent hosted `main` replay
+completed successfully in [run 29540136068](https://github.com/vcode-sh/depfresh/actions/runs/29540136068).
 
 Plan 027 was opened by the final release request. A sanitized WUN-shaped demo audit exposed two
 release-blocking CLI defects before publication: large machine documents written into a pipe could

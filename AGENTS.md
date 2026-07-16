@@ -117,7 +117,12 @@ pnpm typecheck         # tsc --noEmit
 - **SQLite fallback** — the cache directory or database may be unavailable; memory fallback must work identically
 - **Exit codes** — Legacy check uses 0 for complete/no blocking failure, optional 1 for outdated,
   and 2 for error or incomplete write. Inspect/plan/apply and global result contracts have their own
-  documented schema-valid non-success mappings. Never collapse unknown into success.
+  documented schema-valid non-success mappings. Never collapse unknown into success. Normal CLI
+  exits must set `process.exitCode` and return so large piped JSON drains completely; reserve
+  immediate exits for signal termination.
+- **Discovery ignore safety** — Invocation-specific ignore paths may replace configured custom
+  paths, but must retain the built-in `node_modules`, `dist`, `coverage`, and `.git` exclusions.
+  Repository discovery ignores never substitute for occurrence policy.
 - **YAML/JSON write safety** — Catalog writes touch workspace config files; verify no data loss on round-trip
 - **Evidence ambiguity** — Never select a manager, lockfile, workspace declaration, or runtime by
   filename/enumeration order; retain every candidate and stable physical source identity

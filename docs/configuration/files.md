@@ -89,9 +89,10 @@ export default {
 }
 ```
 
-Legacy check loads every format above. Machine `inspect`/`plan` workflows load only declarative JSON
-files and `package.json#depfresh`; they reject executable TypeScript or JavaScript configuration
-instead of evaluating project code. Equivalent plain JSON values have the same precedence.
+Legacy check loads every format above. Machine `inspect` does not load project configuration.
+Machine `plan` loads only declarative JSON files and `package.json#depfresh`; it rejects executable
+TypeScript or JavaScript configuration instead of evaluating project code. Equivalent plain JSON
+values have the same precedence.
 
 ### Policy compilation order
 
@@ -100,6 +101,9 @@ source layer, `mode`, `packageMode`, `include`, and `exclude` compatibility rule
 explicit `policyRules` follow them. CLI `include` and `exclude` arrays independently replace the
 matching configured arrays rather than concatenate. A direct library override occupies the library
 invocation layer. Compiled rules retain deterministic source, kind, and index provenance.
+
+CLI `--ignore-paths` also replaces configured custom ignore paths for that invocation, but retains
+and dedupes the four built-in discovery safety exclusions.
 
 Invalid policy fails configuration loading with `ConfigError`. Unknown or authority-shaped fields,
 non-JSON values, duplicate IDs, invalid patterns or enums, and invalid action/mode combinations are

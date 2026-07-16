@@ -107,8 +107,8 @@ depfresh --global-all --write --output json
 # Specific directory
 depfresh -C packages/core -w
 
-# Scan everything
-depfresh -r --all
+# Show all dependencies across the recursively discovered workspace
+depfresh --all
 ```
 
 ---
@@ -307,3 +307,7 @@ Catalog dependencies are resolved alongside regular dependencies. When writing, 
 the physical catalog owner; package manifests keep their `catalog:` references unchanged.
 
 Named `peers` catalogs are skipped unless `--peer` is enabled.
+
+To exclude a named Expo/native catalog safely, target the physical catalog owner rather than only
+the consuming app. See the copy-paste policy and ownership explanation in
+[Workspace Configuration](../configuration/workspaces.md#how-catalogs-are-updated).

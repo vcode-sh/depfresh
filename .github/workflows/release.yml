@@ -1,4 +1,4 @@
-# Release verifies one exact artifact before a protected publish step.
+# Release verifies one exact artifact before OIDC publishing and hosted release creation.
 name: Release
 
 on:
@@ -97,6 +97,9 @@ jobs:
       - name: Practical CLI smoke tests
         run: pnpm test:smoke
 
+      - name: WUN-shaped workspace proof
+        run: pnpm test:demo
+
       - name: Package dry run
         run: |
           mkdir -p artifacts
@@ -113,6 +116,16 @@ jobs:
           PACKAGE_INTEGRITY=$(node --input-type=module -e "import { readFileSync } from 'node:fs'; const [entry] = JSON.parse(readFileSync('artifacts/pack.json', 'utf8')); process.stdout.write(entry.integrity)")
           printf 'package-tarball=%s\n' "$PACKAGE_TARBALL" >> "$GITHUB_OUTPUT"
           printf 'package-integrity=%s\n' "$PACKAGE_INTEGRITY" >> "$GITHUB_OUTPUT"
+
+      - name: Prove the packed CLI on a WUN-shaped workspace
+        shell: bash
+        run: |
+          set -euo pipefail
+          DEMO_INSTALL_ROOT=$(mktemp -d "$RUNNER_TEMP/depfresh-release-demo.XXXXXX")
+          trap 'rm -rf -- "$DEMO_INSTALL_ROOT"' EXIT
+          npm install --prefix "$DEMO_INSTALL_ROOT" --ignore-scripts --no-audit --no-fund \
+            "artifacts/${{ steps.pack.outputs.package-tarball }}"
+          DEPFRESH_CLI_PATH="$DEMO_INSTALL_ROOT/node_modules/depfresh/dist/cli.mjs" pnpm test:demo
 
       - name: Upload verified release evidence
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7
@@ -134,7 +147,6 @@ jobs:
     name: Publish verified artifact
     needs: verify
     runs-on: ubuntu-24.04
-    environment: release
     permissions:
       contents: read
       id-token: write
@@ -240,7 +252,6 @@ jobs:
     name: Create curated hosted release
     needs: [verify, publish]
     runs-on: ubuntu-24.04
-    environment: release-hosted
     permissions:
       contents: write
     steps:

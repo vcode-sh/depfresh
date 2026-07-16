@@ -14,7 +14,8 @@ Everything I know about depfresh is in here, split into files so you can pretend
 - **[Configuration](./configuration/)** -- Config files, ordered occurrence policy, compatibility inputs, `depFields`, private registries, and cache settings.
   - [Config Files](./configuration/files.md) -- formats, private registries, cache
   - [Options Reference](./configuration/options.md) -- the exhaustive list
-  - [Workspaces](./configuration/workspaces.md) -- monorepos, catalogs, scanning
+  - [Workspaces](./configuration/workspaces.md) -- monorepos, catalogs, scanning, and native/Expo
+    exclusions
 
 - **[Programmatic API](./api/)** -- Exported policy/repository functions, lifecycle callbacks, addons, types, and workflow examples.
   - [Overview](./api/overview.md) -- quick start, defaults, examples

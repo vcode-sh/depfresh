@@ -143,6 +143,9 @@ Apply exits `0` only for `applied` or `noop`, `1` for a schema-valid `conflicted
 | `--include <patterns>` | `-n` | string | -- | Compatibility policy input: exclude by default, then include matching occurrence names. A CLI array replaces configured include patterns. |
 | `--exclude <patterns>` | `-x` | string | -- | Compatibility policy input evaluated after include, so a matching exclusion wins. A CLI array replaces configured exclude patterns. |
 | `--ignore-paths <patterns>` | -- | string | -- | Additional ignore glob patterns (comma-separated) merged with default ignore paths. Useful for skipping specific folders during recursive scan. |
+
+CLI ignore paths replace configured custom ignore paths for that invocation, while the built-in
+`node_modules`, `dist`, `coverage`, and `.git` safety exclusions are always retained and deduped.
 | `--deps-only` | -- | boolean | `false` | Only check `dependencies`. Ignores devDependencies, peerDependencies, and optionalDependencies. |
 | `--dev-only` | -- | boolean | `false` | Only check `devDependencies`. The inverse of `--deps-only`. Using both simultaneously is not recommended unless you enjoy empty results. |
 | `--peer` | `-P` | boolean | `false` | Include peer declarations and peer-scoped catalogs in selection. Plan signals evaluate peer constraints in each exact owner's proposed graph; ambiguous overrides, hoists, or cross-workspace providers remain unknown. |
