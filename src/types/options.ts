@@ -1,6 +1,7 @@
 import type { depfreshAddon } from '../addons/types'
 import type { DepFieldType, RangeMode, ResolvedDepChange, SortOption } from './dependencies'
 import type { OutputFormat, PackageMeta } from './package'
+import type { CompiledPolicy, PolicyRuleInput } from './policy'
 
 export interface InvocationAuthority {
   readonly write: boolean
@@ -33,6 +34,9 @@ export interface depfreshOptions {
   depFields?: Partial<Record<DepFieldType, boolean>>
 
   packageMode?: Record<string, RangeMode>
+  policyRules?: PolicyRuleInput[]
+  /** Compiled by resolveConfig or lazily at the check boundary. */
+  compiledPolicy?: CompiledPolicy
 
   concurrency: number
   timeout: number

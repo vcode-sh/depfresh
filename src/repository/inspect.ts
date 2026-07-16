@@ -1,4 +1,6 @@
 import { discoverPackages } from '../io/packages/discovery'
+import { compilePolicy } from '../policy/compiler'
+import { applyPolicyToProjection, evaluateRepositoryPolicy } from '../policy/repository'
 import type { depfreshOptions, PackageMeta } from '../types'
 import { DEFAULT_OPTIONS } from '../types'
 import type { InspectRepositoryOptions, RepositoryModel } from '../types/repository'
@@ -19,13 +21,31 @@ export async function inspectRepository(
 export async function inspectRepositoryWithProjection(
   options: depfreshOptions,
 ): Promise<RepositoryInspection> {
-  const packages = await discoverPackages(options)
+  const discoveryOptions = { ...options, include: undefined, exclude: undefined }
+  const packages = await discoverPackages(discoveryOptions)
+  options.discoveryReport = discoveryOptions.discoveryReport
+  options.effectiveRoot = discoveryOptions.effectiveRoot
   const root = options.effectiveRoot ?? options.cwd
   const report = options.discoveryReport
   if (!report) {
     throw new Error('Repository inspection requires a discovery report')
   }
-  return { model: buildRepositoryModel(root, packages, report, options.ignorePaths), packages }
+  const model = buildRepositoryModel(root, packages, report, options.ignorePaths)
+  const policy =
+    options.compiledPolicy ??
+    compilePolicy([
+      { source: 'defaults', mode: DEFAULT_OPTIONS.mode ?? 'default' },
+      {
+        source: 'library',
+        mode: options.mode,
+        packageMode: options.packageMode,
+        include: options.include,
+        exclude: options.exclude,
+        policyRules: options.policyRules,
+      },
+    ])
+  const decisions = evaluateRepositoryPolicy(model, policy)
+  return { model, packages: applyPolicyToProjection(root, packages, model, decisions) }
 }
 
 function createInspectOptions(options: InspectRepositoryOptions): depfreshOptions {

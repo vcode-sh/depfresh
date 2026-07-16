@@ -6,7 +6,7 @@ The complete field manual for `depfresh`. Every flag, every trick, every questio
 
 - **[Flags](./flags.md)** -- All CLI flags, sorted by category: core, filtering, display, post-write, and behavior. The reference you'll actually bookmark.
 
-- **[Modes](./modes.md)** -- Version range modes explained: `default`, `major`, `minor`, `patch`, `latest`, `newest`, `next`, and `ignore`. The philosophical core of the tool.
+- **[Modes](./modes.md)** -- Version range modes explained: `default`, `major`, `minor`, `patch`, `latest`, `newest`, and `next`, plus the legacy `packageMode` ignore translation.
 
 - **[Examples](./examples.md)** -- Real-world incantations, interactive mode, workspaces, progress display, table rendering, and CI usage. The copy-paste page.
 

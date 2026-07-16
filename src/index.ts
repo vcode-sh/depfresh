@@ -18,12 +18,22 @@ export { loadGlobalPackages, loadGlobalPackagesAll, writeGlobalPackage } from '.
 export { loadPackages } from './io/packages'
 export { resolvePackage } from './io/resolve'
 export { writePackage } from './io/write'
+export {
+  compilePolicy,
+  createPolicyContexts,
+  evaluatePolicy,
+  evaluateRepositoryPolicy,
+  finalizePolicyDecision,
+  validatePolicyRules,
+} from './policy'
 export { inspectRepository } from './repository/inspect'
 export type {
   AddonContext,
   AddonHookName,
   CanonicalOccurrencePath,
   CatalogSource,
+  CompiledPolicy,
+  CompiledPolicyRule,
   DepFieldType,
   DiffType,
   DiscoveryReport,
@@ -38,6 +48,21 @@ export type {
   PackageManagerName,
   PackageMeta,
   PackageType,
+  PolicyAction,
+  PolicyCandidateReason,
+  PolicyCatalogRole,
+  PolicyCurrentChannel,
+  PolicyDecision,
+  PolicyInputLayer,
+  PolicyMode,
+  PolicyOccurrenceContext,
+  PolicyReason,
+  PolicyRuleInput,
+  PolicyRuleProvenance,
+  PolicyRuleSource,
+  PolicySelectors,
+  PolicySpecifierStatus,
+  PolicyStatus,
   ProfileReport,
   ProvenanceLevel,
   RangeMode,

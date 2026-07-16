@@ -16,7 +16,7 @@ Selected taze backlog items that depfresh addresses. This page highlights the hi
 | [#13](https://github.com/antfu-collective/taze/issues/13), [#161](https://github.com/antfu-collective/taze/issues/161) | Private registry and scoped auth from `.npmrc` | `src/utils/npmrc.ts`, `src/io/registry.ts` |
 | [#18](https://github.com/antfu-collective/taze/issues/18), [#44](https://github.com/antfu-collective/taze/issues/44), [#178](https://github.com/antfu-collective/taze/issues/178) | Timeout, retry, and error handling for registry failures | `src/io/registry.ts`, `src/io/registry.retry.test.ts` |
 | [#78](https://github.com/antfu-collective/taze/issues/78) | Per-dependency verify command with rollback | `src/commands/check/write-flow.ts`, `src/io/write/backup.ts` |
-| [#91](https://github.com/antfu-collective/taze/issues/91) | `packageMode` takes precedence over global mode | `src/io/resolve/resolve-dependency.ts`, `src/io/resolve-mode.ts` |
+| [#91](https://github.com/antfu-collective/taze/issues/91) | `packageMode` takes precedence over global mode through the compatibility policy compiler | `src/policy/compiler.ts`, `src/policy/matcher.ts`, `src/io/resolve/resolve-dependency.ts` |
 | [#101](https://github.com/antfu-collective/taze/issues/101) | `--deps-only` and `--dev-only` filters | `src/cli/normalize-args.ts`, `docs/cli/flags.md` |
 | [#107](https://github.com/antfu-collective/taze/issues/107) | Stable TUI rendering (no flicker) | `src/commands/check/tui/index.ts`, `src/commands/check/tui/renderer.test.ts` |
 | [#118](https://github.com/antfu-collective/taze/issues/118) | `npm_config_userconfig` env var respected | `src/utils/npmrc.ts`, `src/utils/npmrc.test.ts` |

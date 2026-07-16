@@ -4,7 +4,10 @@ Everything you can import and call. Each one does exactly what the name says, wh
 
 ## `check(options, authority?)`
 
-The main event. Loads packages, resolves dependencies against the registry, renders output, and optionally writes updates. Everything the CLI does, minus the argument parsing.
+The main event. Loads the repository occurrence model, applies ordered policy before registry work,
+resolves selected dependencies, renders output, and optionally writes updates. Skipped and blocked
+occurrences do not reach the registry. A selected occurrence with no candidate target is finalized
+as unchanged with the exact candidate reason.
 
 ```ts
 function check(options: depfreshOptions, authority?: InvocationAuthority): Promise<number>
@@ -36,7 +39,7 @@ reason `AUTHORITY_REQUIRED` before discovery or side effects.
 
 ## `resolveConfig(overrides?)`
 
-Merges your overrides with config file values (`.depfreshrc`, `depfresh.config.ts`, `package.json#depfresh`) and `DEFAULT_OPTIONS`. Config file wins over defaults. Your overrides win over everything. Invocation-only options are retained only when supplied directly in `overrides`; config-file values for `write`, install/update/command execution, and global writes are ignored.
+Merges your overrides with config file values (`.depfreshrc`, `depfresh.config.ts`, `package.json#depfresh`) and `DEFAULT_OPTIONS`. Config file wins over defaults. Your overrides win over everything. Invocation-only options are retained only when supplied directly in `overrides`; config-file values for `write`, install/update/command execution, and global writes are ignored. Policy compiles in defaults/config/library order with traced provenance; CLI normalization uses the CLI invocation layer and preserves include/exclude array replacement.
 
 ```ts
 function resolveConfig(overrides?: Partial<depfreshOptions>): Promise<depfreshOptions>
@@ -61,6 +64,53 @@ const options = await resolveConfig({
   concurrency: 4,
 })
 ```
+
+---
+
+## Policy functions
+
+`compilePolicy(layers)` strictly validates JSON-compatible explicit rules and translates legacy
+mode, `packageMode`, include, and exclude inputs into one ordered list. `createPolicyContexts(model)`
+derives registry-free current version/channel/status and manager evidence for every modeled
+occurrence. `evaluatePolicy(policy, context)` and `evaluateRepositoryPolicy(model, policy)` are pure
+and deterministic. `finalizePolicyDecision(decision, candidateReason)` records an unchanged
+candidate outcome without discarding its policy trace. `validatePolicyRules(value)` validates and
+normalizes a rule array without compiling compatibility inputs.
+
+```ts
+function validatePolicyRules(value: readonly unknown[]): PolicyRuleInput[]
+function compilePolicy(layers: readonly PolicyInputLayer[]): CompiledPolicy
+function createPolicyContexts(model: RepositoryModel): PolicyOccurrenceContext[]
+function evaluatePolicy(policy: CompiledPolicy, context: PolicyOccurrenceContext): PolicyDecision
+function evaluateRepositoryPolicy(model: RepositoryModel, policy: CompiledPolicy): PolicyDecision[]
+function finalizePolicyDecision(
+  decision: PolicyDecision,
+  candidateReason: PolicyCandidateReason,
+): PolicyDecision
+```
+
+```ts
+import { compilePolicy, evaluateRepositoryPolicy, inspectRepository } from 'depfresh'
+
+const model = await inspectRepository({ cwd: process.cwd() })
+const policy = compilePolicy([
+  { source: 'defaults', mode: 'latest' },
+  {
+    source: 'library',
+    policyRules: [
+      {
+        id: 'native-catalog-minor',
+        selectors: { catalogName: 'native' },
+        mode: 'minor',
+      },
+    ],
+  },
+])
+const decisions = evaluateRepositoryPolicy(model, policy)
+```
+
+Policy provenance does not grant authority. Named reusable profiles, inspect/plan envelopes, and
+versioned global occurrences are outside this API contract.
 
 ---
 
@@ -113,7 +163,10 @@ behavior.
 
 ## `loadPackages(options)`
 
-Finds and parses package manifests (`package.json`, `package.yaml`) in your project. Respects `recursive`, `ignorePaths`, `ignoreOtherWorkspaces`. Loads workspace catalogs (pnpm, bun, yarn) only when `recursive: true`, and supports global packages when `global: true` (single detected manager) or `globalAll: true` (npm + pnpm + bun).
+Finds and parses package manifests (`package.json`, `package.yaml`) in your project. For local
+repositories it evaluates occurrence policy and returns selected, exactly linked dependencies with
+their policy decision. It respects `recursive`, `ignorePaths`, and `ignoreOtherWorkspaces`, and
+loads workspace catalogs only when `recursive: true`. Global modes keep their legacy non-model path.
 
 When both `package.yaml` and `package.json` exist in a directory, `package.yaml` is selected.
 
@@ -136,7 +189,9 @@ for (const pkg of packages) {
 
 ## `resolvePackage(pkg, options, externalCache?, externalNpmrc?, privatePackages?)`
 
-Resolves every dependency in a package against the registry. Handles caching, concurrency, version filtering, workspace protocol semantics, and the `onDependencyResolved` callback. This is where the network calls happen.
+Resolves every selected dependency in a package against the registry. An attached occurrence policy
+decision supplies the effective mode; otherwise standalone/manual callers retain legacy
+`mode`/`packageMode` behavior. Candidate safety remains authoritative.
 
 ```ts
 function resolvePackage(
@@ -173,7 +228,7 @@ for (const pkg of packages) {
 
 ## `parseDependencies(raw, options)`
 
-Extracts dependencies from a parsed package manifest object (JSON or YAML). Handles all standard fields, `packageManager`, overrides, resolutions, nested overrides, protocols (`npm:`, `jsr:`, `github:`, `workspace:`), include/exclude filters, and locked version detection.
+Extracts dependencies from a parsed package manifest object (JSON or YAML). Handles all standard fields, `packageManager`, overrides, resolutions, nested overrides, protocols (`npm:`, `jsr:`, `github:`, `workspace:`), standalone include/exclude compatibility filtering, and locked version detection. Repository checks defer that filtering until occurrence policy evaluation so later explicit rules can override compatibility inputs.
 
 ```ts
 function parseDependencies(

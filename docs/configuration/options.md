@@ -19,10 +19,11 @@ Every option from the `depfreshOptions` interface. I documented all of them beca
 
 | Option | Type | Default | Description |
 |---|---|---|---|
-| `include` | `string[]` | `undefined` | Only check packages matching these patterns. Supports regex, `/regex/flags`, and glob syntax. |
-| `exclude` | `string[]` | `undefined` | Skip packages matching these patterns. Supports regex, `/regex/flags`, and glob syntax. |
+| `include` | `string[]` | `undefined` | Only check dependency occurrences whose names match these patterns. Supports regex, `/regex/flags`, and glob syntax. |
+| `exclude` | `string[]` | `undefined` | Skip dependency occurrences whose names match these patterns. Supports regex, `/regex/flags`, and glob syntax. |
 | `depFields` | `Partial<Record<DepFieldType, boolean>>` | `undefined` | Control which dependency types are checked. See [depFields](#depfields). |
-| `packageMode` | `Record<string, RangeMode>` | `undefined` | Per-package version strategies. See [packageMode](#packagemode). |
+| `packageMode` | `Record<string, RangeMode>` | `undefined` | Per-dependency-resolution-name strategies. See [packageMode](#packagemode). |
+| `policyRules` | `PolicyRuleInput[]` | `undefined` | Ordered occurrence rules. See [Occurrence policy](#occurrence-policy). |
 
 ## Performance
 
@@ -112,9 +113,86 @@ See the [API docs](../api/) for usage examples.
 
 ---
 
+## Occurrence policy
+
+`policyRules` is the primary occurrence-level selection surface. Each rule is JSON-compatible,
+has a stable public ID and selector object, and sets an action, a mode, or both:
+
+```typescript
+import { defineConfig } from 'depfresh'
+
+export default defineConfig({
+  mode: 'latest',
+  policyRules: [
+    {
+      id: 'native-catalog-minor',
+      selectors: { catalogName: 'native' },
+      mode: 'minor',
+    },
+    {
+      id: 'exclude-legacy-app',
+      selectors: { workspacePath: 'apps/legacy' },
+      action: 'exclude',
+    },
+  ],
+})
+```
+
+The selector vocabulary is:
+
+| Selector | Match |
+|---|---|
+| `dependencyName` | Existing regex, `/regex/flags`, or glob pattern dialect |
+| `workspacePath` | Canonical repository-relative workspace path pattern |
+| `packageName` | Manifest package-name pattern |
+| `catalogName` | Default or named catalog pattern |
+| `catalogRole` | Exact `direct`, `owner`, or `consumer` |
+| `field` | Exact `dependencies`, `devDependencies`, `peerDependencies`, `optionalDependencies`, `overrides`, `resolutions`, `packageManager`, `pnpm.overrides`, or `catalog` |
+| `role` | Exact `dependency`, `override`, `package-manager`, `catalog-owner`, or `catalog-consumer` |
+| `manager` | Exact `npm`, `pnpm`, `yarn`, or `bun` |
+| `protocol` | Exact `semver`, `npm`, `jsr`, `github`, `workspace`, `catalog`, `file`, `link`, `git`, `http`, or `unknown` |
+| `currentChannel` | Exact `stable` or prerelease channel identifier |
+| `specifierStatus` | Exact `locked`, `range`, `dynamic`, or `invalid` |
+
+Selectors in one rule are AND-combined; an empty selector object is a broad rule. Rules are
+evaluated in order. Action and mode are independent last-match-wins dimensions, so a decision can
+have different `winningActionRuleId` and `winningModeRuleId` values. `matchedRuleIds` retains every
+definite match in order. Policy evaluation produces `selected`, `skipped`, or `blocked`; a check
+finalizes a selected decision to `unchanged` when candidate selection produces no writable target,
+retaining the exact candidate reason.
+
+Every decision includes `matchedRuleIds`, `indeterminateRuleIds`, and separate action/mode winner
+IDs. An otherwise matching manager-specific rule with unknown evidence is listed in
+`indeterminateRuleIds`; a later definite rule clears only the action or mode dimension it actually
+overrides. `candidateReason` is present only after selected work is finalized as unchanged.
+
+Stable policy reasons are `POLICY_DEFAULT_INCLUDED`, `POLICY_RULE_INCLUDED`,
+`POLICY_RULE_EXCLUDED`, `POLICY_MANAGER_UNKNOWN`, and `POLICY_CANDIDATE_UNCHANGED`. The last reason
+retains the exact candidate-pipeline reason separately instead of collapsing unknown or blocked
+candidate state into success.
+
+`action: 'exclude'` cannot be combined with a mode. Explicit `mode: 'ignore'` is invalid; the
+legacy `packageMode` sentinel is translated to exclusion. Unknown fields, non-JSON values,
+duplicate or reserved IDs, invalid patterns/enums, and authority-shaped fields are rejected.
+
+Catalog owners and consumers match independently. Only the owner decision controls a physical
+catalog entry; workspace- or package-specific consumer rules never propagate into a shared owner.
+Catalog manager identity comes from the catalog entity. A package manager is used only when the
+owning boundary has one confirmed manager. If a manager-specific rule otherwise matches ambiguous,
+missing, unsupported, or unavailable evidence, the decision is blocked unless a later definite
+rule overrides the same dimension. Manager-agnostic rules remain evaluable.
+
+Current version, channel, and specifier status come only from the repository declaration. Policy
+inspection does not invent registry-derived status. Global packages retain their legacy
+`mode`/`packageMode` path until versioned global occurrences are introduced. Configuration can
+shape policy but never grants side-effect authority.
+
+---
+
 ## packageMode
 
-The real power move. `packageMode` lets you set different version strategies per package using exact names, glob patterns, or regex.
+The real power move. `packageMode` lets you set different version strategies per dependency
+resolution name using exact names, glob patterns, or regex.
 
 ```typescript
 // depfresh.config.ts
@@ -143,11 +221,18 @@ export default defineConfig({
 
 ### Pattern matching order
 
-1. **Exact name** -- checked first, wins if matched
-2. **Glob patterns** -- standard glob syntax (`*`, `**`, `?`)
-3. **Regex** -- strings starting with `/` are treated as regular expressions
+Exact names always win. Otherwise, the first matching insertion-order pattern wins; glob and regex
+patterns do not form separate priority classes. The compatibility compiler reverses pattern rules,
+then appends exact-name rules, so the ordered last-match-wins evaluator preserves that behavior.
 
-If nothing matches, the global `mode` applies. If you set a package to `'ignore'`, depfresh pretends it doesn't exist. Sometimes that's the healthiest option.
+If nothing matches, the global `mode` applies. Legacy `'ignore'` compiles to
+`action: 'exclude'`; it is not a candidate-resolution mode. New configuration should use an
+explicit policy rule.
+
+For npm aliases, compatibility `packageMode` keys match the resolved package name: an occurrence
+declared as `alias: "npm:react@^18"` is matched by the key `react`. Explicit
+`policyRules[].selectors.dependencyName` instead matches the manifest occurrence name (`alias`). A
+mechanical `packageMode`-to-rule rewrite must account for that distinction.
 
 ### Available modes
 
@@ -160,7 +245,7 @@ If nothing matches, the global `mode` applies. If you set a package to `'ignore'
 | `latest` | Whatever the `latest` dist-tag points to. Living dangerously. |
 | `newest` | Highest eligible semantic version, regardless of dist-tags. Chaotic neutral. |
 | `next` | The `next` dist-tag. For beta enthusiasts. |
-| `ignore` | Skip this package entirely. Out of sight, out of mind. |
+| `ignore` | Legacy `packageMode` sentinel compiled to exclusion. |
 
 ## depFields
 

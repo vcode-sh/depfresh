@@ -73,7 +73,9 @@ depfresh --fail-on-outdated
   state per effective or nested repository boundary.
 - **7 range modes** -- `default`, `major`, `minor`, `patch`, `latest`, `newest`, `next`
 - **Interactive cherry-picking** -- grouped multiselect with colour-coded severity
-- **Per-package modes** -- `packageMode` with exact, glob, or regex patterns per dependency
+- **Occurrence policy** -- validated ordered rules select by dependency, workspace, catalog,
+  field, role, manager, protocol, and current specifier context, with independent action and mode
+  winners and complete decision traces.
 - **Write safely** -- exact manifest/catalog occurrences are preconditioned and re-read after writes;
   `--verify-command` tests each dependency and proves rollback outcomes.
 - **Post-write hooks** -- `--execute`, `--install`, `--update`. Chain commands after writing.
@@ -100,14 +102,21 @@ Zero config works. But if you want it:
 import { defineConfig } from 'depfresh'
 
 export default defineConfig({
-  mode: 'minor',
-  exclude: ['typescript'],
-  packageMode: {
-    'eslint': 'latest',
-    '/^@types/': 'patch',
-  },
+  mode: 'latest',
+  policyRules: [
+    {
+      id: 'native-catalog-minor',
+      selectors: { catalogName: 'native' },
+      mode: 'minor',
+    },
+  ],
 })
 ```
+
+That rule caps the physical `native` catalog owner and its linked consumer occurrences. A direct
+declaration of the same dependency name still uses `latest`. Existing `include`, `exclude`,
+`mode`, and `packageMode` configuration remains supported through a compatibility compiler.
+Configuration can shape selection but cannot grant write or process authority.
 
 Supports `depfresh.config.ts`, `.depfreshrc`, or a `depfresh` key in `package.json`. Full reference: **[docs/configuration/](docs/configuration/)**
 
@@ -132,7 +141,7 @@ Migration guide: **[docs/compare/from-taze.md](docs/compare/from-taze.md)** | Fu
 ## Documentation
 
 - **[CLI Reference](docs/cli/)** -- flags, modes, sorting, filtering, hooks, interactive, CI
-- **[Configuration](docs/configuration/)** -- config files, options, packageMode, private registries, cache
+- **[Configuration](docs/configuration/)** -- config files, occurrence policy, compatibility inputs, private registries, cache
 - **[Programmatic API](docs/api/)** -- functions, lifecycle callbacks, addon plugins, types
 - **[Output Formats](docs/output-formats/)** -- table, JSON, exit codes
 - **[Agent Workflows](docs/agents/README.md)** -- quickstarts for AI coding assistants

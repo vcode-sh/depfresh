@@ -43,13 +43,15 @@ depfresh loads config from multiple file formats. Priority order (highest wins):
 import { defineConfig } from 'depfresh'
 
 export default defineConfig({
-  mode: 'minor',
+  mode: 'latest',
   concurrency: 8,
-  include: ['typescript', 'vitest'],
-  packageMode: {
-    'eslint*': 'latest',
-    '/^@types/': 'patch',
-  },
+  policyRules: [
+    {
+      id: 'native-catalog-minor',
+      selectors: { catalogName: 'native' },
+      mode: 'minor',
+    },
+  ],
 })
 ```
 
@@ -87,6 +89,19 @@ export default {
 ```
 
 All formats are equivalent. Pick one and pretend the others don't exist.
+
+### Policy compilation order
+
+Policy is compiled as defaults, file configuration, then direct invocation input. Within each
+source layer, `mode`, `packageMode`, `include`, and `exclude` compatibility rules are emitted first;
+explicit `policyRules` follow them. CLI `include` and `exclude` arrays independently replace the
+matching configured arrays rather than concatenate. A direct library override occupies the library
+invocation layer. Compiled rules retain deterministic source, kind, and index provenance.
+
+Invalid policy fails configuration loading with `ConfigError`. Unknown or authority-shaped fields,
+non-JSON values, duplicate IDs, invalid patterns or enums, and invalid action/mode combinations are
+never ignored. See [Full Options](./options.md#occurrence-policy) for the selector vocabulary and
+legacy translation.
 
 ### Invocation-only options
 

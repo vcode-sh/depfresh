@@ -97,6 +97,74 @@ async function resolveFromCache(
 }
 
 describe('authoritative resolution candidate truth', () => {
+  it('uses the occurrence policy mode and finalizes no-target decisions with the exact reason', async () => {
+    const selectedDecision = {
+      occurrenceId: 'occurrence:test-dep',
+      status: 'selected' as const,
+      reason: 'POLICY_DEFAULT_INCLUDED' as const,
+      action: 'include' as const,
+      mode: 'latest' as const,
+      matchedRuleIds: ['$defaults:mode'],
+      indeterminateRuleIds: [],
+      winningModeRuleId: '$defaults:mode',
+    }
+    const dep = makeDep({ policyDecision: selectedDecision })
+    const pkg: PackageMeta = {
+      name: 'root',
+      type: 'package.json',
+      filepath: '/tmp/project/package.json',
+      deps: [dep],
+      resolved: [],
+      raw: {},
+      indent: '  ',
+    }
+
+    const updates = await resolvePackage(
+      pkg,
+      makeOptions({ mode: 'default' }),
+      makeCache({
+        name: 'test-dep',
+        versions: ['1.0.0'],
+        distTags: { latest: '1.0.0' },
+      }),
+      npmrc,
+    )
+
+    expect(updates).toEqual([])
+    expect(dep.policyDecision).toEqual({
+      ...selectedDecision,
+      status: 'unchanged',
+      reason: 'POLICY_CANDIDATE_UNCHANGED',
+      candidateReason: 'CURRENT_VERSION_SELECTED',
+    })
+  })
+
+  it('uses a selected occurrence mode instead of stale global mode', async () => {
+    const dep = makeDep({
+      policyDecision: {
+        occurrenceId: 'occurrence:test-dep',
+        status: 'selected',
+        reason: 'POLICY_RULE_INCLUDED',
+        action: 'include',
+        mode: 'latest',
+        matchedRuleIds: ['latest-rule'],
+        indeterminateRuleIds: [],
+        winningModeRuleId: 'latest-rule',
+      },
+    })
+    const result = await resolveFromCache(
+      {
+        name: 'test-dep',
+        versions: ['1.0.0', '2.0.0'],
+        distTags: { latest: '2.0.0' },
+      },
+      dep,
+      { mode: 'default' },
+    )
+
+    expect(result?.targetVersion).toBe('^2.0.0')
+  })
+
   it('exposes a pure selector whose targets are eligible and never downgrades', () => {
     const cases: VersionCandidateInput[] = [
       {

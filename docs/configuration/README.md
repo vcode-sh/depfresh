@@ -17,14 +17,20 @@ You're here because defaults offend you. Fair enough. depfresh works perfectly f
 import { defineConfig } from 'depfresh'
 
 export default defineConfig({
-  mode: 'minor',
-  exclude: ['webpack'],
-  packageMode: {
-    'typescript': 'latest',
-    '/^@types/': 'patch',
-  },
+  mode: 'latest',
+  policyRules: [
+    {
+      id: 'native-catalog-minor',
+      selectors: { catalogName: 'native' },
+      mode: 'minor',
+    },
+  ],
 })
 ```
+
+Rules target repository occurrences, not just package names. See
+[Full Options](./options.md#occurrence-policy) for selectors, precedence, decision traces, and the
+compatibility translation for `include`, `exclude`, `mode`, and `packageMode`.
 
 That's everything. If you've read this far, you're either building something serious or procrastinating. Either way, I respect the commitment.
 

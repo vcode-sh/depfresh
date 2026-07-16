@@ -5,12 +5,13 @@ import { normalizeArgs } from './normalize-args'
 
 const { resolveConfigMock } = vi.hoisted(() => ({
   resolveConfigMock: vi.fn(
-    async (overrides: Partial<depfreshOptions>) => overrides as depfreshOptions,
+    async (overrides: Partial<depfreshOptions>, _source?: 'library' | 'cli') =>
+      overrides as depfreshOptions,
   ),
 }))
 
 vi.mock('../config', () => ({
-  resolveConfig: resolveConfigMock,
+  resolveConfigForSource: resolveConfigMock,
 }))
 
 function makeRawArgs(overrides: Record<string, unknown> = {}): Record<string, unknown> {
@@ -112,6 +113,7 @@ describe('normalizeArgs enum validation', () => {
     )
 
     expect(resolveConfigMock).toHaveBeenCalledTimes(1)
+    expect(resolveConfigMock.mock.calls[0]?.[1]).toBe('cli')
     const resolvedOptions = resolveConfigMock.mock.calls[0]?.[0] as depfreshOptions
     expect(resolvedOptions.mode).toBe('patch')
     expect(resolvedOptions.output).toBe('json')

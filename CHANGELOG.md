@@ -6,6 +6,16 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Semver
 
 ### Added
 
+- **Occurrence-level ordered policy rules** -- JSON-compatible `policyRules` select exact repository
+  occurrences by dependency, workspace path, package, catalog, catalog role, dependency field,
+  occurrence role, package manager, protocol, current channel, and specifier status. Action and mode
+  use independent last-match-wins decisions with stable provenance, all matched rule IDs, separate
+  winning rule IDs, and explicit selected, skipped, blocked, and unchanged states. Catalog owners
+  and consumers are evaluated independently, direct declarations do not inherit catalog rules, and
+  unknown manager evidence blocks only an otherwise matching manager-specific rule. Public pure
+  compiler, context, matcher, repository evaluator, and finalizer APIs expose the same behavior used
+  by checks.
+
 - **Versioned repository model** -- the public read-only `inspectRepository()` API emits stable
   repository-relative source, manifest, catalog, occurrence, relationship, diagnostic, and
   evidence-reference entities under schema version `1`. Exact source bytes are SHA-256 hashed,
@@ -25,6 +35,12 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Semver
   conclusions never expose unrelated pnpm catalog or Yarn configuration values.
 
 ### Security
+
+- **Policy input is data, never authority** -- policy rules reject unknown or authority-shaped
+  fields, non-JSON values, duplicate or reserved IDs, invalid patterns and enums, and invalid
+  action/mode combinations. Configuration can select occurrences and modes but cannot authorize
+  writes, commands, installs, global mutation, or verification. Ambiguous, missing, unsupported,
+  and unavailable manager evidence is retained rather than guessed.
 
 - **Repository discovery is contained to one canonical root** -- workspace patterns containing
   parent traversal or absolute paths are rejected before globbing, and package, workspace-marker,
@@ -50,6 +66,14 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Semver
   cleaned on every path.
 
 ### Changed
+
+- **Legacy selection inputs compile into the ordered policy** -- global mode remains the default;
+  `packageMode` retains exact-name priority and first-pattern behavior; legacy `ignore` becomes an
+  exclusion; include creates an allow-list; later exclude rules win; and explicit policy rules
+  follow compatibility rules within their source layer. CLI include/exclude arrays continue to
+  replace configured arrays. Skipped and blocked local occurrences never reach registry resolution,
+  selected occurrences use their policy mode, and a no-target candidate result becomes unchanged
+  while retaining the exact candidate reason. Versioned global occurrence policy remains deferred.
 
 - **Writes now report observed physical outcomes** -- manifest, YAML, catalog, nested override,
   package-manager, and global writes use canonical file-plus-path identities, require the exact

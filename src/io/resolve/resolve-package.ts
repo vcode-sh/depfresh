@@ -1,10 +1,12 @@
 import pLimit from 'p-limit'
 import type { Cache } from '../../cache/index'
 import { createSqliteCache } from '../../cache/index'
+import { finalizePolicyDecision } from '../../policy/matcher'
 import type {
   depfreshOptions,
   NpmrcConfig,
   PackageMeta,
+  PolicyCandidateReason,
   RawDep,
   ResolvedDepChange,
 } from '../../types'
@@ -67,8 +69,9 @@ export async function resolvePackage(
         .filter((dep) => dep.update)
         .map((dep) =>
           limit(async () => {
+            let candidateReason: PolicyCandidateReason | undefined
             try {
-              return await resolveDependency(
+              const resolved = await resolveDependency(
                 dep,
                 dependencyOptions,
                 cache,
@@ -76,7 +79,14 @@ export async function resolvePackage(
                 logger,
                 privatePackages,
                 resolveContext,
+                (selection) => {
+                  candidateReason = selection.reason
+                },
               )
+              if (!resolved && candidateReason && dep.policyDecision) {
+                dep.policyDecision = finalizePolicyDecision(dep.policyDecision, candidateReason)
+              }
+              return resolved
             } catch (error) {
               logger.debug(
                 `Resolution failed for ${dep.aliasName ?? dep.name}: ${error instanceof Error ? error.message : String(error)}`,

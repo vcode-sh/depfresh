@@ -139,25 +139,28 @@ async function getOutdatedReport() {
 }
 ```
 
-### Per-Package Mode Overrides
+### Occurrence Policy
 
-Different update strategies for different dependencies. Because not all packages deserve the same level of trust.
+Different update strategies for exact dependency occurrences, without coupling policy to write authority.
 
 ```ts
 import { check, resolveConfig } from 'depfresh'
 
 const options = await resolveConfig({
-  mode: 'minor',
+  mode: 'latest',
   write: true,
-  packageMode: {
-    // Pin TypeScript to patch updates only
-    'typescript': 'patch',
-    // Let test tools go wild
-    'vitest': 'latest',
-    '@vitest/*': 'latest',
-    // Ignore things I don't want to think about
-    'webpack': 'ignore',
-  },
+  policyRules: [
+    {
+      id: 'native-catalog-minor',
+      selectors: { catalogName: 'native' },
+      mode: 'minor',
+    },
+    {
+      id: 'legacy-app-exclude',
+      selectors: { workspacePath: 'apps/legacy' },
+      action: 'exclude',
+    },
+  ],
 })
 
 await check(options)

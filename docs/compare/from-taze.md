@@ -33,7 +33,17 @@ import { defineConfig } from 'taze'
 import { defineConfig } from 'depfresh'
 ```
 
-Most config fields are compatible: `mode`, `include`, `exclude`, `packageMode`, `depFields`, `ignorePaths`, `peer`, `write`, and more.
+Most config fields remain compatible: `mode`, `include`, `exclude`, `packageMode`, `depFields`,
+`ignorePaths`, `peer`, `write`, and more. Selection inputs compile into ordered occurrence policy:
+include remains an allow-list, exclude wins later, exact `packageMode` names retain priority, and
+the first matching insertion-order pattern still wins. Explicit `policyRules` can be adopted
+incrementally; existing configuration does not need an immediate rewrite. Invalid new policy rules
+are rejected strictly, and configuration never grants side-effect authority.
+
+One alias migration detail is intentional: legacy `packageMode` matches an npm alias by its resolved
+package name, while an explicit `dependencyName` selector matches the manifest key. For
+`alias: "npm:react@^18"`, keep `react` as a compatibility `packageMode` key or target `alias` in an
+explicit occurrence rule.
 
 ## Behavioral Differences
 

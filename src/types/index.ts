@@ -24,6 +24,25 @@ export type {
   PackageType,
 } from './package'
 export type {
+  CompiledPolicy,
+  CompiledPolicyRule,
+  PolicyAction,
+  PolicyCandidateReason,
+  PolicyCatalogRole,
+  PolicyCurrentChannel,
+  PolicyDecision,
+  PolicyInputLayer,
+  PolicyMode,
+  PolicyOccurrenceContext,
+  PolicyReason,
+  PolicyRuleInput,
+  PolicyRuleProvenance,
+  PolicyRuleSource,
+  PolicySelectors,
+  PolicySpecifierStatus,
+  PolicyStatus,
+} from './policy'
+export type {
   NpmrcConfig,
   PackageData,
   ProvenanceLevel,

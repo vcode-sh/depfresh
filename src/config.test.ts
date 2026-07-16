@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { resolveConfig } from './config'
+import { resolveConfig, resolveConfigForSource } from './config'
 import { defineConfig } from './index'
 
 describe('resolveConfig', () => {
@@ -336,6 +336,89 @@ describe('CLI array overrides', () => {
     expect(config.include).toEqual(['from-cli'])
     expect(config.exclude).toEqual(['exclude-cli'])
     expect(config.ignorePaths).toEqual(['**/cli-only/**'])
+  })
+})
+
+describe('policy configuration', () => {
+  let tmpDir: string
+
+  afterEach(() => {
+    if (tmpDir) rmSync(tmpDir, { recursive: true, force: true })
+  })
+
+  it('compiles config and CLI compatibility layers with explicit provenance', async () => {
+    tmpDir = mkdtempSync(join(tmpdir(), 'depfresh-policy-config-'))
+    writeFileSync(
+      join(tmpDir, 'package.json'),
+      JSON.stringify({
+        name: 'root',
+        depfresh: {
+          mode: 'latest',
+          include: ['from-config'],
+          exclude: ['excluded-by-config'],
+          policyRules: [
+            {
+              id: 'native-minor',
+              selectors: { catalogName: 'native' },
+              mode: 'minor',
+            },
+          ],
+        },
+      }),
+    )
+
+    const config = await resolveConfigForSource(
+      {
+        cwd: tmpDir,
+        loglevel: 'silent',
+        mode: 'patch',
+        include: ['from-cli'],
+        exclude: ['excluded-by-cli'],
+      },
+      'cli',
+    )
+
+    expect(config.compiledPolicy?.rules).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'native-minor',
+          provenance: expect.objectContaining({ source: 'config', kind: 'explicit' }),
+        }),
+        expect.objectContaining({
+          id: '$cli:mode',
+          provenance: expect.objectContaining({ source: 'cli' }),
+        }),
+        expect.objectContaining({ id: '$cli:include:0' }),
+        expect.objectContaining({ id: '$cli:exclude:0' }),
+      ]),
+    )
+    expect(config.compiledPolicy?.rules.map((rule) => rule.id)).not.toContain('$config:include:0')
+    expect(config.compiledPolicy?.rules.map((rule) => rule.id)).not.toContain('$config:exclude:0')
+  })
+
+  it('rejects invalid and authority-shaped policy rules loaded from config', async () => {
+    tmpDir = mkdtempSync(join(tmpdir(), 'depfresh-policy-invalid-'))
+    writeFileSync(
+      join(tmpDir, 'package.json'),
+      JSON.stringify({
+        name: 'root',
+        depfresh: {
+          policyRules: [
+            {
+              id: 'unsafe',
+              selectors: {},
+              action: 'include',
+              execute: 'untrusted command',
+            },
+          ],
+        },
+      }),
+    )
+
+    await expect(resolveConfig({ cwd: tmpDir, loglevel: 'silent' })).rejects.toMatchObject({
+      code: 'ERR_CONFIG',
+      reason: 'INVALID_CONFIG',
+    })
   })
 })
 

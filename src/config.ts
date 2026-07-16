@@ -4,7 +4,8 @@ import { defu } from 'defu'
 import { join } from 'pathe'
 import { ConfigError } from './errors'
 import { resolveDiscoveryContext } from './io/packages/root-detection'
-import type { depfreshOptions } from './types'
+import { compilePolicy } from './policy'
+import type { depfreshOptions, PolicyInputLayer, PolicyRuleSource } from './types'
 import { DEFAULT_OPTIONS } from './types'
 import { createLogger } from './utils/logger'
 import { redactSensitiveValue } from './utils/redact'
@@ -128,14 +129,18 @@ function removeInvocationOnlyOptions(
 export async function resolveConfig(
   overrides: Partial<depfreshOptions> = {},
 ): Promise<depfreshOptions> {
+  return resolveConfigForSource(overrides, 'library')
+}
+
+export async function resolveConfigForSource(
+  overrides: Partial<depfreshOptions>,
+  invocationSource: Extract<PolicyRuleSource, 'library' | 'cli'> = 'library',
+): Promise<depfreshOptions> {
   const requestedCwd = overrides.cwd || process.cwd()
   const discovery = resolveDiscoveryContext(requestedCwd)
   const fileConfig = await loadConfigFile(discovery.effectiveRoot)
-  const merged = defu(
-    overrides,
-    removeInvocationOnlyOptions(fileConfig),
-    DEFAULT_OPTIONS,
-  ) as depfreshOptions
+  const safeFileConfig = removeInvocationOnlyOptions(fileConfig)
+  const merged = defu(overrides, safeFileConfig, DEFAULT_OPTIONS) as depfreshOptions
   if (overrides.include !== undefined) {
     merged.include = overrides.include
   }
@@ -150,9 +155,53 @@ export async function resolveConfig(
   merged.effectiveRoot = discovery.effectiveRoot
   merged.discoveryMode = discovery.discoveryMode
   validateOptions(merged)
+  merged.compiledPolicy = compilePolicy(
+    createPolicyLayers(safeFileConfig, overrides, invocationSource),
+  )
 
   const logger = createLogger(merged.loglevel)
   logger.debug('Config resolved:', JSON.stringify(redactSensitiveValue(merged), null, 2))
 
   return merged
+}
+
+function createPolicyLayers(
+  fileConfig: Partial<depfreshOptions>,
+  overrides: Partial<depfreshOptions>,
+  invocationSource: Extract<PolicyRuleSource, 'library' | 'cli'>,
+): PolicyInputLayer[] {
+  const layers: PolicyInputLayer[] = [
+    { source: 'defaults', mode: DEFAULT_OPTIONS.mode ?? 'default' },
+  ]
+  if (hasPolicyInputs(fileConfig)) {
+    layers.push({
+      source: 'config',
+      mode: fileConfig.mode,
+      packageMode: fileConfig.packageMode,
+      include: overrides.include === undefined ? fileConfig.include : undefined,
+      exclude: overrides.exclude === undefined ? fileConfig.exclude : undefined,
+      policyRules: fileConfig.policyRules,
+    })
+  }
+  if (hasPolicyInputs(overrides)) {
+    layers.push({
+      source: invocationSource,
+      mode: overrides.mode,
+      packageMode: overrides.packageMode,
+      include: overrides.include,
+      exclude: overrides.exclude,
+      policyRules: overrides.policyRules,
+    })
+  }
+  return layers
+}
+
+function hasPolicyInputs(options: Partial<depfreshOptions>): boolean {
+  return (
+    options.mode !== undefined ||
+    options.packageMode !== undefined ||
+    options.include !== undefined ||
+    options.exclude !== undefined ||
+    options.policyRules !== undefined
+  )
 }

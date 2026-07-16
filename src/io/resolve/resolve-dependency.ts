@@ -22,7 +22,7 @@ import { fetchPackageData } from '../registry'
 import { getPackageMode } from '../resolve-mode'
 import { getResolveCachePolicy } from './cache-policy'
 import type { ResolveContext } from './context'
-import { selectVersionCandidate } from './version-filter'
+import { selectVersionCandidate, type VersionCandidateSelection } from './version-filter'
 
 export async function resolveDependency(
   dep: RawDep,
@@ -32,6 +32,7 @@ export async function resolveDependency(
   logger: ReturnType<typeof createLogger>,
   privatePackages?: Set<string>,
   resolveContext?: ResolveContext,
+  onCandidateSelection?: (selection: VersionCandidateSelection) => void,
 ): Promise<ResolvedDepChange | null> {
   const packageName = dep.aliasName ?? dep.name
   const normalizedCurrentVersion = normalizeWorkspaceCurrentVersion(
@@ -53,7 +54,10 @@ export async function resolveDependency(
   }
 
   // Resolve the mode — check packageMode globs before falling back to global mode
-  const mode = getPackageMode(packageName, options.packageMode, options.mode)
+  const mode =
+    dep.policyDecision?.status === 'selected' || dep.policyDecision?.status === 'unchanged'
+      ? dep.policyDecision.mode
+      : getPackageMode(packageName, options.packageMode, options.mode)
 
   // Skip if mode is 'ignore'
   if (mode === 'ignore') {
@@ -135,6 +139,7 @@ export async function resolveDependency(
     includeLocked: options.includeLocked,
     cooldown: options.cooldown,
   })
+  onCandidateSelection?.(selection)
   logger.debug(`Candidate selection for ${packageName}: ${selection.reason}`)
   const targetVersion = selection.targetVersion
 

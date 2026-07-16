@@ -19,7 +19,7 @@ function validateEnum<T extends string>(
 }
 
 export async function normalizeArgs(args: Record<string, unknown>): Promise<depfreshOptions> {
-  const { resolveConfig } = await import('../config')
+  const { resolveConfigForSource } = await import('../config')
   const globalAll = args['global-all'] as boolean
 
   if (args['deps-only'] && args['dev-only']) {
@@ -54,43 +54,46 @@ export async function normalizeArgs(args: Record<string, unknown>): Promise<depf
   const concurrency = parseIntegerOption(args.concurrency, '--concurrency', 1)
   const cooldown = parseIntegerOption(args.cooldown, '--cooldown', 0)
 
-  return resolveConfig({
-    cwd: (args.cwd as string) || process.cwd(),
-    recursive: args.recursive as boolean,
-    write: args.write as boolean,
-    interactive: args.interactive as boolean,
-    mode,
-    include,
-    exclude,
-    ignorePaths,
-    force: args.force as boolean,
-    refreshCache,
-    global: (args.global as boolean) || globalAll,
-    globalAll,
-    peer: args.peer as boolean,
-    includeLocked: args['include-locked'] as boolean,
-    output,
-    concurrency,
-    loglevel,
-    depFields,
-    all: args.all as boolean,
-    group: args.group as boolean,
-    sort,
-    timediff: args.timediff as boolean,
-    cooldown,
-    nodecompat: args.nodecompat as boolean,
-    long: args.long as boolean,
-    explain: args.explain as boolean,
-    explainDiscovery: args['explain-discovery'] as boolean,
-    profile: args.profile as boolean,
-    install: args.install as boolean,
-    update: args.update as boolean,
-    strictPostWrite: args['strict-post-write'] as boolean,
-    execute: args.execute as string | undefined,
-    verifyCommand: args['verify-command'] as string | undefined,
-    failOnOutdated: args['fail-on-outdated'] as boolean,
-    failOnResolutionErrors: args['fail-on-resolution-errors'] as boolean,
-    failOnNoPackages: args['fail-on-no-packages'] as boolean,
-    ignoreOtherWorkspaces: args['ignore-other-workspaces'] as boolean,
-  })
+  return resolveConfigForSource(
+    {
+      cwd: (args.cwd as string) || process.cwd(),
+      recursive: args.recursive as boolean,
+      write: args.write as boolean,
+      interactive: args.interactive as boolean,
+      mode,
+      include,
+      exclude,
+      ignorePaths,
+      force: args.force as boolean,
+      refreshCache,
+      global: (args.global as boolean) || globalAll,
+      globalAll,
+      peer: args.peer as boolean,
+      includeLocked: args['include-locked'] as boolean,
+      output,
+      concurrency,
+      loglevel,
+      depFields,
+      all: args.all as boolean,
+      group: args.group as boolean,
+      sort,
+      timediff: args.timediff as boolean,
+      cooldown,
+      nodecompat: args.nodecompat as boolean,
+      long: args.long as boolean,
+      explain: args.explain as boolean,
+      explainDiscovery: args['explain-discovery'] as boolean,
+      profile: args.profile as boolean,
+      install: args.install as boolean,
+      update: args.update as boolean,
+      strictPostWrite: args['strict-post-write'] as boolean,
+      execute: args.execute as string | undefined,
+      verifyCommand: args['verify-command'] as string | undefined,
+      failOnOutdated: args['fail-on-outdated'] as boolean,
+      failOnResolutionErrors: args['fail-on-resolution-errors'] as boolean,
+      failOnNoPackages: args['fail-on-no-packages'] as boolean,
+      ignoreOtherWorkspaces: args['ignore-other-workspaces'] as boolean,
+    },
+    'cli',
+  )
 }

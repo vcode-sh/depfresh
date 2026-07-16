@@ -20,10 +20,20 @@ The full type catalogue. Every interface, union, and enum that depfresh exports.
 | `PackageManagerName` | `'npm'` \| `'pnpm'` \| `'yarn'` \| `'bun'` |
 | `PackageMeta` | A loaded package with its file path, raw deps, resolved changes, and indent info |
 | `PackageType` | `'package.json'` \| `'package.yaml'` \| `'pnpm-workspace'` \| `'bun-workspace'` \| `'yarn-workspace'` \| `'global'` |
+| `PolicyRuleInput` / `PolicySelectors` | JSON-compatible occurrence rule and selector vocabulary |
+| `PolicyAction` / `PolicyMode` | Independent include/exclude action and non-ignore resolution mode dimensions |
+| `PolicyInputLayer` | One defaults, config, library, or CLI input layer accepted by `compilePolicy` |
+| `PolicyStatus` / `PolicyCurrentChannel` | Decision lifecycle state and model-derived stable/prerelease channel |
+| `PolicyRuleSource` / `PolicyRuleProvenance` | Defaults, config, library, or CLI source plus deterministic kind and index |
+| `CompiledPolicyRule` / `CompiledPolicy` | Validated ordered rules ready for pure evaluation |
+| `PolicyOccurrenceContext` | Model-derived occurrence, workspace, catalog, manager, protocol, and current-specifier context |
+| `PolicyDecision` | Selected, skipped, blocked, or unchanged result with complete matched/winner trace |
+| `PolicyReason` / `PolicyCandidateReason` | Stable policy result and exact candidate-pipeline reason vocabularies |
+| `PolicyCatalogRole` / `PolicySpecifierStatus` | `direct|owner|consumer` and `locked|range|dynamic|invalid` classifications |
 | `SignaturePresence` | Passive registry metadata: `'present'` \| `'absent'`; presence does not prove verification or trust |
 | `ProvenanceLevel` | Deprecated compatibility input. Its legacy values do not imply verification; use `SignaturePresence` |
-| `RangeMode` | Version resolution strategy: `'default'` \| `'major'` \| `'minor'` \| `'patch'` \| `'latest'` \| `'newest'` \| `'next'` \| `'ignore'` |
-| `RawDep` | A dependency before resolution -- name, current version, source field, update flag |
+| `RangeMode` | Resolution strategy plus legacy `packageMode` sentinel: `'default'` \| `'major'` \| `'minor'` \| `'patch'` \| `'latest'` \| `'newest'` \| `'next'` \| `'ignore'` |
+| `RawDep` | A dependency before resolution, optionally linked to its exact occurrence and policy decision |
 | `RegistryConfig` | A single registry entry -- URL, auth token, scope |
 | `RepositoryModel` | Versioned deterministic repository source, manifest, catalog, occurrence, relationship, diagnostic, and evidence-reference graph |
 | `RepositoryEvidenceConclusion<T>` | Stable `confirmed`, `ambiguous`, `missing`, `unsupported`, or `unavailable` conclusion with candidate values, sources, and diagnostics |

@@ -35,7 +35,7 @@ PR summary: **11 open** (4 shipped, 1 partial, 6 missing).
 | [#66](https://github.com/antfu-collective/taze/issues/66) | Wrong sort order: Expected object keys to be in ascending order. '3dmol' should be before '@atomistics/xyz'  jsonc/sort-key | missing | — |
 | [#71](https://github.com/antfu-collective/taze/issues/71) | can't find upgarde of some package | partial | `src/utils/versions.ts`<br>`src/io/registry.ts` |
 | [#78](https://github.com/antfu-collective/taze/issues/78) | Options to run upgrade one by one and run a command after to check if everything is ok | shipped | `src/commands/check/write-flow.ts`<br>`src/io/write/backup.ts` |
-| [#91](https://github.com/antfu-collective/taze/issues/91) | `packageMode` option is only effective when `mode` is not set | shipped | `src/io/resolve/resolve-dependency.ts`<br>`src/io/resolve-mode.ts` |
+| [#91](https://github.com/antfu-collective/taze/issues/91) | `packageMode` option is only effective when `mode` is not set | shipped | `src/policy/compiler.ts`<br>`src/policy/matcher.ts`<br>`src/io/resolve/resolve-dependency.ts` |
 | [#101](https://github.com/antfu-collective/taze/issues/101) | Allow filtering on devDep / Dep updates | shipped | `src/cli/normalize-args.ts`<br>`docs/cli/flags.md` |
 | [#106](https://github.com/antfu-collective/taze/issues/106) | support ignore version checking for packageManager | missing | — |
 | [#107](https://github.com/antfu-collective/taze/issues/107) | Interaction mode flicker issue (交互模式闪烁问题) | shipped | `src/commands/check/tui/index.ts`<br>`src/commands/check/tui/renderer.test.ts` |

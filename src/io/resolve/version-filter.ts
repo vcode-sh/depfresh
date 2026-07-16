@@ -1,20 +1,14 @@
 import * as semver from 'semver'
-import type { depfreshOptions, PackageData, RangeMode, RawDep } from '../../types'
+import type {
+  depfreshOptions,
+  PackageData,
+  PolicyCandidateReason,
+  RangeMode,
+  RawDep,
+} from '../../types'
 import { getMaxVersion, getSpecShape, isLocked, normalizeVersion } from '../../utils/versions'
 
-export type VersionSelectionReason =
-  | 'SELECTED'
-  | 'CURRENT_VERSION_SELECTED'
-  | 'CURRENT_VERSION_INVALID'
-  | 'NO_VALID_VERSIONS'
-  | 'PRERELEASE_CHANNEL_BLOCKED'
-  | 'DIST_TAG_MISSING'
-  | 'DIST_TAG_NOT_ELIGIBLE'
-  | 'MODE_NO_MATCH'
-  | 'DEPRECATED_CANDIDATE_BLOCKED'
-  | 'MISSING_PUBLISH_TIME'
-  | 'MATURITY_CANDIDATE_BLOCKED'
-  | 'DOWNGRADE_BLOCKED'
+export type VersionSelectionReason = PolicyCandidateReason
 
 export interface VersionCandidateInput {
   currentVersion: string

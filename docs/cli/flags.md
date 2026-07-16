@@ -101,8 +101,8 @@ The output includes supported flags, defaults, valid enum values, and exit-code 
 
 | Flag | Alias | Type | Default | Description |
 |------|-------|------|---------|-------------|
-| `--include <patterns>` | `-n` | string | -- | Only include packages matching these regex/glob patterns (comma-separated). Everything else gets ghosted. |
-| `--exclude <patterns>` | `-x` | string | -- | Exclude packages matching these regex/glob patterns (comma-separated). Pretend they don't exist. |
+| `--include <patterns>` | `-n` | string | -- | Compatibility policy input: exclude by default, then include matching occurrence names. A CLI array replaces configured include patterns. |
+| `--exclude <patterns>` | `-x` | string | -- | Compatibility policy input evaluated after include, so a matching exclusion wins. A CLI array replaces configured exclude patterns. |
 | `--ignore-paths <patterns>` | -- | string | -- | Additional ignore glob patterns (comma-separated) merged with default ignore paths. Useful for skipping specific folders during recursive scan. |
 | `--deps-only` | -- | boolean | `false` | Only check `dependencies`. Ignores devDependencies, peerDependencies, and optionalDependencies. |
 | `--dev-only` | -- | boolean | `false` | Only check `devDependencies`. The inverse of `--deps-only`. Using both simultaneously is not recommended unless you enjoy empty results. |
@@ -129,6 +129,10 @@ The output includes supported flags, defaults, valid enum values, and exit-code 
 | `--json` | -- | boolean | `false` | JSON mode for the `depfresh capabilities` discoverability command. |
 
 `--profile`'s `networkFetches` and `dedupeHits` count real registry fetches and real in-flight cache hits in every output mode, interactive terminal runs included. Before 1.2.0 those two numbers were always `0` on an interactive run, which made them worse than useless -- they were reassuring.
+
+`--profile` is runtime telemetry only. It does not activate or select reusable policy profiles;
+named policy profiles are not part of the current policy contract. Policy rules are configured in a
+config file or through the library API, not through a JSON CLI flag.
 
 ## Post-Write
 

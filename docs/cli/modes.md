@@ -47,7 +47,9 @@ or cooldown filtering is not replaced after the fact by a less-restricted candid
 
 ## `ignore`
 
-Not available via CLI flags -- this one's for the config file's `packageMode` option. Set a package to `ignore` and depfresh will skip it entirely. Useful for pinning a specific package while letting everything else update.
+`ignore` is a legacy `packageMode` sentinel, not a candidate-resolution mode and not a CLI mode.
+The compatibility compiler translates it to `action: 'exclude'`. New policy rules should express
+that intent directly.
 
 ```json
 {
@@ -63,6 +65,9 @@ Not available via CLI flags -- this one's for the config file's `packageMode` op
 ## What gets rewritten
 
 Modes decide *which version* depfresh aims for. The shape of the spec already in your manifest decides whether depfresh is willing to touch it at all. This applies to every mode, including `latest` and `newest`.
+
+An occurrence policy rule can supply the effective mode. It does not bypass normalization,
+prerelease, deprecation, cooldown, downgrade, or faithful-rewrite checks.
 
 Rewritten, shape preserved:
 
@@ -113,4 +118,4 @@ skipped because the package manager resolves it dynamically.
 | `latest` | Eligible, semver-valid version named by the `latest` dist-tag. |
 | `newest` | Highest eligible semantic version, regardless of dist-tags. |
 | `next` | Eligible `next` dist-tag, falling back to eligible `latest` when absent or invalid. |
-| `ignore` | Skip this package entirely. Out of sight, out of mind. Config file only. |
+| `ignore` | Legacy `packageMode` sentinel compiled to occurrence exclusion. |

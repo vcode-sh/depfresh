@@ -142,8 +142,12 @@ directories, and the three unavailable Git outcomes.
 ## Compatibility projection and limitations
 
 Normal `loadPackages()` and `check()` discovery consume the same `PackageMeta[]` compatibility
-projection. Existing filtering, catalog loading, callbacks, and callers remain unchanged. Global
-package discovery remains on its existing non-filesystem projection.
+projection. Local checks derive policy context from exact occurrences, including normalized current
+version/channel/status, catalog identity, and confirmed single-manager boundary evidence, then link
+only selected physical dependencies back into that projection. Ambiguous, missing, unsupported, or
+unavailable managers remain unknown. Catalog consumers are explanatory and never propagate a
+workspace/package rule into their physical owner. Global package discovery remains on its existing
+non-filesystem legacy policy path.
 
-Repository inspection does not resolve registry versions, choose a compatibility policy,
+Repository inspection does not resolve registry versions or invent registry-derived current status,
 synchronize lockfiles, apply manifest changes, run installs, or mutate Git state.

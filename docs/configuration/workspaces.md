@@ -177,7 +177,28 @@ catalog:
 
 ### How catalogs are updated
 
-Catalog dependencies are resolved and updated alongside regular dependencies. When writing (`--write`), depfresh updates both the catalog source file and any manifest files that reference it. The catalog protocol references (`catalog:`, `catalog:<name>`) are preserved -- depfresh only changes the version in the source file.
+Catalog dependencies are resolved alongside regular dependencies, but the catalog owner is the only
+physical version declaration. When writing (`--write`), depfresh updates that owner in the catalog
+source file. Consumer manifests retain their `catalog:` or `catalog:<name>` references unchanged.
+
+Policy can select `catalogName` and exact `catalogRole` values (`owner`, `consumer`, or `direct`).
+Owners and consumers are evaluated independently. A workspace- or package-specific consumer rule
+never propagates into a shared owner; only the owner decision controls the physical entry. A rule
+that selects `catalogName: 'native'` matches the native owner and each linked consumer, while a
+direct declaration of the same dependency name remains unaffected:
+
+```typescript
+export default defineConfig({
+  mode: 'latest',
+  policyRules: [
+    {
+      id: 'native-catalog-minor',
+      selectors: { catalogName: 'native' },
+      mode: 'minor',
+    },
+  ],
+})
+```
 
 ## Workspace Protocol
 

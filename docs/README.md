@@ -11,12 +11,12 @@ Everything I know about depfresh is in here, split into files so you can pretend
   - [Modes](./cli/modes.md) -- version resolution strategies explained
   - [Examples](./cli/examples.md) -- real-world commands, interactive mode, workspaces
 
-- **[Configuration](./configuration/)** -- Config files, every option worth documenting, `packageMode`, `depFields`, private registries, cache settings. For people who think defaults are a personal insult.
+- **[Configuration](./configuration/)** -- Config files, ordered occurrence policy, compatibility inputs, `depFields`, private registries, and cache settings.
   - [Config Files](./configuration/files.md) -- formats, private registries, cache
   - [Options Reference](./configuration/options.md) -- the exhaustive list
   - [Workspaces](./configuration/workspaces.md) -- monorepos, catalogs, scanning
 
-- **[Programmatic API](./api/)** -- Exported functions, lifecycle callbacks, addon plugins, types, and workflow examples. For when you want to wrap depfresh in your own tooling and take credit for it. I respect the hustle.
+- **[Programmatic API](./api/)** -- Exported policy/repository functions, lifecycle callbacks, addons, types, and workflow examples.
   - [Overview](./api/overview.md) -- quick start, defaults, examples
   - [Functions](./api/functions.md) -- every exported function
   - [Types](./api/types.md) -- the type catalogue

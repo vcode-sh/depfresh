@@ -1,3 +1,4 @@
+import type { PolicyDecision } from './policy'
 import type { PackageData, ProvenanceLevel, SignaturePresence } from './registry'
 
 export type RangeMode =
@@ -41,6 +42,8 @@ export interface RawDep {
   parents: string[]
   aliasName?: string
   protocol?: string
+  occurrenceId?: string
+  policyDecision?: PolicyDecision
 }
 
 export interface UpdateScore {
