@@ -1,0 +1,431 @@
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { PackageData } from '../../types'
+
+const { fetchPackageData } = vi.hoisted(() => ({
+  fetchPackageData: vi.fn<(name: string) => Promise<PackageData>>(),
+}))
+
+vi.mock('../../io/registry', () => ({ fetchPackageData }))
+
+import { plan } from './index'
+
+describe('plan contract', () => {
+  beforeEach(() => {
+    fetchPackageData.mockReset()
+    fetchPackageData.mockImplementation(async (name: string) => ({
+      name,
+      versions: ['1.0.0', '2.0.0'],
+      distTags: { latest: '2.0.0' },
+    }))
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+    vi.unstubAllEnvs()
+  })
+
+  it('creates exact immutable operations with one terminal decision per occurrence', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'depfresh-plan-'))
+    const home = mkdtempSync(join(tmpdir(), 'depfresh-plan-home-'))
+    const manifest = join(root, 'package.json')
+    writeFileSync(manifest, '{\n  "name": "fixture",\n  "dependencies": { "alpha": "^1.0.0" }\n}\n')
+    const before = readFileSync(manifest)
+    vi.stubEnv('HOME', home)
+
+    const result = await plan({ cwd: root, mode: 'latest' })
+
+    expect(result.contract).toBe('depfresh.plan')
+    expect(result.operations).toHaveLength(1)
+    expect(result.decisions).toHaveLength(result.occurrences.length)
+    expect(new Set(result.decisions.map((decision) => decision.occurrenceId))).toEqual(
+      new Set(result.occurrences.map((occurrence) => occurrence.id)),
+    )
+    expect(result.operations[0]).toMatchObject({
+      file: 'package.json',
+      path: ['dependencies', 'alpha'],
+      expectedValue: '^1.0.0',
+      requestedValue: '^2.0.0',
+    })
+    expect(result.decisions[0]?.candidate?.targetVersion).toBe('2.0.0')
+    expect(result.planFingerprint).toMatch(/^[a-f0-9]{64}$/u)
+    expect(JSON.stringify(result)).not.toContain(root)
+    expect(readFileSync(manifest)).toEqual(before)
+    expect(existsSync(join(home, '.depfresh'))).toBe(false)
+  })
+
+  it('blocks credential-bearing values instead of leaking or weakening exact preconditions', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'depfresh-plan-secret-'))
+    writeFileSync(
+      join(root, 'package.json'),
+      JSON.stringify({
+        name: 'fixture',
+        dependencies: { alpha: 'https://user:secret@example.test/a.tgz?token=hidden' },
+      }),
+    )
+
+    const result = await plan({ cwd: root })
+    const serialized = JSON.stringify(result)
+
+    expect(result.operations).toHaveLength(0)
+    expect(result.decisions).toHaveLength(1)
+    expect(result.decisions[0]).toMatchObject({
+      status: 'blocked',
+      reason: 'SENSITIVE_VALUE_REDACTED',
+    })
+    expect(serialized).not.toContain('secret')
+    expect(serialized).not.toContain('hidden')
+  })
+
+  it('rejects credential-bearing policy identifiers before producing a plan', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'depfresh-plan-policy-secret-'))
+    writeFileSync(
+      join(root, 'package.json'),
+      JSON.stringify({
+        name: 'fixture',
+        dependencies: { alpha: '^1.0.0' },
+        depfresh: {
+          policyRules: [
+            {
+              id: 'token=supersecret',
+              selectors: { dependencyName: 'alpha' },
+              action: 'exclude',
+            },
+          ],
+        },
+      }),
+    )
+
+    await expect(plan({ cwd: root, mode: 'latest' })).rejects.toThrow(
+      'Plan policy rule identifiers must be public and path-neutral.',
+    )
+  })
+
+  it('rejects hostile option containers before invoking traps or accessors', async () => {
+    let traps = 0
+    const policyRules = new Proxy([], {
+      ownKeys: () => {
+        traps += 1
+        throw new Error('token=must-not-leak')
+      },
+    })
+    const include = Object.defineProperty([], '0', {
+      enumerable: true,
+      get: () => {
+        traps += 1
+        return 'alpha'
+      },
+    })
+
+    await expect(plan({ cwd: '.', policyRules })).rejects.toMatchObject({
+      code: 'ERR_CONFIG',
+      reason: 'INVALID_CONFIG',
+      message: 'Plan options must be plain JSON data.',
+    })
+    await expect(plan({ cwd: '.', include: include as string[] })).rejects.toMatchObject({
+      code: 'ERR_CONFIG',
+      reason: 'INVALID_CONFIG',
+      message: 'Plan options must be plain JSON data.',
+    })
+    expect(traps).toBe(0)
+  })
+
+  it('blocks secret-bearing occurrence keys without exposing an inexact operation', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'depfresh-plan-secret-key-'))
+    writeFileSync(
+      join(root, 'package.json'),
+      JSON.stringify({
+        name: 'fixture',
+        dependencies: { 'token=supersecret': '^1.0.0' },
+      }),
+    )
+
+    const result = await plan({ cwd: root, exclude: ['*'] })
+    const serialized = JSON.stringify(result)
+
+    expect(result.operations).toHaveLength(0)
+    expect(result.decisions[0]).toMatchObject({
+      status: 'blocked',
+      reason: 'SENSITIVE_VALUE_REDACTED',
+    })
+    expect(serialized).not.toContain('supersecret')
+  })
+
+  it('retains successful operations when another registry resolution is unavailable', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'depfresh-plan-partial-'))
+    writeFileSync(
+      join(root, 'package.json'),
+      JSON.stringify({
+        name: 'fixture',
+        dependencies: { alpha: '^1.0.0', beta: '^1.0.0' },
+      }),
+    )
+    fetchPackageData.mockImplementation(async (name: string) => {
+      if (name === 'beta') throw new Error('token=must-not-leak')
+      return { name, versions: ['1.0.0', '2.0.0'], distTags: { latest: '2.0.0' } }
+    })
+
+    const result = await plan({ cwd: root, mode: 'latest' })
+
+    expect(result.operations.map((operation) => operation.name)).toEqual(['alpha'])
+    expect(result.decisions.map((decision) => decision.status).sort()).toEqual([
+      'operation',
+      'unknown',
+    ])
+    expect(result.errors).toHaveLength(1)
+    expect(JSON.stringify(result)).not.toContain('must-not-leak')
+  })
+
+  it.each([
+    ['NO_VALID_VERSIONS', { versions: [], distTags: {} }],
+    [
+      'MISSING_PUBLISH_TIME',
+      { versions: ['1.0.0', '2.0.0'], distTags: { latest: '2.0.0' }, time: {} },
+    ],
+    ['DIST_TAG_MISSING', { versions: ['1.0.0', '2.0.0'], distTags: {} }],
+  ])('keeps incomplete candidate evidence unknown: %s', async (reason, packageData) => {
+    const root = mkdtempSync(join(tmpdir(), 'depfresh-plan-unknown-'))
+    writeFileSync(
+      join(root, 'package.json'),
+      JSON.stringify({ name: 'fixture', dependencies: { alpha: '^1.0.0' } }),
+    )
+    fetchPackageData.mockResolvedValue({ name: 'alpha', ...packageData })
+
+    const result = await plan({
+      cwd: root,
+      mode: 'latest',
+      ...(reason === 'MISSING_PUBLISH_TIME'
+        ? { cooldown: 1, asOf: '2020-01-03T00:00:00.000Z' }
+        : {}),
+    })
+
+    expect(result.decisions[0]).toMatchObject({ status: 'unknown', reason })
+    expect(result.summary.unknown).toBe(1)
+    expect(result.errors).toHaveLength(1)
+  })
+
+  it('keeps safety-filtered candidates blocked instead of unchanged', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'depfresh-plan-blocked-'))
+    writeFileSync(
+      join(root, 'package.json'),
+      JSON.stringify({ name: 'fixture', dependencies: { alpha: '^1.0.0' } }),
+    )
+    fetchPackageData.mockResolvedValue({
+      name: 'alpha',
+      versions: ['2.0.0-beta.1'],
+      distTags: { latest: '2.0.0-beta.1' },
+    })
+
+    const result = await plan({ cwd: root, mode: 'latest' })
+
+    expect(result.decisions[0]).toMatchObject({
+      status: 'blocked',
+      reason: 'PRERELEASE_CHANNEL_BLOCKED',
+    })
+    expect(result.summary.blocked).toBe(1)
+  })
+
+  it('keeps dynamic and unsupported declarations as explicit skips', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'depfresh-plan-skips-'))
+    writeFileSync(
+      join(root, 'package.json'),
+      JSON.stringify({
+        name: 'fixture',
+        dependencies: { alpha: 'latest', beta: '>=1.0.0 <2.0.0' },
+      }),
+    )
+
+    const result = await plan({ cwd: root })
+
+    expect(result.decisions.map((decision) => [decision.status, decision.reason])).toEqual(
+      expect.arrayContaining([
+        ['skipped', 'DYNAMIC_DIST_TAG'],
+        ['skipped', 'COMPLEX_RANGE_UNSUPPORTED'],
+      ]),
+    )
+  })
+
+  it('retains the finalized candidate-unchanged policy trace', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'depfresh-plan-final-policy-'))
+    writeFileSync(
+      join(root, 'package.json'),
+      JSON.stringify({ name: 'fixture', dependencies: { alpha: '^1.0.0' } }),
+    )
+    fetchPackageData.mockResolvedValue({
+      name: 'alpha',
+      versions: ['1.0.0'],
+      distTags: { latest: '1.0.0' },
+    })
+
+    const result = await plan({ cwd: root })
+
+    expect(result.decisions[0]).toMatchObject({
+      status: 'unchanged',
+      reason: 'CURRENT_VERSION_SELECTED',
+      policy: {
+        status: 'unchanged',
+        reason: 'POLICY_CANDIDATE_UNCHANGED',
+        candidateReason: 'CURRENT_VERSION_SELECTED',
+      },
+    })
+  })
+
+  it('uses declarative config policy without evaluating code', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'depfresh-plan-config-'))
+    writeFileSync(
+      join(root, 'package.json'),
+      JSON.stringify({
+        name: 'fixture',
+        dependencies: { alpha: '^1.0.0' },
+        depfresh: { exclude: ['alpha'] },
+      }),
+    )
+
+    const result = await plan({ cwd: root, mode: 'latest' })
+
+    expect(result.operations).toHaveLength(0)
+    expect(result.decisions[0]).toMatchObject({ status: 'skipped', reason: 'POLICY_RULE_EXCLUDED' })
+    expect(fetchPackageData).not.toHaveBeenCalled()
+  })
+
+  it('classifies locked and disabled fields without inventing resolution failures', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'depfresh-plan-scope-'))
+    writeFileSync(
+      join(root, 'package.json'),
+      JSON.stringify({
+        name: 'fixture',
+        dependencies: { alpha: '1.0.0' },
+        peerDependencies: { beta: '^1.0.0' },
+      }),
+    )
+
+    const result = await plan({ cwd: root })
+
+    expect(result.operations).toHaveLength(0)
+    expect(result.errors).toHaveLength(0)
+    expect(result.decisions.map((decision) => [decision.status, decision.reason])).toEqual(
+      expect.arrayContaining([
+        ['skipped', 'LOCKED_DECLARATION_EXCLUDED'],
+        ['skipped', 'RESOLUTION_SCOPE_EXCLUDED'],
+      ]),
+    )
+    expect(fetchPackageData).not.toHaveBeenCalled()
+  })
+
+  it('preserves alias, workspace, and package-manager storage syntax in exact operations', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'depfresh-plan-protocols-'))
+    writeFileSync(
+      join(root, 'package.json'),
+      JSON.stringify({
+        name: 'fixture',
+        packageManager: 'pnpm@10.0.0+sha512.fixture',
+        dependencies: {
+          alias: 'npm:alpha@^1.0.0',
+          workspaceAlpha: 'workspace:^1.0.0',
+        },
+      }),
+    )
+    fetchPackageData.mockImplementation(async (name: string) =>
+      name === 'pnpm'
+        ? { name, versions: ['10.0.0', '11.0.0'], distTags: { latest: '11.0.0' } }
+        : { name, versions: ['1.0.0', '2.0.0'], distTags: { latest: '2.0.0' } },
+    )
+
+    const result = await plan({ cwd: root, mode: 'latest' })
+
+    expect(
+      result.operations.map(({ expectedValue, requestedValue }) => [expectedValue, requestedValue]),
+    ).toEqual(
+      expect.arrayContaining([
+        ['npm:alpha@^1.0.0', 'npm:alpha@^2.0.0'],
+        ['workspace:^1.0.0', 'workspace:^2.0.0'],
+        ['pnpm@10.0.0+sha512.fixture', 'pnpm@11.0.0+sha512.fixture'],
+      ]),
+    )
+  })
+
+  it('plans a physical catalog owner once and keeps its consumer explanatory', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'depfresh-plan-catalog-'))
+    writeFileSync(
+      join(root, 'package.json'),
+      JSON.stringify({
+        name: 'fixture',
+        private: true,
+        packageManager: 'bun@1.0.0',
+        workspaces: {
+          packages: ['.'],
+          catalogs: { native: { react: '^18.0.0' } },
+        },
+        dependencies: { react: 'catalog:native' },
+      }),
+    )
+    fetchPackageData.mockImplementation(async (name: string) =>
+      name === 'bun'
+        ? { name, versions: ['1.0.0', '2.0.0'], distTags: { latest: '2.0.0' } }
+        : { name, versions: ['18.0.0', '19.0.0'], distTags: { latest: '19.0.0' } },
+    )
+
+    const result = await plan({ cwd: root, mode: 'latest' })
+    const reactOperations = result.operations.filter((operation) => operation.name === 'react')
+    const consumer = result.decisions.find(
+      (decision) =>
+        result.occurrences.find((occurrence) => occurrence.id === decision.occurrenceId)?.role ===
+        'catalog-consumer',
+    )
+
+    expect(reactOperations).toHaveLength(1)
+    expect(reactOperations[0]).toMatchObject({
+      path: ['workspaces', 'catalogs', 'native', 'react'],
+      expectedValue: '^18.0.0',
+      requestedValue: '^19.0.0',
+    })
+    expect(consumer).toMatchObject({
+      status: 'skipped',
+      reason: 'CATALOG_CONSUMER_EXPLANATORY',
+    })
+  })
+
+  it('requires a semantic time for cooldown and fingerprints it', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'depfresh-plan-time-'))
+    writeFileSync(
+      join(root, 'package.json'),
+      JSON.stringify({ name: 'fixture', dependencies: { alpha: '^1.0.0' } }),
+    )
+    fetchPackageData.mockResolvedValue({
+      name: 'alpha',
+      versions: ['1.0.0', '2.0.0'],
+      distTags: { latest: '2.0.0' },
+      time: { '1.0.0': '2020-01-01T00:00:00.000Z', '2.0.0': '2020-01-02T00:00:00.000Z' },
+    })
+
+    await expect(plan({ cwd: root, cooldown: 1 })).rejects.toThrow(/--as-of/u)
+    const first = await plan({
+      cwd: root,
+      cooldown: 1,
+      mode: 'latest',
+      asOf: '2020-01-04T00:00:00.000Z',
+    })
+    const second = await plan({
+      cwd: root,
+      cooldown: 1,
+      mode: 'latest',
+      asOf: '2020-01-05T00:00:00.000Z',
+    })
+
+    expect(first.planFingerprint).not.toBe(second.planFingerprint)
+  })
+
+  it('is byte-identical for cloned repositories with the same registry evidence', async () => {
+    const firstRoot = mkdtempSync(join(tmpdir(), 'depfresh-plan-clone-a-'))
+    const secondRoot = mkdtempSync(join(tmpdir(), 'depfresh-plan-clone-b-'))
+    const manifest = '{"name":"fixture","dependencies":{"alpha":"^1.0.0"}}\n'
+    writeFileSync(join(firstRoot, 'package.json'), manifest)
+    writeFileSync(join(secondRoot, 'package.json'), manifest)
+
+    expect(JSON.stringify(await plan({ cwd: secondRoot, mode: 'latest' }))).toBe(
+      JSON.stringify(await plan({ cwd: firstRoot, mode: 'latest' })),
+    )
+  })
+})

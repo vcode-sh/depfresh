@@ -1,0 +1,597 @@
+import type { FromSchema, JSONSchema } from 'json-schema-to-ts'
+
+const hashSchema = { type: 'string', pattern: '^[a-f0-9]{64}$' } as const
+const relativePathSchema = {
+  type: 'string',
+  minLength: 1,
+  pattern: '^(?!/)(?![A-Za-z]:/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*\\\\).+$',
+} as const
+
+const commonDefinitions = {
+  source: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['path', 'byteHash'],
+    properties: {
+      path: relativePathSchema,
+      byteHash: hashSchema,
+    },
+  },
+  repository: {
+    type: 'object',
+    additionalProperties: false,
+    required: [
+      'identity',
+      'fingerprint',
+      'modelSchemaVersion',
+      'sources',
+      'boundaries',
+      'sourceFiles',
+      'packages',
+      'catalogs',
+      'runtimeDeclarations',
+      'relationships',
+    ],
+    properties: {
+      identity: { type: 'string', minLength: 1 },
+      fingerprint: hashSchema,
+      modelSchemaVersion: { const: 1 },
+      sources: { type: 'array', items: { $ref: '#/definitions/source' } },
+      root: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['id', 'path', 'discoveryMode', 'evidenceId'],
+        properties: {
+          id: { type: 'string', minLength: 1 },
+          path: { const: '.' },
+          discoveryMode: { enum: ['direct-root', 'inside-project', 'parent-folder'] },
+          evidenceId: { type: 'string', minLength: 1 },
+        },
+      },
+      boundaries: { type: 'array', items: { $ref: '#/definitions/boundary' } },
+      sourceFiles: { type: 'array', items: { $ref: '#/definitions/sourceFile' } },
+      packages: { type: 'array', items: { $ref: '#/definitions/package' } },
+      catalogs: { type: 'array', items: { $ref: '#/definitions/catalog' } },
+      runtimeDeclarations: {
+        type: 'array',
+        items: { $ref: '#/definitions/runtimeDeclaration' },
+      },
+      relationships: { $ref: '#/definitions/relationships' },
+    },
+  },
+  boundary: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['id', 'path', 'classification', 'markers'],
+    properties: {
+      id: { type: 'string', minLength: 1 },
+      path: relativePathSchema,
+      classification: { enum: ['effective-root', 'nested-workspace', 'nested-git'] },
+      markers: {
+        type: 'array',
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['id', 'kind', 'path'],
+          properties: {
+            id: { type: 'string', minLength: 1 },
+            kind: {
+              enum: ['pnpm-workspace', 'yarn-workspace', 'manifest-workspaces', 'git-repo'],
+            },
+            path: relativePathSchema,
+          },
+        },
+      },
+    },
+  },
+  sourceFile: {
+    type: 'object',
+    additionalProperties: false,
+    required: [
+      'id',
+      'path',
+      'format',
+      'byteHash',
+      'parseState',
+      'indent',
+      'newline',
+      'trailingNewline',
+    ],
+    properties: {
+      id: { type: 'string', minLength: 1 },
+      path: relativePathSchema,
+      format: { enum: ['json', 'yaml'] },
+      byteHash: hashSchema,
+      parseState: { enum: ['parsed', 'error'] },
+      indent: { type: 'string' },
+      newline: { enum: ['lf', 'crlf', 'mixed', 'none'] },
+      trailingNewline: { type: 'boolean' },
+    },
+  },
+  package: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['id', 'sourceFileId', 'path', 'workspacePath', 'name', 'private'],
+    properties: {
+      id: { type: 'string', minLength: 1 },
+      sourceFileId: { type: 'string', minLength: 1 },
+      path: relativePathSchema,
+      workspacePath: relativePathSchema,
+      name: { type: 'string' },
+      private: { type: 'boolean' },
+    },
+  },
+  catalog: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['id', 'sourceFileId', 'manager', 'format', 'name', 'entries'],
+    properties: {
+      id: { type: 'string', minLength: 1 },
+      sourceFileId: { type: 'string', minLength: 1 },
+      manager: { enum: ['pnpm', 'bun', 'yarn'] },
+      format: { enum: ['json', 'yaml'] },
+      name: { type: 'string' },
+      entries: {
+        type: 'array',
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['name', 'occurrenceId'],
+          properties: {
+            name: { type: 'string', minLength: 1 },
+            occurrenceId: { type: 'string', minLength: 1 },
+          },
+        },
+      },
+    },
+  },
+  runtimeDeclaration: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['id', 'boundaryId', 'kind', 'path', 'declaredText'],
+    properties: {
+      id: { type: 'string', minLength: 1 },
+      boundaryId: { type: 'string', minLength: 1 },
+      kind: { enum: ['engines-node', 'nvmrc', 'node-version', 'tool-versions-nodejs'] },
+      path: relativePathSchema,
+      field: { type: 'string' },
+      declaredText: { type: 'string' },
+      byteHash: hashSchema,
+    },
+  },
+  relationships: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['workspaceMembers', 'catalogConsumers', 'boundaryPackages', 'lockfileBoundaries'],
+    properties: {
+      workspaceMembers: {
+        type: 'array',
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['workspaceId', 'packageId'],
+          properties: {
+            workspaceId: { type: 'string', minLength: 1 },
+            packageId: { type: 'string', minLength: 1 },
+          },
+        },
+      },
+      catalogConsumers: {
+        type: 'array',
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['catalogId', 'occurrenceId'],
+          properties: {
+            catalogId: { type: 'string', minLength: 1 },
+            occurrenceId: { type: 'string', minLength: 1 },
+          },
+        },
+      },
+      boundaryPackages: {
+        type: 'array',
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['boundaryId', 'packageId'],
+          properties: {
+            boundaryId: { type: 'string', minLength: 1 },
+            packageId: { type: 'string', minLength: 1 },
+          },
+        },
+      },
+      lockfileBoundaries: {
+        type: 'array',
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['lockfileId', 'boundaryId'],
+          properties: {
+            lockfileId: { type: 'string', minLength: 1 },
+            boundaryId: { type: 'string', minLength: 1 },
+          },
+        },
+      },
+    },
+  },
+  diagnostic: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['code', 'path'],
+    properties: {
+      code: { type: 'string', minLength: 1 },
+      path: relativePathSchema,
+      detail: { type: 'string' },
+    },
+  },
+  occurrence: {
+    type: 'object',
+    additionalProperties: false,
+    required: [
+      'id',
+      'ownerId',
+      'sourceFileId',
+      'file',
+      'name',
+      'path',
+      'field',
+      'role',
+      'protocol',
+      'declaredValue',
+      'writeable',
+    ],
+    properties: {
+      id: { type: 'string', minLength: 1 },
+      ownerId: { type: 'string', minLength: 1 },
+      sourceFileId: { type: 'string', minLength: 1 },
+      file: relativePathSchema,
+      name: { type: 'string', minLength: 1 },
+      path: { type: 'array', minItems: 1, items: { type: 'string' } },
+      field: { type: 'string', minLength: 1 },
+      role: {
+        enum: ['dependency', 'override', 'package-manager', 'catalog-owner', 'catalog-consumer'],
+      },
+      protocol: {
+        enum: [
+          'semver',
+          'npm',
+          'jsr',
+          'github',
+          'workspace',
+          'catalog',
+          'file',
+          'link',
+          'git',
+          'http',
+          'unknown',
+        ],
+      },
+      declaredValue: { type: 'string' },
+      writeable: { type: 'boolean' },
+      catalogId: { type: 'string', minLength: 1 },
+    },
+  },
+  evidence: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['id', 'kind', 'status', 'values', 'sources', 'diagnostics'],
+    properties: {
+      id: { type: 'string', minLength: 1 },
+      kind: {
+        enum: ['root', 'workspace', 'package-manager', 'lockfile-selection', 'runtime', 'vcs'],
+      },
+      boundaryId: { type: 'string', minLength: 1 },
+      status: { enum: ['confirmed', 'ambiguous', 'missing', 'unsupported', 'unavailable'] },
+      values: { type: 'array', items: { $ref: '#/definitions/jsonValue' } },
+      sources: { type: 'array', items: { $ref: '#/definitions/evidenceSource' } },
+      diagnostics: { type: 'array', items: { $ref: '#/definitions/diagnostic' } },
+    },
+  },
+  evidenceSource: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['id', 'kind', 'path'],
+    properties: {
+      id: { type: 'string', minLength: 1 },
+      kind: { enum: ['file', 'field', 'probe'] },
+      path: relativePathSchema,
+      field: { type: 'array', items: { type: 'string' } },
+      probe: { enum: ['discovery', 'git'] },
+      byteHash: hashSchema,
+    },
+  },
+  jsonValue: {
+    anyOf: [
+      { type: 'null' },
+      { type: 'boolean' },
+      { type: 'number' },
+      { type: 'string' },
+      { type: 'array' },
+      { type: 'object' },
+    ],
+  },
+  lockfile: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['id', 'boundaryId', 'manager', 'path', 'parseState'],
+    properties: {
+      id: { type: 'string', minLength: 1 },
+      boundaryId: { type: 'string', minLength: 1 },
+      manager: { enum: ['npm', 'pnpm', 'yarn', 'bun'] },
+      path: relativePathSchema,
+      byteHash: hashSchema,
+      parseState: { enum: ['parsed', 'error', 'unsupported', 'unavailable'] },
+      formatVersion: { type: 'string' },
+    },
+  },
+  vcs: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['status', 'targetFiles', 'unrelatedDirtyPaths', 'diagnostics'],
+    properties: {
+      status: { enum: ['confirmed', 'unavailable'] },
+      shallow: { type: 'boolean' },
+      targetFiles: {
+        type: 'array',
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['path', 'state'],
+          properties: {
+            path: relativePathSchema,
+            state: {
+              enum: [
+                'clean',
+                'staged',
+                'unstaged',
+                'staged-plus-unstaged',
+                'added',
+                'deleted',
+                'renamed',
+                'conflicted',
+                'untracked',
+                'ignored',
+              ],
+            },
+            originalPath: relativePathSchema,
+          },
+        },
+      },
+      unrelatedDirtyPaths: { type: 'array', items: relativePathSchema },
+      diagnostics: { type: 'array', items: { $ref: '#/definitions/diagnostic' } },
+    },
+  },
+  error: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['code', 'reason', 'message', 'retryable', 'fatal'],
+    properties: {
+      code: { type: 'string', minLength: 1 },
+      reason: { type: 'string', minLength: 1 },
+      message: { type: 'string' },
+      retryable: { type: 'boolean' },
+      fatal: { type: 'boolean' },
+      occurrenceId: { type: 'string', minLength: 1 },
+    },
+  },
+  risk: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['code', 'severity', 'message', 'evidenceRefs'],
+    properties: {
+      code: { type: 'string', minLength: 1 },
+      severity: { enum: ['info', 'warning', 'blocking'] },
+      message: { type: 'string' },
+      occurrenceId: { type: 'string', minLength: 1 },
+      evidenceRefs: { type: 'array', items: { type: 'string', minLength: 1 } },
+    },
+  },
+} as const
+
+export const INSPECT_SCHEMA_ID = 'https://depfresh.dev/schemas/inspect-v1.schema.json'
+export const PLAN_SCHEMA_ID = 'https://depfresh.dev/schemas/plan-v1.schema.json'
+export const COMMAND_ERROR_SCHEMA_ID = 'https://depfresh.dev/schemas/error-v1.schema.json'
+
+export const inspectResultSchema = {
+  $schema: 'http://json-schema.org/draft-07/schema#',
+  $id: INSPECT_SCHEMA_ID,
+  title: 'depfresh inspect contract v1',
+  type: 'object',
+  additionalProperties: false,
+  required: [
+    'contract',
+    'schemaVersion',
+    'toolVersion',
+    'repository',
+    'occurrences',
+    'evidence',
+    'lockfiles',
+    'vcs',
+    'diagnostics',
+    'risks',
+    'errors',
+    'requiredCapabilities',
+  ],
+  properties: {
+    contract: { const: 'depfresh.inspect' },
+    schemaVersion: { const: 1 },
+    toolVersion: { type: 'string', minLength: 1 },
+    repository: { $ref: '#/definitions/repository' },
+    occurrences: { type: 'array', items: { $ref: '#/definitions/occurrence' } },
+    evidence: { type: 'array', items: { $ref: '#/definitions/evidence' } },
+    lockfiles: { type: 'array', items: { $ref: '#/definitions/lockfile' } },
+    vcs: { $ref: '#/definitions/vcs' },
+    diagnostics: { type: 'array', items: { $ref: '#/definitions/diagnostic' } },
+    risks: { type: 'array', items: { $ref: '#/definitions/risk' } },
+    errors: { type: 'array', items: { $ref: '#/definitions/error' } },
+    requiredCapabilities: {
+      type: 'array',
+      items: { enum: ['filesystem-read'] },
+    },
+  },
+  definitions: commonDefinitions,
+} as const satisfies JSONSchema
+
+const policyDecisionSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['status', 'reason', 'action', 'mode', 'matchedRuleIds', 'indeterminateRuleIds'],
+  properties: {
+    status: { enum: ['selected', 'skipped', 'blocked', 'unchanged'] },
+    reason: {
+      enum: [
+        'POLICY_DEFAULT_INCLUDED',
+        'POLICY_RULE_INCLUDED',
+        'POLICY_RULE_EXCLUDED',
+        'POLICY_MANAGER_UNKNOWN',
+        'POLICY_CANDIDATE_UNCHANGED',
+      ],
+    },
+    action: { enum: ['include', 'exclude'] },
+    mode: { enum: ['default', 'major', 'minor', 'patch', 'latest', 'newest', 'next'] },
+    matchedRuleIds: { type: 'array', items: { type: 'string' } },
+    indeterminateRuleIds: { type: 'array', items: { type: 'string' } },
+    winningActionRuleId: { type: 'string' },
+    winningModeRuleId: { type: 'string' },
+    candidateReason: { type: 'string' },
+  },
+} as const
+
+export const planResultSchema = {
+  $schema: 'http://json-schema.org/draft-07/schema#',
+  $id: PLAN_SCHEMA_ID,
+  title: 'depfresh plan contract v1',
+  type: 'object',
+  additionalProperties: false,
+  required: [
+    'contract',
+    'schemaVersion',
+    'toolVersion',
+    'repository',
+    'asOf',
+    'occurrences',
+    'decisions',
+    'operations',
+    'evidence',
+    'lockfiles',
+    'vcs',
+    'diagnostics',
+    'risks',
+    'errors',
+    'requiredCapabilities',
+    'summary',
+    'planFingerprint',
+  ],
+  properties: {
+    contract: { const: 'depfresh.plan' },
+    schemaVersion: { const: 1 },
+    toolVersion: { type: 'string', minLength: 1 },
+    repository: { $ref: '#/definitions/repository' },
+    asOf: {
+      type: 'string',
+      pattern: '^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$',
+    },
+    occurrences: { type: 'array', items: { $ref: '#/definitions/occurrence' } },
+    decisions: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['occurrenceId', 'status', 'reason', 'policy'],
+        properties: {
+          occurrenceId: { type: 'string', minLength: 1 },
+          status: { enum: ['operation', 'unchanged', 'skipped', 'blocked', 'unknown', 'error'] },
+          reason: { type: 'string', minLength: 1 },
+          operationId: { type: 'string', minLength: 1 },
+          candidate: {
+            type: 'object',
+            additionalProperties: false,
+            required: ['reason', 'eligibleVersions'],
+            properties: {
+              reason: { type: 'string', minLength: 1 },
+              eligibleVersions: { type: 'array', items: { type: 'string' } },
+              targetVersion: { type: 'string' },
+            },
+          },
+          policy: policyDecisionSchema,
+        },
+      },
+    },
+    operations: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: [
+          'id',
+          'occurrenceId',
+          'sourceFileId',
+          'file',
+          'path',
+          'name',
+          'sourceByteHash',
+          'expectedValue',
+          'requestedValue',
+        ],
+        properties: {
+          id: { type: 'string', minLength: 1 },
+          occurrenceId: { type: 'string', minLength: 1 },
+          sourceFileId: { type: 'string', minLength: 1 },
+          file: relativePathSchema,
+          path: { type: 'array', minItems: 1, items: { type: 'string' } },
+          name: { type: 'string', minLength: 1 },
+          sourceByteHash: hashSchema,
+          expectedValue: { type: 'string' },
+          requestedValue: { type: 'string' },
+        },
+      },
+    },
+    evidence: { type: 'array', items: { $ref: '#/definitions/evidence' } },
+    lockfiles: { type: 'array', items: { $ref: '#/definitions/lockfile' } },
+    vcs: { $ref: '#/definitions/vcs' },
+    diagnostics: { type: 'array', items: { $ref: '#/definitions/diagnostic' } },
+    risks: { type: 'array', items: { $ref: '#/definitions/risk' } },
+    errors: { type: 'array', items: { $ref: '#/definitions/error' } },
+    requiredCapabilities: {
+      type: 'array',
+      items: { enum: ['filesystem-read', 'registry-read', 'file-write'] },
+    },
+    summary: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['total', 'operations', 'unchanged', 'skipped', 'blocked', 'unknown', 'errors'],
+      properties: {
+        total: { type: 'integer', minimum: 0 },
+        operations: { type: 'integer', minimum: 0 },
+        unchanged: { type: 'integer', minimum: 0 },
+        skipped: { type: 'integer', minimum: 0 },
+        blocked: { type: 'integer', minimum: 0 },
+        unknown: { type: 'integer', minimum: 0 },
+        errors: { type: 'integer', minimum: 0 },
+      },
+    },
+    planFingerprint: hashSchema,
+  },
+  definitions: commonDefinitions,
+} as const satisfies JSONSchema
+
+export const commandErrorSchema = {
+  $schema: 'http://json-schema.org/draft-07/schema#',
+  $id: COMMAND_ERROR_SCHEMA_ID,
+  title: 'depfresh machine command error v1',
+  type: 'object',
+  additionalProperties: false,
+  required: ['contract', 'schemaVersion', 'toolVersion', 'command', 'errors'],
+  properties: {
+    contract: { const: 'depfresh.error' },
+    schemaVersion: { const: 1 },
+    toolVersion: { type: 'string', minLength: 1 },
+    command: { enum: ['inspect', 'plan'] },
+    errors: { type: 'array', minItems: 1, items: { $ref: '#/definitions/error' } },
+  },
+  definitions: commonDefinitions,
+} as const satisfies JSONSchema
+
+export type InspectResult = FromSchema<typeof inspectResultSchema>
+export type PlanResult = FromSchema<typeof planResultSchema>
+export type MachineCommandError = FromSchema<typeof commandErrorSchema>

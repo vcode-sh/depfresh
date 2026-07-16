@@ -88,13 +88,24 @@ async function loadJsonFile(filePath: string): Promise<Partial<depfreshOptions> 
   }
 }
 
-async function loadConfigFile(cwd: string): Promise<Partial<depfreshOptions> | undefined> {
+async function loadConfigFile(
+  cwd: string,
+  dataOnly = false,
+): Promise<Partial<depfreshOptions> | undefined> {
   for (const file of CONFIG_FILES) {
     const filePath = join(cwd, file)
     if (!(await exists(filePath))) continue
 
-    if (TS_RE.test(file)) return loadTsFile(filePath)
-    if (JS_RE.test(file)) return loadJsFile(filePath)
+    if (TS_RE.test(file) || JS_RE.test(file)) {
+      if (dataOnly) {
+        throw new ConfigError(
+          `Machine planning cannot evaluate executable configuration: ${file}`,
+          { reason: 'EXECUTABLE_CONFIG_FORBIDDEN' },
+        )
+      }
+      if (TS_RE.test(file)) return loadTsFile(filePath)
+      return loadJsFile(filePath)
+    }
     return loadJsonFile(filePath)
   }
 
@@ -136,9 +147,24 @@ export async function resolveConfigForSource(
   overrides: Partial<depfreshOptions>,
   invocationSource: Extract<PolicyRuleSource, 'library' | 'cli'> = 'library',
 ): Promise<depfreshOptions> {
+  return resolveConfigWithLoader(overrides, invocationSource, false)
+}
+
+export async function resolveDataConfigForSource(
+  overrides: Partial<depfreshOptions>,
+  invocationSource: Extract<PolicyRuleSource, 'library' | 'cli'> = 'library',
+): Promise<depfreshOptions> {
+  return resolveConfigWithLoader(overrides, invocationSource, true)
+}
+
+async function resolveConfigWithLoader(
+  overrides: Partial<depfreshOptions>,
+  invocationSource: Extract<PolicyRuleSource, 'library' | 'cli'>,
+  dataOnly: boolean,
+): Promise<depfreshOptions> {
   const requestedCwd = overrides.cwd || process.cwd()
   const discovery = resolveDiscoveryContext(requestedCwd)
-  const fileConfig = await loadConfigFile(discovery.effectiveRoot)
+  const fileConfig = await loadConfigFile(discovery.effectiveRoot, dataOnly)
   const safeFileConfig = removeInvocationOnlyOptions(fileConfig)
   const merged = defu(overrides, safeFileConfig, DEFAULT_OPTIONS) as depfreshOptions
   if (overrides.include !== undefined) {

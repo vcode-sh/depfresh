@@ -3,6 +3,7 @@ import type { Cache } from '../../cache/index'
 import type {
   depfreshOptions,
   PackageData,
+  PolicyCandidateReason,
   RawDep,
   ResolvedDepChange,
   SignaturePresence,
@@ -21,7 +22,7 @@ import {
 import { fetchPackageData } from '../registry'
 import { getPackageMode } from '../resolve-mode'
 import { getResolveCachePolicy } from './cache-policy'
-import type { ResolveContext } from './context'
+import { type ResolveContext, recordResolutionTrace } from './context'
 import { selectVersionCandidate, type VersionCandidateSelection } from './version-filter'
 
 export async function resolveDependency(
@@ -43,6 +44,11 @@ export async function resolveDependency(
 
   if (dep.protocol === 'workspace' && !normalizedCurrentVersion) {
     logger.debug(`Skipping workspace dependency without explicit version: ${packageName}`)
+    recordResolutionTrace(resolveContext, dep.occurrenceId, {
+      status: 'skipped',
+      reason: 'WORKSPACE_VERSION_DYNAMIC',
+      eligibleVersions: [],
+    })
     return null
   }
   const currentVersion = normalizedCurrentVersion ?? dep.currentVersion
@@ -50,6 +56,11 @@ export async function resolveDependency(
   // Skip private workspace packages — no point hitting the registry for local deps
   if (privatePackages?.has(packageName) && dep.protocol !== 'workspace') {
     logger.debug(`Skipping private workspace package: ${packageName}`)
+    recordResolutionTrace(resolveContext, dep.occurrenceId, {
+      status: 'skipped',
+      reason: 'PRIVATE_WORKSPACE_PACKAGE',
+      eligibleVersions: [],
+    })
     return null
   }
 
@@ -62,6 +73,11 @@ export async function resolveDependency(
   // Skip if mode is 'ignore'
   if (mode === 'ignore') {
     logger.debug(`Ignoring ${packageName} (mode: ignore)`)
+    recordResolutionTrace(resolveContext, dep.occurrenceId, {
+      status: 'skipped',
+      reason: 'MODE_IGNORED',
+      eligibleVersions: [],
+    })
     return null
   }
 
@@ -105,6 +121,11 @@ export async function resolveDependency(
       }
     } catch (error) {
       logger.debug(`Failed to fetch ${packageName}: ${error}`)
+      recordResolutionTrace(resolveContext, dep.occurrenceId, {
+        status: 'unknown',
+        reason: 'REGISTRY_UNAVAILABLE',
+        eligibleVersions: [],
+      })
       return {
         ...dep,
         targetVersion: dep.currentVersion,
@@ -121,6 +142,11 @@ export async function resolveDependency(
     currentVersion in pkgData.distTags
   ) {
     logger.debug(`Skipping ${dep.name}: version "${currentVersion}" is a dist-tag`)
+    recordResolutionTrace(resolveContext, dep.occurrenceId, {
+      status: 'skipped',
+      reason: 'DYNAMIC_DIST_TAG',
+      eligibleVersions: [],
+    })
     return null
   }
 
@@ -129,6 +155,11 @@ export async function resolveDependency(
     logger.debug(
       `Skipping ${dep.name}: version "${currentVersion}" is a complex range depfresh cannot rewrite faithfully`,
     )
+    recordResolutionTrace(resolveContext, dep.occurrenceId, {
+      status: 'skipped',
+      reason: 'COMPLEX_RANGE_UNSUPPORTED',
+      eligibleVersions: [],
+    })
     return null
   }
 
@@ -138,16 +169,28 @@ export async function resolveDependency(
     mode,
     includeLocked: options.includeLocked,
     cooldown: options.cooldown,
+    ...(resolveContext?.now === undefined ? {} : { now: resolveContext.now }),
   })
   onCandidateSelection?.(selection)
   logger.debug(`Candidate selection for ${packageName}: ${selection.reason}`)
   const targetVersion = selection.targetVersion
 
   if (!targetVersion) {
+    recordResolutionTrace(resolveContext, dep.occurrenceId, {
+      status: candidateTraceStatus(selection.reason),
+      reason: selection.reason,
+      eligibleVersions: selection.eligibleVersions,
+    })
     return null
   }
 
   if (specShape === 'x-range' && semver.satisfies(targetVersion, currentVersion)) {
+    recordResolutionTrace(resolveContext, dep.occurrenceId, {
+      status: 'unchanged',
+      reason: 'RANGE_ALREADY_SATISFIES_TARGET',
+      eligibleVersions: selection.eligibleVersions,
+      targetVersion,
+    })
     return null
   }
 
@@ -158,11 +201,23 @@ export async function resolveDependency(
   const diff = getDiff(currentVersion, targetVersion)
 
   if (prefixedTarget === currentVersion) {
+    recordResolutionTrace(resolveContext, dep.occurrenceId, {
+      status: 'unchanged',
+      reason: 'CURRENT_VALUE_SELECTED',
+      eligibleVersions: selection.eligibleVersions,
+      targetVersion,
+    })
     return null
   }
 
   // Skip if no change
   if (diff === 'none' && !options.force) {
+    recordResolutionTrace(resolveContext, dep.occurrenceId, {
+      status: 'unchanged',
+      reason: 'NO_SEMANTIC_CHANGE',
+      eligibleVersions: selection.eligibleVersions,
+      targetVersion,
+    })
     return null
   }
 
@@ -176,6 +231,12 @@ export async function resolveDependency(
     ? semver.satisfies(process.version, nodeCompat)
     : undefined
 
+  recordResolutionTrace(resolveContext, dep.occurrenceId, {
+    status: 'selected',
+    reason: selection.reason,
+    eligibleVersions: selection.eligibleVersions,
+    targetVersion,
+  })
   return {
     ...dep,
     currentVersion,
@@ -190,6 +251,30 @@ export async function resolveDependency(
     currentSignaturePresence,
     nodeCompat,
     nodeCompatible,
+  }
+}
+
+function candidateTraceStatus(
+  reason: PolicyCandidateReason,
+): 'unchanged' | 'skipped' | 'blocked' | 'unknown' {
+  switch (reason) {
+    case 'CURRENT_VERSION_SELECTED':
+    case 'MODE_NO_MATCH':
+      return 'unchanged'
+    case 'CURRENT_VERSION_INVALID':
+      return 'skipped'
+    case 'PRERELEASE_CHANNEL_BLOCKED':
+    case 'DEPRECATED_CANDIDATE_BLOCKED':
+    case 'MATURITY_CANDIDATE_BLOCKED':
+    case 'DOWNGRADE_BLOCKED':
+      return 'blocked'
+    case 'NO_VALID_VERSIONS':
+    case 'DIST_TAG_MISSING':
+    case 'DIST_TAG_NOT_ELIGIBLE':
+    case 'MISSING_PUBLISH_TIME':
+      return 'unknown'
+    case 'SELECTED':
+      return 'unknown'
   }
 }
 

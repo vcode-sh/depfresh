@@ -63,6 +63,23 @@ depfresh --help-json
 depfresh --write --mode minor
 ```
 
+## Review Before Mutation
+
+```bash
+# Repository structure and evidence only; no registry or subprocess
+depfresh inspect --json > depfresh-inspect.json
+
+# Resolve candidates and exact future write operations; still no writes
+depfresh plan --json > depfresh-plan.json
+
+# Reproducible cooldown evaluation
+depfresh plan --json --cooldown 7 --as-of 2026-07-16T10:00:00.000Z
+```
+
+Exit `1` from `plan` means the document is valid and contains operations, material risks, or
+explicitly incomplete decisions. Parse the document; reserve exit `2` for a fatal command error
+document.
+
 ## Global Packages
 
 ```bash

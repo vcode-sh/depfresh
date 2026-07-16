@@ -10,6 +10,12 @@ These commands work with any AI coding agent.
 # Check-only (read-only report)
 depfresh --output json
 
+# Deterministic repository evidence, with no registry or subprocess
+depfresh inspect --json
+
+# Registry-aware review plan, with no writes
+depfresh plan --json
+
 # Safe write (minor + patch)
 depfresh --write --mode minor
 
@@ -32,6 +38,18 @@ Run depfresh in JSON mode, summarize summary/meta fields, then propose safe upda
 
 ```bash
 depfresh --output json
+```
+
+For automation that needs exact occurrences and immutable fingerprints, prefer:
+
+```text
+Run depfresh inspect and plan in JSON mode. Validate the shipped schema, review every blocked,
+unknown, and error decision, and do not treat the legacy check report as an apply plan.
+```
+
+```bash
+depfresh inspect --json
+depfresh plan --json
 ```
 
 **Guarded writes:**
@@ -64,5 +82,6 @@ depfresh --help-json
 depfresh capabilities --json
 ```
 
-The response includes supported flags, valid enum values, defaults, invocation-authority grants,
-config options that cannot grant side effects, stable error reasons, and exit code semantics.
+The response includes supported commands, packaged schemas, flags, valid enum values, defaults,
+invocation-authority grants, config options that cannot grant side effects, stable error reasons,
+and separate legacy/machine exit semantics.

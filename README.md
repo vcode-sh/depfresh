@@ -57,6 +57,12 @@ depfresh -I
 # JSON output for scripts and AI agents
 depfresh --output json
 
+# Deterministic repository evidence (no registry or subprocess)
+depfresh inspect --json
+
+# Reviewable dependency plan (registry reads, no writes)
+depfresh plan --json
+
 # Only minor/patch (living cautiously)
 depfresh minor -w
 
@@ -71,6 +77,10 @@ depfresh --fail-on-outdated
 - **Repository model** -- deterministic read-only inspection with stable IDs, exact byte hashes,
   boundaries, package-manager and lockfile conclusions, declared Node runtimes, and read-only Git
   state per effective or nested repository boundary.
+- **Inspect and plan contracts** -- versioned, schema-valid machine documents with canonical
+  repository and plan fingerprints, exact occurrence operations, complete policy traces, candidate
+  traces when registry resolution runs, and one terminal decision per occurrence. Planning uses
+  memory-only cache state and never writes.
 - **7 range modes** -- `default`, `major`, `minor`, `patch`, `latest`, `newest`, `next`
 - **Interactive cherry-picking** -- grouped multiselect with colour-coded severity
 - **Occurrence policy** -- validated ordered rules select by dependency, workspace, catalog,
@@ -128,7 +138,12 @@ Details: **[docs/configuration/workspaces.md](docs/configuration/workspaces.md)*
 
 ## AI Agent Friendly
 
-depfresh was built for humans and machines. `--output json` emits a structured envelope. `--help-json` returns the full CLI contract (flags, enums, exit codes, agent workflows). Exit codes are semantic: `0` = up to date, `1` = updates available, `2` = error. Non-TTY environments automatically suppress spinners and interactive prompts.
+depfresh was built for humans and machines. `depfresh inspect --json` describes repository evidence,
+and `depfresh plan --json` resolves a reviewable dependency plan. The compatibility
+`--output json` check report remains available for existing automation. `--help-json` returns the
+CLI contract, schema paths, and workflows. Machine-command exits are `0` for a complete result with
+no findings, `1` for a valid actionable, risky, or incomplete result, and `2` for a fatal error. Non-TTY
+environments suppress spinners and interactive prompts.
 
 Details: **[docs/agents/README.md](docs/agents/README.md)**
 

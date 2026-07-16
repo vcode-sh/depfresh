@@ -40,6 +40,9 @@ interface CliCapabilities {
     loglevel: readonly string[]
   }
   exitCodes: Record<string, string>
+  machineExitCodes: Record<string, string>
+  commands: Record<string, { description: string; schema?: string }>
+  contractSchemas: Record<string, string>
   positional: Record<string, CapabilityFlag>
   flags: Record<string, CapabilityFlag>
   workflows: Record<string, Workflow>
@@ -69,6 +72,14 @@ const EXIT_CODES: Record<string, string> = {
 }
 
 const WORKFLOWS: Record<string, Workflow> = {
+  inspect: {
+    description: 'Inspect deterministic repository evidence without registry access',
+    command: 'depfresh inspect --output json',
+  },
+  plan: {
+    description: 'Resolve a deterministic non-mutating dependency plan',
+    command: 'depfresh plan --output json',
+  },
   checkOnly: {
     description: 'Check for outdated dependencies and return structured JSON',
     command: 'depfresh --output json',
@@ -177,7 +188,7 @@ function buildFlagDefinitions(argsDef: ArgsDef): {
   }
 
   if (positional.mode_arg) {
-    positional.mode_arg.values = VALID_MODES
+    positional.mode_arg.values = [...VALID_MODES, 'inspect', 'plan', 'capabilities']
   }
 
   return { positional, flags }
@@ -198,6 +209,26 @@ export function getCliCapabilities(): CliCapabilities {
       loglevel: VALID_LOG_LEVELS,
     },
     exitCodes: EXIT_CODES,
+    machineExitCodes: {
+      '0': 'Complete result with no operation, material risk, block, unknown, or error.',
+      '1': 'Schema-valid result with operations, material risks, or non-fatal blocked, unknown, or error decisions.',
+      '2': 'Fatal input, contract, configuration, or runtime error prevented a trustworthy result.',
+    },
+    commands: {
+      inspect: {
+        description: 'Process-free repository model and evidence inspection.',
+        schema: 'depfresh/schemas/inspect-v1.json',
+      },
+      plan: {
+        description: 'Registry-aware planning without file or process side effects.',
+        schema: 'depfresh/schemas/plan-v1.json',
+      },
+    },
+    contractSchemas: {
+      inspect: 'depfresh/schemas/inspect-v1.json',
+      plan: 'depfresh/schemas/plan-v1.json',
+      error: 'depfresh/schemas/error-v1.json',
+    },
     positional,
     flags,
     workflows: WORKFLOWS,

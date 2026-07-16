@@ -51,6 +51,15 @@ describe('normalizeCliRawArgs', () => {
     ])
   })
 
+  it('keeps a machine command distinct from its range mode', () => {
+    expect(normalizeCliRawArgs(['plan', '--mode', 'minor', '--json'])).toEqual([
+      'plan',
+      '--mode',
+      'minor',
+      '--json',
+    ])
+  })
+
   it('passes negative numeric values to numeric validation', () => {
     expect(normalizeCliRawArgs(['--cooldown', '-1'])).toEqual(['--cooldown', '-1'])
   })

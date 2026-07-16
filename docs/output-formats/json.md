@@ -1,4 +1,9 @@
-# JSON Output
+# Legacy Check JSON Output
+
+This schema-v1 envelope is the compatibility report produced by `check()`. It intentionally keeps
+absolute cwd/discovery paths and a volatile timestamp. It is useful for reports, but it is not an
+immutable dependency plan and does not validate as `depfresh.plan`. Use
+[`depfresh plan --json`](./inspect-plan.md) when exact operations and fingerprints are required.
 
 ```bash
 depfresh --output json

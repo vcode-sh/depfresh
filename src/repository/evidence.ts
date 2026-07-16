@@ -82,6 +82,7 @@ export function collectRepositoryEvidence(
   packages: RepositoryPackageManifest[],
   diagnostics: RepositoryDiagnostic[],
   ignorePaths: readonly string[],
+  vcsMode: 'probe' | 'disabled' = 'probe',
 ): EvidenceExtension {
   const walk = walkRepository(root, ignorePaths, diagnostics)
   const files = walk.files
@@ -173,12 +174,15 @@ export function collectRepositoryEvidence(
       targetPaths.add(joinRelative(boundary.path, filename))
     }
   }
-  const vcs = collectBoundaryVcsEvidence(
-    root,
-    boundaries,
-    [...targetPaths].sort((a, b) => a.localeCompare(b)),
-    [...modeledTargetPaths].sort((a, b) => a.localeCompare(b)),
-  )
+  const vcs =
+    vcsMode === 'disabled'
+      ? createDisabledVcsEvidence(boundaries)
+      : collectBoundaryVcsEvidence(
+          root,
+          boundaries,
+          [...targetPaths].sort((a, b) => a.localeCompare(b)),
+          [...modeledTargetPaths].sort((a, b) => a.localeCompare(b)),
+        )
   const vcsEvidence = createConclusion(
     'vcs',
     undefined,
@@ -214,6 +218,27 @@ export function collectRepositoryEvidence(
     lockfileBoundaries: lockfiles
       .map((lockfile) => ({ lockfileId: lockfile.id, boundaryId: lockfile.boundaryId }))
       .sort((a, b) => a.lockfileId.localeCompare(b.lockfileId)),
+  }
+}
+
+function createDisabledVcsEvidence(boundaries: RepositoryBoundary[]): RepositoryVcsEvidence {
+  const repositories = boundaries
+    .filter((boundary) => boundary.path === '.' || boundary.classification === 'nested-git')
+    .map((boundary) => ({
+      boundaryId: boundary.id,
+      path: boundary.path,
+      status: 'unavailable' as const,
+      diagnostics: [createEvidenceDiagnostic('VCS_PROBE_DISABLED', boundary.path)],
+    }))
+  const diagnostics = repositories.flatMap((repository) => repository.diagnostics)
+  if (diagnostics.length === 0)
+    diagnostics.push(createEvidenceDiagnostic('VCS_PROBE_DISABLED', '.'))
+  return {
+    status: 'unavailable',
+    targetFiles: [],
+    unrelatedDirtyPaths: [],
+    diagnostics,
+    repositories,
   }
 }
 

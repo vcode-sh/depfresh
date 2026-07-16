@@ -13,7 +13,7 @@ import type {
 import { createLogger } from '../../utils/logger'
 import { loadNpmrc } from '../../utils/npmrc'
 import { resolveDiscoveryContext } from '../packages/root-detection'
-import type { ResolveContext } from './context'
+import { type ResolveContext, recordResolutionTrace } from './context'
 import { resolveDependency } from './resolve-dependency'
 
 function createResolutionError(dep: RawDep): ResolvedDepChange {
@@ -91,6 +91,11 @@ export async function resolvePackage(
               logger.debug(
                 `Resolution failed for ${dep.aliasName ?? dep.name}: ${error instanceof Error ? error.message : String(error)}`,
               )
+              recordResolutionTrace(resolveContext, dep.occurrenceId, {
+                status: 'unknown',
+                reason: 'RESOLUTION_FAILED',
+                eligibleVersions: [],
+              })
               return createResolutionError(dep)
             } finally {
               await runBestEffortCallback(

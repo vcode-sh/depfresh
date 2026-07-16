@@ -47,6 +47,7 @@ export function buildRepositoryModel(
   projection: PackageMeta[],
   report: DiscoveryReport,
   ignorePaths: readonly string[] = [],
+  vcsMode: 'probe' | 'disabled' = 'probe',
 ): RepositoryModel {
   const diagnostics = diagnosticsFromDiscovery(root, report)
   const sourcePaths = collectSourcePaths(root, projection, report)
@@ -124,6 +125,7 @@ export function buildRepositoryModel(
     sortedPackages,
     diagnostics,
     ignorePaths,
+    vcsMode,
   )
 
   const model: RepositoryModel = {

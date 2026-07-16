@@ -7,6 +7,10 @@ import { normalizeCliRawArgs } from './raw-args'
 import { showUsageWithLinks } from './usage'
 import './signals'
 
+function rawMachineCommand(rawArgs: string[]): 'inspect' | 'plan' | undefined {
+  return rawArgs[0] === 'inspect' || rawArgs[0] === 'plan' ? rawArgs[0] : undefined
+}
+
 function wantsJsonOutput(rawArgs: string[]): boolean {
   if (
     rawArgs.includes('--help-json') ||
@@ -27,12 +31,28 @@ function getRawMode(rawArgs: string[]): string {
     if (arg === '--mode' || arg === '-m') return rawArgs[index + 1] ?? 'default'
     if (arg?.startsWith('--mode=')) return arg.slice('--mode='.length)
     if (arg?.startsWith('-m') && arg.length > 2) return arg.slice(2)
-    if (arg && !arg.startsWith('-') && arg !== 'help' && arg !== 'capabilities') return arg
+    if (
+      arg &&
+      !arg.startsWith('-') &&
+      arg !== 'help' &&
+      arg !== 'capabilities' &&
+      arg !== 'inspect' &&
+      arg !== 'plan'
+    ) {
+      return arg
+    }
   }
   return 'default'
 }
 
 async function outputStartupError(error: unknown, rawArgs: string[]): Promise<void> {
+  const command = rawMachineCommand(rawArgs)
+  if (command) {
+    const { buildMachineCommandError } = await import('../contracts/error-document')
+    // biome-ignore lint/suspicious/noConsole: intentional stable machine output
+    console.log(JSON.stringify(buildMachineCommandError(command, error), null, 2))
+    return
+  }
   if (wantsJsonOutput(rawArgs)) {
     const { outputJsonError } = await import('../commands/check/json-output')
     outputJsonError(error, { cwd: process.cwd(), mode: getRawMode(rawArgs) })
@@ -76,6 +96,48 @@ const main = defineCommand({
         process.exit(0)
       }
 
+      const { assertMachineCommandSafety, getMachineCommand } = await import('./machine-commands')
+      const machineCommand = getMachineCommand(args.mode_arg)
+      if (machineCommand) {
+        const commandArgs = args as Record<string, unknown>
+        assertMachineCommandSafety(commandArgs, originalRawArgs, machineCommand)
+        if (!(args.json || args.output === 'json')) {
+          throw new ConfigError(`depfresh ${machineCommand} requires --json.`, {
+            reason: 'UNSUPPORTED_COMBINATION',
+          })
+        }
+        if (machineCommand === 'inspect') {
+          const { inspect } = await import('../commands/inspect')
+          const result = await inspect({
+            cwd: typeof commandArgs.cwd === 'string' ? commandArgs.cwd : process.cwd(),
+            recursive: commandArgs.recursive !== false,
+            ignorePaths:
+              typeof commandArgs['ignore-paths'] === 'string'
+                ? commandArgs['ignore-paths']
+                    .split(',')
+                    .map((value) => value.trim())
+                    .filter(Boolean)
+                : undefined,
+            ignoreOtherWorkspaces: commandArgs['ignore-other-workspaces'] !== false,
+          })
+          // biome-ignore lint/suspicious/noConsole: intentional stable machine output
+          console.log(JSON.stringify(result, null, 2))
+          process.exit(result.risks.length > 0 || result.errors.length > 0 ? 1 : 0)
+        }
+        const { planForInvocation } = await import('../commands/plan')
+        const { normalizePlanCommandArgs } = await import('./machine-commands')
+        const result = await planForInvocation(normalizePlanCommandArgs(commandArgs), 'cli')
+        // biome-ignore lint/suspicious/noConsole: intentional stable machine output
+        console.log(JSON.stringify(result, null, 2))
+        const findings =
+          result.operations.length > 0 ||
+          result.summary.blocked > 0 ||
+          result.summary.unknown > 0 ||
+          result.summary.errors > 0 ||
+          result.risks.length > 0
+        process.exit(findings ? 1 : 0)
+      }
+
       if (args.json) {
         throw new ConfigError('--json is only valid with the capabilities command.', {
           reason: 'UNSUPPORTED_COMBINATION',
@@ -89,6 +151,14 @@ const main = defineCommand({
       const exitCode = await check(options)
       process.exit(exitCode)
     } catch (error) {
+      const machineCommand =
+        args.mode_arg === 'inspect' || args.mode_arg === 'plan' ? args.mode_arg : undefined
+      if (machineCommand) {
+        const { buildMachineCommandError } = await import('../contracts/error-document')
+        // biome-ignore lint/suspicious/noConsole: intentional stable machine output
+        console.log(JSON.stringify(buildMachineCommandError(machineCommand, error), null, 2))
+        process.exit(2)
+      }
       if (args.output === 'json') {
         const { outputJsonError } = await import('../commands/check/json-output')
         outputJsonError(error, {

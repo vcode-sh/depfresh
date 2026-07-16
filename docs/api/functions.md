@@ -135,6 +135,40 @@ export default defineConfig({
 
 ---
 
+## `inspect(options)` and `plan(options)`
+
+`inspect()` returns the schema-v1 process-free repository evidence contract. `plan()` returns the
+schema-v1 registry-aware plan with one terminal decision per occurrence and exact future file
+operations. Neither function writes stdout/stderr, changes exit state, writes repository/cache
+files, or runs package-manager/lifecycle/configured commands. Fatal failures throw structured
+errors.
+
+```ts
+function inspect(options: InspectOptions): Promise<InspectResult>
+function plan(options: PlanOptions): Promise<PlanResult>
+```
+
+```ts
+import { inspect, plan, validateInspectResult, validatePlanResult } from 'depfresh'
+
+const evidence = await inspect({ cwd: process.cwd() })
+const dependencyPlan = await plan({ cwd: process.cwd(), mode: 'latest' })
+
+if (!validateInspectResult(evidence) || !validatePlanResult(dependencyPlan)) {
+  throw new Error('Unsupported contract')
+}
+```
+
+`plan()` reads only declarative JSON configuration. Set `asOf` to a canonical UTC timestamp when
+cooldown is positive. See [Inspect and Plan Contracts](../output-formats/inspect-plan.md) for the
+schemas, fingerprints, terminal vocabulary, and compatibility boundary.
+
+The module also exports authoritative schema descriptors, runtime assertion/type-guard helpers,
+canonical JSON and fingerprint helpers, plus pure `buildLegacyCheckJsonResult()` and
+`buildLegacyCheckJsonError()` compatibility builders.
+
+---
+
 ## `inspectRepository(options)`
 
 Builds the versioned, deterministic, read-only repository model. It reads contained manifests,
@@ -156,8 +190,9 @@ const model = await inspectRepository({ cwd: process.cwd() })
 console.log(model.schemaVersion, model.occurrences.length)
 ```
 
-See [Repository Model](./repository-model.md) for IDs, hashes, diagnostics, and forward-version
-behavior.
+Unlike process-free `inspect()`, this lower-level compatibility API retains the fixed read-only Git
+probe. See [Repository Model](./repository-model.md) for IDs, hashes, diagnostics, and
+forward-version behavior.
 
 ---
 

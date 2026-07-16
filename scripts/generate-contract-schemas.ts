@@ -1,0 +1,32 @@
+import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { dirname, resolve } from 'node:path'
+import {
+  commandErrorSchema,
+  inspectResultSchema,
+  planResultSchema,
+} from '../src/contracts/schemas'
+
+const root = resolve(import.meta.dirname, '..')
+const artifacts = [
+  ['schemas/inspect-v1.json', inspectResultSchema],
+  ['schemas/plan-v1.json', planResultSchema],
+  ['schemas/error-v1.json', commandErrorSchema],
+] as const
+const check = process.argv.includes('--check')
+
+for (const [relativePath, schema] of artifacts) {
+  const path = resolve(root, relativePath)
+  const expected = `${JSON.stringify(schema, null, 2)}\n`
+  if (check) {
+    let actual = ''
+    try {
+      actual = await readFile(path, 'utf8')
+    } catch {}
+    if (actual !== expected) {
+      throw new Error(`Generated schema artifact is stale: ${relativePath}`)
+    }
+    continue
+  }
+  await mkdir(dirname(path), { recursive: true })
+  await writeFile(path, expected)
+}

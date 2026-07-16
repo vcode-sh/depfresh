@@ -1,6 +1,46 @@
 export { addonVSCode, createVSCodeAddon } from './addons'
 export { check } from './commands/check/index'
+export type {
+  LegacyCheckJsonError,
+  LegacyCheckJsonResult,
+} from './commands/check/json-output'
+export {
+  buildLegacyCheckJsonError,
+  buildLegacyCheckJsonResult,
+} from './commands/check/json-output'
+export type { InspectOptions } from './commands/inspect'
+export { inspect } from './commands/inspect'
+export type { PlanOptions } from './commands/plan'
+export { plan } from './commands/plan'
 export { resolveConfig } from './config'
+export { canonicalJson } from './contracts/canonical-json'
+export {
+  createPlanFingerprint,
+  createRepositoryFingerprint,
+  hashExactBytes,
+} from './contracts/fingerprint'
+export type {
+  InspectResult,
+  MachineCommandError,
+  PlanResult,
+} from './contracts/schemas'
+export {
+  COMMAND_ERROR_SCHEMA_ID,
+  commandErrorSchema,
+  INSPECT_SCHEMA_ID,
+  inspectResultSchema,
+  PLAN_SCHEMA_ID,
+  planResultSchema,
+} from './contracts/schemas'
+export {
+  assertInspectResult,
+  assertMachineCommandError,
+  assertPlanResult,
+  ContractValidationError,
+  validateInspectResult,
+  validateMachineCommandError,
+  validatePlanResult,
+} from './contracts/validate'
 export type { depfreshErrorReason } from './errors'
 export {
   AddonError,

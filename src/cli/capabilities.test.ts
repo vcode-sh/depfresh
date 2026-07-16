@@ -34,11 +34,13 @@ describe('getCliCapabilities', () => {
     expect(capabilities.version).toMatch(/^\d+\.\d+\.\d+/)
   })
 
-  it('includes 4 agent workflows', () => {
+  it('includes inspect and plan agent workflows', () => {
     const capabilities = getCliCapabilities()
 
     expect(capabilities.workflows).toBeDefined()
     expect(Object.keys(capabilities.workflows)).toEqual([
+      'inspect',
+      'plan',
       'checkOnly',
       'safeUpdate',
       'fullUpdate',
@@ -50,6 +52,18 @@ describe('getCliCapabilities', () => {
       expect(workflow.command).toContain('depfresh')
       expect(workflow.command).toContain('--output json')
     }
+  })
+
+  it('publishes machine commands, schemas, and exit meanings', () => {
+    const capabilities = getCliCapabilities()
+
+    expect(capabilities.positional.mode_arg?.values).toEqual(
+      expect.arrayContaining(['major', 'inspect', 'plan', 'capabilities']),
+    )
+    expect(capabilities.commands.inspect?.schema).toBe('depfresh/schemas/inspect-v1.json')
+    expect(capabilities.commands.plan?.schema).toBe('depfresh/schemas/plan-v1.json')
+    expect(capabilities.contractSchemas.error).toBe('depfresh/schemas/error-v1.json')
+    expect(capabilities.machineExitCodes['1']).toContain('operations')
   })
 
   it('includes flag relationships with requires and conflicts', () => {

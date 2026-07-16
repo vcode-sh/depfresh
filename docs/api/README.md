@@ -6,9 +6,10 @@ I exposed the internals. On purpose. You can `import` from `depfresh` and do wha
 
 - **[Overview](./overview.md)** -- Quick start, defaults, workflow examples. The "just show me some code" page.
 
-- **[Functions](./functions.md)** -- Check/configuration, repository policy compilation/evaluation, package resolution, writes, lifecycle callbacks, and addons.
+- **[Functions](./functions.md)** -- Inspect/plan contracts, check/configuration, repository policy compilation/evaluation, package resolution, writes, lifecycle callbacks, and addons.
 
-- **[Types](./types.md)** -- The full type catalogue, including policy inputs, contexts, compiled rules, provenance, decisions, and candidate reasons.
+- **[Types](./types.md)** -- The full type catalogue, including inspect/plan schemas and options,
+  policy inputs, contexts, compiled rules, provenance, decisions, and candidate reasons.
 
 - **[Repository Model](./repository-model.md)** -- Versioned read-only repository inspection,
   stable IDs, exact source hashes, occurrences, catalogs, relationships, and diagnostics.

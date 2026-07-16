@@ -45,7 +45,7 @@ export interface JsonExecutionState {
   didWrite: boolean
 }
 
-interface JsonOutput {
+export interface LegacyCheckJsonResult {
   packages: JsonPackage[]
   errors: JsonError[]
   writeOutcomes: WriteOutcome[]
@@ -80,7 +80,7 @@ interface JsonOutput {
   profile?: ProfileReport
 }
 
-interface JsonErrorOutput {
+export interface LegacyCheckJsonError {
   error: {
     code: string
     reason: string
@@ -119,10 +119,23 @@ export function outputJsonEnvelope(
   executionState: JsonExecutionState,
   errors: JsonError[] = [],
 ): void {
+  const output = buildLegacyCheckJsonResult(packages, options, executionState, errors)
+
+  // biome-ignore lint/suspicious/noConsole: intentional JSON output
+  console.log(JSON.stringify(output, null, 2))
+}
+
+export function buildLegacyCheckJsonResult(
+  packages: JsonPackage[],
+  options: depfreshOptions,
+  executionState: JsonExecutionState,
+  errors: JsonError[] = [],
+  timestamp = new Date().toISOString(),
+): LegacyCheckJsonResult {
   const allUpdates = packages.flatMap((p) => p.updates)
   const count = (diff: DiffType) => allUpdates.filter((u) => u.diff === diff).length
 
-  const output: JsonOutput = {
+  const output: LegacyCheckJsonResult = {
     packages,
     errors,
     writeOutcomes: executionState.writeOutcomes,
@@ -148,7 +161,7 @@ export function outputJsonEnvelope(
       cwd: options.cwd,
       effectiveRoot: options.effectiveRoot ?? options.cwd,
       mode: redactSensitiveText(options.mode),
-      timestamp: new Date().toISOString(),
+      timestamp,
       noPackagesFound: executionState.noPackagesFound,
       hadResolutionErrors: executionState.failedResolutions > 0,
       didWrite: executionState.didWrite,
@@ -159,14 +172,24 @@ export function outputJsonEnvelope(
     ...(options.profile && options.profileReport ? { profile: options.profileReport } : {}),
   }
 
-  // biome-ignore lint/suspicious/noConsole: intentional JSON output
-  console.log(JSON.stringify(redactSensitiveValue(output), null, 2))
+  return redactSensitiveValue(output) as LegacyCheckJsonResult
 }
 
 export function outputJsonError(error: unknown, options: { cwd: string; mode: string }): void {
+  const output = buildLegacyCheckJsonError(error, options)
+
+  // biome-ignore lint/suspicious/noConsole: intentional JSON error output
+  console.log(JSON.stringify(output, null, 2))
+}
+
+export function buildLegacyCheckJsonError(
+  error: unknown,
+  options: { cwd: string; mode: string },
+  timestamp = new Date().toISOString(),
+): LegacyCheckJsonError {
   const { code, message, reason } = getSafeErrorDetails(error)
 
-  const output: JsonErrorOutput = {
+  return {
     error: {
       code,
       reason,
@@ -177,10 +200,7 @@ export function outputJsonError(error: unknown, options: { cwd: string; mode: st
       schemaVersion: 1,
       cwd: redactSensitiveText(options.cwd),
       mode: redactSensitiveText(options.mode),
-      timestamp: new Date().toISOString(),
+      timestamp,
     },
   }
-
-  // biome-ignore lint/suspicious/noConsole: intentional JSON error output
-  console.log(JSON.stringify(output, null, 2))
 }

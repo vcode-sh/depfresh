@@ -8,6 +8,7 @@ interface CliOptionDefinition {
 
 const optionDefinitions = new Map<string, CliOptionDefinition>()
 const numericOptionNames = new Set(['concurrency', 'cooldown'])
+const commandNames = new Set(['capabilities', 'inspect', 'plan'])
 
 for (const [name, rawDefinition] of Object.entries(args)) {
   if (rawDefinition.type !== 'boolean' && rawDefinition.type !== 'string') continue
@@ -200,7 +201,7 @@ export function normalizeCliRawArgs(rawArgs: string[]): string[] {
       })
     }
     positional = token
-    recordOccurrence(occurrences, 'mode', token)
+    recordOccurrence(occurrences, commandNames.has(token) ? 'command' : 'mode', token)
     normalized.push(token)
   }
 

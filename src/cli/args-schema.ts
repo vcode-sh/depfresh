@@ -4,7 +4,7 @@ import { migrationParityArgs } from './migration-flags'
 export const args: ArgsDef = {
   mode_arg: {
     type: 'positional',
-    description: 'Version range mode shorthand (major, minor, patch, latest, newest, next)',
+    description: 'Command (inspect, plan, capabilities) or version range mode shorthand',
     required: false,
   },
   cwd: {
@@ -141,6 +141,10 @@ export const args: ArgsDef = {
     type: 'string',
     description: 'Skip versions published less than N days ago (0 = disabled)',
     default: '0',
+  },
+  'as-of': {
+    type: 'string',
+    description: 'Semantic UTC timestamp for deterministic cooldown planning',
   },
   nodecompat: {
     type: 'boolean',

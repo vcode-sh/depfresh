@@ -6,6 +6,21 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Semver
 
 ### Added
 
+- **Versioned inspect and plan contracts** -- `depfresh inspect --json` and the public `inspect()`
+  API emit deterministic process-free repository evidence, while `depfresh plan --json` and
+  `plan()` add registry candidate resolution without filesystem writes or persistent cache access.
+  Inspect, plan, and fatal command-error JSON Schemas ship at stable package subpaths. Repository
+  fingerprints cover canonical root identity plus sorted exact-byte source hashes; plan
+  fingerprints cover the complete semantic plan. Every inspected occurrence receives one terminal
+  operation, unchanged, skipped, blocked, unknown, or error decision with a policy trace and, when
+  registry resolution runs, a candidate trace. Exact operations retain relative file, nested path,
+  source hash, expected value, and requested stored value. Credential-bearing occurrences block
+  instead of leaking or weakening their preconditions. Inspect projections retain resolvable
+  source, package, catalog, boundary,
+  relationship, runtime, evidence-value, and evidence-source entities. Runtime validators enforce
+  fingerprints, references, summaries, one-decision-per-occurrence, and exact operation links in
+  addition to JSON Schema shape.
+
 - **Occurrence-level ordered policy rules** -- JSON-compatible `policyRules` select exact repository
   occurrences by dependency, workspace path, package, catalog, catalog role, dependency field,
   occurrence role, package manager, protocol, current channel, and specifier status. Action and mode
@@ -42,6 +57,11 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Semver
   writes, commands, installs, global mutation, or verification. Ambiguous, missing, unsupported,
   and unavailable manager evidence is retained rather than guessed.
 
+- **Machine contracts withhold non-public repository data** -- inspect and plan results reject
+  absolute or credential-bearing identity paths, redact non-public occurrence/evidence/lockfile
+  text with material risks, reject proxy-backed canonical input before traps run, and emit stable
+  fatal reasons without paths, secrets, causes, or stacks.
+
 - **Repository discovery is contained to one canonical root** -- workspace patterns containing
   parent traversal or absolute paths are rejected before globbing, and package, workspace-marker,
   lockfile, and catalog symlinks must resolve inside the selected repository. In-root symlinks are
@@ -67,13 +87,21 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Semver
 
 ### Changed
 
+- **Legacy check JSON is an explicit compatibility contract** -- `depfresh --output json` keeps its
+  schema-v1 fields, absolute cwd/discovery paths, timestamp, formatting, redaction, and exit
+  behavior. Public pure builders expose that envelope separately; it is not an immutable plan and
+  is not accepted as one. Machine planning reads only declarative JSON configuration and rejects
+  executable JavaScript/TypeScript configuration before evaluation.
+
 - **Legacy selection inputs compile into the ordered policy** -- global mode remains the default;
   `packageMode` retains exact-name priority and first-pattern behavior; legacy `ignore` becomes an
   exclusion; include creates an allow-list; later exclude rules win; and explicit policy rules
   follow compatibility rules within their source layer. CLI include/exclude arrays continue to
   replace configured arrays. Skipped and blocked local occurrences never reach registry resolution,
-  selected occurrences use their policy mode, and a no-target candidate result becomes unchanged
-  while retaining the exact candidate reason. Versioned global occurrence policy remains deferred.
+  selected occurrences use their policy mode. True current/no-match outcomes become unchanged,
+  unsupported declarations are skipped, safety-filtered candidates are blocked, and incomplete or
+  inconsistent candidate evidence remains unknown. Every result retains the exact candidate
+  reason. Versioned global occurrence policy remains deferred.
 
 - **Writes now report observed physical outcomes** -- manifest, YAML, catalog, nested override,
   package-manager, and global writes use canonical file-plus-path identities, require the exact

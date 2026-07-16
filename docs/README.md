@@ -25,7 +25,8 @@ Everything I know about depfresh is in here, split into files so you can pretend
 
 - **[Output Formats](./output-formats/)** -- Table, JSON, exit codes, and AI agent integration. Machines deserve documentation too. They're doing most of the work anyway.
   - [Table](./output-formats/table.md) -- the default, colourful output
-  - [JSON](./output-formats/json.md) -- machine-readable envelope
+  - [JSON](./output-formats/json.md) -- legacy machine-readable check envelope
+  - [Inspect and Plan](./output-formats/inspect-plan.md) -- versioned schemas, fingerprints, and terminal decisions
 
 - **[Agent Workflows](./agents/README.md)** -- quickstarts for AI coding agents with copy-paste command patterns.
 

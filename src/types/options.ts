@@ -52,6 +52,8 @@ export interface depfreshOptions {
 
   ignorePaths: string[]
   ignoreOtherWorkspaces: boolean
+  /** Internal repository evidence mode. Machine inspection can disable all subprocess probes. */
+  repositoryVcs?: 'probe' | 'disabled'
 
   // Display options
   all: boolean

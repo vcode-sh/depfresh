@@ -4,6 +4,11 @@ export default defineBuildConfig({
   entries: [
     'src/index',
     'src/cli',
+    {
+      builder: 'copy',
+      input: 'schemas',
+      outDir: 'dist/schemas',
+    },
   ],
   declaration: true,
   clean: true,

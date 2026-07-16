@@ -7,6 +7,7 @@ export interface InspectRepositoryOptions {
   recursive?: boolean
   ignorePaths?: string[]
   ignoreOtherWorkspaces?: boolean
+  vcs?: 'probe' | 'disabled'
 }
 
 export type RepositoryEvidenceStatus =
@@ -238,6 +239,7 @@ export type RepositoryDiagnosticCode =
   | 'VCS_EXECUTABLE_MISSING'
   | 'VCS_NOT_REPOSITORY'
   | 'VCS_PROBE_FAILED'
+  | 'VCS_PROBE_DISABLED'
 
 export interface RepositoryDiagnostic {
   code: RepositoryDiagnosticCode

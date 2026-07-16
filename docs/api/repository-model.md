@@ -151,3 +151,14 @@ non-filesystem legacy policy path.
 
 Repository inspection does not resolve registry versions or invent registry-derived current status,
 synchronize lockfiles, apply manifest changes, run installs, or mutate Git state.
+
+## Machine contract projection
+
+`inspect()` projects this model into `depfresh.inspect` schema v1 without absolute paths or raw
+credential-bearing declaration text. The projection includes the model entities and relationships
+needed to resolve every occurrence/source/catalog/boundary reference, plus each evidence value and
+its complete file/field/probe sources. Withheld non-public values produce material risks; unsafe
+identity paths fail with a stable structured error. It disables the Git subprocess and records
+`VCS_PROBE_DISABLED` instead of fabricating clean state. `plan()` uses the full model, including the
+fixed read-only Git evidence adapter, then adds policy/candidate traces and exact operations. See
+[Inspect and Plan Contracts](../output-formats/inspect-plan.md).

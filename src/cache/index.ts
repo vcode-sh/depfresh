@@ -9,4 +9,5 @@ export interface Cache {
   stats(): { hits: number; misses: number; size: number }
 }
 
+export { createMemoryCache } from './memory'
 export { createSqliteCache } from './sqlite'

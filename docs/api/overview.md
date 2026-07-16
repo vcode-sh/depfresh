@@ -6,6 +6,22 @@ ESM-only, obviously. It's not 2019.
 
 ## Quick Start
 
+For a side-effect-free machine workflow, use the typed contracts directly:
+
+```ts
+import { inspect, plan } from 'depfresh'
+
+const evidence = await inspect({ cwd: process.cwd() })
+const dependencyPlan = await plan({ cwd: process.cwd(), mode: 'minor' })
+
+console.log(evidence.repository.fingerprint, dependencyPlan.planFingerprint)
+```
+
+These functions return data and never exit the process. Fatal input/configuration/runtime failures
+throw structured errors for the caller to handle.
+
+The legacy check API remains available:
+
 ```ts
 import { check, resolveConfig } from 'depfresh'
 
@@ -18,7 +34,7 @@ const exitCode = await check(options)
 process.exit(exitCode)
 ```
 
-That's it. You've just built a worse version of the CLI. Congratulations.
+That's it. You've just built a worse version of the legacy CLI. Congratulations.
 
 ## `DEFAULT_OPTIONS`
 

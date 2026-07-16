@@ -5,6 +5,7 @@ import { join } from 'pathe'
 import { CacheError } from '../errors'
 import type { PackageData } from '../types'
 import type { Cache } from './index'
+import { createMemoryCache } from './memory'
 
 const CACHE_DIR = join(homedir(), '.depfresh')
 const CACHE_DB = join(CACHE_DIR, 'cache.db')
@@ -26,14 +27,14 @@ export function createSqliteCache(): Cache {
   try {
     mkdirSync(CACHE_DIR, { recursive: true })
   } catch {
-    return createMemoryFallback()
+    return createMemoryCache()
   }
 
   let db: DatabaseSync
   try {
     db = new DatabaseSync(CACHE_DB)
   } catch {
-    return createMemoryFallback()
+    return createMemoryCache()
   }
 
   try {
@@ -45,7 +46,7 @@ export function createSqliteCache(): Cache {
     try {
       db.close()
     } catch {}
-    return createMemoryFallback()
+    return createMemoryCache()
   }
 
   const getStmt = db.prepare('SELECT data FROM registry_cache WHERE package = ? AND expires_at > ?')
@@ -131,41 +132,6 @@ export function createSqliteCache(): Cache {
         throw new CacheError('Failed to read cache stats', { cause: error })
       }
       return { hits, misses, size: Number(row.count) }
-    },
-  }
-}
-
-function createMemoryFallback(): Cache {
-  const store = new Map<string, { data: PackageData; expiresAt: number }>()
-  let hits = 0
-  let misses = 0
-
-  return {
-    get(key) {
-      const entry = store.get(key)
-      if (entry && entry.expiresAt > Date.now()) {
-        hits++
-        return entry.data
-      }
-      if (entry) store.delete(key)
-      misses++
-      return undefined
-    },
-    set(key, data, ttl) {
-      store.set(key, { data, expiresAt: Date.now() + ttl })
-    },
-    has(key) {
-      const entry = store.get(key)
-      return !!entry && entry.expiresAt > Date.now()
-    },
-    clear() {
-      store.clear()
-    },
-    close() {
-      store.clear()
-    },
-    stats() {
-      return { hits, misses, size: store.size }
     },
   }
 }

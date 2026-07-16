@@ -24,10 +24,23 @@ depfresh -wI
 
 # CI pipeline
 depfresh --fail-on-outdated --output json
+
+# Process-free repository evidence
+depfresh inspect --json
+
+# Registry-aware plan without writes
+depfresh plan --json
 ```
+
+## Machine Commands
+
+`inspect` and `plan` are commands, not range modes. Both require `--json` or `--output json`, write
+one versioned schema-valid document to stdout, and reject write, interactive, post-write, and global
+flags before discovery. See [Inspect and Plan Contracts](../output-formats/inspect-plan.md) for
+schemas, fingerprints, side-effect boundaries, and exit codes.
 
 ## See Also
 
 - [Configuration](../configuration/) -- `.depfreshrc`, `depfresh.config.ts`, and `package.json#depfresh`
 - [Programmatic API](../api/) -- using depfresh as a library with callbacks
-- [Output Formats](../output-formats/) -- JSON schema and table output behavior
+- [Output Formats](../output-formats/) -- legacy JSON, inspect/plan schemas, and table behavior
