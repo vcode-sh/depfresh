@@ -33,6 +33,7 @@ const workflowPaths = [
   '.github/workflows/ci.yml',
   '.github/workflows/pr-validation.yml',
   '.github/workflows/dependency-freshness.yml',
+  '.github/workflows/dependabot-automerge.yml',
   '.github/workflows/release.yml',
 ] as const
 
@@ -72,8 +73,15 @@ describe('2.0 release readiness', () => {
     }
   })
 
-  it('runs permission-sensitive repository evidence tests as an unprivileged hosted user', () => {
-    expect(workflow('.github/workflows/ci.yml').jobs?.test?.['runs-on']).toBe('ubuntu-latest')
+  it('runs every workflow on the exact hosted image without third-party coverage upload', () => {
+    for (const path of workflowPaths) {
+      const content = read(path)
+      expect(content, path).not.toContain('self-hosted')
+      expect(content, path).not.toMatch(/codecov|CODECOV_TOKEN/iu)
+      for (const [jobName, job] of Object.entries(workflow(path).jobs ?? {})) {
+        expect(job['runs-on'], `${path}: ${jobName}`).toBe('ubuntu-24.04')
+      }
+    }
   })
 
   it.each([

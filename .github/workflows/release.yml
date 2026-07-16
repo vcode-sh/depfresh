@@ -12,7 +12,7 @@ permissions:
 jobs:
   verify:
     name: Verify exact release artifact
-    runs-on: [self-hosted, linux, x64, vps]
+    runs-on: ubuntu-24.04
     outputs:
       package-version: ${{ steps.version.outputs.package-version }}
       package-tarball: ${{ steps.pack.outputs.package-tarball }}
