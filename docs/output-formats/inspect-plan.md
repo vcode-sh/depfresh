@@ -58,6 +58,13 @@ Every inspected occurrence appears exactly once in `decisions` as `operation`, `
 resolution ran, its candidate reason, eligible versions, and selected target. Catalog consumers are
 explanatory decisions; only physical owners produce operations. Unknown and errors remain explicit.
 
+Every newly produced plan also includes `signals`, `signalEvidence`, and `summary.signals`. The
+extension remains optional at the schema-v1 compatibility boundary so previously valid immutable
+plans remain consumable. New producers always emit it. Signal state is immutable evidence truth;
+ordered `signalRules` can change only `effect`. A blocking effect converts affected candidate
+operations to `SIGNAL_POLICY_BLOCKED` without reselecting a target. See
+[Compatibility Signals](./compatibility-signals.md) for the complete vocabulary and limits.
+
 An operation includes:
 
 - exact occurrence and source-file IDs;
@@ -101,7 +108,8 @@ Source hashes are lowercase SHA-256 over exact bytes, including BOMs, newline st
 newlines. The repository fingerprint is SHA-256 over UTF-8 canonical JSON containing schema
 version, the repository-relative root identity, and sources sorted by relative path with byte hash.
 
-The plan fingerprint is SHA-256 over the complete canonical semantic plan. Only top-level
+The plan fingerprint is SHA-256 over the complete canonical semantic plan, including signals,
+signal evidence, explicit cohort results, and override traces. Only top-level
 `planFingerprint`, `generatedAt`, and `presentation` fields are excluded; arrays retain semantic
 order and object keys are recursively sorted by code unit. Consumers must recompute both
 fingerprints instead of trusting supplied values.

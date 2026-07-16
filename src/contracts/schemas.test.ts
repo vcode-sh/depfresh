@@ -336,6 +336,506 @@ describe('shipped contract schemas', () => {
     ).toBe(false)
     expect(validatePlanResult({ ...valid, planFingerprint: 'c'.repeat(64) })).toBe(false)
 
+    const signalEvidenceBase = {
+      kind: 'registry-version' as const,
+      status: 'unknown' as const,
+      subject: 'occurrence-1',
+      sourceRefs: ['occurrence-1'],
+      facts: { metadata: 'unavailable' },
+    }
+    const signalEvidence = {
+      id: `signal-evidence-${hashExactBytes(canonicalJson(signalEvidenceBase)).slice(0, 24)}`,
+      ...signalEvidenceBase,
+    }
+    const signalBase = {
+      family: 'evidence-completeness' as const,
+      state: 'unknown' as const,
+      reason: 'REGISTRY_EVIDENCE_UNKNOWN',
+      subject: { occurrenceIds: ['occurrence-1'], dependencyName: 'alpha', workspacePath: '.' },
+      evidenceRefs: [signalEvidence.id],
+      effect: 'warn' as const,
+      matchedRuleIds: [],
+    }
+    const signal = {
+      id: `signal-${hashExactBytes(canonicalJson(signalBase)).slice(0, 24)}`,
+      ...signalBase,
+    }
+    const signalPlan = {
+      ...semantic,
+      signals: [signal],
+      signalEvidence: [signalEvidence],
+      summary: {
+        ...semantic.summary,
+        signals: {
+          total: 1,
+          pass: 0,
+          warn: 0,
+          fail: 0,
+          unknown: 1,
+          notApplicable: 0,
+          blocking: 0,
+        },
+      },
+    }
+    expect(
+      validatePlanResult({ ...signalPlan, planFingerprint: createPlanFingerprint(signalPlan) }),
+    ).toBe(true)
+    const contradictorySignalBase = {
+      ...signalBase,
+      family: 'release-channel' as const,
+      state: 'pass' as const,
+      reason: 'TARGET_PRERELEASE' as const,
+    }
+    const contradictorySignal = {
+      id: `signal-${hashExactBytes(canonicalJson(contradictorySignalBase)).slice(0, 24)}`,
+      ...contradictorySignalBase,
+    }
+    const contradictorySignalPlan = {
+      ...signalPlan,
+      signals: [contradictorySignal],
+      summary: {
+        ...signalPlan.summary,
+        signals: { ...signalPlan.summary.signals, unknown: 0, pass: 1 },
+      },
+    }
+    expect(
+      validatePlanResult({
+        ...contradictorySignalPlan,
+        planFingerprint: createPlanFingerprint(contradictorySignalPlan),
+      }),
+    ).toBe(false)
+    const mismatchedEvidenceSignalBase = {
+      ...signalBase,
+      family: 'signature-presence' as const,
+      state: 'warn' as const,
+      reason: 'SIGNATURE_PRESENT_UNVERIFIED' as const,
+    }
+    const mismatchedEvidenceSignal = {
+      id: `signal-${hashExactBytes(canonicalJson(mismatchedEvidenceSignalBase)).slice(0, 24)}`,
+      ...mismatchedEvidenceSignalBase,
+    }
+    const mismatchedEvidencePlan = {
+      ...signalPlan,
+      signals: [mismatchedEvidenceSignal],
+      summary: {
+        ...signalPlan.summary,
+        signals: { ...signalPlan.summary.signals, unknown: 0, warn: 1 },
+      },
+    }
+    expect(
+      validatePlanResult({
+        ...mismatchedEvidencePlan,
+        planFingerprint: createPlanFingerprint(mismatchedEvidencePlan),
+      }),
+    ).toBe(false)
+    const unknownTargetSignatureEvidenceBase = {
+      kind: 'registry-version' as const,
+      status: 'unknown' as const,
+      subject: 'occurrence-1',
+      sourceRefs: ['occurrence-1'],
+      facts: { targetVersion: 'unknown', signaturePresence: 'present' },
+    }
+    const unknownTargetSignatureEvidence = {
+      id: `signal-evidence-${hashExactBytes(canonicalJson(unknownTargetSignatureEvidenceBase)).slice(0, 24)}`,
+      ...unknownTargetSignatureEvidenceBase,
+    }
+    const unknownTargetSignatureBase = {
+      ...mismatchedEvidenceSignalBase,
+      evidenceRefs: [unknownTargetSignatureEvidence.id],
+    }
+    const unknownTargetSignature = {
+      id: `signal-${hashExactBytes(canonicalJson(unknownTargetSignatureBase)).slice(0, 24)}`,
+      ...unknownTargetSignatureBase,
+    }
+    const unknownTargetSignaturePlan = {
+      ...mismatchedEvidencePlan,
+      signals: [unknownTargetSignature],
+      signalEvidence: [unknownTargetSignatureEvidence],
+    }
+    expect(
+      validatePlanResult({
+        ...unknownTargetSignaturePlan,
+        planFingerprint: createPlanFingerprint(unknownTargetSignaturePlan),
+      }),
+    ).toBe(false)
+    const forgedSubjectSignalBase = {
+      ...signalBase,
+      subject: { ...signalBase.subject, dependencyName: 'beta' },
+    }
+    const forgedSubjectSignal = {
+      id: `signal-${hashExactBytes(canonicalJson(forgedSubjectSignalBase)).slice(0, 24)}`,
+      ...forgedSubjectSignalBase,
+    }
+    const forgedSubjectPlan = { ...signalPlan, signals: [forgedSubjectSignal] }
+    expect(
+      validatePlanResult({
+        ...forgedSubjectPlan,
+        planFingerprint: createPlanFingerprint(forgedSubjectPlan),
+      }),
+    ).toBe(false)
+    const peerRegistryBase = {
+      kind: 'registry-version' as const,
+      status: 'observed' as const,
+      subject: 'occurrence-1',
+      sourceRefs: ['occurrence-1'],
+      facts: { targetVersion: '1.0.0', peerMetadata: 'present' },
+    }
+    const peerRegistryEvidence = {
+      id: `signal-evidence-${hashExactBytes(canonicalJson(peerRegistryBase)).slice(0, 24)}`,
+      ...peerRegistryBase,
+    }
+    const missingPeerGraphBase = {
+      kind: 'planned-graph' as const,
+      status: 'absent' as const,
+      subject: 'occurrence-1:occurrence-1:react',
+      sourceRefs: ['occurrence-1'],
+      facts: {
+        peer: 'react',
+        requiredRange: '^19.0.0',
+        providerRange: 'missing',
+        providers: '0',
+        boundaryProviders: '0',
+        overrideConstraints: '0',
+        optional: 'no',
+      },
+    }
+    const missingPeerGraphEvidence = {
+      id: `signal-evidence-${hashExactBytes(canonicalJson(missingPeerGraphBase)).slice(0, 24)}`,
+      ...missingPeerGraphBase,
+    }
+    const forgedOptionalPeerBase = {
+      family: 'peer' as const,
+      state: 'not-applicable' as const,
+      reason: 'PEER_OPTIONAL_MISSING' as const,
+      subject: { occurrenceIds: ['occurrence-1'], dependencyName: 'alpha', workspacePath: '.' },
+      evidenceRefs: [peerRegistryEvidence.id, missingPeerGraphEvidence.id],
+      effect: 'none' as const,
+      matchedRuleIds: [],
+    }
+    const forgedOptionalPeer = {
+      id: `signal-${hashExactBytes(canonicalJson(forgedOptionalPeerBase)).slice(0, 24)}`,
+      ...forgedOptionalPeerBase,
+    }
+    const requiredPeerBase = {
+      ...forgedOptionalPeerBase,
+      state: 'fail' as const,
+      reason: 'PEER_REQUIRED_MISSING' as const,
+      effect: 'warn' as const,
+    }
+    const requiredPeer = {
+      id: `signal-${hashExactBytes(canonicalJson(requiredPeerBase)).slice(0, 24)}`,
+      ...requiredPeerBase,
+    }
+    const forgedOptionalPeerPlan = {
+      ...semantic,
+      signals: [forgedOptionalPeer],
+      signalEvidence: [peerRegistryEvidence, missingPeerGraphEvidence].sort((left, right) =>
+        left.id.localeCompare(right.id),
+      ),
+      summary: {
+        ...semantic.summary,
+        signals: {
+          total: 1,
+          pass: 0,
+          warn: 0,
+          fail: 0,
+          unknown: 0,
+          notApplicable: 1,
+          blocking: 0,
+        },
+      },
+    }
+    const requiredPeerPlan = {
+      ...forgedOptionalPeerPlan,
+      signals: [requiredPeer],
+      summary: {
+        ...forgedOptionalPeerPlan.summary,
+        signals: {
+          ...forgedOptionalPeerPlan.summary.signals,
+          fail: 1,
+          notApplicable: 0,
+        },
+      },
+    }
+    expect(
+      validatePlanResult({
+        ...requiredPeerPlan,
+        planFingerprint: createPlanFingerprint(requiredPeerPlan),
+      }),
+    ).toBe(true)
+    expect(
+      validatePlanResult({
+        ...forgedOptionalPeerPlan,
+        planFingerprint: createPlanFingerprint(forgedOptionalPeerPlan),
+      }),
+    ).toBe(false)
+    const enabledMaturityEvidenceBase = {
+      kind: 'registry-version' as const,
+      status: 'observed' as const,
+      subject: 'occurrence-1',
+      sourceRefs: ['occurrence-1'],
+      facts: {
+        targetVersion: '1.0.0',
+        publishedAt: '2026-07-15T00:00:00.000Z',
+        asOf: '2026-07-16T00:00:00.000Z',
+        cooldownDays: '30',
+      },
+    }
+    const enabledMaturityEvidence = {
+      id: `signal-evidence-${hashExactBytes(canonicalJson(enabledMaturityEvidenceBase)).slice(0, 24)}`,
+      ...enabledMaturityEvidenceBase,
+    }
+    const forgedDisabledMaturityBase = {
+      family: 'maturity' as const,
+      state: 'not-applicable' as const,
+      reason: 'MATURITY_POLICY_DISABLED' as const,
+      subject: { occurrenceIds: ['occurrence-1'], dependencyName: 'alpha', workspacePath: '.' },
+      evidenceRefs: [enabledMaturityEvidence.id],
+      effect: 'none' as const,
+      matchedRuleIds: [],
+    }
+    const forgedDisabledMaturity = {
+      id: `signal-${hashExactBytes(canonicalJson(forgedDisabledMaturityBase)).slice(0, 24)}`,
+      ...forgedDisabledMaturityBase,
+    }
+    const tooNewMaturityBase = {
+      ...forgedDisabledMaturityBase,
+      state: 'fail' as const,
+      reason: 'TARGET_TOO_NEW' as const,
+      effect: 'warn' as const,
+    }
+    const tooNewMaturity = {
+      id: `signal-${hashExactBytes(canonicalJson(tooNewMaturityBase)).slice(0, 24)}`,
+      ...tooNewMaturityBase,
+    }
+    const forgedDisabledMaturityPlan = {
+      ...semantic,
+      signals: [forgedDisabledMaturity],
+      signalEvidence: [enabledMaturityEvidence],
+      summary: {
+        ...semantic.summary,
+        signals: {
+          total: 1,
+          pass: 0,
+          warn: 0,
+          fail: 0,
+          unknown: 0,
+          notApplicable: 1,
+          blocking: 0,
+        },
+      },
+    }
+    const tooNewMaturityPlan = {
+      ...forgedDisabledMaturityPlan,
+      signals: [tooNewMaturity],
+      summary: {
+        ...forgedDisabledMaturityPlan.summary,
+        signals: {
+          ...forgedDisabledMaturityPlan.summary.signals,
+          fail: 1,
+          notApplicable: 0,
+        },
+      },
+    }
+    expect(
+      validatePlanResult({
+        ...tooNewMaturityPlan,
+        planFingerprint: createPlanFingerprint(tooNewMaturityPlan),
+      }),
+    ).toBe(true)
+    expect(
+      validatePlanResult({
+        ...forgedDisabledMaturityPlan,
+        planFingerprint: createPlanFingerprint(forgedDisabledMaturityPlan),
+      }),
+    ).toBe(false)
+    const unknownCurrentEvidenceBase = {
+      kind: 'registry-version' as const,
+      status: 'unknown' as const,
+      subject: 'occurrence-1',
+      sourceRefs: ['occurrence-1'],
+      facts: {
+        targetVersion: 'unknown',
+        deprecation: 'unknown',
+        versionRole: 'current',
+      },
+    }
+    const unknownCurrentEvidence = {
+      id: `signal-evidence-${hashExactBytes(canonicalJson(unknownCurrentEvidenceBase)).slice(0, 24)}`,
+      ...unknownCurrentEvidenceBase,
+    }
+    const unknownCurrentVersionBase = {
+      family: 'current-deprecation' as const,
+      state: 'unknown' as const,
+      reason: 'CURRENT_VERSION_UNKNOWN' as const,
+      subject: { occurrenceIds: ['occurrence-1'], dependencyName: 'alpha', workspacePath: '.' },
+      evidenceRefs: [unknownCurrentEvidence.id],
+      effect: 'warn' as const,
+      matchedRuleIds: [],
+    }
+    const unknownCurrentVersion = {
+      id: `signal-${hashExactBytes(canonicalJson(unknownCurrentVersionBase)).slice(0, 24)}`,
+      ...unknownCurrentVersionBase,
+    }
+    const unknownCurrentVersionPlan = {
+      ...semantic,
+      occurrences: semantic.occurrences.map((occurrence) => ({
+        ...occurrence,
+        declaredValue: '^1.0.0',
+      })),
+      signals: [unknownCurrentVersion],
+      signalEvidence: [unknownCurrentEvidence],
+      summary: {
+        ...semantic.summary,
+        signals: {
+          total: 1,
+          pass: 0,
+          warn: 0,
+          fail: 0,
+          unknown: 1,
+          notApplicable: 0,
+          blocking: 0,
+        },
+      },
+    }
+    expect(
+      validatePlanResult({
+        ...unknownCurrentVersionPlan,
+        planFingerprint: createPlanFingerprint(unknownCurrentVersionPlan),
+      }),
+    ).toBe(true)
+    const forgedCurrentVersionEvidenceBase = {
+      ...unknownCurrentEvidenceBase,
+      status: 'observed' as const,
+      facts: {
+        targetVersion: '9.0.0',
+        deprecation: 'absent',
+        versionRole: 'current',
+      },
+    }
+    const forgedCurrentVersionEvidence = {
+      id: `signal-evidence-${hashExactBytes(canonicalJson(forgedCurrentVersionEvidenceBase)).slice(0, 24)}`,
+      ...forgedCurrentVersionEvidenceBase,
+    }
+    const forgedCurrentVersionSignalBase = {
+      ...unknownCurrentVersionBase,
+      state: 'pass' as const,
+      reason: 'CURRENT_NOT_DEPRECATED' as const,
+      evidenceRefs: [forgedCurrentVersionEvidence.id],
+      effect: 'none' as const,
+    }
+    const forgedCurrentVersionSignal = {
+      id: `signal-${hashExactBytes(canonicalJson(forgedCurrentVersionSignalBase)).slice(0, 24)}`,
+      ...forgedCurrentVersionSignalBase,
+    }
+    const forgedCurrentVersionPlan = {
+      ...unknownCurrentVersionPlan,
+      occurrences: semantic.occurrences,
+      signals: [forgedCurrentVersionSignal],
+      signalEvidence: [forgedCurrentVersionEvidence],
+      summary: {
+        ...unknownCurrentVersionPlan.summary,
+        signals: {
+          ...unknownCurrentVersionPlan.summary.signals,
+          pass: 1,
+          unknown: 0,
+        },
+      },
+    }
+    expect(
+      validatePlanResult({
+        ...forgedCurrentVersionPlan,
+        planFingerprint: createPlanFingerprint(forgedCurrentVersionPlan),
+      }),
+    ).toBe(false)
+    const exactCurrentVersionEvidenceBase = {
+      ...forgedCurrentVersionEvidenceBase,
+      facts: { ...forgedCurrentVersionEvidenceBase.facts, targetVersion: '1.0.0' },
+    }
+    const exactCurrentVersionEvidence = {
+      id: `signal-evidence-${hashExactBytes(canonicalJson(exactCurrentVersionEvidenceBase)).slice(0, 24)}`,
+      ...exactCurrentVersionEvidenceBase,
+    }
+    const exactCurrentVersionSignalBase = {
+      ...forgedCurrentVersionSignalBase,
+      evidenceRefs: [exactCurrentVersionEvidence.id],
+    }
+    const exactCurrentVersionSignal = {
+      id: `signal-${hashExactBytes(canonicalJson(exactCurrentVersionSignalBase)).slice(0, 24)}`,
+      ...exactCurrentVersionSignalBase,
+    }
+    const exactCurrentVersionPlan = {
+      ...forgedCurrentVersionPlan,
+      signals: [exactCurrentVersionSignal],
+      signalEvidence: [exactCurrentVersionEvidence],
+    }
+    expect(
+      validatePlanResult({
+        ...exactCurrentVersionPlan,
+        planFingerprint: createPlanFingerprint(exactCurrentVersionPlan),
+      }),
+    ).toBe(true)
+    for (const [protocol, declaredValue] of [
+      ['npm', 'npm:@scope/alpha@=1.0.0'],
+      ['jsr', 'jsr:@scope/alpha@=1.0.0'],
+    ] as const) {
+      const protocolCurrentVersionPlan = {
+        ...exactCurrentVersionPlan,
+        occurrences: exactCurrentVersionPlan.occurrences.map((occurrence) => ({
+          ...occurrence,
+          protocol,
+          declaredValue,
+        })),
+      }
+      expect(
+        validatePlanResult({
+          ...protocolCurrentVersionPlan,
+          planFingerprint: createPlanFingerprint(protocolCurrentVersionPlan),
+        }),
+      ).toBe(true)
+    }
+    const forgedCurrentDeprecationBase = {
+      ...unknownCurrentVersionBase,
+      reason: 'CURRENT_DEPRECATION_UNKNOWN' as const,
+    }
+    const forgedCurrentDeprecation = {
+      id: `signal-${hashExactBytes(canonicalJson(forgedCurrentDeprecationBase)).slice(0, 24)}`,
+      ...forgedCurrentDeprecationBase,
+    }
+    const forgedCurrentDeprecationPlan = {
+      ...unknownCurrentVersionPlan,
+      signals: [forgedCurrentDeprecation],
+    }
+    expect(
+      validatePlanResult({
+        ...forgedCurrentDeprecationPlan,
+        planFingerprint: createPlanFingerprint(forgedCurrentDeprecationPlan),
+      }),
+    ).toBe(false)
+    const forgedSignalSummary = {
+      ...signalPlan,
+      summary: {
+        ...signalPlan.summary,
+        signals: { ...signalPlan.summary.signals, unknown: 0, pass: 1 },
+      },
+    }
+    expect(
+      validatePlanResult({
+        ...forgedSignalSummary,
+        planFingerprint: createPlanFingerprint(forgedSignalSummary),
+      }),
+    ).toBe(false)
+    const forgedEvidenceRef = {
+      ...signalPlan,
+      signals: [{ ...signal, evidenceRefs: ['signal-evidence-deadbeefdeadbeefdeadbeef'] }],
+    }
+    expect(
+      validatePlanResult({
+        ...forgedEvidenceRef,
+        planFingerprint: createPlanFingerprint(forgedEvidenceRef),
+      }),
+    ).toBe(false)
+
     const operationBase = {
       occurrenceId: 'occurrence-1',
       sourceFileId: 'source-1',
@@ -390,6 +890,45 @@ describe('shipped contract schemas', () => {
     }
 
     expect(validatePlanResult(validOperationPlan)).toBe(true)
+    const blockingSignalBase = {
+      ...signalBase,
+      effect: 'block' as const,
+      matchedRuleIds: ['block-unknown'],
+      winningRuleId: 'block-unknown',
+      override: {
+        ruleId: 'block-unknown',
+        source: 'library' as const,
+        from: 'warn' as const,
+        to: 'block' as const,
+      },
+    }
+    const blockingSignal = {
+      id: `signal-${hashExactBytes(canonicalJson(blockingSignalBase)).slice(0, 24)}`,
+      ...blockingSignalBase,
+    }
+    const blockingButExecutable = {
+      ...operationPlan,
+      signals: [blockingSignal],
+      signalEvidence: [signalEvidence],
+      summary: {
+        ...operationPlan.summary,
+        signals: {
+          total: 1,
+          pass: 0,
+          warn: 0,
+          fail: 0,
+          unknown: 1,
+          notApplicable: 0,
+          blocking: 1,
+        },
+      },
+    }
+    expect(
+      validatePlanResult({
+        ...blockingButExecutable,
+        planFingerprint: createPlanFingerprint(blockingButExecutable),
+      }),
+    ).toBe(false)
     const duplicateSourcePath = {
       ...validOperationPlan,
       repository: {

@@ -6,6 +6,17 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Semver
 
 ### Added
 
+- **Deterministic compatibility and passive-evidence signals** -- every new immutable plan carries
+  fingerprinted repository-runtime, exact-owner proposed peer-constraint graph, explicit/inferred cohort,
+  release-channel, fixed-clock maturity, current/target deprecation, completeness, staleness, and
+  signature/provenance-presence results. Evidence state remains `pass`, `warn`, `fail`, `unknown`,
+  or `not-applicable`; ordered rules change only `none`/`warn`/`block` policy effects and retain
+  override provenance. Explicit divergent cohorts block without retargeting, inferred shared
+  repository families remain non-mutating suggestions, and process runtime/wall-clock state never
+  enters plan truth. Physical catalogs and peer declarations project into the proposed graph;
+  ambiguous overrides, cross-workspace/hoist topology, malformed fields, and unavailable evidence
+  remain unknown. Passive presence never claims artifact verification.
+
 - **Observed global apply state machine** -- strict `depfresh.global-plan` and
   `depfresh.global-apply` schema-v1 contracts retain stable manager/package/version occurrence
   identity, executable and global-realm evidence, fixed no-shell argv, and explicit npm 10/11,
@@ -166,8 +177,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Semver
   cooldown is active instead of being treated as safe.
 
 - **Registry signature data is described as presence, not proof** -- current output and public
-  types report `present` or `absent` signature metadata without claiming verification or trust.
-  Legacy provenance fields remain deprecated compatibility input for library callers.
+  types report `present`, `absent`, or `unknown` signature metadata without claiming verification or
+  trust. Provenance presence remains independent and unknown when the registry contract supplies no
+  authoritative field. Legacy provenance labels remain deprecated compatibility input and are not
+  converted into signature evidence.
 
 - **The registry cache now uses Node's built-in SQLite** -- `node:sqlite` replaces the native `better-sqlite3` dependency while preserving the existing WAL-backed cache and memory fallback. depfresh no longer needs a native cache build or a matching Node ABI. The minimum supported runtime is now Node 24.15.0, the first Node 24 release where `node:sqlite` is a release candidate and imports without an experimental warning.
 - **The GitHub Action is revision-coupled and self-contained** -- each Action revision reads the

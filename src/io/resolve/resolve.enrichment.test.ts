@@ -149,7 +149,7 @@ describe('signature-presence tracking', () => {
     expect(result[0]!.currentSignaturePresence).toBeUndefined()
   })
 
-  it('accepts deprecated provenance fields as passive compatibility input', async () => {
+  it('does not conflate legacy provenance labels with signature presence', async () => {
     const { fetchPackageData } = await import('../registry')
     const { resolvePackage } = await import('./index')
 
@@ -168,8 +168,8 @@ describe('signature-presence tracking', () => {
       defaultNpmrc,
     )
 
-    expect(result[0]!.currentSignaturePresence).toBe('present')
-    expect(result[0]!.signaturePresence).toBe('absent')
+    expect(result[0]!.currentSignaturePresence).toBeUndefined()
+    expect(result[0]!.signaturePresence).toBeUndefined()
   })
 })
 
@@ -178,7 +178,7 @@ describe('node engine compatibility', () => {
     vi.resetAllMocks()
   })
 
-  it('populates nodeCompat and nodeCompatible from engines data', async () => {
+  it('records target engine metadata without consulting the executor runtime', async () => {
     const { fetchPackageData } = await import('../registry')
     const { resolvePackage } = await import('./index')
 
@@ -199,10 +199,10 @@ describe('node engine compatibility', () => {
 
     expect(result.length).toBe(1)
     expect(result[0]!.nodeCompat).toBe('>=18')
-    expect(result[0]!.nodeCompatible).toBe(true)
+    expect(result[0]!.nodeCompatible).toBeUndefined()
   })
 
-  it('marks incompatible node versions', async () => {
+  it('leaves compatibility unknown until repository constraints are evaluated', async () => {
     const { fetchPackageData } = await import('../registry')
     const { resolvePackage } = await import('./index')
 
@@ -223,7 +223,7 @@ describe('node engine compatibility', () => {
 
     expect(result.length).toBe(1)
     expect(result[0]!.nodeCompat).toBe('<16')
-    expect(result[0]!.nodeCompatible).toBe(false)
+    expect(result[0]!.nodeCompatible).toBeUndefined()
   })
 
   it('leaves nodeCompat undefined when no engines data', async () => {

@@ -235,6 +235,248 @@
         }
       }
     },
+    "signals": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "family",
+          "state",
+          "reason",
+          "subject",
+          "evidenceRefs",
+          "effect",
+          "matchedRuleIds"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^signal-[a-f0-9]{24}$"
+          },
+          "family": {
+            "enum": [
+              "runtime",
+              "peer",
+              "cohort",
+              "release-channel",
+              "maturity",
+              "current-deprecation",
+              "target-deprecation",
+              "signature-presence",
+              "provenance-presence",
+              "evidence-completeness",
+              "evidence-staleness"
+            ]
+          },
+          "state": {
+            "enum": [
+              "pass",
+              "warn",
+              "fail",
+              "unknown",
+              "not-applicable"
+            ]
+          },
+          "reason": {
+            "enum": [
+              "RUNTIME_COMPATIBLE",
+              "RUNTIME_PARTIAL_OVERLAP",
+              "RUNTIME_INCOMPATIBLE",
+              "RUNTIME_UNCONSTRAINED",
+              "RUNTIME_EVIDENCE_UNKNOWN",
+              "TARGET_ENGINE_UNKNOWN",
+              "PEER_COMPATIBLE",
+              "PEER_PARTIAL_OVERLAP",
+              "PEER_INCOMPATIBLE",
+              "PEER_REQUIRED_MISSING",
+              "PEER_OPTIONAL_MISSING",
+              "PEER_METADATA_ABSENT",
+              "PEER_EVIDENCE_UNKNOWN",
+              "COHORT_ALIGNED",
+              "COHORT_DIVERGED",
+              "COHORT_MEMBER_UNKNOWN",
+              "COHORT_INFERRED_SUGGESTION",
+              "TARGET_STABLE",
+              "TARGET_PRERELEASE",
+              "TARGET_VERSION_UNKNOWN",
+              "MATURITY_POLICY_DISABLED",
+              "TARGET_MATURE",
+              "TARGET_TOO_NEW",
+              "TARGET_TIME_UNKNOWN",
+              "CURRENT_NOT_DEPRECATED",
+              "CURRENT_DEPRECATED",
+              "CURRENT_VERSION_UNKNOWN",
+              "CURRENT_DEPRECATION_UNKNOWN",
+              "TARGET_NOT_DEPRECATED",
+              "TARGET_DEPRECATED",
+              "TARGET_DEPRECATION_UNKNOWN",
+              "SIGNATURE_PRESENT_UNVERIFIED",
+              "SIGNATURE_METADATA_ABSENT",
+              "SIGNATURE_METADATA_UNKNOWN",
+              "PROVENANCE_PRESENT_UNVERIFIED",
+              "PROVENANCE_METADATA_ABSENT",
+              "PROVENANCE_METADATA_UNKNOWN",
+              "REGISTRY_EVIDENCE_COMPLETE",
+              "REGISTRY_EVIDENCE_UNKNOWN",
+              "STALENESS_NOT_OBSERVED"
+            ]
+          },
+          "subject": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "occurrenceIds"
+            ],
+            "properties": {
+              "occurrenceIds": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "dependencyName": {
+                "type": "string",
+                "minLength": 1
+              },
+              "workspacePath": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^(?!/)(?![A-Za-z]:/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*\\\\).+$"
+              },
+              "cohortId": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          },
+          "evidenceRefs": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "effect": {
+            "enum": [
+              "none",
+              "warn",
+              "block"
+            ]
+          },
+          "matchedRuleIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "winningRuleId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "override": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "ruleId",
+              "source",
+              "from",
+              "to"
+            ],
+            "properties": {
+              "ruleId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "source": {
+                "enum": [
+                  "config",
+                  "library",
+                  "cli"
+                ]
+              },
+              "from": {
+                "enum": [
+                  "none",
+                  "warn",
+                  "block"
+                ]
+              },
+              "to": {
+                "enum": [
+                  "warn",
+                  "block"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "signalEvidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "kind",
+          "status",
+          "subject",
+          "sourceRefs",
+          "facts"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^signal-evidence-[a-f0-9]{24}$"
+          },
+          "kind": {
+            "enum": [
+              "repository-runtime",
+              "registry-version",
+              "planned-graph",
+              "explicit-cohort",
+              "inferred-cohort",
+              "clock"
+            ]
+          },
+          "status": {
+            "enum": [
+              "observed",
+              "absent",
+              "unknown",
+              "conflicting"
+            ]
+          },
+          "subject": {
+            "type": "string",
+            "minLength": 1
+          },
+          "sourceRefs": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "facts": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string",
+              "minLength": 1
+            },
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
     "execution": {
       "type": "object",
       "additionalProperties": false,
@@ -520,6 +762,49 @@
         "errors": {
           "type": "integer",
           "minimum": 0
+        },
+        "signals": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "total",
+            "pass",
+            "warn",
+            "fail",
+            "unknown",
+            "notApplicable",
+            "blocking"
+          ],
+          "properties": {
+            "total": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "pass": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "warn": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "fail": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "unknown": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "notApplicable": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "blocking": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
         }
       }
     },

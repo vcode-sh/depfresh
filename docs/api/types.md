@@ -14,6 +14,11 @@ The full type catalogue. Every interface, union, and enum that depfresh exports.
 | `InvocationAuthority` | Immutable grants for file write, process execution, lockfile write, install, exact verification, legacy compatibility, and global-write side effects |
 | `InspectOptions` / `InspectResult` | Process-free schema-v1 repository evidence input and schema-derived result |
 | `PlanOptions` / `PlanResult` | Registry-aware non-mutating planner input, including optional manager/verification intent, and schema-derived semantic plan result |
+| `CohortInput` / `SignalRuleInput` / `SignalRuleEffect` | Strict explicit package-family coordination and ordered `warn`/`block` signal-effect configuration |
+| `EvaluatePlanSignalsInput` / `EvaluatePlanSignalsResult` | Pure fixed-clock repository-signal evaluator input and normalized signals/evidence/summary/block result |
+| `PlanSignal` / `SignalEvidence` / `SignalSummary` | Fingerprinted immutable signal truth, normalized source evidence, policy trace, and exact counts |
+| `SignalState` / `SignalFamily` / `SignalReason` | Public five-state vocabulary, supported compatibility/passive families, and stable reason registry |
+| `SignalPolicyEffect` / `SignalPolicySource` | `none|warn|block` effect and traced config/library/CLI provenance; neither changes evidence truth |
 | `ApplyOptions` / `ApplyResult` | Explicit root selection and schema-derived observed file, manager, verification, and recovery result for one authorized immutable plan |
 | `GlobalPlanOptions` / `GlobalApplyOptions` | Explicit working directory, timeout, and environment inputs for global inventory/apply operations |
 | `GlobalApplyPlan` / `GlobalApplyResult` | Strict schema-v1 manager-specific global plan and observed non-transactional result |
@@ -24,7 +29,7 @@ The full type catalogue. Every interface, union, and enum that depfresh exports.
 | `InspectRepositoryOptions` | Read-only repository inspection options; contains no side-effect grants |
 | `NpmrcConfig` | Parsed `.npmrc` -- registries, auth tokens, proxy settings |
 | `OutputFormat` | Output mode: `'table'` \| `'json'` |
-| `PackageData` | Raw registry metadata for a package -- versions, dist-tags, timestamps, deprecations |
+| `PackageData` | Normalized registry metadata -- versions/tags/timestamps, deprecation, engines, peer requirements/optionality, repository identity, and passive signature/provenance presence |
 | `PackageManagerField` | Parsed `packageManager` field from a package manifest (`package.json` or `package.yaml`) (name, version, hash) |
 | `PackageManagerName` | `'npm'` \| `'pnpm'` \| `'yarn'` \| `'bun'` |
 | `PackageMeta` | A loaded package with its file path, raw deps, resolved changes, and indent info |
@@ -39,8 +44,8 @@ The full type catalogue. Every interface, union, and enum that depfresh exports.
 | `PolicyDecision` | Selected, skipped, blocked, or unchanged result with complete matched/winner trace |
 | `PolicyReason` / `PolicyCandidateReason` | Stable policy result and exact candidate-pipeline reason vocabularies |
 | `PolicyCatalogRole` / `PolicySpecifierStatus` | `direct|owner|consumer` and `locked|range|dynamic|invalid` classifications |
-| `SignaturePresence` | Passive registry metadata: `'present'` \| `'absent'`; presence does not prove verification or trust |
-| `ProvenanceLevel` | Deprecated compatibility input. Its legacy values do not imply verification; use `SignaturePresence` |
+| `PassivePresence` / `SignaturePresence` | Passive registry metadata: `'present'` \| `'absent'` \| `'unknown'`; presence does not prove verification or trust |
+| `ProvenanceLevel` | Deprecated compatibility input. Its legacy labels are not converted into signature evidence |
 | `RangeMode` | Resolution strategy plus legacy `packageMode` sentinel: `'default'` \| `'major'` \| `'minor'` \| `'patch'` \| `'latest'` \| `'newest'` \| `'next'` \| `'ignore'` |
 | `RawDep` | A dependency before resolution, optionally linked to its exact occurrence and policy decision |
 | `RegistryConfig` | A single registry entry -- URL, auth token, scope |
@@ -59,5 +64,5 @@ The full type catalogue. Every interface, union, and enum that depfresh exports.
 | `RepositoryDiagnostic` | Deterministic unsupported, ambiguous, containment, parse, or ID-collision evidence |
 | `ResolvedDepChange` | A dependency after resolution -- extends `RawDep` with target version, diff, metadata |
 | `SortOption` | Sort order for output: `'diff-asc'` \| `'diff-desc'` \| `'time-asc'` \| `'time-desc'` \| `'name-asc'` \| `'name-desc'` |
-| `UpdateScore` | Confidence scoring for an update -- confidence, maturity, adoption, breaking flag |
+| `UpdateScore` | Legacy optional compatibility shape; Plan 022 maturity truth is expressed by `PlanSignal` instead |
 | `WriteOutcome` | Observed terminal result for one exact physical write occurrence |

@@ -52,6 +52,10 @@ So you don't have to:
   roots are fingerprinted; fixed argument arrays run without a shell in a sanitized environment.
   Every command is followed by fresh inventory, and process success without observed target state
   is never reported as applied.
+- **Passive registry evidence is not artifact trust** -- plan signals keep signature presence,
+  provenance presence, absence, and unknown distinct. Registry fields are unverified input; a
+  signal override records policy, not proof. No passive signal verifies a tarball, integrity,
+  signer, attestation, or mutable tag, and configuration still grants no process authority.
 
 ## Stale-safe file apply
 

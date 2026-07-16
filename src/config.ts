@@ -5,6 +5,7 @@ import { join } from 'pathe'
 import { ConfigError } from './errors'
 import { resolveDiscoveryContext } from './io/packages/root-detection'
 import { compilePolicy } from './policy'
+import { validateSignalConfiguration } from './signals'
 import type { depfreshOptions, PolicyInputLayer, PolicyRuleSource } from './types'
 import { DEFAULT_OPTIONS } from './types'
 import { createLogger } from './utils/logger'
@@ -181,11 +182,18 @@ async function resolveConfigWithLoader(
   if (overrides.ignorePaths !== undefined) {
     merged.ignorePaths = overrides.ignorePaths
   }
+  if (overrides.cohorts !== undefined) {
+    merged.cohorts = overrides.cohorts
+  }
+  if (overrides.signalRules !== undefined) {
+    merged.signalRules = overrides.signalRules
+  }
   merged.cwd = discovery.inputCwd
   merged.inputCwd = discovery.inputCwd
   merged.effectiveRoot = discovery.effectiveRoot
   merged.discoveryMode = discovery.discoveryMode
   validateOptions(merged)
+  validateSignalConfiguration(merged.cohorts, merged.signalRules)
   merged.compiledPolicy = compilePolicy(
     createPolicyLayers(safeFileConfig, overrides, invocationSource),
   )

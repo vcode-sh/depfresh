@@ -27,6 +27,8 @@ Everything I know about depfresh is in here, split into files so you can pretend
   - [Table](./output-formats/table.md) -- the default, colourful output
   - [JSON](./output-formats/json.md) -- legacy machine-readable check envelope
   - [Inspect and Plan](./output-formats/inspect-plan.md) -- versioned schemas, fingerprints, and terminal decisions
+  - [Compatibility Signals](./output-formats/compatibility-signals.md) -- runtime, peer, cohort,
+    release, deprecation, completeness, and passive-presence evidence
 
 - **[Agent Workflows](./agents/README.md)** -- quickstarts for AI coding agents with copy-paste command patterns.
 

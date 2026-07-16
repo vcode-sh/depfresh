@@ -43,8 +43,6 @@ export function prepareDetailVersions(dep: ResolvedDepChange, explain: boolean):
     const deprecated = pkgData.deprecated?.[version]
     const nodeEngines = pkgData.engines?.[version]
     const signaturePresence = pkgData.signaturePresence?.[version]
-    const nodeIncompat =
-      typeof nodeEngines === 'string' && !semver.satisfies(process.version, nodeEngines)
 
     const result: DetailVersion = { version, diff }
     if (age) result.age = age
@@ -58,7 +56,8 @@ export function prepareDetailVersions(dep: ResolvedDepChange, explain: boolean):
         diff,
         deprecated,
         signaturePresence === 'absent',
-        nodeIncompat,
+        false,
+        Boolean(nodeEngines),
       )
     }
 
@@ -71,6 +70,7 @@ export function getExplanation(
   deprecated?: string,
   signatureMetadataAbsent?: boolean,
   nodeIncompat?: boolean,
+  nodeCompatibilityUnknown?: boolean,
 ): string {
   const parts: string[] = []
 
@@ -79,16 +79,17 @@ export function getExplanation(
       parts.push('Breaking change. Check migration guide.')
       break
     case 'minor':
-      parts.push('New features. Backwards compatible.')
+      parts.push('Minor release. Review changes.')
       break
     case 'patch':
-      parts.push('Bug fixes only. Safe to update.')
+      parts.push('Patch release. Review changes.')
       break
   }
 
   if (deprecated) parts.push('Deprecated.')
   if (signatureMetadataAbsent) parts.push('Signature metadata absent.')
   if (nodeIncompat) parts.push('Node incompatible.')
+  if (nodeCompatibilityUnknown) parts.push('Repository Node compatibility unknown.')
 
   return parts.join(' ')
 }

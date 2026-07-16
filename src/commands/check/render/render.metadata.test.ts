@@ -162,6 +162,18 @@ describe('renderTable nodecompat display', () => {
     expect(depLine).not.toContain('\u2717')
   })
 
+  it('shows unknown when engine metadata exists without repository compatibility evidence', () => {
+    const updates = [
+      makeUpdate({ name: 'unknown-engine-pkg', nodeCompat: '>=20', nodeCompatible: undefined }),
+    ]
+
+    renderTable('test-project', updates, { ...defaultOpts, nodecompat: true })
+
+    const depLine = lines.map(stripAnsi).find((line) => line.includes('unknown-engine-pkg'))
+    expect(depLine).toContain('?node')
+    expect(depLine).not.toContain('\u2713')
+  })
+
   it('hides nodecompat indicators when nodecompat option is false', () => {
     const updates = [
       makeUpdate({

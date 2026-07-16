@@ -82,8 +82,8 @@ depfresh --fail-on-outdated
   state per effective or nested repository boundary.
 - **Inspect and plan contracts** -- versioned, schema-valid machine documents with canonical
   repository and plan fingerprints, exact occurrence operations, complete policy traces, candidate
-  traces when registry resolution runs, and one terminal decision per occurrence. Planning uses
-  memory-only cache state and never writes.
+  traces when registry resolution runs, one terminal decision per occurrence, and fingerprinted
+  compatibility/passive-evidence signals. Planning uses memory-only cache state and never writes.
 - **Stale-safe apply contract** -- validates one immutable plan, exact target hashes and values,
   target Git state, and explicit write authority before same-filesystem staging. Every target is
   reparsed and rechecked before atomic per-file replacement; byte-exact backups and a durable
@@ -109,9 +109,16 @@ depfresh --fail-on-outdated
   agents. No ANSI noise.
 - **CI mode** -- `--fail-on-outdated` exits with code 1. Plug it into your pipeline.
 - **SQLite cache** -- WAL mode, 30min TTL, auto-fallback to memory
-- **Signature metadata** -- warns when a target lacks signature metadata that the current version has
-- **Node engine compat** -- flags updates that don't match your Node version
-- **Cooldown filter** -- skip versions published less than N days ago
+- **Compatibility signals** -- evaluates target engines against repository-declared Node ranges and
+  peer requirements against the complete proposed declaration graph for each exact owner. Catalog
+  owners are projected physically; unproven cross-workspace/hoist topology remains unknown.
+- **Coordination and release evidence** -- explicit cohorts can block divergent targets; inferred
+  repository families are non-mutating suggestions. Channel, maturity, and deprecation use the
+  plan's fixed clock.
+- **Passive trust presence** -- signature and provenance metadata remain distinct
+  `present`/`absent`/`unknown` observations and never claim artifact verification.
+- **Cooldown filter** -- skip versions published less than N days ago; immutable planning requires
+  an explicit `--as-of`, while legacy check uses its active invocation clock
 - **Candidate safety** -- filtered versions never re-enter through tags or fallbacks, and updates never implicitly downgrade
 - **Programmatic API** -- lifecycle callbacks + addon system for custom workflows
 
@@ -140,8 +147,30 @@ That rule caps the physical `native` catalog owner and its linked consumer occur
 declaration of the same dependency name still uses `latest`. Existing `include`, `exclude`,
 `mode`, and `packageMode` configuration remains supported through a compatibility compiler.
 Configuration can shape selection but cannot grant write or process authority.
+Signal rules change only a signal's policy effect; they never rewrite evidence state or select a
+different target.
 
-Supports `depfresh.config.ts`, `.depfreshrc`, or a `depfresh` key in `package.json`. Full reference: **[docs/configuration/](docs/configuration/)**
+Machine planning loads only declarative JSON configuration. Put plan-risk policy in `.depfreshrc`,
+`depfresh.config.json`, or `package.json#depfresh` (or pass the same plain data to `plan()`):
+
+```json
+{
+  "cohorts": [
+    { "id": "react-family", "members": ["react", "react-dom"], "strategy": "same-major" }
+  ],
+  "signalRules": [
+    {
+      "id": "review-peer-failures",
+      "selectors": { "family": "peer", "state": "fail" },
+      "effect": "block"
+    }
+  ]
+}
+```
+
+Legacy checks support `depfresh.config.ts`; machine planning accepts declarative JSON files,
+`.depfreshrc`, or a `depfresh` key in `package.json`. Full reference:
+**[docs/configuration/](docs/configuration/)**
 
 ## Monorepo Support
 
@@ -159,6 +188,8 @@ CLI contract, schema paths, and workflows. Inspect and plan exit `0` when comple
 actionable or incomplete findings and `1` for a valid finding-bearing document. Apply exits `0` for
 `applied` or `noop` and `1` for a valid `conflicted`, `reverted`, `failed`, or `unknown` result. Exit
 `2` is a fatal machine-command error. Non-TTY environments suppress spinners and interactive prompts.
+Before apply, review every failed or unknown signal, explicit cohort block, inferred suggestion,
+and effect override. Passive presence and an override are policy evidence, not proof of safety.
 
 To synchronize a supported lockfile and run an exact verification command, plan the phase first,
 review the JSON, then repeat only the matching grants at apply time:

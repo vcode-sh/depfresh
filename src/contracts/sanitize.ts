@@ -3,6 +3,7 @@ import { redactSensitiveText } from '../utils/redact'
 const POSIX_ABSOLUTE_PATH_PATTERN = /(?:^|[\s"'(=])(?:(?:file|link):)?\/+[^\s"'<>]+/u
 const WINDOWS_DRIVE_PATH_PATTERN = /(?:^|[\s"'(=])(?:(?:file|link):)?[A-Za-z]:[\\/][^\s"'<>]+/u
 const WINDOWS_UNC_PATH_PATTERN = /(?:^|[\s"'(=])\\\\[^\s\\/]+[\\/][^\s"'<>]+/u
+const CONTROL_OR_FORMAT_PATTERN = /[\p{Cc}\p{Cf}\p{Cs}]/u
 
 export function containsAbsolutePath(value: string): boolean {
   return (
@@ -13,7 +14,12 @@ export function containsAbsolutePath(value: string): boolean {
 }
 
 export function isContractSafeText(value: string): boolean {
-  return !containsAbsolutePath(value) && redactSensitiveText(value) === value
+  return (
+    value.length <= 4096 &&
+    !CONTROL_OR_FORMAT_PATTERN.test(value) &&
+    !containsAbsolutePath(value) &&
+    redactSensitiveText(value) === value
+  )
 }
 
 const SENSITIVE_ARG_FLAG =
@@ -112,6 +118,8 @@ function hasLiteralUserInfo(value: string): boolean {
 }
 
 export function sanitizeContractText(value: string): string {
+  if (value.length > 4096) return '[REDACTED]'
+  if (CONTROL_OR_FORMAT_PATTERN.test(value)) return '[REDACTED]'
   if (containsAbsolutePath(value)) return '[REDACTED_PATH]'
   if (redactSensitiveText(value) !== value) return '[REDACTED]'
   return value

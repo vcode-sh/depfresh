@@ -1,6 +1,7 @@
-export type SignaturePresence = 'present' | 'absent'
+export type PassivePresence = 'present' | 'absent' | 'unknown'
+export type SignaturePresence = PassivePresence
 
-/** @deprecated Signature metadata is presence-only and does not prove provenance or trust. */
+/** @deprecated Legacy caller input only; labels do not prove provenance or trust. */
 export type ProvenanceLevel = 'trusted' | 'attested' | 'none'
 
 export interface PackageData {
@@ -13,7 +14,13 @@ export interface PackageData {
   homepage?: string
   repository?: string
   signaturePresence?: Record<string, SignaturePresence>
-  /** @deprecated Use signaturePresence. Values do not imply verification. */
+  provenancePresence?: Record<string, PassivePresence>
+  deprecationPresence?: Record<string, PassivePresence>
+  engineMetadata?: Record<string, PassivePresence>
+  peerDependencies?: Record<string, Record<string, string>>
+  optionalPeerDependencies?: Record<string, string[]>
+  peerMetadata?: Record<string, PassivePresence>
+  /** @deprecated Legacy caller input only. Use provenancePresence for passive evidence. */
   provenance?: Record<string, ProvenanceLevel>
   engines?: Record<string, string>
 }

@@ -90,20 +90,20 @@ describe('renderFrame - detail view', () => {
     expect(output).toContain('Breaking change. Check migration guide.')
   })
 
-  it('renders node incompatibility explanations and metadata together', () => {
+  it('renders unknown repository Node compatibility and engine metadata together', () => {
     const dep = makeDep('alpha', 'dependencies')
     dep.pkgData.engines = { '2.0.0': '>=999.0.0' }
 
     const base = createInitialState([dep], {
       termRows: 20,
-      termCols: 120,
+      termCols: 160,
       explain: true,
     })
     const detail = enterDetail(base)
     const output = stripAnsi(renderFrame(detail))
 
     expect(output).toContain('node >=999.0.0')
-    expect(output).toContain('Node incompatible.')
+    expect(output).toContain('Repository Node compatibility unknown.')
   })
 
   it('keeps every visible line within the terminal width when detail metadata is long', () => {

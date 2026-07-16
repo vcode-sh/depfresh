@@ -9,7 +9,8 @@ I exposed the internals. On purpose. You can `import` from `depfresh` and do wha
 - **[Functions](./functions.md)** -- Inspect/plan/apply contracts, check/configuration, repository policy compilation/evaluation, package resolution, compatibility writes, lifecycle callbacks, and addons.
 
 - **[Types](./types.md)** -- The full type catalogue, including inspect/plan/apply schemas and options,
-  policy inputs, contexts, compiled rules, provenance, decisions, and candidate reasons.
+  policy inputs, compatibility signals/evidence, contexts, compiled rules, provenance, decisions,
+  and candidate reasons.
 
 - **[Repository Model](./repository-model.md)** -- Versioned read-only repository inspection,
   stable IDs, exact source hashes, occurrences, catalogs, relationships, and diagnostics.

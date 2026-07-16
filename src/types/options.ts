@@ -2,6 +2,7 @@ import type { depfreshAddon } from '../addons/types'
 import type { DepFieldType, RangeMode, ResolvedDepChange, SortOption } from './dependencies'
 import type { OutputFormat, PackageMeta } from './package'
 import type { CompiledPolicy, PolicyRuleInput } from './policy'
+import type { CohortInput, SignalRuleInput } from './signals'
 
 export interface InvocationAuthority {
   readonly write: boolean
@@ -39,6 +40,8 @@ export interface depfreshOptions {
   policyRules?: PolicyRuleInput[]
   /** Compiled by resolveConfig or lazily at the check boundary. */
   compiledPolicy?: CompiledPolicy
+  cohorts?: CohortInput[]
+  signalRules?: SignalRuleInput[]
 
   concurrency: number
   timeout: number

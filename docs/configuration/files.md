@@ -20,7 +20,7 @@ depfresh ships with sensible defaults. Here's what you get for free:
 | `sort` | `'diff-asc'` | Patch updates first, majors last |
 | `group` | `true` | Groups deps by package |
 | `timediff` | `true` | Shows how old your versions are |
-| `nodecompat` | `true` | Checks Node engine compatibility |
+| `nodecompat` | `true` | Shows legacy engine metadata; repository compatibility is evaluated by `plan` signals |
 | `ignorePaths` | `['**/node_modules/**', ...]` | Skips the obvious |
 | `ignoreOtherWorkspaces` | `true` | Skips nested monorepos |
 
@@ -88,7 +88,9 @@ export default {
 }
 ```
 
-All formats are equivalent. Pick one and pretend the others don't exist.
+Legacy check loads every format above. Machine `inspect`/`plan` workflows load only declarative JSON
+files and `package.json#depfresh`; they reject executable TypeScript or JavaScript configuration
+instead of evaluating project code. Equivalent plain JSON values have the same precedence.
 
 ### Policy compilation order
 
@@ -102,6 +104,13 @@ Invalid policy fails configuration loading with `ConfigError`. Unknown or author
 non-JSON values, duplicate IDs, invalid patterns or enums, and invalid action/mode combinations are
 never ignored. See [Full Options](./options.md#occurrence-policy) for the selector vocabulary and
 legacy translation.
+
+`cohorts` and `signalRules` are a separate plan-risk policy surface. Explicit cohorts describe
+exact package names and one coordination strategy; inferred shared-repository families are reported
+only as suggestions. Signal rules change `effect` with last-match-wins ordering while retaining the
+original state and a traced override. See [Full Options](./options.md#compatibility-signal-policy).
+For machine planning, place these values in `.depfreshrc`, a JSON config file, or
+`package.json#depfresh`, or provide them as direct plain-data library input.
 
 ### Invocation-only options
 

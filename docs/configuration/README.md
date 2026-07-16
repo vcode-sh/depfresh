@@ -6,7 +6,8 @@ You're here because defaults offend you. Fair enough. depfresh works perfectly f
 
 - **[Config Files](./files.md)** -- Supported file formats (TypeScript, JavaScript, JSON, `package.json#depfresh`), zero-config defaults, private registries, `.npmrc` handling, and cache settings. Start here.
 
-- **[Options Reference](./options.md)** -- Every option from the `depfreshOptions` interface, organised by category. Core, filtering, performance, output, paths, display, invocation-only phases, addons, and callbacks. The exhaustive list.
+- **[Options Reference](./options.md)** -- Every option from the `depfreshOptions` interface,
+  including explicit cohorts and ordered signal-effect policy.
 
 - **[Workspaces](./workspaces.md)** -- Recursive scanning, nested workspace detection, workspace catalogs (pnpm, bun, yarn), and the `workspace:` protocol. For the monorepo crowd.
 
@@ -31,6 +32,27 @@ export default defineConfig({
 Rules target repository occurrences, not just package names. See
 [Full Options](./options.md#occurrence-policy) for selectors, precedence, decision traces, and the
 compatibility translation for `include`, `exclude`, `mode`, and `packageMode`.
+Compatibility signal policy is documented under
+[Compatibility signal policy](./options.md#compatibility-signal-policy).
+
+`depfresh plan` and `plan()` intentionally do not evaluate executable configuration. Define
+`cohorts` and `signalRules` as plain data in `.depfreshrc`, `depfresh.config.json`, or
+`package.json#depfresh`, or pass them directly to `plan()`:
+
+```json
+{
+  "cohorts": [
+    { "id": "react-family", "members": ["react", "react-dom"], "strategy": "same-major" }
+  ],
+  "signalRules": [
+    {
+      "id": "block-peer-failures",
+      "selectors": { "family": "peer", "state": "fail" },
+      "effect": "block"
+    }
+  ]
+}
+```
 
 That's everything. If you've read this far, you're either building something serious or procrastinating. Either way, I respect the commitment.
 

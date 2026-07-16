@@ -9,8 +9,7 @@ import {
 import { canonicalJson } from '../contracts/canonical-json'
 import { hashExactBytes } from '../contracts/fingerprint'
 import type { GlobalInventoryPackage, GlobalManagerEvidence, GlobalManagerName } from '../types'
-
-const PACKAGE_NAME = /^(?:@[a-z0-9~][a-z0-9._~-]*\/)?[a-z0-9~][a-z0-9._~-]*$/u
+import { isValidPackageName } from '../utils/package-name'
 
 export interface GlobalManagerAdapter {
   manager: GlobalManagerName
@@ -102,7 +101,7 @@ export function getGlobalManagerAdapter(manager: GlobalManagerName): GlobalManag
 }
 
 export function isValidGlobalPackageName(name: string): boolean {
-  return PACKAGE_NAME.test(name)
+  return isValidPackageName(name)
 }
 
 export function executableFingerprint(handle: ExecutableHandle): string {

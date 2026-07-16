@@ -25,6 +25,20 @@ Every option from the `depfreshOptions` interface. I documented all of them beca
 | `packageMode` | `Record<string, RangeMode>` | `undefined` | Per-dependency-resolution-name strategies. See [packageMode](#packagemode). |
 | `policyRules` | `PolicyRuleInput[]` | `undefined` | Ordered occurrence rules. See [Occurrence policy](#occurrence-policy). |
 
+## Compatibility signal policy
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `cohorts` | `CohortInput[]` | `undefined` | Explicit package families. Each requires a public unique `id`, at least two unique exact `members`, and `update-together`, `same-major`, or `same-version`. `update-together` requires all physical members to have a candidate operation or none; it does not require equal versions. Divergence blocks by default but never selects another target. |
+| `signalRules` | `SignalRuleInput[]` | `undefined` | Ordered last-match-wins `warn`/`block` effects selected by family, state, reason, dependency, workspace, or explicit cohort. Rules cannot rewrite signal state or inferred suggestions. |
+
+Signal/cohort configuration is strict plain data: unknown fields, duplicate IDs or members, empty
+selectors, invalid enums, unsafe text, and references to unknown explicit cohorts fail configuration
+loading. Direct planner input replaces configured arrays and records `library` or `cli` provenance;
+otherwise overrides record `config` provenance. Configuration never grants apply or process authority.
+Machine planning reads these values only from declarative JSON configuration or direct plain-data
+input; it does not evaluate TypeScript or JavaScript config modules.
+
 ## Performance
 
 | Option | Type | Default | Description |
@@ -61,9 +75,9 @@ Every option from the `depfreshOptions` interface. I documented all of them beca
 | `sort` | `SortOption` | `'diff-asc'` | Sort order. Options: `diff-asc`, `diff-desc`, `time-asc`, `time-desc`, `name-asc`, `name-desc`. |
 | `timediff` | `boolean` | `true` | Show time since last publish. Guilt-trip yourself into updating. |
 | `cooldown` | `number` | `0` | Minimum proven age in days before suggesting an update. Missing or invalid publish-time metadata is skipped while enabled. |
-| `nodecompat` | `boolean` | `true` | Check Node engine compatibility and warn about incompatible updates. |
+| `nodecompat` | `boolean` | `true` | Show legacy target engine metadata. `?node` means repository compatibility is unknown; authoritative plan signals require repository runtime evidence and never use the executor runtime. |
 | `long` | `boolean` | `false` | Extended display with the package homepage URL. |
-| `explain` | `boolean` | `false` | Show human-readable explanations in the interactive detail view. "Breaking change." for majors, "Bug fixes only." for patches. Only does anything with `interactive: true`. |
+| `explain` | `boolean` | `false` | Show review-oriented release-shape notes in the interactive detail view, such as "Breaking change. Check migration guide." and "Patch release. Review changes." Only does anything with `interactive: true`. |
 | `explainDiscovery` | `boolean` | `false` | Print or emit discovery diagnostics: chosen root, matched manifests, skipped manifests, and loaded catalogs. |
 
 ## Exit Behavior

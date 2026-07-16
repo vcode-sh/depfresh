@@ -142,7 +142,7 @@ Apply exits `0` only for `applied` or `noop`, `1` for a schema-valid `conflicted
 | `--ignore-paths <patterns>` | -- | string | -- | Additional ignore glob patterns (comma-separated) merged with default ignore paths. Useful for skipping specific folders during recursive scan. |
 | `--deps-only` | -- | boolean | `false` | Only check `dependencies`. Ignores devDependencies, peerDependencies, and optionalDependencies. |
 | `--dev-only` | -- | boolean | `false` | Only check `devDependencies`. The inverse of `--deps-only`. Using both simultaneously is not recommended unless you enjoy empty results. |
-| `--peer` | `-P` | boolean | `false` | Include peer dependencies in the check. Also enables peer-scoped workspace catalogs (`catalog:peers` / `workspaces.catalogs.peers`) that are skipped by default. |
+| `--peer` | `-P` | boolean | `false` | Include peer declarations and peer-scoped catalogs in selection. Plan signals evaluate peer constraints in each exact owner's proposed graph; ambiguous overrides, hoists, or cross-workspace providers remain unknown. |
 | `--include-locked` | `-l` | boolean | `false` | Include pinned dependencies. They follow the selected mode; in `default` mode an exact pin can advance to the highest eligible version. |
 | `--cooldown <days>` | -- | string | `0` | Require candidate versions to be at least N days old. Candidates with missing or invalid publish-time metadata are skipped while cooldown is active. `0` disables it. |
 
@@ -155,7 +155,7 @@ Apply exits `0` only for `applied` or `noop`, `1` for a schema-valid `conflicted
 | `--group` | `-G` | boolean | `true` | Group output by dependency source (dependencies, devDependencies, etc.). Disable with `--no-group` if you prefer chaos. |
 | `--sort <strategy>` | `-s` | string | `diff-asc` | Sort order for the output table. See [Sorting](#sorting). |
 | `--timediff` | `-T` | boolean | `true` | Show how long ago each target version was published. Useful for spotting suspiciously fresh packages. Disable with `--no-timediff`. |
-| `--nodecompat` | -- | boolean | `true` | Show Node.js engine compatibility for target versions. Warns you before you install something that hates your runtime. Disable with `--no-nodecompat`. |
+| `--nodecompat` | -- | boolean | `true` | Show legacy engine metadata indicators. `?node` means repository compatibility is unknown; authoritative plan signals use repository declarations, never the executor runtime. |
 | `--long` | `-L` | boolean | `false` | Show extra details per package -- currently the homepage URL. For when you need to rage-read a changelog. |
 | `--explain` | `-E` | boolean | `false` | Show human-readable explanations for update types in interactive mode. Tells you *why* a version change matters. Only works with `--interactive`. |
 | `--explain-discovery` | -- | boolean | `false` | Explain how depfresh chose the root, which manifests it matched, which ones it skipped, and which catalogs it loaded. |

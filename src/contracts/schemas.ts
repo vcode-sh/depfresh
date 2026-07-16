@@ -1,4 +1,5 @@
 import type { FromSchema, JSONSchema } from 'json-schema-to-ts'
+import { SIGNAL_FAMILIES, SIGNAL_REASONS, SIGNAL_STATES } from '../types'
 
 const hashSchema = { type: 'string', pattern: '^[a-f0-9]{64}$' } as const
 const relativePathSchema = {
@@ -537,6 +538,95 @@ const planExecutionSchema = {
   },
 } as const
 
+const signalEvidenceSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['id', 'kind', 'status', 'subject', 'sourceRefs', 'facts'],
+  properties: {
+    id: { type: 'string', pattern: '^signal-evidence-[a-f0-9]{24}$' },
+    kind: {
+      enum: [
+        'repository-runtime',
+        'registry-version',
+        'planned-graph',
+        'explicit-cohort',
+        'inferred-cohort',
+        'clock',
+      ],
+    },
+    status: { enum: ['observed', 'absent', 'unknown', 'conflicting'] },
+    subject: { type: 'string', minLength: 1 },
+    sourceRefs: { type: 'array', items: { type: 'string', minLength: 1 } },
+    facts: {
+      type: 'object',
+      propertyNames: { type: 'string', minLength: 1 },
+      additionalProperties: { type: 'string' },
+    },
+  },
+} as const
+
+const planSignalSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: [
+    'id',
+    'family',
+    'state',
+    'reason',
+    'subject',
+    'evidenceRefs',
+    'effect',
+    'matchedRuleIds',
+  ],
+  properties: {
+    id: { type: 'string', pattern: '^signal-[a-f0-9]{24}$' },
+    family: { enum: SIGNAL_FAMILIES },
+    state: { enum: SIGNAL_STATES },
+    reason: { enum: SIGNAL_REASONS },
+    subject: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['occurrenceIds'],
+      properties: {
+        occurrenceIds: { type: 'array', items: { type: 'string', minLength: 1 } },
+        dependencyName: { type: 'string', minLength: 1 },
+        workspacePath: relativePathSchema,
+        cohortId: { type: 'string', minLength: 1 },
+      },
+    },
+    evidenceRefs: { type: 'array', minItems: 1, items: { type: 'string', minLength: 1 } },
+    effect: { enum: ['none', 'warn', 'block'] },
+    matchedRuleIds: { type: 'array', items: { type: 'string', minLength: 1 } },
+    winningRuleId: { type: 'string', minLength: 1 },
+    override: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['ruleId', 'source', 'from', 'to'],
+      properties: {
+        ruleId: { type: 'string', minLength: 1 },
+        source: { enum: ['config', 'library', 'cli'] },
+        from: { enum: ['none', 'warn', 'block'] },
+        to: { enum: ['warn', 'block'] },
+      },
+    },
+  },
+} as const
+
+const signalSummarySchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['total', 'pass', 'warn', 'fail', 'unknown', 'notApplicable', 'blocking'],
+  properties: {
+    total: { type: 'integer', minimum: 0 },
+    pass: { type: 'integer', minimum: 0 },
+    warn: { type: 'integer', minimum: 0 },
+    fail: { type: 'integer', minimum: 0 },
+    unknown: { type: 'integer', minimum: 0 },
+    notApplicable: { type: 'integer', minimum: 0 },
+    blocking: { type: 'integer', minimum: 0 },
+  },
+} as const
+
 export const planResultSchema = {
   $schema: 'http://json-schema.org/draft-07/schema#',
   $id: PLAN_SCHEMA_ID,
@@ -627,6 +717,8 @@ export const planResultSchema = {
         },
       },
     },
+    signals: { type: 'array', items: planSignalSchema },
+    signalEvidence: { type: 'array', items: signalEvidenceSchema },
     execution: planExecutionSchema,
     evidence: { type: 'array', items: { $ref: '#/definitions/evidence' } },
     lockfiles: { type: 'array', items: { $ref: '#/definitions/lockfile' } },
@@ -660,6 +752,7 @@ export const planResultSchema = {
         blocked: { type: 'integer', minimum: 0 },
         unknown: { type: 'integer', minimum: 0 },
         errors: { type: 'integer', minimum: 0 },
+        signals: signalSummarySchema,
       },
     },
     planFingerprint: hashSchema,

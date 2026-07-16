@@ -103,6 +103,9 @@ declaration is missing, and malformed supported syntax is unsupported. A single 
 unreadable declaration keeps the boundary conclusion unavailable, and unsupported syntax keeps it
 unsupported even when another declaration is valid. The Node version executing depfresh is not
 evidence. Compatibility evaluation remains outside this model.
+The plan signal evaluator consumes all declarations attached to an occurrence's owning boundary;
+missing, malformed, ambiguous, unsupported, or unavailable evidence remains unknown, and the
+executor runtime is never substituted.
 
 ### `vcs`
 

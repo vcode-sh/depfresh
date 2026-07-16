@@ -22,7 +22,7 @@ import {
 import { fetchPackageData } from '../registry'
 import { getPackageMode } from '../resolve-mode'
 import { getResolveCachePolicy } from './cache-policy'
-import { type ResolveContext, recordResolutionTrace } from './context'
+import { type ResolveContext, recordResolutionMetadata, recordResolutionTrace } from './context'
 import { selectVersionCandidate, type VersionCandidateSelection } from './version-filter'
 
 export async function resolveDependency(
@@ -135,6 +135,12 @@ export async function resolveDependency(
     }
   }
 
+  recordResolutionMetadata(resolveContext, dep.occurrenceId, {
+    packageName,
+    currentVersion,
+    data: pkgData,
+  })
+
   // Skip dist-tag versions (e.g., "latest", "next") — they resolve dynamically at install time
   if (
     pkgData.distTags &&
@@ -227,9 +233,6 @@ export async function resolveDependency(
     : undefined
   const signaturePresence = getSignaturePresence(pkgData, targetVersion)
   const nodeCompat: string | undefined = pkgData.engines?.[targetVersion]
-  const nodeCompatible: boolean | undefined = nodeCompat
-    ? semver.satisfies(process.version, nodeCompat)
-    : undefined
 
   recordResolutionTrace(resolveContext, dep.occurrenceId, {
     status: 'selected',
@@ -250,7 +253,6 @@ export async function resolveDependency(
     signaturePresence,
     currentSignaturePresence,
     nodeCompat,
-    nodeCompatible,
   }
 }
 
@@ -285,9 +287,7 @@ function getSignaturePresence(
   const presence = pkgData.signaturePresence?.[version]
   if (presence) return presence
 
-  const legacy = pkgData.provenance?.[version]
-  if (!legacy) return undefined
-  return legacy === 'none' ? 'absent' : 'present'
+  return undefined
 }
 
 function normalizeWorkspaceCurrentVersion(

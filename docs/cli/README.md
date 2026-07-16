@@ -42,6 +42,7 @@ depfresh apply --json --write --plan-file depfresh-plan.json
 write, interactive, legacy post-write, and global flags before discovery. Apply requires explicit
 `--write` plus one `--plan-file`, and rejects unrelated command flags. See
 [Inspect and Plan Contracts](../output-formats/inspect-plan.md) and
+[Compatibility Signals](../output-formats/compatibility-signals.md), plus the
 [Apply Contract](../output-formats/apply.md) for schemas, fingerprints, side-effect boundaries,
 recovery, and exit codes.
 

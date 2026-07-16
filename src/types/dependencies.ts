@@ -68,9 +68,9 @@ export interface ResolvedDepChange extends RawDep {
   score?: UpdateScore
   signaturePresence?: SignaturePresence
   currentSignaturePresence?: SignaturePresence
-  /** @deprecated Use signaturePresence. Values do not imply verification. */
+  /** @deprecated Legacy caller input only; values do not imply verification. */
   provenance?: ProvenanceLevel
-  /** @deprecated Use currentSignaturePresence. Values do not imply verification. */
+  /** @deprecated Legacy caller input only; values do not imply verification. */
   currentProvenance?: ProvenanceLevel
   nodeCompat?: string
   nodeCompatible?: boolean

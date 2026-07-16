@@ -106,10 +106,10 @@ describe('prepareDetailVersions', () => {
     expect(major?.explain).toContain('Breaking change')
 
     const minor = versions.find((v) => v.version === '1.1.0')
-    expect(minor?.explain).toContain('Backwards compatible')
+    expect(minor?.explain).toContain('Review changes')
   })
 
-  it('adds node incompatibility warning when engines do not match the current runtime', () => {
+  it('keeps Node compatibility unknown without repository evidence', () => {
     const dep = makeDep({
       pkgData: {
         name: 'test-pkg',
@@ -123,10 +123,10 @@ describe('prepareDetailVersions', () => {
     const major = versions.find((v) => v.version === '2.0.0')
 
     expect(major?.nodeEngines).toBe('>=999.0.0')
-    expect(major?.explain).toContain('Node incompatible.')
+    expect(major?.explain).toContain('Repository Node compatibility unknown.')
   })
 
-  it('treats malformed engine ranges as incompatible in explanations', () => {
+  it('does not classify malformed engine ranges against the executor', () => {
     const dep = makeDep({
       pkgData: {
         name: 'test-pkg',
@@ -140,7 +140,7 @@ describe('prepareDetailVersions', () => {
     const major = versions.find((v) => v.version === '2.0.0')
 
     expect(major?.nodeEngines).toBe('node >=18')
-    expect(major?.explain).toContain('Node incompatible.')
+    expect(major?.explain).toContain('Repository Node compatibility unknown.')
   })
 
   it('omits explanation text when explain is false', () => {
@@ -162,11 +162,11 @@ describe('getExplanation', () => {
   })
 
   it('returns minor explanation', () => {
-    expect(getExplanation('minor')).toBe('New features. Backwards compatible.')
+    expect(getExplanation('minor')).toBe('Minor release. Review changes.')
   })
 
   it('returns patch explanation', () => {
-    expect(getExplanation('patch')).toBe('Bug fixes only. Safe to update.')
+    expect(getExplanation('patch')).toBe('Patch release. Review changes.')
   })
 
   it('appends deprecated warning', () => {

@@ -12,6 +12,9 @@ table, a legacy check JSON envelope, and versioned inspect/plan/apply machine co
 
 - **[Inspect and Plan](./inspect-plan.md)** -- Deterministic schema-v1 repository evidence and
   immutable plan operations with canonical fingerprints.
+- **[Compatibility Signals](./compatibility-signals.md)** -- Repository-runtime, exact-owner peer
+  constraints with conservative unknown topology, cohort, release, deprecation, completeness, and
+  passive-presence evidence in plans.
 - **[Apply](./apply.md)** -- Explicitly authorized stale-safe file application, phase evidence,
   observed outcomes, and recovery limits.
 - **[Global Apply](./global-apply.md)** -- Manager-specific immutable global plans, observed item

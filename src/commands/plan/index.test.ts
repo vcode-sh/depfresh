@@ -2,6 +2,9 @@ import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { canonicalJson } from '../../contracts/canonical-json'
+import { createPlanFingerprint, hashExactBytes } from '../../contracts/fingerprint'
+import { validatePlanResult } from '../../contracts/validate'
 import type { PackageData } from '../../types'
 
 const { fetchPackageData } = vi.hoisted(() => ({
@@ -51,9 +54,587 @@ describe('plan contract', () => {
     })
     expect(result.decisions[0]?.candidate?.targetVersion).toBe('2.0.0')
     expect(result.planFingerprint).toMatch(/^[a-f0-9]{64}$/u)
+    expect(result.signals?.length).toBeGreaterThan(0)
+    expect(result.signalEvidence?.length).toBeGreaterThan(0)
+    expect(result.summary.signals?.total).toBe(result.signals?.length)
     expect(JSON.stringify(result)).not.toContain(root)
     expect(readFileSync(manifest)).toEqual(before)
     expect(existsSync(join(home, '.depfresh'))).toBe(false)
+  })
+
+  it('rejects release signals rebuilt from a target other than the decision candidate', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'depfresh-plan-release-forgery-'))
+    writeFileSync(
+      join(root, 'package.json'),
+      JSON.stringify({ name: 'fixture', dependencies: { alpha: '^1.0.0' } }),
+    )
+    fetchPackageData.mockResolvedValue({
+      name: 'alpha',
+      versions: ['1.0.0', '2.0.0'],
+      distTags: { latest: '2.0.0' },
+    })
+    const result = await plan({ cwd: root, mode: 'latest' })
+    const releaseSignal = result.signals?.find((item) => item.reason === 'TARGET_STABLE')
+    const releaseEvidence = result.signalEvidence?.find(
+      (item) => item.id === releaseSignal?.evidenceRefs[0],
+    )
+    expect(result.decisions[0]?.candidate?.targetVersion).toBe('2.0.0')
+    expect(releaseSignal).toBeDefined()
+    expect(releaseEvidence).toBeDefined()
+
+    const { id: _oldEvidenceId, ...evidenceBase } = releaseEvidence!
+    const forgedEvidenceBase = {
+      ...evidenceBase,
+      facts: { ...evidenceBase.facts, targetVersion: '3.0.0' },
+    }
+    const forgedEvidence = {
+      id: `signal-evidence-${hashExactBytes(canonicalJson(forgedEvidenceBase)).slice(0, 24)}`,
+      ...forgedEvidenceBase,
+    }
+    const { id: _oldSignalId, ...signalBase } = releaseSignal!
+    const forgedSignalBase = {
+      ...signalBase,
+      evidenceRefs: [forgedEvidence.id],
+    }
+    const forgedSignal = {
+      id: `signal-${hashExactBytes(canonicalJson(forgedSignalBase)).slice(0, 24)}`,
+      ...forgedSignalBase,
+    }
+    const { planFingerprint: _oldFingerprint, ...planBase } = result
+    const forgedBase = {
+      ...planBase,
+      signals: result
+        .signals!.map((item) => (item.id === releaseSignal!.id ? forgedSignal : item))
+        .sort((left, right) => left.id.localeCompare(right.id)),
+      signalEvidence: result
+        .signalEvidence!.map((item) => (item.id === releaseEvidence!.id ? forgedEvidence : item))
+        .sort((left, right) => left.id.localeCompare(right.id)),
+      summary: result.summary,
+    }
+
+    expect(
+      validatePlanResult({ ...forgedBase, planFingerprint: createPlanFingerprint(forgedBase) }),
+    ).toBe(false)
+  })
+
+  it('blocks divergent explicit cohorts without reselecting candidates', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'depfresh-plan-cohort-'))
+    writeFileSync(
+      join(root, 'package.json'),
+      JSON.stringify({
+        name: 'fixture',
+        dependencies: { alpha: '^1.0.0', beta: '^1.0.0' },
+      }),
+    )
+    fetchPackageData.mockImplementation(async (name: string) => ({
+      name,
+      versions: name === 'alpha' ? ['1.0.0', '2.0.0'] : ['1.0.0', '3.0.0'],
+      distTags: { latest: name === 'alpha' ? '2.0.0' : '3.0.0' },
+    }))
+
+    const result = await plan({
+      cwd: root,
+      mode: 'latest',
+      cohorts: [{ id: 'family', members: ['alpha', 'beta'], strategy: 'same-major' }],
+    })
+
+    expect(result.operations).toEqual([])
+    expect(result.decisions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ status: 'blocked', reason: 'SIGNAL_POLICY_BLOCKED' }),
+        expect.objectContaining({ status: 'blocked', reason: 'SIGNAL_POLICY_BLOCKED' }),
+      ]),
+    )
+    expect(result.signals).toContainEqual(
+      expect.objectContaining({
+        family: 'cohort',
+        state: 'fail',
+        reason: 'COHORT_DIVERGED',
+        effect: 'block',
+      }),
+    )
+
+    const demoted = await plan({
+      cwd: root,
+      mode: 'latest',
+      cohorts: [{ id: 'family', members: ['alpha', 'beta'], strategy: 'same-major' }],
+      signalRules: [{ id: 'review-family', selectors: { cohortId: 'family' }, effect: 'warn' }],
+    })
+    const cohortSignal = demoted.signals?.find((item) => item.reason === 'COHORT_DIVERGED')
+    const cohortEvidence = demoted.signalEvidence?.find(
+      (item) => item.kind === 'explicit-cohort' && cohortSignal?.evidenceRefs.includes(item.id),
+    )
+    const betaOccurrence = demoted.occurrences.find((item) => item.name === 'beta')
+    expect(cohortSignal).toBeDefined()
+    expect(cohortEvidence).toBeDefined()
+    expect(betaOccurrence).toBeDefined()
+    const betaFact = `proposedVersion.${betaOccurrence!.id}`
+    const { id: _oldCohortEvidenceId, ...cohortEvidenceBase } = cohortEvidence!
+    const forgedCohortEvidenceBase = {
+      ...cohortEvidenceBase,
+      facts: { ...cohortEvidenceBase.facts, [betaFact]: '2.0.0' },
+    }
+    const forgedCohortEvidence = {
+      id: `signal-evidence-${hashExactBytes(canonicalJson(forgedCohortEvidenceBase)).slice(0, 24)}`,
+      ...forgedCohortEvidenceBase,
+    }
+    const { id: _oldCohortSignalId, ...cohortSignalBase } = cohortSignal!
+    const forgedCohortSignalBase = {
+      ...cohortSignalBase,
+      state: 'pass' as const,
+      reason: 'COHORT_ALIGNED' as const,
+      evidenceRefs: [forgedCohortEvidence.id],
+      override: {
+        ruleId: 'review-family',
+        source: 'library' as const,
+        from: 'none' as const,
+        to: 'warn' as const,
+      },
+    }
+    const forgedCohortSignal = {
+      id: `signal-${hashExactBytes(canonicalJson(forgedCohortSignalBase)).slice(0, 24)}`,
+      ...forgedCohortSignalBase,
+    }
+    const { planFingerprint: _oldDemotedFingerprint, ...demotedBase } = demoted
+    const forgedBase = {
+      ...demotedBase,
+      signals: demoted
+        .signals!.map((item) => (item.id === cohortSignal!.id ? forgedCohortSignal : item))
+        .sort((left, right) => left.id.localeCompare(right.id)),
+      signalEvidence: demoted
+        .signalEvidence!.map((item) =>
+          item.id === cohortEvidence!.id ? forgedCohortEvidence : item,
+        )
+        .sort((left, right) => left.id.localeCompare(right.id)),
+      summary: {
+        ...demoted.summary,
+        signals: {
+          ...demoted.summary.signals!,
+          pass: demoted.summary.signals!.pass + 1,
+          fail: demoted.summary.signals!.fail - 1,
+        },
+      },
+    }
+    expect(
+      validatePlanResult({ ...forgedBase, planFingerprint: createPlanFingerprint(forgedBase) }),
+    ).toBe(false)
+  })
+
+  it('retains the causal blocking signal after rebuilding the planned peer graph', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'depfresh-plan-peer-block-'))
+    writeFileSync(
+      join(root, 'package.json'),
+      JSON.stringify({
+        name: 'fixture',
+        dependencies: { alpha: '^1.0.0', react: '^18.0.0' },
+      }),
+    )
+    fetchPackageData.mockImplementation(
+      async (name: string): Promise<PackageData> =>
+        name === 'alpha'
+          ? {
+              name,
+              versions: ['1.0.0', '2.0.0'],
+              distTags: { latest: '2.0.0' },
+              peerDependencies: { '2.0.0': { react: '^19.0.0' } },
+              peerMetadata: { '2.0.0': 'present' },
+            }
+          : {
+              name,
+              versions: ['18.0.0'],
+              distTags: { latest: '18.0.0' },
+              peerMetadata: { '18.0.0': 'absent' },
+            },
+    )
+
+    const result = await plan({
+      cwd: root,
+      mode: 'latest',
+      signalRules: [
+        {
+          id: 'block-peer-failures',
+          selectors: { family: 'peer', state: 'fail' },
+          effect: 'block',
+        },
+      ],
+    })
+
+    expect(result.operations).toEqual([])
+    expect(result.decisions).toContainEqual(
+      expect.objectContaining({ status: 'blocked', reason: 'SIGNAL_POLICY_BLOCKED' }),
+    )
+    expect(result.signals).toContainEqual(
+      expect.objectContaining({
+        family: 'peer',
+        state: 'fail',
+        effect: 'block',
+        winningRuleId: 'block-peer-failures',
+      }),
+    )
+  })
+
+  it('uses peer declarations as final planned provider constraints', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'depfresh-plan-peer-provider-'))
+    writeFileSync(
+      join(root, 'package.json'),
+      JSON.stringify({
+        name: 'fixture',
+        dependencies: { 'react-dom': '^18.0.0' },
+        peerDependencies: { react: '^18.0.0' },
+      }),
+    )
+    fetchPackageData.mockImplementation(
+      async (name: string): Promise<PackageData> =>
+        name === 'react-dom'
+          ? {
+              name,
+              versions: ['18.0.0', '19.0.0'],
+              distTags: { latest: '19.0.0' },
+              peerDependencies: { '19.0.0': { react: '^19.0.0' } },
+              peerMetadata: { '19.0.0': 'present' },
+            }
+          : {
+              name,
+              versions: ['18.0.0', '19.0.0'],
+              distTags: { latest: '19.0.0' },
+              peerMetadata: { '19.0.0': 'absent' },
+            },
+    )
+
+    const compatible = await plan({ cwd: root, mode: 'latest', peer: true })
+    expect(compatible.signals).toContainEqual(
+      expect.objectContaining({ family: 'peer', state: 'pass', reason: 'PEER_COMPATIBLE' }),
+    )
+    const disjoint = await plan({ cwd: root, mode: 'latest', peer: false })
+    expect(disjoint.signals).toContainEqual(
+      expect.objectContaining({ family: 'peer', state: 'fail', reason: 'PEER_INCOMPATIBLE' }),
+    )
+    expect(disjoint.signals).not.toContainEqual(
+      expect.objectContaining({ family: 'peer', reason: 'PEER_REQUIRED_MISSING' }),
+    )
+    const peerSignal = disjoint.signals?.find((item) => item.reason === 'PEER_INCOMPATIBLE')
+    const graphEvidence = disjoint.signalEvidence?.find(
+      (item) => item.kind === 'planned-graph' && peerSignal?.evidenceRefs.includes(item.id),
+    )
+    expect(peerSignal).toBeDefined()
+    expect(graphEvidence).toBeDefined()
+    const { id: _oldGraphId, ...graphBase } = graphEvidence!
+    const forgedGraphBase = {
+      ...graphBase,
+      facts: { ...graphBase.facts, providerRange: '>=19.0.0 <20.0.0-0' },
+    }
+    const forgedGraph = {
+      id: `signal-evidence-${hashExactBytes(canonicalJson(forgedGraphBase)).slice(0, 24)}`,
+      ...forgedGraphBase,
+    }
+    const { id: _oldPeerId, ...peerBase } = peerSignal!
+    const forgedPeerBase = {
+      ...peerBase,
+      state: 'pass' as const,
+      reason: 'PEER_COMPATIBLE' as const,
+      evidenceRefs: peerBase.evidenceRefs.map((id) =>
+        id === graphEvidence!.id ? forgedGraph.id : id,
+      ),
+      effect: 'none' as const,
+    }
+    const forgedPeer = {
+      id: `signal-${hashExactBytes(canonicalJson(forgedPeerBase)).slice(0, 24)}`,
+      ...forgedPeerBase,
+    }
+    const { planFingerprint: _oldPlanFingerprint, ...disjointBase } = disjoint
+    const forgedBase = {
+      ...disjointBase,
+      signals: disjoint
+        .signals!.map((item) => (item.id === peerSignal!.id ? forgedPeer : item))
+        .sort((left, right) => left.id.localeCompare(right.id)),
+      signalEvidence: disjoint
+        .signalEvidence!.map((item) => (item.id === graphEvidence!.id ? forgedGraph : item))
+        .sort((left, right) => left.id.localeCompare(right.id)),
+      summary: {
+        ...disjoint.summary,
+        signals: {
+          ...disjoint.summary.signals!,
+          pass: disjoint.summary.signals!.pass + 1,
+          fail: disjoint.summary.signals!.fail - 1,
+        },
+      },
+    }
+    expect(
+      validatePlanResult({ ...forgedBase, planFingerprint: createPlanFingerprint(forgedBase) }),
+    ).toBe(false)
+  })
+
+  it('keeps override-constrained peer topology unknown instead of emitting a false pass', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'depfresh-plan-peer-override-'))
+    writeFileSync(
+      join(root, 'package.json'),
+      JSON.stringify({
+        name: 'fixture',
+        dependencies: { alpha: '^1.0.0', react: '^18.0.0' },
+        overrides: { react: '18.0.0' },
+      }),
+    )
+    fetchPackageData.mockImplementation(
+      async (name: string): Promise<PackageData> =>
+        name === 'alpha'
+          ? {
+              name,
+              versions: ['1.0.0', '2.0.0'],
+              distTags: { latest: '2.0.0' },
+              peerDependencies: { '2.0.0': { react: '^19.0.0' } },
+              peerMetadata: { '2.0.0': 'present' },
+            }
+          : {
+              name,
+              versions: ['18.0.0', '19.0.0'],
+              distTags: { latest: '19.0.0' },
+              peerMetadata: { '19.0.0': 'absent' },
+            },
+    )
+
+    const result = await plan({ cwd: root, mode: 'latest' })
+
+    expect(result.signals).toContainEqual(
+      expect.objectContaining({
+        family: 'peer',
+        state: 'unknown',
+        reason: 'PEER_EVIDENCE_UNKNOWN',
+      }),
+    )
+    expect(result.signals).not.toContainEqual(
+      expect.objectContaining({ family: 'peer', state: 'pass', reason: 'PEER_COMPATIBLE' }),
+    )
+  })
+
+  it('withholds overlong runtime declarations and keeps compatibility unknown', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'depfresh-plan-runtime-overlong-'))
+    const hostileRuntime = 'x'.repeat(5000)
+    writeFileSync(
+      join(root, 'package.json'),
+      JSON.stringify({
+        name: 'fixture',
+        engines: { node: hostileRuntime },
+        dependencies: { alpha: '^1.0.0' },
+      }),
+    )
+    fetchPackageData.mockResolvedValue({
+      name: 'alpha',
+      versions: ['1.0.0', '2.0.0'],
+      distTags: { latest: '2.0.0' },
+      engines: { '2.0.0': '>=20' },
+      engineMetadata: { '2.0.0': 'present' },
+    })
+
+    const result = await plan({ cwd: root, mode: 'latest' })
+
+    expect(result.signals).toContainEqual(
+      expect.objectContaining({
+        family: 'runtime',
+        state: 'unknown',
+        reason: 'RUNTIME_EVIDENCE_UNKNOWN',
+      }),
+    )
+    expect(JSON.stringify(result)).not.toContain(hostileRuntime)
+  })
+
+  it('rejects runtime signals rebuilt from invented repository declaration facts', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'depfresh-plan-runtime-forgery-'))
+    writeFileSync(
+      join(root, 'package.json'),
+      JSON.stringify({
+        name: 'fixture',
+        engines: { node: '24.15.0' },
+        dependencies: { alpha: '^1.0.0' },
+      }),
+    )
+    fetchPackageData.mockResolvedValue({
+      name: 'alpha',
+      versions: ['1.0.0', '2.0.0'],
+      distTags: { latest: '2.0.0' },
+      engines: { '2.0.0': '>=20' },
+      engineMetadata: { '2.0.0': 'present' },
+    })
+    const result = await plan({ cwd: root, mode: 'latest' })
+    const runtimeSignal = result.signals?.find((item) => item.reason === 'RUNTIME_COMPATIBLE')
+    const runtimeEvidence = result.signalEvidence?.find(
+      (item) => item.id === runtimeSignal?.evidenceRefs[0],
+    )
+    expect(runtimeSignal).toBeDefined()
+    expect(runtimeEvidence).toBeDefined()
+
+    const rangeFact = Object.keys(runtimeEvidence!.facts).find((key) =>
+      key.startsWith('repositoryRange.'),
+    )!
+    const { id: _oldEvidenceId, ...evidenceBase } = runtimeEvidence!
+    const forgedEvidenceBase = {
+      ...evidenceBase,
+      facts: { ...evidenceBase.facts, [rangeFact]: '18.0.0' },
+    }
+    const forgedEvidence = {
+      id: `signal-evidence-${hashExactBytes(canonicalJson(forgedEvidenceBase)).slice(0, 24)}`,
+      ...forgedEvidenceBase,
+    }
+    const { id: _oldSignalId, ...signalBase } = runtimeSignal!
+    const forgedSignalBase = {
+      ...signalBase,
+      state: 'fail' as const,
+      reason: 'RUNTIME_INCOMPATIBLE' as const,
+      evidenceRefs: [forgedEvidence.id],
+      effect: 'warn' as const,
+    }
+    const forgedSignal = {
+      id: `signal-${hashExactBytes(canonicalJson(forgedSignalBase)).slice(0, 24)}`,
+      ...forgedSignalBase,
+    }
+    const { planFingerprint: _oldFingerprint, ...planBase } = result
+    const forgedBase = {
+      ...planBase,
+      signals: result
+        .signals!.map((item) => (item.id === runtimeSignal!.id ? forgedSignal : item))
+        .sort((left, right) => left.id.localeCompare(right.id)),
+      signalEvidence: result
+        .signalEvidence!.map((item) => (item.id === runtimeEvidence!.id ? forgedEvidence : item))
+        .sort((left, right) => left.id.localeCompare(right.id)),
+      summary: {
+        ...result.summary,
+        signals: {
+          ...result.summary.signals!,
+          pass: result.summary.signals!.pass - 1,
+          fail: result.summary.signals!.fail + 1,
+        },
+      },
+    }
+    const forged = { ...forgedBase, planFingerprint: createPlanFingerprint(forgedBase) }
+
+    expect(validatePlanResult(forged)).toBe(false)
+  })
+
+  it('withholds overlong dependency names without rejecting the plan contract', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'depfresh-plan-name-overlong-'))
+    const hostileName = 'x'.repeat(5000)
+    writeFileSync(
+      join(root, 'package.json'),
+      JSON.stringify({ name: 'fixture', dependencies: { [hostileName]: '^1.0.0' } }),
+    )
+
+    const result = await plan({ cwd: root, mode: 'latest' })
+
+    expect(result.decisions).toContainEqual(
+      expect.objectContaining({ status: 'blocked', reason: 'SENSITIVE_VALUE_REDACTED' }),
+    )
+    expect(JSON.stringify(result)).not.toContain(hostileName)
+    expect(fetchPackageData).not.toHaveBeenCalled()
+  })
+
+  it('projects catalog consumers into the complete planned peer graph', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'depfresh-plan-catalog-peer-'))
+    writeFileSync(
+      join(root, 'package.json'),
+      JSON.stringify({
+        name: 'fixture',
+        private: true,
+        packageManager: 'bun@1.2.0',
+        workspaces: {
+          packages: ['.'],
+          catalogs: { native: { react: '^18.0.0' } },
+        },
+        dependencies: { alpha: '^1.0.0', react: 'catalog:native' },
+      }),
+    )
+    fetchPackageData.mockImplementation(async (name: string): Promise<PackageData> => {
+      if (name === 'alpha') {
+        return {
+          name,
+          versions: ['1.0.0', '2.0.0'],
+          distTags: { latest: '2.0.0' },
+          peerDependencies: { '2.0.0': { react: '^19.0.0' } },
+          peerMetadata: { '2.0.0': 'present' },
+        }
+      }
+      if (name === 'react') {
+        return {
+          name,
+          versions: ['18.0.0', '19.0.0'],
+          distTags: { latest: '19.0.0' },
+          peerMetadata: { '19.0.0': 'absent' },
+        }
+      }
+      return { name, versions: ['1.2.0'], distTags: { latest: '1.2.0' } }
+    })
+
+    const result = await plan({ cwd: root, mode: 'latest' })
+
+    expect(result.signals).toContainEqual(
+      expect.objectContaining({ family: 'peer', state: 'pass', reason: 'PEER_COMPATIBLE' }),
+    )
+    expect(result.signals).not.toContainEqual(
+      expect.objectContaining({ family: 'peer', reason: 'PEER_REQUIRED_MISSING' }),
+    )
+  })
+
+  it('evaluates explicit cohorts through physical catalog owners without consumer duplicates', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'depfresh-plan-catalog-cohort-'))
+    writeFileSync(
+      join(root, 'package.json'),
+      JSON.stringify({
+        name: 'fixture',
+        private: true,
+        packageManager: 'bun@1.2.0',
+        workspaces: {
+          packages: ['.'],
+          catalogs: { native: { react: '^18.0.0', 'react-dom': '^18.0.0' } },
+        },
+        dependencies: { react: 'catalog:native', 'react-dom': 'catalog:native' },
+      }),
+    )
+    fetchPackageData.mockImplementation(
+      async (name: string): Promise<PackageData> => ({
+        name,
+        versions: name === 'bun' ? ['1.2.0'] : ['18.0.0', '19.0.0'],
+        distTags: { latest: name === 'bun' ? '1.2.0' : '19.0.0' },
+      }),
+    )
+
+    const result = await plan({
+      cwd: root,
+      mode: 'latest',
+      cohorts: [{ id: 'react-family', members: ['react', 'react-dom'], strategy: 'same-major' }],
+    })
+
+    expect(
+      result.operations.filter((operation) => operation.name.startsWith('react')),
+    ).toHaveLength(2)
+    expect(result.signals).toContainEqual(
+      expect.objectContaining({
+        family: 'cohort',
+        state: 'pass',
+        reason: 'COHORT_ALIGNED',
+        effect: 'none',
+      }),
+    )
+  })
+
+  it('reports an explicit cohort with no repository members as unknown', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'depfresh-plan-missing-cohort-'))
+    writeFileSync(
+      join(root, 'package.json'),
+      JSON.stringify({ name: 'fixture', dependencies: { alpha: '^1.0.0' } }),
+    )
+
+    const result = await plan({
+      cwd: root,
+      mode: 'latest',
+      cohorts: [{ id: 'missing-family', members: ['beta', 'gamma'], strategy: 'same-version' }],
+    })
+
+    expect(result.signals).toContainEqual(
+      expect.objectContaining({
+        family: 'cohort',
+        state: 'unknown',
+        reason: 'COHORT_MEMBER_UNKNOWN',
+        subject: expect.objectContaining({ occurrenceIds: [], cohortId: 'missing-family' }),
+      }),
+    )
   })
 
   it('fingerprints exact manager, lockfile, adapter, and verification phase intent', async () => {
@@ -555,13 +1136,52 @@ describe('plan contract', () => {
     expect(fetchPackageData).not.toHaveBeenCalled()
   })
 
+  it('keeps configured signal-rule provenance when library cohorts are supplied directly', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'depfresh-plan-signal-provenance-'))
+    writeFileSync(
+      join(root, 'package.json'),
+      JSON.stringify({
+        name: 'fixture',
+        dependencies: { alpha: '^1.0.0' },
+        depfresh: {
+          signalRules: [
+            {
+              id: 'review-stable',
+              selectors: { family: 'release-channel', state: 'pass' },
+              effect: 'warn',
+            },
+          ],
+        },
+      }),
+    )
+    fetchPackageData.mockResolvedValue({
+      name: 'alpha',
+      versions: ['1.0.0', '2.0.0'],
+      distTags: { latest: '2.0.0' },
+    })
+
+    const result = await plan({ cwd: root, mode: 'latest', cohorts: [] })
+
+    expect(result.signals).toContainEqual(
+      expect.objectContaining({
+        family: 'release-channel',
+        winningRuleId: 'review-stable',
+        override: expect.objectContaining({ source: 'config', from: 'none', to: 'warn' }),
+      }),
+    )
+  })
+
   it('classifies locked and disabled fields without inventing resolution failures', async () => {
     const root = mkdtempSync(join(tmpdir(), 'depfresh-plan-scope-'))
     writeFileSync(
       join(root, 'package.json'),
       JSON.stringify({
         name: 'fixture',
-        dependencies: { alpha: '1.0.0' },
+        dependencies: {
+          alpha: '1.0.0',
+          npmAlias: 'npm:@scope/alpha@=1.0.0',
+          jsrAlias: 'jsr:@scope/beta@2.0.0',
+        },
         peerDependencies: { beta: '^1.0.0' },
       }),
     )
@@ -577,6 +1197,38 @@ describe('plan contract', () => {
       ]),
     )
     expect(fetchPackageData).not.toHaveBeenCalled()
+    expect(result.signals).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          family: 'current-deprecation',
+          reason: 'CURRENT_DEPRECATION_UNKNOWN',
+          subject: expect.objectContaining({ dependencyName: 'alpha' }),
+        }),
+        expect.objectContaining({
+          family: 'release-channel',
+          reason: 'TARGET_STABLE',
+          subject: expect.objectContaining({ dependencyName: 'alpha' }),
+        }),
+        expect.objectContaining({
+          family: 'release-channel',
+          reason: 'TARGET_STABLE',
+          subject: expect.objectContaining({ dependencyName: 'npmAlias' }),
+        }),
+        expect.objectContaining({
+          family: 'release-channel',
+          reason: 'TARGET_STABLE',
+          subject: expect.objectContaining({ dependencyName: 'jsrAlias' }),
+        }),
+      ]),
+    )
+    expect(
+      result.signals?.filter((signal) => signal.subject.dependencyName === 'alpha'),
+    ).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ reason: 'CURRENT_VERSION_UNKNOWN' }),
+        expect.objectContaining({ reason: 'TARGET_VERSION_UNKNOWN' }),
+      ]),
+    )
   })
 
   it('preserves alias, workspace, and package-manager storage syntax in exact operations', async () => {

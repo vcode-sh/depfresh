@@ -147,6 +147,11 @@ errors.
 ```ts
 function inspect(options: InspectOptions): Promise<InspectResult>
 function plan(options: PlanOptions): Promise<PlanResult>
+function evaluatePlanSignals(input: EvaluatePlanSignalsInput): EvaluatePlanSignalsResult
+function validateSignalConfiguration(
+  cohorts: CohortInput[] | undefined,
+  rules: SignalRuleInput[] | undefined,
+): void
 function apply(
   plan: PlanResult,
   options: ApplyOptions,
@@ -172,6 +177,12 @@ if (!validateInspectResult(evidence) || !validatePlanResult(dependencyPlan)) {
   throw new Error('Unsupported contract')
 }
 
+for (const signal of dependencyPlan.signals ?? []) {
+  if (signal.state === 'fail' || signal.state === 'unknown' || signal.effect === 'block') {
+    // Review before granting apply authority.
+  }
+}
+
 const applied = await apply(
   dependencyPlan,
   { cwd: process.cwd() },
@@ -186,6 +197,14 @@ cooldown is positive. `syncLockfile` or `install` fingerprints one supported man
 process. These values express future intent and grant no authority. See
 [Inspect and Plan Contracts](../output-formats/inspect-plan.md) for the schemas, fingerprints,
 terminal vocabulary, and compatibility boundary.
+
+The planner builds all candidate operations before `evaluatePlanSignals()` evaluates repository
+runtime declarations, selected-version peer requirements against the proposed declaration graph,
+explicit/inferred cohorts, fixed-clock release evidence, and passive presence. The pure evaluator
+never reads process state or performs I/O. Direct evaluator calls require a canonical UTC `asOf`, a
+non-negative safe-integer `cooldownDays`, and confirmed Plan 016 runtime conclusions before runtime
+compatibility can pass. `validateSignalConfiguration()` applies the same strict cohort/rule checks
+used by configuration loading. An override changes only `effect`; it is not a safety assertion.
 
 Manager phase planning currently accepts only registry-backed `semver` and `npm:` alias occurrence
 protocols. Other protocols retain exact file operations but make requested manager execution

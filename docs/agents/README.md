@@ -47,8 +47,9 @@ depfresh --output json
 For automation that needs exact occurrences and immutable fingerprints, prefer:
 
 ```text
-Run depfresh inspect and plan in JSON mode. Validate the shipped schema, review every blocked,
-unknown, and error decision, and do not treat the legacy check report as an apply plan.
+Run depfresh inspect and plan in JSON mode. Validate the shipped schema; review every blocked,
+unknown, and error decision plus every failed/unknown signal, explicit cohort block, inferred
+suggestion, and effect override; and do not treat the legacy check report as an apply plan.
 ```
 
 ```bash

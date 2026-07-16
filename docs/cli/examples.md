@@ -234,10 +234,11 @@ Pick any version with `Space` or `Enter` -- not just the one depfresh suggested.
 Add `--explain` (or `-E`) to show human-readable descriptions next to each version in the detail view:
 
 - **major** -- "Breaking change. Check migration guide."
-- **minor** -- "New features. Backwards compatible."
-- **patch** -- "Bug fixes only. Safe to update."
+- **minor** -- "Minor release. Review changes."
+- **patch** -- "Patch release. Review changes."
 
-Plus deprecation, missing signature-metadata, and Node compatibility warnings when relevant. For the AI agents and juniors who want context, not just numbers.
+Plus deprecation, missing signature-metadata, and unknown repository Node compatibility warnings
+when relevant. These notes are review context, not a safety verdict.
 
 ### Non-TTY Fallback
 

@@ -81,10 +81,14 @@ Shows the package homepage URL beneath each row. For when you need to click thro
 Shows all packages, including the ones that are actually up to date. A confidence boost, if you need one.
 
 **`--nodecompat`** (default: `true`)
-Displays Node.js engine compatibility indicators next to each update. A green checkmark means you're fine. A red cross means the target version has opinions about your Node version.
+Displays legacy Node.js engine indicators. A green check or red cross is shown only when a caller
+provided an evaluated result; `?node` means engine metadata exists but repository compatibility is
+unknown. Use `depfresh plan --json` for the repository-declaration signal contract.
 
 **`--explain` / `-E`** (default: `false`)
-In the interactive detail view (`-I`), shows human-readable explanations next to each version: "Breaking change. Check migration guide." for majors, "Bug fixes only. Safe to update." for patches. Plus deprecation and missing signature-metadata warnings. Signature presence is passive registry metadata, not a verification result. Patronising? Maybe. Useful when you're staring at 6 versions of typescript at midnight? Definitely.
+In the interactive detail view (`-I`), shows human-readable release-shape notes plus deprecation,
+unknown repository Node compatibility, and missing signature-metadata warnings. Release shape and
+passive registry presence are not safety or verification results.
 
 ## Contextual Tips
 

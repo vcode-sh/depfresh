@@ -263,7 +263,10 @@ do not treat a successful process exit as proof that the package changed.
 metadata may be unavailable. When `--cooldown` needs a missing publish time, the candidate is
 skipped as unknown rather than assumed mature.
 
-**Node compatibility.** The `--nodecompat` flag checks the `engines.node` field in package metadata. This is best-effort — not every package declares engine constraints, and some declarations are optimistic at best.
+**Node compatibility.** The legacy `--nodecompat` display exposes target `engines.node` metadata;
+it does not compare against the Node process running depfresh. `?node` means repository
+compatibility is unknown. For machine decisions, use `depfresh plan`: its runtime signal requires
+confirmed repository declarations and keeps missing, conflicting, or unsupported evidence unknown.
 
 **Exit codes.** Legacy check uses `0` for a complete check or fully observed write, optional `1` for
 outdated results with `--fail-on-outdated`, and `2` for fatal or incomplete writes. Inspect/plan use

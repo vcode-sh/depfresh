@@ -64,6 +64,8 @@ export function renderRows(
         line += `  ${c.green.dim('\u2713')}`
       } else if (dep.nodeCompatible === false) {
         line += `  ${c.red('\u2717node')}`
+      } else if (dep.nodeCompat) {
+        line += `  ${c.yellow('?node')}`
       }
     }
 

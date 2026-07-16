@@ -121,6 +121,11 @@ describe('fetchPackageData', () => {
       '3.0.0': '2025-03-01T00:00:00.000Z',
     })
     expect(result.deprecated).toEqual({ '3.0.0': 'Version is yanked' })
+    expect(result.deprecationPresence).toEqual({
+      '1.0.0': 'absent',
+      '2.0.0': 'absent',
+      '3.0.0': 'present',
+    })
 
     const { selectVersionCandidate } = await import('./resolve')
     expect(
@@ -353,7 +358,7 @@ describe('fetchPackageData', () => {
     expect(result.signaturePresence).toEqual({
       '1.0.0': 'present',
       '2.0.0': 'absent',
-      '3.0.0': 'absent',
+      '3.0.0': 'unknown',
     })
     expect(result.provenance).toBeUndefined()
   })
@@ -361,7 +366,7 @@ describe('fetchPackageData', () => {
   it('records signature presence from full metadata without claiming verification', async () => {
     const npmResponse = {
       versions: {
-        '1.0.0': { dist: { signatures: [{ sig: 'abc' }] } },
+        '1.0.0': { dist: { signatures: [{ keyid: 'SHA256:key', sig: 'abc' }] } },
         '2.0.0': { dist: { signatures: [] } },
         '3.0.0': { dist: {} },
       },
@@ -375,9 +380,100 @@ describe('fetchPackageData', () => {
     expect(result.signaturePresence).toEqual({
       '1.0.0': 'present',
       '2.0.0': 'absent',
-      '3.0.0': 'absent',
+      '3.0.0': 'unknown',
     })
     expect(result.provenance).toBeUndefined()
+  })
+
+  it('keeps malformed and contradictory signature metadata unknown', async () => {
+    const npmResponse = {
+      versions: {
+        '1.0.0': { hasSignatures: true, dist: { signatures: [] } },
+        '2.0.0': { dist: { signatures: 'not-an-array' } },
+        '3.0.0': { hasSignatures: 'yes' },
+      },
+      'dist-tags': { latest: '3.0.0' },
+    }
+    globalThis.fetch = mockFetchResponse(npmResponse)
+
+    const { fetchPackageData } = await import('./registry')
+    const result = await fetchPackageData('ambiguous-signatures', defaultOptions)
+
+    expect(result.signaturePresence).toEqual({
+      '1.0.0': 'unknown',
+      '2.0.0': 'unknown',
+      '3.0.0': 'unknown',
+    })
+  })
+
+  it('records attestation presence without exposing or verifying its URL', async () => {
+    const npmResponse = {
+      versions: {
+        '1.0.0': { dist: { attestations: { url: 'https://registry.example.test/a.json' } } },
+        '2.0.0': { dist: { attestations: {} } },
+        '3.0.0': { dist: { attestations: null } },
+      },
+      'dist-tags': { latest: '3.0.0' },
+    }
+    globalThis.fetch = mockFetchResponse(npmResponse)
+
+    const { fetchPackageData } = await import('./registry')
+    const result = await fetchPackageData('attested-package', defaultOptions)
+
+    expect(result.provenancePresence).toEqual({
+      '1.0.0': 'present',
+      '2.0.0': 'unknown',
+      '3.0.0': 'unknown',
+    })
+    expect(JSON.stringify(result.provenancePresence)).not.toContain('registry.example')
+  })
+
+  it('keeps hostile peer metadata unknown instead of serializing control text', async () => {
+    const hostile = '\u001B[31mpeer\nname'
+    globalThis.fetch = mockFetchResponse({
+      versions: { '1.0.0': { peerDependencies: { [hostile]: '^1.0.0' } } },
+      'dist-tags': { latest: '1.0.0' },
+    })
+
+    const { fetchPackageData } = await import('./registry')
+    const result = await fetchPackageData('hostile-peer-package', defaultOptions)
+
+    expect(result.peerMetadata).toEqual({ '1.0.0': 'unknown' })
+    expect(JSON.stringify(result)).not.toContain(hostile)
+  })
+
+  it('keeps path-like peer names unknown instead of serializing them as graph subjects', async () => {
+    globalThis.fetch = mockFetchResponse({
+      versions: { '1.0.0': { peerDependencies: { '../escape': '^1.0.0' } } },
+      'dist-tags': { latest: '1.0.0' },
+    })
+
+    const { fetchPackageData } = await import('./registry')
+    const result = await fetchPackageData('path-like-peer-package', defaultOptions)
+
+    expect(result.peerMetadata).toEqual({ '1.0.0': 'unknown' })
+    expect(JSON.stringify(result)).not.toContain('../escape')
+  })
+
+  it('extracts peer requirements and optionality without coercing malformed fields', async () => {
+    const npmResponse = {
+      versions: {
+        '1.0.0': {
+          peerDependencies: { react: '^18.0.0' },
+          peerDependenciesMeta: { react: { optional: true } },
+        },
+        '2.0.0': { peerDependencies: ['invalid'] },
+      },
+      'dist-tags': { latest: '2.0.0' },
+    }
+    globalThis.fetch = mockFetchResponse(npmResponse)
+
+    const { fetchPackageData } = await import('./registry')
+    const result = await fetchPackageData('peer-package', defaultOptions)
+
+    expect(result.peerDependencies).toEqual({ '1.0.0': { react: '^18.0.0' } })
+    expect(result.optionalPeerDependencies).toEqual({ '1.0.0': ['react'] })
+    expect(result.peerMetadata).toEqual({ '1.0.0': 'present', '2.0.0': 'unknown' })
   })
 
   it('extracts engines.node per version', async () => {

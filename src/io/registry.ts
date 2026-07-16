@@ -1,8 +1,16 @@
 import * as semver from 'semver'
+import { isContractSafeText } from '../contracts/sanitize'
 import { RegistryError, ResolveError } from '../errors'
-import type { NpmrcConfig, PackageData, RegistryConfig, SignaturePresence } from '../types'
+import type {
+  NpmrcConfig,
+  PackageData,
+  PassivePresence,
+  RegistryConfig,
+  SignaturePresence,
+} from '../types'
 import type { Logger } from '../utils/logger'
 import { getRegistryForPackage } from '../utils/npmrc'
+import { isValidPackageName } from '../utils/package-name'
 import { redactSensitiveText } from '../utils/redact'
 import { getFetchTransportInit } from './transport'
 
@@ -54,28 +62,60 @@ async function fetchNpmPackage(
   }
   const json = payload as Record<string, unknown>
 
-  const versionsObj = (json.versions ?? {}) as Record<string, Record<string, unknown>>
-  const versions = Object.keys(versionsObj).filter((v) => semver.valid(v))
+  const versionsObj = isRecord(json.versions) ? json.versions : {}
+  const versions = Object.entries(versionsObj)
+    .filter(([candidate, metadata]) => semver.valid(candidate) && isRecord(metadata))
+    .map(([candidate]) => candidate)
 
-  const distTags = (json['dist-tags'] ?? {}) as Record<string, string>
+  const distTags = readDistTags(json['dist-tags'])
   const time = readStringRecord(json.time)
   const deprecated: Record<string, string> = {}
 
   const signaturePresence: Record<string, SignaturePresence> = {}
+  const provenancePresence: Record<string, PassivePresence> = {}
+  const deprecationPresence: Record<string, PassivePresence> = {}
+  const engineMetadata: Record<string, PassivePresence> = {}
+  const peerDependencies: Record<string, Record<string, string>> = {}
+  const optionalPeerDependencies: Record<string, string[]> = {}
+  const peerMetadata: Record<string, PassivePresence> = {}
   const engines: Record<string, string> = {}
 
-  for (const [ver, data] of Object.entries(versionsObj)) {
-    if (data.deprecated) {
-      deprecated[ver] = String(data.deprecated)
-    }
-    const dist = data.dist as Record<string, unknown> | undefined
-    const hasSignatures =
-      data.hasSignatures ||
-      (Array.isArray(dist?.signatures) && (dist.signatures as unknown[]).length > 0)
-    signaturePresence[ver] = hasSignatures ? 'present' : 'absent'
-    const enginesObj = data.engines as Record<string, string> | undefined
-    if (enginesObj?.node) {
-      engines[ver] = enginesObj.node
+  for (const ver of versions) {
+    const data = versionsObj[ver]
+    if (!isRecord(data)) continue
+    const deprecatedValue = data.deprecated
+    if (deprecatedValue === undefined) deprecationPresence[ver] = 'absent'
+    else if (typeof deprecatedValue === 'string' && deprecatedValue.length > 0) {
+      deprecated[ver] = deprecatedValue
+      deprecationPresence[ver] = 'present'
+    } else deprecationPresence[ver] = 'unknown'
+
+    signaturePresence[ver] = readSignaturePresence(data)
+    provenancePresence[ver] = readProvenancePresence(data)
+
+    const enginesValue = data.engines
+    if (enginesValue === undefined) engineMetadata[ver] = 'absent'
+    else if (isRecord(enginesValue)) {
+      const node = enginesValue.node
+      if (node === undefined) engineMetadata[ver] = 'absent'
+      else if (typeof node === 'string' && isContractSafeText(node) && semver.validRange(node)) {
+        engines[ver] = node
+        engineMetadata[ver] = 'present'
+      } else engineMetadata[ver] = 'unknown'
+    } else engineMetadata[ver] = 'unknown'
+
+    const peerValue = data.peerDependencies
+    if (peerValue === undefined) peerMetadata[ver] = 'absent'
+    else {
+      const peers = readStringRecordStrict(peerValue)
+      if (!peers) peerMetadata[ver] = 'unknown'
+      else {
+        peerDependencies[ver] = peers
+        peerMetadata[ver] = Object.keys(peers).length > 0 ? 'present' : 'absent'
+        const optional = readOptionalPeers(data.peerDependenciesMeta, new Set(Object.keys(peers)))
+        if (optional) optionalPeerDependencies[ver] = optional
+        else if (data.peerDependenciesMeta !== undefined) peerMetadata[ver] = 'unknown'
+      }
     }
   }
 
@@ -86,14 +126,127 @@ async function fetchNpmPackage(
     time,
     deprecated: Object.keys(deprecated).length > 0 ? deprecated : undefined,
     signaturePresence: Object.keys(signaturePresence).length > 0 ? signaturePresence : undefined,
+    provenancePresence: Object.keys(provenancePresence).length > 0 ? provenancePresence : undefined,
+    deprecationPresence,
+    engineMetadata,
+    peerDependencies: Object.keys(peerDependencies).length > 0 ? peerDependencies : undefined,
+    optionalPeerDependencies:
+      Object.keys(optionalPeerDependencies).length > 0 ? optionalPeerDependencies : undefined,
+    peerMetadata,
     engines: Object.keys(engines).length > 0 ? engines : undefined,
-    description: json.description as string | undefined,
-    homepage: json.homepage as string | undefined,
+    description: typeof json.description === 'string' ? json.description : undefined,
+    homepage: typeof json.homepage === 'string' ? json.homepage : undefined,
     repository:
       typeof json.repository === 'string'
         ? json.repository
-        : ((json.repository as Record<string, unknown> | undefined)?.url as string | undefined),
+        : isRecord(json.repository) && typeof json.repository.url === 'string'
+          ? json.repository.url
+          : undefined,
   }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+}
+
+function hasOwn(value: Record<string, unknown>, key: string): boolean {
+  return Object.hasOwn(value, key)
+}
+
+function readSignaturePresence(data: Record<string, unknown>): SignaturePresence {
+  const hasFlag = hasOwn(data, 'hasSignatures')
+  const flag = data.hasSignatures
+  const dist = isRecord(data.dist) ? data.dist : undefined
+  const hasArray = Boolean(dist && hasOwn(dist, 'signatures'))
+  const signatures = dist?.signatures
+  if ((hasFlag && typeof flag !== 'boolean') || (hasArray && !Array.isArray(signatures))) {
+    return 'unknown'
+  }
+  const fromFlag = hasFlag ? (flag === true ? 'present' : 'absent') : undefined
+  const signatureArray = Array.isArray(signatures) ? signatures : undefined
+  const fromArray = hasArray
+    ? signatureArray?.length === 0
+      ? 'absent'
+      : signatureArray?.every(
+            (entry) =>
+              isRecord(entry) &&
+              isPassiveMetadataString(entry.keyid, 2048) &&
+              isPassiveMetadataString(entry.sig, 65_536),
+          )
+        ? 'present'
+        : 'unknown'
+    : undefined
+  if (fromFlag && fromArray && fromFlag !== fromArray) return 'unknown'
+  return fromFlag ?? fromArray ?? 'unknown'
+}
+
+function readProvenancePresence(data: Record<string, unknown>): PassivePresence {
+  if (!isRecord(data.dist)) return 'unknown'
+  if (!hasOwn(data.dist, 'attestations')) return 'unknown'
+  const attestations = data.dist.attestations
+  if (!isRecord(attestations)) return 'unknown'
+  if (Object.keys(attestations).length === 0) return 'unknown'
+  if (typeof attestations.url !== 'string' || attestations.url.length > 4096) return 'unknown'
+  try {
+    const url = new URL(attestations.url)
+    return (url.protocol === 'https:' || url.protocol === 'http:') && !url.username && !url.password
+      ? 'present'
+      : 'unknown'
+  } catch {
+    return 'unknown'
+  }
+}
+
+function isPassiveMetadataString(value: unknown, maximum: number): value is string {
+  return (
+    typeof value === 'string' &&
+    value.length > 0 &&
+    value.length <= maximum &&
+    !/[\p{Cc}\p{Cf}\p{Cs}]/u.test(value)
+  )
+}
+
+function readDistTags(value: unknown): Record<string, string> {
+  if (!isRecord(value)) return {}
+  return Object.fromEntries(
+    Object.entries(value).filter(
+      (entry): entry is [string, string] =>
+        isContractSafeText(entry[0]) &&
+        typeof entry[1] === 'string' &&
+        isContractSafeText(entry[1]) &&
+        Boolean(semver.valid(entry[1])),
+    ),
+  )
+}
+
+function readStringRecordStrict(value: unknown): Record<string, string> | undefined {
+  if (!isRecord(value)) return undefined
+  const entries = Object.entries(value)
+  if (
+    entries.some(
+      ([name, item]) =>
+        !(isContractSafeText(name) && isValidPackageName(name)) ||
+        typeof item !== 'string' ||
+        !isContractSafeText(item) ||
+        !semver.validRange(item),
+    )
+  ) {
+    return undefined
+  }
+  return Object.fromEntries(entries as Array<[string, string]>)
+}
+
+function readOptionalPeers(value: unknown, peers: Set<string>): string[] | undefined {
+  if (value === undefined) return []
+  if (!isRecord(value)) return undefined
+  const optional: string[] = []
+  for (const [name, metadata] of Object.entries(value)) {
+    if (!(peers.has(name) && isRecord(metadata)) || typeof metadata.optional !== 'boolean') {
+      return undefined
+    }
+    if (metadata.optional) optional.push(name)
+  }
+  return optional.sort()
 }
 
 function readStringRecord(value: unknown): Record<string, string> {
@@ -120,6 +273,7 @@ async function fetchJsrPackage(name: string, options: FetchOptions): Promise<Pac
   const latest = typeof json.latest === 'string' ? semver.valid(json.latest) : null
   const time: Record<string, string> = {}
   const deprecated: Record<string, string> = {}
+  const deprecationPresence: Record<string, PassivePresence> = {}
 
   for (const version of versions) {
     const metadata = versionsObj[version]
@@ -130,6 +284,11 @@ async function fetchJsrPackage(name: string, options: FetchOptions): Promise<Pac
     }
     if (record.yanked === true) {
       deprecated[version] = 'Version is yanked'
+      deprecationPresence[version] = 'present'
+    } else if (record.yanked === false || record.yanked === undefined) {
+      deprecationPresence[version] = 'absent'
+    } else {
+      deprecationPresence[version] = 'unknown'
     }
   }
 
@@ -139,6 +298,7 @@ async function fetchJsrPackage(name: string, options: FetchOptions): Promise<Pac
     distTags: latest && versionSet.has(latest) ? { latest } : {},
     time: Object.keys(time).length > 0 ? time : undefined,
     deprecated: Object.keys(deprecated).length > 0 ? deprecated : undefined,
+    deprecationPresence,
   }
 }
 

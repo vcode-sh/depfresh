@@ -23,12 +23,16 @@ import { ConfigError } from '../../errors'
 import { createResolveContext, resolvePackage } from '../../io/resolve'
 import { resolvePhysicalValues } from '../../io/write/occurrence'
 import { inspectRepositoryWithProjection } from '../../repository/inspect'
+import { evaluatePlanSignals, validateSignalConfiguration } from '../../signals'
 import type {
   depfreshOptions,
+  PlanSignal,
   PolicyDecision,
   PolicyRuleInput,
   RangeMode,
   ResolvedDepChange,
+  SignalEvidence,
+  SignalSummary,
   SortOption,
 } from '../../types'
 import type { PolicyRuleSource } from '../../types/policy'
@@ -60,6 +64,8 @@ export interface PlanOptions {
   install?: boolean
   verifyArgv?: string[]
   phaseTimeout?: number
+  cohorts?: depfreshOptions['cohorts']
+  signalRules?: depfreshOptions['signalRules']
 }
 
 type PlanExecution = PlanResult['execution']
@@ -129,6 +135,10 @@ function createRuntimeOverrides(options: PlanOptions): Partial<depfreshOptions> 
       ? {}
       : { ignoreOtherWorkspaces: options.ignoreOtherWorkspaces }),
     ...(options.sort === undefined ? {} : { sort: options.sort }),
+    ...(options.cohorts === undefined ? {} : { cohorts: structuredClone(options.cohorts) }),
+    ...(options.signalRules === undefined
+      ? {}
+      : { signalRules: structuredClone(options.signalRules) }),
     write: false,
     interactive: false,
     install: false,
@@ -170,6 +180,7 @@ export async function planForInvocation(
     })
   }
   const asOf = semanticAsOf(options, runtimeOptions)
+  validateSignalConfiguration(runtimeOptions.cohorts, runtimeOptions.signalRules)
   const inspection = await inspectRepositoryWithProjection(runtimeOptions)
   const { model } = inspection
   const repository = projectRepository(model)
@@ -243,7 +254,7 @@ export async function planForInvocation(
     expectedValue: string
     requestedValue: string
   }> = []
-  const decisions = model.occurrences.map((occurrence) => {
+  let decisions = model.occurrences.map((occurrence) => {
     const trace = resolveContext.traces.get(occurrence.id)
     const policy =
       (trace?.status === 'unchanged' ? finalizedPolicies.get(occurrence.id) : undefined) ??
@@ -417,6 +428,104 @@ export async function planForInvocation(
     }
   })
 
+  const candidateOccurrenceIds = operations.map((operation) => operation.occurrenceId)
+  const runtimeSignalEvidence = (model.evidence ?? [])
+    .filter((item) => item.kind === 'runtime')
+    .map((item) => ({
+      id: item.id,
+      kind: 'runtime' as const,
+      ...(item.boundaryId ? { boundaryId: item.boundaryId } : {}),
+      status: item.status,
+    }))
+  let signalResult = evaluatePlanSignals({
+    repository,
+    occurrences,
+    operations,
+    candidateOccurrenceIds,
+    traces: resolveContext.traces,
+    metadata: resolveContext.metadata,
+    cohorts: runtimeOptions.cohorts ?? [],
+    rules: runtimeOptions.signalRules ?? [],
+    policySource: options.signalRules !== undefined ? invocationSource : 'config',
+    cohortSource: options.cohorts !== undefined ? invocationSource : 'config',
+    runtimeEvidence: runtimeSignalEvidence,
+    asOf: asOf.iso,
+    cooldownDays: runtimeOptions.cooldown,
+  })
+  const blockedBySignals = new Set<string>()
+  const causalSignals = new Map<string, PlanSignal>()
+  const causalEvidence = new Map<string, SignalEvidence>()
+  for (;;) {
+    const newlyBlocked = signalResult.blockedOccurrenceIds.filter(
+      (id) =>
+        !blockedBySignals.has(id) &&
+        decisions.some(
+          (decision) => decision.occurrenceId === id && decision.status === 'operation',
+        ),
+    )
+    if (newlyBlocked.length === 0) break
+    const newlyBlockedSet = new Set(newlyBlocked)
+    const evidenceById = new Map(signalResult.evidence.map((item) => [item.id, item]))
+    for (const signal of signalResult.signals) {
+      if (
+        signal.effect !== 'block' ||
+        !signal.subject.occurrenceIds.some((id) => newlyBlockedSet.has(id))
+      ) {
+        continue
+      }
+      causalSignals.set(signal.id, signal)
+      for (const evidenceRef of signal.evidenceRefs) {
+        const item = evidenceById.get(evidenceRef)
+        if (item) causalEvidence.set(item.id, item)
+      }
+    }
+    for (const id of newlyBlocked) blockedBySignals.add(id)
+    for (let index = operations.length - 1; index >= 0; index -= 1) {
+      const operation = operations[index]
+      if (operation && blockedBySignals.has(operation.occurrenceId)) operations.splice(index, 1)
+    }
+    decisions = decisions.map((decision) => {
+      if (!(blockedBySignals.has(decision.occurrenceId) && decision.status === 'operation')) {
+        return decision
+      }
+      const { operationId: _operationId, ...rest } = decision
+      return { ...rest, status: 'blocked' as const, reason: 'SIGNAL_POLICY_BLOCKED' }
+    })
+    signalResult = evaluatePlanSignals({
+      repository,
+      occurrences,
+      operations,
+      candidateOccurrenceIds,
+      traces: resolveContext.traces,
+      metadata: resolveContext.metadata,
+      cohorts: runtimeOptions.cohorts ?? [],
+      rules: runtimeOptions.signalRules ?? [],
+      policySource: options.signalRules !== undefined ? invocationSource : 'config',
+      cohortSource: options.cohorts !== undefined ? invocationSource : 'config',
+      runtimeEvidence: runtimeSignalEvidence,
+      asOf: asOf.iso,
+      cooldownDays: runtimeOptions.cooldown,
+    })
+  }
+  if (causalSignals.size > 0) {
+    const signals = [
+      ...new Map(
+        [...signalResult.signals, ...causalSignals.values()].map((signal) => [signal.id, signal]),
+      ).values(),
+    ].sort((left, right) => compareText(left.id, right.id))
+    const signalEvidence = [
+      ...new Map(
+        [...signalResult.evidence, ...causalEvidence.values()].map((item) => [item.id, item]),
+      ).values(),
+    ].sort((left, right) => compareText(left.id, right.id))
+    signalResult = {
+      ...signalResult,
+      signals,
+      evidence: signalEvidence,
+      summary: summarizePlanSignals(signals),
+    }
+  }
+
   const unknownDecisions = decisions.filter((decision) => decision.status === 'unknown')
   const errorDecisions = decisions.filter((decision) => decision.status === 'error')
   const errors = [...unknownDecisions, ...errorDecisions].map((decision) => ({
@@ -461,6 +570,17 @@ export async function planForInvocation(
           },
         ]
       : []),
+    ...signalResult.signals
+      .filter(
+        (signal) =>
+          signal.state === 'fail' || signal.state === 'unknown' || signal.effect === 'block',
+      )
+      .map((signal) => ({
+        code: signal.reason,
+        severity: signal.effect === 'block' ? ('blocking' as const) : ('warning' as const),
+        message: `Compatibility signal ${signal.id} is ${signal.state}.`,
+        evidenceRefs: [],
+      })),
   ].sort(compareCanonical)
   const summary = {
     total: decisions.length,
@@ -470,6 +590,7 @@ export async function planForInvocation(
     blocked: blockedDecisions.length,
     unknown: unknownDecisions.length,
     errors: errorDecisions.length,
+    signals: signalResult.summary,
   }
   const semanticResult = {
     contract: 'depfresh.plan',
@@ -480,6 +601,8 @@ export async function planForInvocation(
     occurrences,
     decisions,
     operations,
+    signals: signalResult.signals,
+    signalEvidence: signalResult.evidence,
     execution,
     evidence,
     lockfiles,
@@ -493,6 +616,22 @@ export async function planForInvocation(
   const result = { ...semanticResult, planFingerprint: createPlanFingerprint(semanticResult) }
   assertPlanResult(result)
   return result
+}
+
+function summarizePlanSignals(signals: PlanSignal[]): SignalSummary {
+  return {
+    total: signals.length,
+    pass: signals.filter((signal) => signal.state === 'pass').length,
+    warn: signals.filter((signal) => signal.state === 'warn').length,
+    fail: signals.filter((signal) => signal.state === 'fail').length,
+    unknown: signals.filter((signal) => signal.state === 'unknown').length,
+    notApplicable: signals.filter((signal) => signal.state === 'not-applicable').length,
+    blocking: signals.filter((signal) => signal.effect === 'block').length,
+  }
+}
+
+function compareText(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0
 }
 
 function validatePhaseOptions(options: PlanOptions): void {

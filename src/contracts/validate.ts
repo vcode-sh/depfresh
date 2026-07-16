@@ -1,5 +1,7 @@
 import Ajv, { type ErrorObject, type ValidateFunction } from 'ajv'
+import * as semver from 'semver'
 import { resolveManagerAdapter } from '../commands/apply/manager-adapters'
+import { exactDeclaredVersion } from '../utils/exact-version'
 import { canonicalJson } from './canonical-json'
 import { createPlanFingerprint, createRepositoryFingerprint, hashExactBytes } from './fingerprint'
 import { isSupportedManagerOccurrence } from './manager-occurrence'
@@ -418,6 +420,7 @@ function hasValidPlanSemantics(plan: PlanResult): boolean {
     ) {
       return false
     }
+    if (!hasValidPlanSignals(plan)) return false
     if (!hasValidPlanExecution(plan)) return false
     return (
       counts.operations === plan.operations.length &&
@@ -428,6 +431,959 @@ function hasValidPlanSemantics(plan: PlanResult): boolean {
   } catch {
     return false
   }
+}
+
+function hasValidPlanSignals(plan: PlanResult): boolean {
+  const fields = [plan.signals, plan.signalEvidence, plan.summary.signals]
+  if (fields.every((field) => field === undefined)) return true
+  if (fields.some((field) => field === undefined)) return false
+  const signals = plan.signals!
+  const signalEvidence = plan.signalEvidence!
+  const summary = plan.summary.signals!
+  const occurrenceIds = new Set(plan.occurrences.map((occurrence) => occurrence.id))
+  const runtimeIds = new Set(plan.repository.runtimeDeclarations.map((item) => item.id))
+  const repositoryEvidenceIds = new Set(plan.evidence.map((item) => item.id))
+  if (!(isSortedById(signalEvidence) && isSortedById(signals))) {
+    return false
+  }
+  const evidenceIds = new Set<string>()
+  for (const evidence of signalEvidence) {
+    if (evidenceIds.has(evidence.id)) return false
+    evidenceIds.add(evidence.id)
+    const { id: _id, ...semantic } = evidence
+    if (`signal-evidence-${hashExactBytes(canonicalJson(semantic)).slice(0, 24)}` !== evidence.id) {
+      return false
+    }
+    if (
+      new Set(evidence.sourceRefs).size !== evidence.sourceRefs.length ||
+      evidence.sourceRefs.some(
+        (ref) => !(occurrenceIds.has(ref) || runtimeIds.has(ref) || repositoryEvidenceIds.has(ref)),
+      ) ||
+      ![
+        evidence.id,
+        evidence.kind,
+        evidence.status,
+        evidence.subject,
+        ...evidence.sourceRefs,
+        ...Object.keys(evidence.facts),
+        ...Object.values(evidence.facts),
+      ].every(isContractSafeText)
+    ) {
+      return false
+    }
+  }
+  const signalIds = new Set<string>()
+  const signalEvidenceById = new Map(signalEvidence.map((item) => [item.id, item]))
+  for (const signal of signals) {
+    if (signalIds.has(signal.id)) return false
+    signalIds.add(signal.id)
+    const { id: _id, ...semantic } = signal
+    if (`signal-${hashExactBytes(canonicalJson(semantic)).slice(0, 24)}` !== signal.id) return false
+    if (
+      (signal.subject.occurrenceIds.length === 0 && !signal.subject.cohortId) ||
+      new Set(signal.subject.occurrenceIds).size !== signal.subject.occurrenceIds.length ||
+      signal.subject.occurrenceIds.some((id) => !occurrenceIds.has(id)) ||
+      new Set(signal.evidenceRefs).size !== signal.evidenceRefs.length ||
+      signal.evidenceRefs.some((id) => !evidenceIds.has(id)) ||
+      new Set(signal.matchedRuleIds).size !== signal.matchedRuleIds.length ||
+      ![
+        signal.id,
+        signal.family,
+        signal.state,
+        signal.reason,
+        ...(signal.subject.dependencyName ? [signal.subject.dependencyName] : []),
+        ...(signal.subject.workspacePath ? [signal.subject.workspacePath] : []),
+        ...(signal.subject.cohortId ? [signal.subject.cohortId] : []),
+        ...signal.subject.occurrenceIds,
+        ...signal.evidenceRefs,
+        ...signal.matchedRuleIds,
+        ...(signal.winningRuleId ? [signal.winningRuleId] : []),
+        ...(signal.override
+          ? [
+              signal.override.ruleId,
+              signal.override.source,
+              signal.override.from,
+              signal.override.to,
+            ]
+          : []),
+      ].every(isContractSafeText) ||
+      !hasValidSignalTruth(signal) ||
+      !hasValidSignalEvidenceTruth(signal, signalEvidenceById, plan) ||
+      !hasValidSignalSubject(signal, signalEvidenceById, plan)
+    ) {
+      return false
+    }
+    if (
+      (signal.winningRuleId !== undefined &&
+        signal.matchedRuleIds.at(-1) !== signal.winningRuleId) ||
+      (signal.override !== undefined &&
+        (signal.override.ruleId !== signal.winningRuleId || signal.override.to !== signal.effect))
+    ) {
+      return false
+    }
+    const defaultEffect = defaultSignalEffect(signal)
+    const inferred = signal.reason === 'COHORT_INFERRED_SUGGESTION'
+    if (
+      (inferred &&
+        (signal.effect !== 'warn' ||
+          signal.matchedRuleIds.length > 0 ||
+          signal.winningRuleId !== undefined ||
+          signal.override !== undefined)) ||
+      (signal.matchedRuleIds.length === 0 &&
+        (signal.winningRuleId !== undefined ||
+          signal.override !== undefined ||
+          signal.effect !== defaultEffect)) ||
+      (signal.matchedRuleIds.length > 0 && signal.winningRuleId === undefined) ||
+      (signal.override !== undefined &&
+        (signal.override.from !== defaultEffect ||
+          signal.override.from === signal.override.to ||
+          signal.effect === defaultEffect)) ||
+      (signal.override === undefined && signal.effect !== defaultEffect) ||
+      (signal.effect === 'block' &&
+        signal.subject.occurrenceIds.some((id) =>
+          plan.operations.some((operation) => operation.occurrenceId === id),
+        ))
+    ) {
+      return false
+    }
+  }
+  const blockedBySignals = new Set(
+    signals
+      .filter((signal) => signal.effect === 'block')
+      .flatMap((signal) => signal.subject.occurrenceIds),
+  )
+  if (
+    plan.decisions.some(
+      (decision) =>
+        decision.reason === 'SIGNAL_POLICY_BLOCKED' && !blockedBySignals.has(decision.occurrenceId),
+    )
+  ) {
+    return false
+  }
+  const expected = {
+    total: signals.length,
+    pass: signals.filter((signal) => signal.state === 'pass').length,
+    warn: signals.filter((signal) => signal.state === 'warn').length,
+    fail: signals.filter((signal) => signal.state === 'fail').length,
+    unknown: signals.filter((signal) => signal.state === 'unknown').length,
+    notApplicable: signals.filter((signal) => signal.state === 'not-applicable').length,
+    blocking: signals.filter((signal) => signal.effect === 'block').length,
+  }
+  return (Object.keys(expected) as Array<keyof typeof expected>).every(
+    (key) => expected[key] === summary[key],
+  )
+}
+
+const SIGNAL_TRUTH = {
+  RUNTIME_COMPATIBLE: ['runtime', 'pass'],
+  RUNTIME_PARTIAL_OVERLAP: ['runtime', 'warn'],
+  RUNTIME_INCOMPATIBLE: ['runtime', 'fail'],
+  RUNTIME_UNCONSTRAINED: ['runtime', 'not-applicable'],
+  RUNTIME_EVIDENCE_UNKNOWN: ['runtime', 'unknown'],
+  TARGET_ENGINE_UNKNOWN: ['runtime', 'unknown'],
+  PEER_COMPATIBLE: ['peer', 'pass'],
+  PEER_PARTIAL_OVERLAP: ['peer', 'warn'],
+  PEER_INCOMPATIBLE: ['peer', 'fail'],
+  PEER_REQUIRED_MISSING: ['peer', 'fail'],
+  PEER_OPTIONAL_MISSING: ['peer', 'not-applicable'],
+  PEER_METADATA_ABSENT: ['peer', 'not-applicable'],
+  PEER_EVIDENCE_UNKNOWN: ['peer', 'unknown'],
+  COHORT_ALIGNED: ['cohort', 'pass'],
+  COHORT_DIVERGED: ['cohort', 'fail'],
+  COHORT_MEMBER_UNKNOWN: ['cohort', 'unknown'],
+  COHORT_INFERRED_SUGGESTION: ['cohort', 'warn'],
+  TARGET_STABLE: ['release-channel', 'pass'],
+  TARGET_PRERELEASE: ['release-channel', 'warn'],
+  TARGET_VERSION_UNKNOWN: ['release-channel', 'unknown'],
+  MATURITY_POLICY_DISABLED: ['maturity', 'not-applicable'],
+  TARGET_MATURE: ['maturity', 'pass'],
+  TARGET_TOO_NEW: ['maturity', 'fail'],
+  TARGET_TIME_UNKNOWN: ['maturity', 'unknown'],
+  CURRENT_NOT_DEPRECATED: ['current-deprecation', 'pass'],
+  CURRENT_DEPRECATED: ['current-deprecation', 'warn'],
+  CURRENT_VERSION_UNKNOWN: ['current-deprecation', 'unknown'],
+  CURRENT_DEPRECATION_UNKNOWN: ['current-deprecation', 'unknown'],
+  TARGET_NOT_DEPRECATED: ['target-deprecation', 'pass'],
+  TARGET_DEPRECATED: ['target-deprecation', 'fail'],
+  TARGET_DEPRECATION_UNKNOWN: ['target-deprecation', 'unknown'],
+  SIGNATURE_PRESENT_UNVERIFIED: ['signature-presence', 'warn'],
+  SIGNATURE_METADATA_ABSENT: ['signature-presence', 'warn'],
+  SIGNATURE_METADATA_UNKNOWN: ['signature-presence', 'unknown'],
+  PROVENANCE_PRESENT_UNVERIFIED: ['provenance-presence', 'warn'],
+  PROVENANCE_METADATA_ABSENT: ['provenance-presence', 'warn'],
+  PROVENANCE_METADATA_UNKNOWN: ['provenance-presence', 'unknown'],
+  REGISTRY_EVIDENCE_COMPLETE: ['evidence-completeness', 'pass'],
+  REGISTRY_EVIDENCE_UNKNOWN: ['evidence-completeness', 'unknown'],
+  STALENESS_NOT_OBSERVED: ['evidence-staleness', 'not-applicable'],
+} as const
+
+function hasValidSignalTruth(signal: NonNullable<PlanResult['signals']>[number]): boolean {
+  const expected = SIGNAL_TRUTH[signal.reason]
+  return expected[0] === signal.family && expected[1] === signal.state
+}
+
+function hasValidSignalSubject(
+  signal: NonNullable<PlanResult['signals']>[number],
+  evidenceById: Map<string, NonNullable<PlanResult['signalEvidence']>[number]>,
+  plan: PlanResult,
+): boolean {
+  const occurrences = signal.subject.occurrenceIds.map((id) =>
+    plan.occurrences.find((item) => item.id === id),
+  )
+  if (occurrences.some((item) => !item)) return false
+  const resolved = occurrences as PlanResult['occurrences']
+  if (
+    signal.subject.dependencyName !== undefined &&
+    resolved.some((occurrence) => occurrence.name !== signal.subject.dependencyName)
+  ) {
+    return false
+  }
+  if (signal.subject.workspacePath !== undefined) {
+    const packages = new Map(plan.repository.packages.map((item) => [item.id, item.workspacePath]))
+    if (
+      resolved.some(
+        (occurrence) => packages.get(occurrence.ownerId) !== signal.subject.workspacePath,
+      )
+    ) {
+      return false
+    }
+  }
+  const evidence = signal.evidenceRefs
+    .map((id) => evidenceById.get(id))
+    .filter((item): item is NonNullable<typeof item> => Boolean(item))
+  if (signal.family === 'cohort') {
+    if (!signal.subject.cohortId || evidence.length !== 1) return false
+    const cohort = evidence[0]
+    return (
+      (cohort?.kind === 'explicit-cohort' || cohort?.kind === 'inferred-cohort') &&
+      (cohort.kind === 'explicit-cohort'
+        ? cohort.subject === signal.subject.cohortId
+        : `inferred-${cohort.subject}` === signal.subject.cohortId) &&
+      canonicalJson([...cohort.sourceRefs].sort()) ===
+        canonicalJson([...signal.subject.occurrenceIds].sort())
+    )
+  }
+  if (
+    signal.subject.cohortId !== undefined ||
+    signal.subject.occurrenceIds.length !== 1 ||
+    signal.subject.dependencyName === undefined
+  ) {
+    return false
+  }
+  const occurrenceId = signal.subject.occurrenceIds[0]!
+  const occurrence = resolved[0]!
+  const workspacePath = plan.repository.packages.find(
+    (item) => item.id === occurrence.ownerId,
+  )?.workspacePath
+  if (
+    workspacePath === undefined
+      ? signal.subject.workspacePath !== undefined
+      : signal.subject.workspacePath !== workspacePath
+  ) {
+    return false
+  }
+  return evidence.every((item) => {
+    if (item.kind === 'planned-graph') return item.sourceRefs.includes(occurrenceId)
+    return item.subject === occurrenceId
+  })
+}
+
+function hasValidSignalEvidenceTruth(
+  signal: NonNullable<PlanResult['signals']>[number],
+  evidenceById: Map<string, NonNullable<PlanResult['signalEvidence']>[number]>,
+  plan: PlanResult,
+): boolean {
+  const evidence = signal.evidenceRefs
+    .map((id) => evidenceById.get(id))
+    .filter((item): item is NonNullable<typeof item> => Boolean(item))
+  if (evidence.length !== signal.evidenceRefs.length) return false
+  const one = (kind: (typeof evidence)[number]['kind']) =>
+    evidence.length === 1 && evidence[0]?.kind === kind ? evidence[0] : undefined
+  const registry = evidence.find((item) => item.kind === 'registry-version')
+  const graph = evidence.find((item) => item.kind === 'planned-graph')
+  const runtime = one('repository-runtime')
+  const runtimeProjection = runtime
+    ? validateRuntimeEvidenceProjection(runtime, signal, plan)
+    : undefined
+  const peerProjectionValid = graph ? validatePeerEvidenceProjection(graph, signal, plan) : false
+  const registryOnly = one('registry-version')
+  const registryTargetValid = registry
+    ? hasValidTargetRegistryProjection(registry, signal, plan)
+    : false
+
+  switch (signal.reason) {
+    case 'RUNTIME_COMPATIBLE':
+    case 'RUNTIME_PARTIAL_OVERLAP':
+    case 'RUNTIME_INCOMPATIBLE': {
+      if (runtime?.status !== 'observed') return false
+      const target = semver.validRange(runtime.facts.targetEngine)
+      const ranges = runtimeFactValues(runtime, 'repositoryRange.')
+      if (!(target && ranges.length > 0 && runtimeProjection?.complete)) {
+        return false
+      }
+      const validRanges = ranges.map((range) => semver.validRange(range))
+      if (validRanges.some((range) => !range)) return false
+      const normalized = validRanges as string[]
+      if (
+        normalized.some((range, index) =>
+          normalized.slice(index + 1).some((other) => !semver.intersects(range, other)),
+        )
+      ) {
+        return false
+      }
+      const disjoint = normalized.some((range) => !semver.intersects(range, target))
+      const subset = normalized.every((range) => semver.subset(range, target))
+      return (
+        signal.reason ===
+        (disjoint
+          ? 'RUNTIME_INCOMPATIBLE'
+          : subset
+            ? 'RUNTIME_COMPATIBLE'
+            : 'RUNTIME_PARTIAL_OVERLAP')
+      )
+    }
+    case 'RUNTIME_UNCONSTRAINED':
+      return (
+        runtime?.status === 'absent' &&
+        runtime.facts.targetEngine === 'absent' &&
+        runtimeProjection?.complete === true
+      )
+    case 'RUNTIME_EVIDENCE_UNKNOWN':
+      return (
+        runtimeProjection !== undefined &&
+        (runtime?.status === 'unknown' || runtime?.status === 'conflicting')
+      )
+    case 'TARGET_ENGINE_UNKNOWN':
+      return (
+        runtime?.status === 'unknown' &&
+        runtime.facts.targetEngine === 'unknown' &&
+        runtimeProjection?.complete === true
+      )
+    case 'PEER_COMPATIBLE':
+    case 'PEER_PARTIAL_OVERLAP':
+    case 'PEER_INCOMPATIBLE': {
+      const required = semver.validRange(graph?.facts.requiredRange)
+      const provider = semver.validRange(graph?.facts.providerRange)
+      if (
+        !(
+          evidence.length === 2 &&
+          registryTargetValid &&
+          registry?.status === 'observed' &&
+          Boolean(semver.valid(registry.facts.targetVersion)) &&
+          registry?.facts.peerMetadata === 'present' &&
+          peerProjectionValid &&
+          graph?.status === 'observed' &&
+          graph.facts.providerRange !== 'missing' &&
+          graph.facts.providers === '1' &&
+          graph.facts.overrideConstraints === '0' &&
+          required &&
+          provider
+        )
+      ) {
+        return false
+      }
+      const intersects = semver.intersects(provider, required)
+      const subset = semver.subset(provider, required)
+      return (
+        signal.reason ===
+        (!intersects ? 'PEER_INCOMPATIBLE' : subset ? 'PEER_COMPATIBLE' : 'PEER_PARTIAL_OVERLAP')
+      )
+    }
+    case 'PEER_REQUIRED_MISSING':
+    case 'PEER_OPTIONAL_MISSING':
+      return (
+        evidence.length === 2 &&
+        registryTargetValid &&
+        registry?.status === 'observed' &&
+        Boolean(semver.valid(registry.facts.targetVersion)) &&
+        registry?.facts.peerMetadata === 'present' &&
+        peerProjectionValid &&
+        graph?.status === 'absent' &&
+        graph.facts.providerRange === 'missing' &&
+        graph.facts.providers === '0' &&
+        graph.facts.boundaryProviders === '0' &&
+        graph.facts.overrideConstraints === '0' &&
+        graph.facts.optional === (signal.reason === 'PEER_OPTIONAL_MISSING' ? 'yes' : 'no')
+      )
+    case 'PEER_METADATA_ABSENT':
+      return (
+        registryTargetValid &&
+        registryOnly?.status === 'observed' &&
+        Boolean(semver.valid(registryOnly.facts.targetVersion)) &&
+        registryOnly.facts.peerMetadata === 'absent'
+      )
+    case 'PEER_EVIDENCE_UNKNOWN':
+      return (
+        (registryOnly?.facts.peerMetadata === 'unknown' &&
+          registryTargetValid &&
+          hasKnownOrUnknownRegistryTarget(registryOnly)) ||
+        (evidence.length === 2 &&
+          registryTargetValid &&
+          registry?.status === 'observed' &&
+          Boolean(semver.valid(registry.facts.targetVersion)) &&
+          registry?.facts.peerMetadata === 'present' &&
+          graph !== undefined &&
+          peerProjectionValid &&
+          hasRecordedGraphAmbiguity(graph))
+      )
+    case 'COHORT_ALIGNED':
+    case 'COHORT_DIVERGED': {
+      const cohort = one('explicit-cohort')
+      const aligned = cohort ? evaluateSerializedCohort(cohort, plan) : undefined
+      return (
+        cohort?.status === 'observed' &&
+        ['config', 'library', 'cli'].includes(cohort.facts.source ?? '') &&
+        aligned !== undefined &&
+        (signal.reason === 'COHORT_ALIGNED' ? aligned : !aligned)
+      )
+    }
+    case 'COHORT_MEMBER_UNKNOWN': {
+      const cohort = one('explicit-cohort')
+      return cohort?.status === 'unknown' && evaluateSerializedCohort(cohort, plan) === undefined
+    }
+    case 'COHORT_INFERRED_SUGGESTION': {
+      const cohort = one('inferred-cohort')
+      return (
+        cohort?.status === 'observed' &&
+        cohort.facts.sharedRepository === 'present' &&
+        /^[a-f0-9]{64}$/u.test(cohort.facts.repositoryIdentity ?? '')
+      )
+    }
+    case 'TARGET_STABLE':
+    case 'TARGET_PRERELEASE': {
+      const target = semver.parse(registryOnly?.facts.targetVersion)
+      return (
+        registryTargetValid &&
+        registryOnly?.status === 'observed' &&
+        Boolean(target) &&
+        (signal.reason === 'TARGET_STABLE'
+          ? target!.prerelease.length === 0
+          : target!.prerelease.length > 0)
+      )
+    }
+    case 'TARGET_VERSION_UNKNOWN':
+      return (
+        registryTargetValid &&
+        registryOnly?.status === 'unknown' &&
+        registryOnly.facts.targetVersion === 'unknown'
+      )
+    case 'MATURITY_POLICY_DISABLED':
+      return (
+        registryTargetValid &&
+        registryOnly?.facts.cooldownDays === '0' &&
+        isCanonicalUtcInstant(registryOnly.facts.asOf)
+      )
+    case 'TARGET_MATURE':
+    case 'TARGET_TOO_NEW': {
+      const publishedAt = Date.parse(registryOnly?.facts.publishedAt ?? '')
+      const asOf = Date.parse(registryOnly?.facts.asOf ?? '')
+      const cooldownDays = Number(registryOnly?.facts.cooldownDays)
+      if (
+        !(
+          registryOnly?.status === 'observed' &&
+          registryTargetValid &&
+          Boolean(semver.valid(registryOnly.facts.targetVersion)) &&
+          isCanonicalUtcInstant(registryOnly?.facts.publishedAt) &&
+          isCanonicalUtcInstant(registryOnly?.facts.asOf) &&
+          isPositiveSafeIntegerText(registryOnly?.facts.cooldownDays) &&
+          Number.isFinite(publishedAt) &&
+          Number.isFinite(asOf) &&
+          Number.isSafeInteger(cooldownDays)
+        ) ||
+        cooldownDays < 0
+      ) {
+        return false
+      }
+      const mature = publishedAt <= asOf - cooldownDays * 24 * 60 * 60 * 1000
+      return signal.reason === 'TARGET_MATURE' ? mature : !mature
+    }
+    case 'TARGET_TIME_UNKNOWN':
+      return (
+        registryOnly?.facts.publishedAt === 'unknown' &&
+        registryTargetValid &&
+        hasKnownOrUnknownRegistryTarget(registryOnly) &&
+        isCanonicalUtcInstant(registryOnly.facts.asOf) &&
+        isPositiveSafeIntegerText(registryOnly.facts.cooldownDays)
+      )
+    case 'CURRENT_NOT_DEPRECATED':
+    case 'CURRENT_DEPRECATED':
+    case 'CURRENT_VERSION_UNKNOWN':
+    case 'CURRENT_DEPRECATION_UNKNOWN': {
+      const currentVersion = expectedCurrentSignalVersion(signal, plan)
+      return (
+        registryOnly?.facts.versionRole === 'current' &&
+        (signal.reason === 'CURRENT_VERSION_UNKNOWN'
+          ? currentVersion === undefined &&
+            registryOnly.facts.targetVersion === 'unknown' &&
+            registryOnly.status === 'unknown'
+          : currentVersion !== undefined &&
+            registryOnly.facts.targetVersion === currentVersion &&
+            registryOnly.status === 'observed') &&
+        registryOnly.facts.deprecation ===
+          (signal.reason === 'CURRENT_NOT_DEPRECATED'
+            ? 'absent'
+            : signal.reason === 'CURRENT_DEPRECATED'
+              ? 'present'
+              : 'unknown')
+      )
+    }
+    case 'TARGET_NOT_DEPRECATED':
+    case 'TARGET_DEPRECATED':
+    case 'TARGET_DEPRECATION_UNKNOWN':
+      return (
+        registryTargetValid &&
+        registryOnly?.facts.versionRole === 'target' &&
+        (signal.reason === 'TARGET_DEPRECATION_UNKNOWN'
+          ? registryOnly.facts.targetVersion === 'unknown'
+            ? registryOnly.status === 'unknown'
+            : Boolean(semver.valid(registryOnly.facts.targetVersion)) &&
+              registryOnly.status === 'observed'
+          : Boolean(semver.valid(registryOnly.facts.targetVersion)) &&
+            registryOnly.status === 'observed') &&
+        registryOnly.facts.deprecation ===
+          (signal.reason === 'TARGET_NOT_DEPRECATED'
+            ? 'absent'
+            : signal.reason === 'TARGET_DEPRECATED'
+              ? 'present'
+              : 'unknown')
+      )
+    case 'SIGNATURE_PRESENT_UNVERIFIED':
+    case 'SIGNATURE_METADATA_ABSENT':
+    case 'SIGNATURE_METADATA_UNKNOWN':
+      return hasValidPassiveRegistryFact(
+        registryOnly,
+        'signaturePresence',
+        registryTargetValid,
+        registryOnly?.facts.signaturePresence ===
+          (signal.reason === 'SIGNATURE_PRESENT_UNVERIFIED'
+            ? 'present'
+            : signal.reason === 'SIGNATURE_METADATA_ABSENT'
+              ? 'absent'
+              : 'unknown'),
+      )
+    case 'PROVENANCE_PRESENT_UNVERIFIED':
+    case 'PROVENANCE_METADATA_ABSENT':
+    case 'PROVENANCE_METADATA_UNKNOWN':
+      return hasValidPassiveRegistryFact(
+        registryOnly,
+        'provenancePresence',
+        registryTargetValid,
+        registryOnly?.facts.provenancePresence ===
+          (signal.reason === 'PROVENANCE_PRESENT_UNVERIFIED'
+            ? 'present'
+            : signal.reason === 'PROVENANCE_METADATA_ABSENT'
+              ? 'absent'
+              : 'unknown'),
+      )
+    case 'REGISTRY_EVIDENCE_COMPLETE':
+      return registryOnly?.status === 'observed' && registryOnly.facts.metadata === 'available'
+    case 'REGISTRY_EVIDENCE_UNKNOWN':
+      return registryOnly?.status === 'unknown' && registryOnly.facts.metadata === 'unavailable'
+    case 'STALENESS_NOT_OBSERVED': {
+      const clock = one('clock')
+      return clock?.status === 'absent' && clock.facts.observation === 'not-recorded'
+    }
+  }
+}
+
+function runtimeFactValues(
+  evidence: NonNullable<PlanResult['signalEvidence']>[number],
+  prefix: string,
+): string[] {
+  return Object.entries(evidence.facts)
+    .filter(([key]) => key.startsWith(prefix))
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([, value]) => value)
+}
+
+function hasRecordedGraphAmbiguity(
+  evidence: NonNullable<PlanResult['signalEvidence']>[number],
+): boolean {
+  const providers = Number(evidence.facts.providers)
+  const boundaryProviders = Number(evidence.facts.boundaryProviders)
+  const overrides = Number(evidence.facts.overrideConstraints)
+  if (
+    ![providers, boundaryProviders, overrides].every(
+      (value) => Number.isSafeInteger(value) && value >= 0,
+    )
+  ) {
+    return false
+  }
+  if (evidence.status === 'conflicting') return providers > 1 || overrides > 0
+  if (evidence.status !== 'unknown') return false
+  return (
+    (providers === 0 && boundaryProviders > 0) ||
+    (providers === 1 && !semver.validRange(evidence.facts.providerRange))
+  )
+}
+
+function isCanonicalUtcInstant(value: string | undefined): boolean {
+  if (value === undefined) return false
+  const milliseconds = Date.parse(value)
+  return Number.isFinite(milliseconds) && new Date(milliseconds).toISOString() === value
+}
+
+function isPositiveSafeIntegerText(value: string | undefined): boolean {
+  if (value === undefined || !/^[1-9]\d*$/u.test(value)) return false
+  return Number.isSafeInteger(Number(value))
+}
+
+function hasKnownOrUnknownRegistryTarget(
+  evidence: NonNullable<PlanResult['signalEvidence']>[number],
+): boolean {
+  return evidence.facts.targetVersion === 'unknown'
+    ? evidence.status === 'unknown'
+    : evidence.status === 'observed' && Boolean(semver.valid(evidence.facts.targetVersion))
+}
+
+function hasValidPassiveRegistryFact(
+  evidence: NonNullable<PlanResult['signalEvidence']>[number] | undefined,
+  fact: 'signaturePresence' | 'provenancePresence',
+  targetProjectionValid: boolean,
+  matchesReason: boolean,
+): boolean {
+  if (!(evidence && targetProjectionValid && matchesReason)) return false
+  const presence = evidence.facts[fact]
+  return presence === 'unknown'
+    ? hasKnownOrUnknownRegistryTarget(evidence)
+    : evidence.status === 'observed' && Boolean(semver.valid(evidence.facts.targetVersion))
+}
+
+function hasValidTargetRegistryProjection(
+  evidence: NonNullable<PlanResult['signalEvidence']>[number],
+  signal: NonNullable<PlanResult['signals']>[number],
+  plan: PlanResult,
+): boolean {
+  const expected = expectedSignalTarget(signal, plan)
+  return (
+    evidence.facts.targetVersion === (expected ?? 'unknown') &&
+    (expected ? evidence.status === 'observed' : evidence.status === 'unknown')
+  )
+}
+
+function expectedSignalTarget(
+  signal: NonNullable<PlanResult['signals']>[number],
+  plan: PlanResult,
+): string | undefined {
+  const occurrence = plan.occurrences.find((item) => item.id === signal.subject.occurrenceIds[0])
+  if (!occurrence) return undefined
+  const candidate = plan.decisions.find((item) => item.occurrenceId === occurrence.id)?.candidate
+    ?.targetVersion
+  if (candidate && semver.valid(candidate)) return candidate
+  return exactDeclaredVersion(occurrence.declaredValue, occurrence.role)
+}
+
+function expectedCurrentSignalVersion(
+  signal: NonNullable<PlanResult['signals']>[number],
+  plan: PlanResult,
+): string | undefined {
+  const occurrence = plan.occurrences.find((item) => item.id === signal.subject.occurrenceIds[0])
+  if (!occurrence) return undefined
+  return exactDeclaredVersion(occurrence.declaredValue, occurrence.role)
+}
+
+function validatePeerEvidenceProjection(
+  evidence: NonNullable<PlanResult['signalEvidence']>[number],
+  signal: NonNullable<PlanResult['signals']>[number],
+  plan: PlanResult,
+): boolean {
+  const primary = plan.occurrences.find((item) => item.id === signal.subject.occurrenceIds[0])
+  const peerName = evidence.facts.peer
+  if (!(primary && peerName)) return false
+  const contexts =
+    primary.role === 'catalog-owner'
+      ? plan.occurrences.filter(
+          (item) =>
+            item.role === 'catalog-consumer' &&
+            item.catalogId === primary.catalogId &&
+            item.name === primary.name,
+        )
+      : [primary]
+  const context = contexts.find(
+    (item) => evidence.subject === `${primary.id}:${item.id}:${peerName}`,
+  )
+  if (!context) return false
+  const providers = plan.occurrences.filter(
+    (item) =>
+      item.ownerId === context.ownerId && item.name === peerName && isPeerProviderOccurrence(item),
+  )
+  const boundaryId = plan.repository.relationships.boundaryPackages.find(
+    (item) => item.packageId === context.ownerId,
+  )?.boundaryId
+  const boundaryProviders = boundaryId
+    ? plan.occurrences.filter(
+        (item) =>
+          item.ownerId !== context.ownerId &&
+          item.name === peerName &&
+          isPeerProviderOccurrence(item) &&
+          plan.repository.relationships.boundaryPackages.some(
+            (relationship) =>
+              relationship.packageId === item.ownerId && relationship.boundaryId === boundaryId,
+          ),
+      )
+    : []
+  const overrides = plan.occurrences.filter(
+    (item) =>
+      item.name === peerName &&
+      item.role === 'override' &&
+      (item.ownerId === context.ownerId ||
+        (boundaryId !== undefined &&
+          plan.repository.relationships.boundaryPackages.some(
+            (relationship) =>
+              relationship.packageId === item.ownerId && relationship.boundaryId === boundaryId,
+          ))),
+  )
+  const projection = providers.length === 1 ? projectPeerProvider(plan, providers[0]!) : undefined
+  const expectedStatus =
+    overrides.length > 0 || providers.length > 1
+      ? 'conflicting'
+      : providers.length === 0
+        ? boundaryProviders.length > 0
+          ? 'unknown'
+          : 'absent'
+        : projection?.range
+          ? 'observed'
+          : 'unknown'
+  const expectedSources = [
+    primary.id,
+    context.id,
+    ...providers.map((item) => item.id),
+    ...boundaryProviders.map((item) => item.id),
+    ...overrides.map((item) => item.id),
+    ...(projection?.sourceRefs ?? []),
+  ]
+    .filter((item, index, items) => items.indexOf(item) === index)
+    .sort()
+  return (
+    evidence.status === expectedStatus &&
+    evidence.facts.providerRange === (projection?.range ?? 'missing') &&
+    evidence.facts.providers === String(providers.length) &&
+    evidence.facts.boundaryProviders === String(boundaryProviders.length) &&
+    evidence.facts.overrideConstraints === String(overrides.length) &&
+    canonicalJson([...evidence.sourceRefs].sort()) === canonicalJson(expectedSources)
+  )
+}
+
+function isPeerProviderOccurrence(occurrence: PlanResult['occurrences'][number]): boolean {
+  if (occurrence.role === 'catalog-consumer') return occurrence.protocol === 'catalog'
+  return (
+    occurrence.role === 'dependency' &&
+    ['semver', 'npm', 'jsr', 'workspace'].includes(occurrence.protocol)
+  )
+}
+
+function projectPeerProvider(
+  plan: PlanResult,
+  provider: PlanResult['occurrences'][number],
+): { range: string | null; sourceRefs: string[] } {
+  if (provider.role !== 'catalog-consumer') {
+    const requested = plan.operations.find(
+      (item) => item.occurrenceId === provider.id,
+    )?.requestedValue
+    return {
+      range: normalizePeerProviderRange(requested ?? provider.declaredValue),
+      sourceRefs: [],
+    }
+  }
+  const owner = plan.occurrences.find(
+    (item) =>
+      item.role === 'catalog-owner' &&
+      item.catalogId === provider.catalogId &&
+      item.name === provider.name,
+  )
+  if (!owner) return { range: null, sourceRefs: [] }
+  const requested = plan.operations.find((item) => item.occurrenceId === owner.id)?.requestedValue
+  return {
+    range: normalizePeerProviderRange(requested ?? owner.declaredValue),
+    sourceRefs: [owner.id],
+  }
+}
+
+function normalizePeerProviderRange(value: string): string | null {
+  const withoutWorkspace = value.startsWith('workspace:') ? value.slice('workspace:'.length) : value
+  const withoutAlias = withoutWorkspace.startsWith('npm:')
+    ? withoutWorkspace.slice(withoutWorkspace.lastIndexOf('@') + 1)
+    : withoutWorkspace
+  return semver.validRange(withoutAlias)
+}
+
+function validateRuntimeEvidenceProjection(
+  evidence: NonNullable<PlanResult['signalEvidence']>[number],
+  signal: NonNullable<PlanResult['signals']>[number],
+  plan: PlanResult,
+): { complete: boolean } | undefined {
+  const primary = plan.occurrences.find((item) => item.id === signal.subject.occurrenceIds[0])
+  if (!primary) return undefined
+  if (evidence.facts.targetVersion !== (expectedSignalTarget(signal, plan) ?? 'unknown')) {
+    return undefined
+  }
+  const contexts =
+    primary.role === 'catalog-owner'
+      ? plan.occurrences.filter(
+          (item) =>
+            item.role === 'catalog-consumer' &&
+            item.catalogId === primary.catalogId &&
+            item.name === primary.name,
+        )
+      : [primary]
+  const relevantOccurrences = [primary, ...contexts].filter(
+    (item, index, items) => items.findIndex((candidate) => candidate.id === item.id) === index,
+  )
+  const boundaryIds = new Set(
+    relevantOccurrences
+      .map(
+        (occurrence) =>
+          plan.repository.relationships.boundaryPackages.find(
+            (item) => item.packageId === occurrence.ownerId,
+          )?.boundaryId,
+      )
+      .filter((item): item is string => Boolean(item)),
+  )
+  const declarations = plan.repository.runtimeDeclarations.filter((item) =>
+    boundaryIds.has(item.boundaryId),
+  )
+  const conclusions = plan.evidence.filter(
+    (item) => item.kind === 'runtime' && item.boundaryId && boundaryIds.has(item.boundaryId),
+  )
+  const expectedSources = [
+    ...relevantOccurrences.map((item) => item.id),
+    ...declarations.map((item) => item.id),
+    ...conclusions.map((item) => item.id),
+  ]
+    .filter((item, index, items) => items.indexOf(item) === index)
+    .sort()
+  if (canonicalJson([...evidence.sourceRefs].sort()) !== canonicalJson(expectedSources)) {
+    return undefined
+  }
+  const expectedRanges = Object.fromEntries(
+    declarations.map((item) => [`repositoryRange.${item.id}`, item.declaredText]),
+  )
+  const actualRanges = Object.fromEntries(
+    Object.entries(evidence.facts).filter(([key]) => key.startsWith('repositoryRange.')),
+  )
+  const expectedConclusions = Object.fromEntries(
+    conclusions.map((item) => [`conclusionStatus.${item.id}`, item.status]),
+  )
+  const actualConclusions = Object.fromEntries(
+    Object.entries(evidence.facts).filter(([key]) => key.startsWith('conclusionStatus.')),
+  )
+  if (
+    canonicalJson(actualRanges) !== canonicalJson(expectedRanges) ||
+    canonicalJson(actualConclusions) !== canonicalJson(expectedConclusions)
+  ) {
+    return undefined
+  }
+  const complete =
+    boundaryIds.size > 0 &&
+    [...boundaryIds].every((boundaryId) => {
+      const matching = conclusions.filter((item) => item.boundaryId === boundaryId)
+      return matching.length === 1 && matching[0]?.status === 'confirmed'
+    })
+  return { complete }
+}
+
+function evaluateSerializedCohort(
+  evidence: NonNullable<PlanResult['signalEvidence']>[number],
+  plan: PlanResult,
+): boolean | undefined {
+  const configured = Object.entries(evidence.facts)
+    .filter(([key]) => key.startsWith('configuredMember.'))
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([, value]) => value)
+  const proposedItems = Object.entries(evidence.facts)
+    .filter(([key]) => key.startsWith('proposedVersion.'))
+    .map(([key, version]) => ({
+      occurrenceId: key.slice('proposedVersion.'.length),
+      version,
+    }))
+  const candidateItems = Object.entries(evidence.facts)
+    .filter(([key]) => key.startsWith('candidateOperation.'))
+    .map(([key, value]) => ({
+      occurrenceId: key.slice('candidateOperation.'.length),
+      candidate: value === 'yes' ? true : value === 'no' ? false : undefined,
+    }))
+  const strategy = evidence.facts.strategy
+  try {
+    if (
+      configured.length < 2 ||
+      new Set(configured).size !== configured.length ||
+      !['update-together', 'same-major', 'same-version'].includes(strategy ?? '')
+    ) {
+      return undefined
+    }
+    if (
+      new Set(proposedItems.map((item) => item.occurrenceId)).size !== proposedItems.length ||
+      new Set(candidateItems.map((item) => item.occurrenceId)).size !== candidateItems.length ||
+      proposedItems.some((item) => {
+        const occurrence = plan.occurrences.find((candidate) => candidate.id === item.occurrenceId)
+        const decision = plan.decisions.find(
+          (candidate) => candidate.occurrenceId === item.occurrenceId,
+        )
+        return !(
+          occurrence &&
+          configured.includes(occurrence.name) &&
+          semver.valid(item.version) &&
+          decision?.candidate?.targetVersion === item.version
+        )
+      }) ||
+      configured.some(
+        (name) =>
+          !proposedItems.some(
+            (item) =>
+              plan.occurrences.find((candidate) => candidate.id === item.occurrenceId)?.name ===
+              name,
+          ),
+      ) ||
+      proposedItems.some(
+        (item) => !candidateItems.some((candidate) => candidate.occurrenceId === item.occurrenceId),
+      ) ||
+      candidateItems.some((item) => {
+        if (item.candidate === undefined) return true
+        const decision = plan.decisions.find(
+          (candidate) => candidate.occurrenceId === item.occurrenceId,
+        )
+        const expected =
+          decision?.status === 'operation' || decision?.reason === 'SIGNAL_POLICY_BLOCKED'
+        return item.candidate !== expected
+      })
+    ) {
+      return undefined
+    }
+    const versions = proposedItems.map((item) => item.version)
+    if (strategy === 'same-version') return new Set(versions).size === 1
+    if (strategy === 'same-major') {
+      return new Set(versions.map((version) => semver.parse(version)!.major)).size === 1
+    }
+    return (
+      new Set(
+        candidateItems
+          .filter((candidate) =>
+            proposedItems.some((item) => item.occurrenceId === candidate.occurrenceId),
+          )
+          .map((candidate) => candidate.candidate),
+      ).size === 1
+    )
+  } catch {
+    return undefined
+  }
+}
+
+function defaultSignalEffect(
+  signal: NonNullable<PlanResult['signals']>[number],
+): NonNullable<PlanResult['signals']>[number]['effect'] {
+  if (signal.reason === 'COHORT_INFERRED_SUGGESTION') return 'warn'
+  if (
+    signal.family === 'cohort' &&
+    signal.subject.cohortId &&
+    (signal.state === 'fail' || signal.state === 'unknown')
+  ) {
+    return 'block'
+  }
+  return signal.state === 'pass' || signal.state === 'not-applicable' ? 'none' : 'warn'
+}
+
+function isSortedById<T extends { id: string }>(items: readonly T[]): boolean {
+  return items.every((item, index) => index === 0 || items[index - 1]!.id < item.id)
 }
 
 function hasValidRepositorySemantics(

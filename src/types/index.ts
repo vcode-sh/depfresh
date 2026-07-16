@@ -62,6 +62,7 @@ export type {
 export type {
   NpmrcConfig,
   PackageData,
+  PassivePresence,
   ProvenanceLevel,
   RegistryConfig,
   SignaturePresence,
@@ -102,6 +103,22 @@ export {
   type RepositoryVcsTargetStateName,
   type RepositoryWorkspaceRelationship,
 } from './repository'
+export {
+  type CohortInput,
+  type PlanSignal,
+  SIGNAL_FAMILIES,
+  SIGNAL_REASONS,
+  SIGNAL_STATES,
+  type SignalEvidence,
+  type SignalFamily,
+  type SignalPolicyEffect,
+  type SignalPolicySource,
+  type SignalReason,
+  type SignalRuleEffect,
+  type SignalRuleInput,
+  type SignalState,
+  type SignalSummary,
+} from './signals'
 export type {
   CanonicalOccurrencePath,
   WriteOutcome,

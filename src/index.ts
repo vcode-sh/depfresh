@@ -96,11 +96,18 @@ export {
   validatePolicyRules,
 } from './policy'
 export { inspectRepository } from './repository/inspect'
+export {
+  type EvaluatePlanSignalsInput,
+  type EvaluatePlanSignalsResult,
+  evaluatePlanSignals,
+  validateSignalConfiguration,
+} from './signals'
 export type {
   AddonContext,
   AddonHookName,
   CanonicalOccurrencePath,
   CatalogSource,
+  CohortInput,
   CompiledPolicy,
   CompiledPolicyRule,
   DepFieldType,
@@ -132,6 +139,8 @@ export type {
   PackageManagerName,
   PackageMeta,
   PackageType,
+  PassivePresence,
+  PlanSignal,
   PolicyAction,
   PolicyCandidateReason,
   PolicyCatalogRole,
@@ -185,6 +194,15 @@ export type {
   RepositoryVcsTargetStateName,
   RepositoryWorkspaceRelationship,
   ResolvedDepChange,
+  SignalEvidence,
+  SignalFamily,
+  SignalPolicyEffect,
+  SignalPolicySource,
+  SignalReason,
+  SignalRuleEffect,
+  SignalRuleInput,
+  SignalState,
+  SignalSummary,
   SignaturePresence,
   SortOption,
   UpdateScore,
@@ -196,6 +214,9 @@ export type {
 export {
   DEFAULT_OPTIONS,
   REPOSITORY_MODEL_SCHEMA_VERSION,
+  SIGNAL_FAMILIES,
+  SIGNAL_REASONS,
+  SIGNAL_STATES,
   summarizeWriteOutcomes,
 } from './types'
 
