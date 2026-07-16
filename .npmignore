@@ -2,7 +2,6 @@ src/
 test/
 audit/
 .github/
-.claude/
 .vscode/
 coverage/
 *.config.ts
@@ -12,7 +11,6 @@ biome.json
 .npmrc
 .editorconfig
 .gitignore
-CLAUDE.md
 CONTRIBUTING.md
 CODE_OF_CONDUCT.md
 SECURITY.md

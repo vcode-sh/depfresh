@@ -4,6 +4,8 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Semver
 
 ## Unreleased
 
+## [2.0.0] - 2026-07-16
+
 ### Added
 
 - **Official schema-backed automation workflow** -- `depfresh capabilities --json` now emits a
@@ -51,9 +53,9 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Semver
   JSON output exposes the versioned `globalResults`.
 
 - **Reviewed lockfile synchronization and verification phases** -- immutable plans can fingerprint
-  supported npm 10/11, pnpm 10/11, or Bun 1.x manager/version evidence, one selected parsed
-  lockfile per affected boundary, fixed lifecycle-disabled argv, permitted paths, timeout, and one
-  optional exact verification argv. Apply requires matching process, lockfile-write, install, and
+  supported npm 10/11, pnpm 10/11, or Bun `>=1.2.0 <2.0.0` manager/version evidence, one selected
+  parsed lockfile per affected boundary, fixed lifecycle-disabled argv, permitted paths, timeout,
+  and one optional exact verification argv. Apply requires matching process, lockfile-write, install, and
   verification grants that configuration cannot supply. Commands run without a shell inside the
   stale-safe lock/journal lifecycle; final lockfiles must change, parse, and match affected manifest
   specifiers plus resolved target versions. Only registry-backed `semver` and `npm:` alias
@@ -658,6 +660,8 @@ First release. Wrote it from scratch because waiting for PRs to get merged in ta
 - TTY detection. No spinners in your CI logs. `NO_COLOR` respected.
 - 54 tests. More than some production apps I've seen.
 
+[Unreleased]: https://github.com/vcode-sh/depfresh/compare/v2.0.0...HEAD
+[2.0.0]: https://github.com/vcode-sh/depfresh/releases/tag/v2.0.0
 [1.0.0]: https://github.com/vcode-sh/depfresh/releases/tag/v1.0.0
 [0.11.1]: https://github.com/vcode-sh/depfresh/releases/tag/v0.11.1
 [0.11.0]: https://github.com/vcode-sh/depfresh/releases/tag/v0.11.0

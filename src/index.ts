@@ -110,6 +110,9 @@ export {
 export type {
   AddonContext,
   AddonHookName,
+  ArtifactTrustDimensionResult,
+  ArtifactTrustResult,
+  ArtifactVerificationTarget,
   CanonicalOccurrencePath,
   CatalogSource,
   CohortInput,

@@ -18,6 +18,12 @@
 - [ ] Lint passes. Biome has accepted my offering.
 - [ ] I wrote tests for my changes. Shocking, I know.
 - [ ] CHANGELOG updated (if this is user-facing)
+- [ ] Current documentation and examples match the built CLI/library behavior
+- [ ] Generated schemas are current and every changed public contract validates
+- [ ] Package dry-run/exports/assets were reviewed when distribution changed
+- [ ] Configuration does not grant write, process, install, verification, global, VCS, or publishing authority
+- [ ] Malformed, ambiguous, unavailable, hostile, stale, concurrent, and partial-failure cases were tested where relevant
+- [ ] Machine output preserves stable exit codes, redaction, and unknown-not-success semantics
 
 ## Related issues
 

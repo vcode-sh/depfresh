@@ -33,11 +33,9 @@ debug.log
 /plans/
 
 # AI
-.claude/
 .agent/
 .agents/
 skills-lock.json
 next.md
 AGENTS.md
-.codex/config.toml
 fix.md

@@ -149,6 +149,7 @@ import { DEFAULT_OPTIONS } from 'depfresh'
   long: false,
   explain: false,
   explainDiscovery: false,
+  profile: false,
   failOnOutdated: false,
   failOnResolutionErrors: false,
   failOnNoPackages: false,

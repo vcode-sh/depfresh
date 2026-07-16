@@ -1,5 +1,5 @@
-name: 'depfresh - Dependency Freshness Check'
-description: 'Check npm dependencies for available updates with structured JSON output'
+name: 'depfresh - Evidence-backed dependency workflow'
+description: 'Run version-coupled check, capabilities, inspect, plan, or reviewed apply workflows'
 author: 'Vibe Code'
 
 branding:
@@ -238,8 +238,32 @@ runs:
       env:
         DEPFRESH_PACKAGE_JSON: ${{ github.action_path }}/package.json
       run: |
-        INSTALL_LOG=$(mktemp "$RUNNER_TEMP/depfresh-install.XXXXXX")
-        trap 'rm -f -- "$INSTALL_LOG"' EXIT
+        INSTALL_ROOT=$(mktemp -d "$RUNNER_TEMP/depfresh-install.XXXXXX")
+        INSTALL_LOG="$INSTALL_ROOT/install.log"
+        INSTALL_PREFIX="$INSTALL_ROOT/prefix"
+        INSTALL_HOME="$INSTALL_ROOT/home"
+        INSTALL_CACHE="$INSTALL_ROOT/cache"
+        EMPTY_USER_CONFIG="$INSTALL_ROOT/empty-user.npmrc"
+        EMPTY_GLOBAL_CONFIG="$INSTALL_ROOT/empty-global.npmrc"
+        mkdir -p -- "$INSTALL_PREFIX" "$INSTALL_HOME" "$INSTALL_CACHE"
+        INSTALL_ROOT=$(realpath -- "$INSTALL_ROOT")
+        INSTALL_PREFIX=$(realpath -- "$INSTALL_PREFIX")
+        INSTALL_HOME=$(realpath -- "$INSTALL_HOME")
+        INSTALL_CACHE=$(realpath -- "$INSTALL_CACHE")
+        EMPTY_USER_CONFIG="$INSTALL_ROOT/empty-user.npmrc"
+        EMPTY_GLOBAL_CONFIG="$INSTALL_ROOT/empty-global.npmrc"
+        : > "$EMPTY_USER_CONFIG"
+        : > "$EMPTY_GLOBAL_CONFIG"
+        chmod 700 "$INSTALL_ROOT" "$INSTALL_PREFIX" "$INSTALL_HOME" "$INSTALL_CACHE"
+        printf 'install-root=%s\n' "$INSTALL_ROOT" >> "$GITHUB_OUTPUT"
+
+        NODE_CLI=$(command -v node)
+        NPM_CLI=$(command -v npm)
+        if [ "$(dirname -- "$(realpath -- "$NODE_CLI")")" != \
+          "$(dirname -- "$(realpath -- "$NPM_CLI")")" ]; then
+          echo '::error title=depfresh install error::Untrusted npm executable'
+          exit 2
+        fi
 
         if ! DEPFRESH_VERSION=$(node --input-type=module --eval '
           import { readFileSync } from "node:fs"
@@ -249,12 +273,42 @@ runs:
           echo '::error title=depfresh install error::Invalid release metadata'
           exit 2
         fi
-        if ! npm install --global --ignore-scripts "depfresh@$DEPFRESH_VERSION" \
-          >> "$INSTALL_LOG" 2>&1; then
+        if ! (
+          cd -- "$INSTALL_ROOT"
+          while IFS='=' read -r name _; do
+            case "$name" in
+              NPM_CONFIG_*|npm_config_*|NODE_AUTH_TOKEN|NPM_TOKEN|HTTP_PROXY|HTTPS_PROXY|ALL_PROXY|NO_PROXY|http_proxy|https_proxy|all_proxy|no_proxy)
+                unset "$name"
+                ;;
+            esac
+          done < <(env)
+          export HOME="$INSTALL_HOME"
+          export PATH="$(dirname -- "$NODE_CLI"):/usr/bin:/bin"
+          "$NPM_CLI" install --global --ignore-scripts --no-audit --no-fund \
+            --registry https://registry.npmjs.org/ \
+            --userconfig "$EMPTY_USER_CONFIG" --globalconfig "$EMPTY_GLOBAL_CONFIG" \
+            --cache "$INSTALL_CACHE" --prefix "$INSTALL_PREFIX" \
+            "depfresh@$DEPFRESH_VERSION"
+        ) >> "$INSTALL_LOG" 2>&1; then
           echo '::error title=depfresh install error::Installation failed'
           exit 2
         fi
-        if ! INSTALLED_VERSION=$(depfresh --version 2>> "$INSTALL_LOG"); then
+        if [ ! -f "$INSTALL_PREFIX/bin/depfresh" ] && [ ! -L "$INSTALL_PREFIX/bin/depfresh" ]; then
+          echo '::error title=depfresh install error::Installed executable unavailable'
+          exit 2
+        fi
+        if ! DEPFRESH_CLI=$(realpath -- "$INSTALL_PREFIX/bin/depfresh"); then
+          echo '::error title=depfresh install error::Installed executable unresolved'
+          exit 2
+        fi
+        case "$DEPFRESH_CLI" in
+          "$INSTALL_PREFIX"/*) ;;
+          *)
+            echo '::error title=depfresh install error::Installed executable escaped'
+            exit 2
+            ;;
+        esac
+        if ! INSTALLED_VERSION=$("$DEPFRESH_CLI" --version 2>> "$INSTALL_LOG"); then
           echo '::error title=depfresh install error::Version check failed'
           exit 2
         fi
@@ -262,16 +316,12 @@ runs:
           echo '::error title=depfresh install error::Version mismatch'
           exit 2
         fi
-        if ! DEPFRESH_BIN=$(command -v depfresh); then
-          echo '::error title=depfresh install error::Installed module unavailable'
-          exit 2
-        fi
-        DEPFRESH_CLI=$(realpath -- "$DEPFRESH_BIN")
         DEPFRESH_MODULE="$(dirname -- "$DEPFRESH_CLI")/index.mjs"
         if [ ! -f "$DEPFRESH_MODULE" ]; then
           echo '::error title=depfresh install error::Installed module unavailable'
           exit 2
         fi
+        printf 'cli=%s\n' "$DEPFRESH_CLI" >> "$GITHUB_OUTPUT"
         printf 'module=%s\n' "$DEPFRESH_MODULE" >> "$GITHUB_OUTPUT"
 
     - name: Run depfresh
@@ -279,6 +329,7 @@ runs:
       shell: bash
       working-directory: ${{ steps.validate.outputs.working-directory }}
       env:
+        DEPFRESH_CLI: ${{ steps.install.outputs.cli }}
         INPUT_COMMAND: ${{ inputs.command }}
         INPUT_MODE: ${{ inputs.mode }}
         INPUT_WRITE: ${{ inputs.write }}
@@ -333,7 +384,7 @@ runs:
         printf 'command=%s\n' "$INPUT_COMMAND" >> "$GITHUB_OUTPUT"
         EXIT_CODE=0
 
-        depfresh "${ARGS[@]}" > "$DEPFRESH_OUTPUT" 2> "$DEPFRESH_ERROR" || EXIT_CODE=$?
+        "$DEPFRESH_CLI" "${ARGS[@]}" > "$DEPFRESH_OUTPUT" 2> "$DEPFRESH_ERROR" || EXIT_CODE=$?
 
         printf 'exit-code=%s\n' "$EXIT_CODE" >> "$GITHUB_OUTPUT"
 
@@ -464,6 +515,8 @@ runs:
       env:
         OUTPUT_FILE: ${{ steps.run.outputs.output-file }}
         ERROR_FILE: ${{ steps.run.outputs.error-file }}
+        INSTALL_ROOT: ${{ steps.install.outputs.install-root }}
       run: |
         if [ -n "$OUTPUT_FILE" ]; then rm -f -- "$OUTPUT_FILE"; fi
         if [ -n "$ERROR_FILE" ]; then rm -f -- "$ERROR_FILE"; fi
+        if [ -n "$INSTALL_ROOT" ]; then rm -rf -- "$INSTALL_ROOT"; fi

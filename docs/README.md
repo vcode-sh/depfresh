@@ -26,13 +26,18 @@ Everything I know about depfresh is in here, split into files so you can pretend
 - **[Output Formats](./output-formats/)** -- Table, JSON, exit codes, and AI agent integration. Machines deserve documentation too. They're doing most of the work anyway.
   - [Table](./output-formats/table.md) -- the default, colourful output
   - [JSON](./output-formats/json.md) -- legacy machine-readable check envelope
+  - [Capabilities](./output-formats/capabilities.md) -- deterministic installed command, schema,
+    authority, runner, and asset descriptor
   - [Inspect and Plan](./output-formats/inspect-plan.md) -- versioned schemas, fingerprints, and terminal decisions
+  - [Apply](./output-formats/apply.md) -- authorized stale-safe apply and observed recovery
+  - [Global Apply](./output-formats/global-apply.md) -- observed non-transactional global updates
   - [Compatibility Signals](./output-formats/compatibility-signals.md) -- runtime, peer, cohort,
     release, deprecation, completeness, and passive-presence evidence
 
 - **[Agent Workflows](./agents/README.md)** -- quickstarts for AI coding agents with copy-paste command patterns.
 
-- **[Integrations](./integrations/README.md)** -- GitHub Actions usage and a thin MCP wrapper reference for tool ecosystems.
+- **[Integrations](./integrations/README.md)** -- Version-coupled GitHub Action and fixed-input
+  machine-wrapper guidance.
 
 - **[Compare](./compare/)** -- How depfresh stacks up. Coverage matrix, migration guide, solved issues, receipts.
 

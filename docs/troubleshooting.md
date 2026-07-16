@@ -30,7 +30,8 @@ You ran depfresh. It found updates. It showed you a lovely table. And then... no
 
 **Did you pass `--write`?** depfresh defaults to `write: false`. It's read-only by design. Add `-w` or `--write` to actually modify files. I'm not going to apologise for this safety net.
 
-**Is `--interactive` on?** In interactive mode, you pick which deps to update. If you selected nothing (or hit Ctrl+C), nothing gets written. That's the deal.
+**Is `--interactive` on?** Interactive mode requires explicit write authority: use `depfresh -wI`.
+If you selected nothing (or hit Ctrl+C), nothing gets written.
 
 **Did `beforePackageWrite` return false?** If you're using the programmatic API with a `beforePackageWrite` callback that returns `false`, depfresh skips writing that package. Check your own code. I'm not debugging your callbacks for you.
 
@@ -148,6 +149,9 @@ If depfresh is picking up packages you didn't expect, check two things:
 2. **Nested workspaces** — is `--ignore-other-workspaces` doing what you think? Run with `--loglevel debug` to see which packages get skipped and why.
 
 ## Interactive mode not showing
+
+Interactive mode requires `--write`; `depfresh -I` fails before discovery. Use `depfresh -wI` in
+an interactive terminal.
 
 The custom TUI requires both `process.stdin.isTTY` and `process.stdout.isTTY` to be true. If you're piping output, running in CI, or using an AI agent, depfresh falls back to a `@clack/prompts` grouped multiselect instead. If *that* doesn't show either, you're in a fully non-interactive environment and should drop the `-I` flag before it gets awkward.
 

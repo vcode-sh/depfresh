@@ -179,10 +179,7 @@ Overflow handling only activates in TTY mode. Non-TTY output (JSON, piped text) 
 `--interactive` (or `-I`) launches a custom terminal UI where you can browse, drill into, and cherry-pick which dependencies to update. No React. No Ink. Just readline and raw mode doing honest work.
 
 ```bash
-# Browse and select
-depfresh -I
-
-# Browse, select, and write
+# Browse, select, and write (interactive mode requires write authority)
 depfresh -wI
 
 # With human-readable explanations

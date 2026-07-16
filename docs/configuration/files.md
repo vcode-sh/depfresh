@@ -24,7 +24,8 @@ depfresh ships with sensible defaults. Here's what you get for free:
 | `ignorePaths` | `['**/node_modules/**', ...]` | Skips the obvious |
 | `ignoreOtherWorkspaces` | `true` | Skips nested monorepos |
 
-That's the full list of things I decided for you. You're welcome.
+This is the practical zero-config subset. See [Options](./options.md) and the exported
+`DEFAULT_OPTIONS` object for the complete current contract.
 
 ## Config File Formats
 

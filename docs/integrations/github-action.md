@@ -1,7 +1,10 @@
 # GitHub Action
 
 The composite Action installs the exact depfresh version recorded in its reviewed `package.json`
-and verifies that version before execution. Pin the Action itself to a reviewed full commit SHA.
+from the fixed public npm registry, using an owned temporary home, cache, empty user/global config,
+and prefix. It invokes the exact contained installed CLI path, validates results with the sibling
+installed library, verifies the package version, and removes the owned installation. Pin the Action
+itself to a reviewed full commit SHA.
 
 ## Inputs
 
@@ -28,6 +31,8 @@ the unchanged reviewed plan. There is no arbitrary argv input and no shell-strin
 The Action exposes `json`, `exit-code`, `contract`, `result-status`, `has-findings`, plus the legacy
 `outdated-count` and `has-updates`. Contract/exit mismatches fail closed. Raw installation/CLI
 diagnostics remain in temporary files that an `always()` step removes.
+The install does not inherit project/user npm config, registry credentials, proxy variables, or a
+global prefix. A same-version executable earlier in `PATH` is not used.
 
 ## Read-only plan gate
 
@@ -76,3 +81,17 @@ issue/PR, merge, tag, publish, or deploy.
 
 Exact verification argv is intentionally not exposed by this fixed-input Action. Use the pinned
 CLI with an argument array when that separately reviewed capability is required.
+
+## Release coupling
+
+The repository release workflow accepts only `v${package.json.version}`, uses exact Node 24.15.0
+and an isolated npm 11.12.0 tool, then runs schemas, types, zero-warning lint, adversarial and full
+tests, coverage, build, smoke, dry-run packaging, and installed-tarball verification. It uploads one
+verified tarball and publishes only those exact bytes after approval of the `release` environment.
+Safe reruns skip publication only when the existing public version has identical SHA-512 integrity.
+The public artifact is then installed and its CLI, library exports, capabilities version, and every
+package export are rechecked.
+
+Curated hosted release creation is a separate `release-hosted` environment boundary with only
+repository-content permission. The workflow does not create or move a mutable Action tag; that is a
+separate manual decision after the exact public package has been verified.

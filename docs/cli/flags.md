@@ -50,9 +50,9 @@ depfresh next      # same as depfresh --mode next
 Valid modes: `default`, `major`, `minor`, `patch`, `latest`, `newest`, `next`. Invalid values fail fast with exit code `2`.
 Machine-discoverability command: `depfresh capabilities --json`.
 
-Reserved machine commands are `depfresh inspect --json`, `depfresh plan --json`, and
-`depfresh apply --json --write --plan-file <path>`. They are not mode shorthands and use their own
-exit contract.
+Reserved machine commands are `depfresh capabilities --json`, `depfresh inspect --json`,
+`depfresh plan --json`, and `depfresh apply --json --write --plan-file <path>`. They are not mode
+shorthands and use their own exit contracts.
 
 ---
 
@@ -130,7 +130,7 @@ Apply exits `0` only for `applied` or `noop`, `1` for a schema-valid `conflicted
 | `--cwd <path>` | `-C` | string | `process.cwd()` | Working directory. Point depfresh at a different project without leaving your comfortable terminal. |
 | `--recursive` | `-r` | boolean | `true` | Recursively search for package manifests (`package.json`, `package.yaml`) in subdirectories. Enabled by default because monorepos are inevitable. |
 | `--write` | `-w` | boolean | `false` | Actually write the updated versions to your package files. Without this, depfresh is just showing you what *could* be. |
-| `--interactive` | `-I` | boolean | `false` | Interactive mode -- a grouped multiselect for hand-picking which deps to update. Requires a TTY, obviously. |
+| `--interactive` | `-I` | boolean | `false` | Interactive grouped selection. Requires a TTY and explicit `--write`; selection alone grants no write authority. |
 | `--mode <mode>` | `-m` | string | `default` | Version range mode. See [Mode Reference](./modes.md) for the full existential breakdown. |
 | `--force` | `-f` | boolean | `false` | Force update even when the current version satisfies the range. Does not bypass cache reads. |
 | `--global` | `-g` | boolean | `false` | Inspect one supported detected global manager; with `--write`, use observed global apply. See [Global Packages](#global-packages). |

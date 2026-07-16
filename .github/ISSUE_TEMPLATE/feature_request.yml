@@ -6,7 +6,7 @@ body:
     attributes:
       value: |
         Feature requests are welcome. Just remember: every feature is code I'm
-        volunteering to maintain forever. So make it count.
+        volunteering to maintain forever. A request is not a roadmap commitment.
 
   - type: textarea
     id: problem
@@ -21,6 +21,22 @@ body:
     attributes:
       label: How should it work?
       description: CLI flags, config options, behaviour changes. Be specific or don't bother.
+    validations:
+      required: true
+
+  - type: textarea
+    id: public-contract
+    attributes:
+      label: Proposed public contract
+      description: Describe exact CLI, library, schema, result, and exit-semantics changes without relying on hidden behavior.
+    validations:
+      required: true
+
+  - type: textarea
+    id: authority
+    attributes:
+      label: Authority and side effects
+      description: List every file, process, network, install, global, VCS, or publishing capability needed, and which operations remain read-only.
     validations:
       required: true
 

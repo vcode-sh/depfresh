@@ -1,7 +1,7 @@
 {
   "name": "depfresh",
-  "version": "1.2.0",
-  "description": "Keep your npm dependencies fresh. Fast, correct, zero-config.",
+  "version": "2.0.0",
+  "description": "Evidence-backed dependency inspection, planning, and updates for JavaScript projects.",
   "type": "module",
   "license": "MIT",
   "author": "Vibe Code <hello@vcode.sh> (https://vcode.sh)",
@@ -73,6 +73,8 @@
     "format": "biome format --write .",
     "typecheck": "tsc --noEmit",
     "test:smoke": "node test/practical-cli-smoke.mjs",
+    "test:release": "vitest run test/release-readiness.test.ts test/github-action.test.ts test/official-workflow.test.ts test/package-assets.test.ts test/packaged-skill.test.ts",
+    "verify:package": "node scripts/verify-packed-package.mjs",
     "prepublishOnly": "pnpm run build",
     "schemas:generate": "tsx scripts/generate-contract-schemas.ts",
     "schemas:check": "tsx scripts/generate-contract-schemas.ts --check"

@@ -231,9 +231,20 @@ const result = await apply(
 )
 ```
 
-The module also exports authoritative inspect, plan, apply, and error schema descriptors, runtime assertion/type-guard helpers,
-canonical JSON and fingerprint helpers, plus pure `buildLegacyCheckJsonResult()` and
-`buildLegacyCheckJsonError()` compatibility builders.
+The module also exports authoritative capabilities, inspect, plan, apply, global-plan,
+global-apply, and command-error schema descriptors and IDs. Use `validateCapabilities()`, the
+`validate*()` type guards, or the `assert*()` helpers at trust boundaries. `ContractValidationError`
+identifies failed runtime assertions. `canonicalJson()`, repository/plan fingerprint helpers, and
+the pure `buildLegacyCheckJsonResult()` / `buildLegacyCheckJsonError()` compatibility builders are
+also public.
+
+```ts
+import {
+  CAPABILITIES_SCHEMA_ID,
+  capabilitiesSchema,
+  validateCapabilities,
+} from 'depfresh'
+```
 
 ---
 
@@ -446,6 +457,30 @@ const result = await applyGlobalPlan(
   createGlobalInvocationAuthority(['npm'], { globalWrite: true, processExecute: true }),
 )
 ```
+
+`loadGlobalPackagesObserved()` and `loadGlobalPackagesAllObserved()` expose the complete manager
+inventory evidence used by these contracts. `loadGlobalPackages()` and `loadGlobalPackagesAll()`
+are compatibility aliases that project confirmed packages while retaining non-confirmed evidence
+in the returned metadata.
+
+## Contract and identity utilities
+
+The root module exports the complete runtime trust-boundary surface:
+
+| Export | Purpose |
+|---|---|
+| `capabilitiesSchema`, `inspectResultSchema`, `planResultSchema`, `applyResultSchema`, `commandErrorSchema` | Authoritative schema-v1 descriptors |
+| `globalPlanSchema`, `globalApplySchema` | Authoritative global contract descriptors |
+| `CAPABILITIES_SCHEMA_ID`, `INSPECT_SCHEMA_ID`, `PLAN_SCHEMA_ID`, `APPLY_SCHEMA_ID`, `COMMAND_ERROR_SCHEMA_ID`, `GLOBAL_PLAN_SCHEMA_ID`, `GLOBAL_APPLY_SCHEMA_ID` | Stable packaged schema identifiers |
+| `validateCapabilities`, `validateInspectResult`, `validatePlanResult`, `validateApplyResult`, `validateMachineCommandError`, `validateGlobalApplyPlan`, `validateGlobalApplyResult` | Boolean runtime validation at untrusted boundaries |
+| `assertInspectResult`, `assertPlanResult`, `assertApplyResult`, `assertMachineCommandError`, `assertGlobalApplyPlan`, `assertGlobalApplyResult` | Throwing validation with `ContractValidationError` |
+| `canonicalJson`, `hashExactBytes`, `createRepositoryFingerprint`, `createPlanFingerprint` | Canonical serialization and recomputable identity |
+| `createInvocationAuthority`, `createGlobalInvocationAuthority` | Immutable invocation-only authority snapshots |
+| `buildLegacyCheckJsonResult`, `buildLegacyCheckJsonError` | Pure legacy JSON compatibility builders |
+| `evaluatePlanSignals`, `validateSignalConfiguration` | Pure fixed-clock signal evaluation and strict config validation |
+
+Schema validation proves shape. Apply additionally performs semantic reference, fingerprint,
+authority, containment, stale-state, and observation checks before it can report success.
 
 ---
 

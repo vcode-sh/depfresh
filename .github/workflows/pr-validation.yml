@@ -21,10 +21,13 @@ jobs:
 
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e  # v6
         with:
-          node-version: 24.x
+          node-version: 24.15.0
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
+
+      - name: Verify generated schemas
+        run: pnpm schemas:check
 
       - name: Typecheck
         run: pnpm typecheck
@@ -32,11 +35,20 @@ jobs:
       - name: Lint
         run: pnpm lint
 
+      - name: Lint with zero warnings
+        run: pnpm exec biome check --error-on-warnings .
+
       - name: Test
         run: pnpm test:run
 
       - name: Build
         run: pnpm build
+
+      - name: Practical CLI smoke tests
+        run: pnpm test:smoke
+
+      - name: Package dry run
+        run: npm pack --dry-run --json --ignore-scripts
 
   security:
     name: Security Audit
@@ -48,7 +60,7 @@ jobs:
 
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e  # v6
         with:
-          node-version: 24.x
+          node-version: 24.15.0
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
@@ -68,7 +80,7 @@ jobs:
 
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e  # v6
         with:
-          node-version: 24.x
+          node-version: 24.15.0
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile

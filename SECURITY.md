@@ -6,8 +6,8 @@ I take security seriously. Yes, I know that sentence usually precedes a data bre
 
 | Version | Supported |
 |---------|-----------|
-| 1.2.x   | Yes       |
-| < 1.2   | No        |
+| 2.0.x   | Yes       |
+| < 2.0   | No        |
 
 Only the latest release gets patches. Running something older? Update first. That's literally what this tool does.
 
@@ -98,7 +98,7 @@ block before apply. A baseline observation failure prevents spawn; a final obser
 unknown. Alias reconciliation binds the manifest alias key, exact registry package identity, exact
 specifier, and exact version, so a same-version identity swap fails. The sanitized manager environment
 excludes arbitrary credential and proxy variables, so private registries must use manager-readable
-configuration and some proxy setups require an explicit future contract. Manager install and
+configuration; unsupported proxy arrangements block. Manager install and
 generic verification phases alone do not establish package trust or update global packages.
 
 Exact artifact trust is an optional install-only boundary for public npm registry artifacts with

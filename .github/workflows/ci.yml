@@ -13,7 +13,7 @@ concurrency:
 
 jobs:
   test:
-    name: Test (Node 24.15 minimum)
+    name: Test (Node 24.15.0)
     runs-on: ${{ github.event_name == 'pull_request' && 'ubuntu-latest' || fromJSON('["self-hosted", "linux", "x64", "vps"]') }}
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6
@@ -27,11 +27,17 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      - name: Verify generated schemas
+        run: pnpm schemas:check
+
       - name: Test Action adversarial harness
         run: pnpm exec vitest run test/github-action.test.ts
 
       - name: Typecheck
         run: pnpm typecheck
+
+      - name: Lint with zero warnings
+        run: pnpm exec biome check --error-on-warnings .
 
       - name: Run tests
         run: pnpm test:run --coverage
@@ -55,7 +61,7 @@ jobs:
 
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e  # v6
         with:
-          node-version: 24.x
+          node-version: 24.15.0
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
@@ -88,7 +94,7 @@ jobs:
 
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e  # v6
         with:
-          node-version: 24.x
+          node-version: 24.15.0
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
@@ -107,7 +113,7 @@ jobs:
 
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e  # v6
         with:
-          node-version: 24.x
+          node-version: 24.15.0
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
@@ -123,3 +129,12 @@ jobs:
 
       - name: Practical CLI smoke tests
         run: pnpm test:smoke
+
+      - name: Package dry run
+        run: npm pack --dry-run --json --ignore-scripts
+
+      - name: Verify packed package
+        run: |
+          mkdir -p artifacts
+          npm pack --json --ignore-scripts --pack-destination artifacts > artifacts/pack.json
+          node scripts/verify-packed-package.mjs artifacts/pack.json

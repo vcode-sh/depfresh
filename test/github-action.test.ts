@@ -76,10 +76,14 @@ function runStep(
     name === 'Parse outputs'
       ? { DEPFRESH_MODULE: join(repoRoot, 'src/index.ts'), NODE_OPTIONS: '--import tsx' }
       : {}
+  const runtimeEnv =
+    name === 'Run depfresh' && !env.DEPFRESH_CLI
+      ? { DEPFRESH_CLI: join(env.PATH?.split(':')[0] ?? '', 'depfresh') }
+      : {}
   return spawnSync('bash', ['--noprofile', '--norc', '-e', '-o', 'pipefail', '-c', step.run], {
     cwd,
     encoding: 'utf8',
-    env: { ...process.env, ...validatorEnv, ...env },
+    env: { ...process.env, ...validatorEnv, ...runtimeEnv, ...env },
   })
 }
 
@@ -117,6 +121,12 @@ function installCommandStubs(fixture: ReturnType<typeof createFixture>): {
   const argsFile = join(fixture.root, 'depfresh-args.json')
   const npmArgsFile = join(fixture.root, 'npm-args.json')
   writeExecutable(
+    join(fixture.bin, 'node'),
+    `#!/usr/bin/env bash
+exec ${JSON.stringify(process.execPath)} "$@"
+`,
+  )
+  writeExecutable(
     join(fixture.bin, 'depfresh'),
     `#!/usr/bin/env node
 const { writeFileSync } = require('node:fs')
@@ -134,8 +144,23 @@ process.exit(Number(process.env.DEPFRESH_EXIT_CODE || 0))
   writeExecutable(
     join(fixture.bin, 'npm'),
     `#!/usr/bin/env node
-const { writeFileSync } = require('node:fs')
-writeFileSync(process.env.NPM_ARGS_FILE, JSON.stringify(process.argv.slice(2)))
+const { chmodSync, copyFileSync, mkdirSync, symlinkSync, writeFileSync } = require('node:fs')
+const { join } = require('node:path')
+const args = process.argv.slice(2)
+writeFileSync(process.env.NPM_ARGS_FILE, JSON.stringify(args))
+const prefixIndex = args.indexOf('--prefix')
+if (prefixIndex >= 0 && args[prefixIndex + 1]) {
+  const prefix = args[prefixIndex + 1]
+  const bin = join(prefix, 'bin', 'depfresh')
+  const cli = join(prefix, 'lib', 'node_modules', 'depfresh', 'dist', 'cli.cjs')
+  const module = join(prefix, 'lib', 'node_modules', 'depfresh', 'dist', 'index.mjs')
+  mkdirSync(join(prefix, 'bin'), { recursive: true })
+  mkdirSync(join(prefix, 'lib', 'node_modules', 'depfresh', 'dist'), { recursive: true })
+  copyFileSync(process.env.FAKE_DEPFRESH_SOURCE, cli)
+  chmodSync(cli, 0o755)
+  symlinkSync(cli, bin)
+  writeFileSync(module, 'export {}\\n')
+}
 process.stdout.write(process.env.NPM_STDOUT || '')
 process.stderr.write(process.env.NPM_STDERR || '')
 process.exit(Number(process.env.NPM_EXIT_CODE || 0))
@@ -374,18 +399,52 @@ describe('GitHub Action version coupling', () => {
       GITHUB_OUTPUT: fixture.githubOutput,
       GITHUB_ACTION_PATH: repoRoot,
       INSTALLED_DEPFRESH_VERSION: packageJson.version,
+      FAKE_DEPFRESH_SOURCE: join(fixture.bin, 'depfresh'),
       NPM_ARGS_FILE: npmArgsFile,
       PATH: `${fixture.bin}:${process.env.PATH ?? ''}`,
       RUNNER_TEMP: fixture.runnerTemp,
     })
 
+    const installOutput = readFileSync(fixture.githubOutput, 'utf8')
+    const installRoot = readOutputValue(installOutput, 'install-root')
+    const installDiagnostic = `${result.stdout}\n${result.stderr}\n${
+      installRoot ? readFileSync(join(installRoot, 'install.log'), 'utf8') : ''
+    }`
+    if (result.status !== 0) throw new Error(installDiagnostic)
     expect(result.status).toBe(0)
-    expect(JSON.parse(readFileSync(npmArgsFile, 'utf8'))).toEqual([
-      'install',
-      '--global',
-      '--ignore-scripts',
-      `depfresh@${packageJson.version}`,
-    ])
+    const args = JSON.parse(readFileSync(npmArgsFile, 'utf8')) as string[]
+    expect(args).toEqual(
+      expect.arrayContaining([
+        'install',
+        '--global',
+        '--ignore-scripts',
+        '--no-audit',
+        '--no-fund',
+        '--registry',
+        'https://registry.npmjs.org/',
+        `depfresh@${packageJson.version}`,
+      ]),
+    )
+    const prefix = args[args.indexOf('--prefix') + 1]
+    const userconfig = args[args.indexOf('--userconfig') + 1]
+    const globalconfig = args[args.indexOf('--globalconfig') + 1]
+    const cache = args[args.indexOf('--cache') + 1]
+    const physicalRunnerTemp = realpathSync(fixture.runnerTemp)
+    expect(prefix?.startsWith(`${physicalRunnerTemp}/`)).toBe(true)
+    expect(userconfig?.startsWith(`${physicalRunnerTemp}/`)).toBe(true)
+    expect(globalconfig?.startsWith(`${physicalRunnerTemp}/`)).toBe(true)
+    expect(cache?.startsWith(`${physicalRunnerTemp}/`)).toBe(true)
+
+    const output = installOutput
+    expect(readOutputValue(output, 'cli')).toBe(
+      join(prefix, 'lib', 'node_modules', 'depfresh', 'dist', 'cli.cjs'),
+    )
+    expect(readOutputValue(output, 'module')).toBe(
+      join(prefix, 'lib', 'node_modules', 'depfresh', 'dist', 'index.mjs'),
+    )
+    expect(readOutputValue(output, 'install-root')).toMatch(
+      new RegExp(`^${physicalRunnerTemp.replaceAll('/', '\\/')}/`),
+    )
   })
 
   it('fails closed when the installed version does not match', () => {
@@ -396,6 +455,7 @@ describe('GitHub Action version coupling', () => {
       GITHUB_OUTPUT: fixture.githubOutput,
       GITHUB_ACTION_PATH: repoRoot,
       INSTALLED_DEPFRESH_VERSION: '0.0.0-wrong',
+      FAKE_DEPFRESH_SOURCE: join(fixture.bin, 'depfresh'),
       NPM_ARGS_FILE: npmArgsFile,
       PATH: `${fixture.bin}:${process.env.PATH ?? ''}`,
       RUNNER_TEMP: fixture.runnerTemp,
@@ -415,6 +475,7 @@ describe('GitHub Action version coupling', () => {
       GITHUB_OUTPUT: fixture.githubOutput,
       GITHUB_ACTION_PATH: repoRoot,
       INSTALLED_DEPFRESH_VERSION: packageJson.version,
+      FAKE_DEPFRESH_SOURCE: join(fixture.bin, 'depfresh'),
       NPM_ARGS_FILE: npmArgsFile,
       NPM_EXIT_CODE: '1',
       NPM_STDERR: secret,
@@ -884,13 +945,20 @@ describe('GitHub Action outputs and cleanup', () => {
     const fixture = createFixture()
     const outputFile = join(fixture.runnerTemp, 'depfresh-output.json')
     const errorFile = join(fixture.runnerTemp, 'depfresh-error.log')
+    const installRoot = join(fixture.runnerTemp, 'depfresh-install-owned')
+    mkdirSync(installRoot)
     writeFileSync(outputFile, '{}')
     writeFileSync(errorFile, 'sensitive diagnostic')
-    const result = runStep('Clean up', { ERROR_FILE: errorFile, OUTPUT_FILE: outputFile })
+    const result = runStep('Clean up', {
+      ERROR_FILE: errorFile,
+      INSTALL_ROOT: installRoot,
+      OUTPUT_FILE: outputFile,
+    })
 
     expect(result.status).toBe(0)
     expect(() => readFileSync(outputFile)).toThrow()
     expect(() => readFileSync(errorFile)).toThrow()
+    expect(() => readFileSync(installRoot)).toThrow()
   })
 })
 
@@ -907,6 +975,7 @@ describe('GitHub Action documented workflow', () => {
       DEPFRESH_PACKAGE_JSON: join(repoRoot, 'package.json'),
       GITHUB_OUTPUT: fixture.githubOutput,
       INSTALLED_DEPFRESH_VERSION: packageJson.version,
+      FAKE_DEPFRESH_SOURCE: join(fixture.bin, 'depfresh'),
       NPM_ARGS_FILE: npmArgsFile,
       PATH: path,
       RUNNER_TEMP: fixture.runnerTemp,

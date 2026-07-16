@@ -6,6 +6,11 @@ import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
+const packageVersion = (
+  JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as {
+    version: string
+  }
+).version
 const temporaryRoots: string[] = []
 
 function bashBlocks(relativePath: string): string[] {
@@ -26,7 +31,7 @@ const args = process.argv.slice(2)
 appendFileSync(process.env.ARGV_LOG, JSON.stringify({ command, args }) + '\\n')
 const depfreshIndex = command === 'depfresh' ? -1 : args.indexOf('depfresh')
 const cli = depfreshIndex === -1 ? args : args.slice(depfreshIndex + 1)
-if (cli[0] === '--version') process.stdout.write('1.2.0')
+if (cli[0] === '--version') process.stdout.write(${JSON.stringify(packageVersion)})
 else if (cli[0] === 'capabilities') process.stdout.write('{"contract":"depfresh.capabilities","schemaVersion":1}')
 else if (cli[0] === 'inspect') process.stdout.write('{"contract":"depfresh.inspect","schemaVersion":1,"risks":[],"errors":[]}')
 else if (cli[0] === 'plan') {
@@ -77,14 +82,21 @@ describe('packaged depfresh skill commands', () => {
       { command: 'pnpm', args: ['exec', 'depfresh', 'capabilities', '--json'] },
       {
         command: 'npm',
-        args: ['exec', '--yes', '--package=depfresh@1.2.0', '--', 'depfresh', '--version'],
+        args: [
+          'exec',
+          '--yes',
+          `--package=depfresh@${packageVersion}`,
+          '--',
+          'depfresh',
+          '--version',
+        ],
       },
       {
         command: 'npm',
         args: [
           'exec',
           '--yes',
-          '--package=depfresh@1.2.0',
+          `--package=depfresh@${packageVersion}`,
           '--',
           'depfresh',
           'capabilities',

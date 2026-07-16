@@ -1,4 +1,4 @@
-# Release -- tag it, test it, ship it. In that order.
+# Release verifies one exact artifact before a protected publish step.
 name: Release
 
 on:
@@ -10,10 +10,13 @@ permissions:
   contents: read
 
 jobs:
-  # Heavy lifting stays on the dedicated self-hosted runner.
   verify:
-    name: Verify
+    name: Verify exact release artifact
     runs-on: [self-hosted, linux, x64, vps]
+    outputs:
+      package-version: ${{ steps.version.outputs.package-version }}
+      package-tarball: ${{ steps.pack.outputs.package-tarball }}
+      package-integrity: ${{ steps.pack.outputs.package-integrity }}
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6
         with:
@@ -23,53 +26,235 @@ jobs:
 
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e  # v6
         with:
-          node-version: 24.x
-          cache: pnpm
+          node-version: 24.15.0
 
-      - run: pnpm install --frozen-lockfile
+      - name: Install exact isolated npm
+        shell: bash
+        run: |
+          set -euo pipefail
+          NPM_TOOL_ROOT=$(mktemp -d "$RUNNER_TEMP/depfresh-release-npm.XXXXXX")
+          printf 'NPM_TOOL_ROOT=%s\n' "$NPM_TOOL_ROOT" >> "$GITHUB_ENV"
+          mkdir -p "$NPM_TOOL_ROOT/home" "$NPM_TOOL_ROOT/cache" \
+            "$NPM_TOOL_ROOT/prefix" "$NPM_TOOL_ROOT/pnpm-store" "$NPM_TOOL_ROOT/xdg-cache"
+          : > "$NPM_TOOL_ROOT/user.npmrc"
+          : > "$NPM_TOOL_ROOT/global.npmrc"
+          NODE_CLI=$(command -v node)
+          NPM_BOOTSTRAP=$(command -v npm)
+          [[ "$(dirname "$(realpath "$NODE_CLI")")" == "$(dirname "$(realpath "$NPM_BOOTSTRAP")")" ]]
+          env -i HOME="$NPM_TOOL_ROOT/home" PATH="$(dirname "$NODE_CLI"):/usr/bin:/bin" \
+            "$NPM_BOOTSTRAP" install --global --ignore-scripts --no-audit --no-fund \
+            --registry https://registry.npmjs.org/ --userconfig "$NPM_TOOL_ROOT/user.npmrc" \
+            --globalconfig "$NPM_TOOL_ROOT/global.npmrc" --cache "$NPM_TOOL_ROOT/cache" \
+            --prefix "$NPM_TOOL_ROOT/prefix" npm@11.12.0
+          [[ "$("$NPM_TOOL_ROOT/prefix/bin/npm" --version)" == '11.12.0' ]]
+          printf '%s\n' "$NPM_TOOL_ROOT/prefix/bin" >> "$GITHUB_PATH"
+          {
+            printf 'HOME=%s\n' "$NPM_TOOL_ROOT/home"
+            printf 'NPM_CONFIG_CACHE=%s\n' "$NPM_TOOL_ROOT/cache"
+            printf 'NPM_CONFIG_GLOBALCONFIG=%s\n' "$NPM_TOOL_ROOT/global.npmrc"
+            printf 'NPM_CONFIG_REGISTRY=https://registry.npmjs.org/\n'
+            printf 'NPM_CONFIG_USERCONFIG=%s\n' "$NPM_TOOL_ROOT/user.npmrc"
+            printf 'XDG_CACHE_HOME=%s\n' "$NPM_TOOL_ROOT/xdg-cache"
+          } >> "$GITHUB_ENV"
+
+      - name: Require the exact package tag
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          PACKAGE_VERSION=$(node --input-type=module -e "import packageJson from './package.json' with { type: 'json' }; process.stdout.write(packageJson.version)")
+          EXPECTED_REF="refs/tags/v${PACKAGE_VERSION}"
+          if [[ "$GITHUB_REF" != "$EXPECTED_REF" ]]; then
+            echo "::error::Expected $EXPECTED_REF, received $GITHUB_REF"
+            exit 1
+          fi
+          printf 'package-version=%s\n' "$PACKAGE_VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Frozen install
+        run: pnpm install --frozen-lockfile --store-dir "$NPM_TOOL_ROOT/pnpm-store"
+
+      - name: Verify generated schemas
+        run: pnpm schemas:check
 
       - name: Typecheck
         run: pnpm typecheck
 
-      - name: Test
-        run: pnpm test:run
+      - name: Lint
+        run: pnpm lint
+
+      - name: Lint with zero warnings
+        run: pnpm exec biome check --error-on-warnings .
+
+      - name: Release-focused adversarial tests
+        run: pnpm test:release
+
+      - name: Full tests and coverage
+        run: pnpm test:run --coverage
 
       - name: Build
         run: pnpm build
 
-  # Publish must run on a github-hosted runner: OIDC trusted publishing
-  # auto-attaches sigstore provenance, which npm only verifies from
-  # github-hosted runners -- self-hosted publishes are rejected with E422.
+      - name: Practical CLI smoke tests
+        run: pnpm test:smoke
+
+      - name: Package dry run
+        run: |
+          mkdir -p artifacts
+          npm pack --dry-run --json --ignore-scripts > artifacts/pack-dry-run.json
+
+      - name: Build and verify the publishable tarball
+        id: pack
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm pack --json --ignore-scripts --pack-destination artifacts > artifacts/pack.json
+          node scripts/verify-packed-package.mjs artifacts/pack.json
+          PACKAGE_TARBALL=$(node --input-type=module -e "import { readFileSync } from 'node:fs'; const [entry] = JSON.parse(readFileSync('artifacts/pack.json', 'utf8')); process.stdout.write(entry.filename)")
+          PACKAGE_INTEGRITY=$(node --input-type=module -e "import { readFileSync } from 'node:fs'; const [entry] = JSON.parse(readFileSync('artifacts/pack.json', 'utf8')); process.stdout.write(entry.integrity)")
+          printf 'package-tarball=%s\n' "$PACKAGE_TARBALL" >> "$GITHUB_OUTPUT"
+          printf 'package-integrity=%s\n' "$PACKAGE_INTEGRITY" >> "$GITHUB_OUTPUT"
+
+      - name: Upload verified release evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7
+        with:
+          name: depfresh-${{ steps.version.outputs.package-version }}-verified
+          path: |
+            artifacts/${{ steps.pack.outputs.package-tarball }}
+            artifacts/pack.json
+            artifacts/pack-dry-run.json
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Clean isolated npm
+        if: ${{ always() }}
+        run: |
+          if [[ -n "${NPM_TOOL_ROOT:-}" ]]; then rm -rf -- "$NPM_TOOL_ROOT"; fi
+
   publish:
-    name: Publish
+    name: Publish verified artifact
     needs: verify
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    environment: release
     permissions:
-      contents: write
+      contents: read
       id-token: write
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6
         with:
           fetch-depth: 0
 
-      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320  # v5
-
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e  # v6
         with:
-          node-version: 24.x
-          cache: pnpm
+          node-version: 24.15.0
 
-      # Trusted publishing (OIDC) requires npm >= 11.5.1
-      - run: npm install -g npm@latest
+      - name: Install exact isolated npm
+        shell: bash
+        run: |
+          set -euo pipefail
+          NPM_TOOL_ROOT=$(mktemp -d "$RUNNER_TEMP/depfresh-release-npm.XXXXXX")
+          printf 'NPM_TOOL_ROOT=%s\n' "$NPM_TOOL_ROOT" >> "$GITHUB_ENV"
+          mkdir -p "$NPM_TOOL_ROOT/home" "$NPM_TOOL_ROOT/cache" \
+            "$NPM_TOOL_ROOT/prefix" "$NPM_TOOL_ROOT/pnpm-store" "$NPM_TOOL_ROOT/xdg-cache"
+          : > "$NPM_TOOL_ROOT/user.npmrc"
+          : > "$NPM_TOOL_ROOT/global.npmrc"
+          NODE_CLI=$(command -v node)
+          NPM_BOOTSTRAP=$(command -v npm)
+          [[ "$(dirname "$(realpath "$NODE_CLI")")" == "$(dirname "$(realpath "$NPM_BOOTSTRAP")")" ]]
+          env -i HOME="$NPM_TOOL_ROOT/home" PATH="$(dirname "$NODE_CLI"):/usr/bin:/bin" \
+            "$NPM_BOOTSTRAP" install --global --ignore-scripts --no-audit --no-fund \
+            --registry https://registry.npmjs.org/ --userconfig "$NPM_TOOL_ROOT/user.npmrc" \
+            --globalconfig "$NPM_TOOL_ROOT/global.npmrc" --cache "$NPM_TOOL_ROOT/cache" \
+            --prefix "$NPM_TOOL_ROOT/prefix" npm@11.12.0
+          [[ "$("$NPM_TOOL_ROOT/prefix/bin/npm" --version)" == '11.12.0' ]]
+          printf '%s\n' "$NPM_TOOL_ROOT/prefix/bin" >> "$GITHUB_PATH"
+          {
+            printf 'HOME=%s\n' "$NPM_TOOL_ROOT/home"
+            printf 'NPM_CONFIG_CACHE=%s\n' "$NPM_TOOL_ROOT/cache"
+            printf 'NPM_CONFIG_GLOBALCONFIG=%s\n' "$NPM_TOOL_ROOT/global.npmrc"
+            printf 'NPM_CONFIG_REGISTRY=https://registry.npmjs.org/\n'
+            printf 'NPM_CONFIG_USERCONFIG=%s\n' "$NPM_TOOL_ROOT/user.npmrc"
+            printf 'XDG_CACHE_HOME=%s\n' "$NPM_TOOL_ROOT/xdg-cache"
+          } >> "$GITHUB_ENV"
 
-      - run: pnpm install --frozen-lockfile
+      - name: Download verified release evidence
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131  # v8
+        with:
+          name: depfresh-${{ needs.verify.outputs.package-version }}-verified
+          path: artifacts
 
-      # Auth via OIDC trusted publishing -- no token needed (configured on
-      # npmjs.com). prepublishOnly rebuilds dist/ before packing.
-      - name: Publish to npm
-        run: npm publish --access public
+      - name: Recheck release identity
+        shell: bash
+        env:
+          PACKAGE_INTEGRITY: ${{ needs.verify.outputs.package-integrity }}
+          PACKAGE_VERSION: ${{ needs.verify.outputs.package-version }}
+          PACKAGE_TARBALL: ${{ needs.verify.outputs.package-tarball }}
+        run: |
+          set -euo pipefail
+          EXPECTED_REF="refs/tags/v${PACKAGE_VERSION}"
+          [[ "$GITHUB_REF" == "$EXPECTED_REF" ]]
+          [[ "$(node --input-type=module -e "import packageJson from './package.json' with { type: 'json' }; process.stdout.write(packageJson.version)")" == "$PACKAGE_VERSION" ]]
+          [[ -f "artifacts/$PACKAGE_TARBALL" ]]
+          [[ "$(node --input-type=module -e "import { readFileSync } from 'node:fs'; const [entry] = JSON.parse(readFileSync('artifacts/pack.json', 'utf8')); process.stdout.write(entry.integrity)")" == "$PACKAGE_INTEGRITY" ]]
+          node scripts/verify-packed-package.mjs artifacts/pack.json
 
-      - name: GitHub Release
+      - name: Publish exact verified tarball
+        shell: bash
+        env:
+          PACKAGE_VERSION: ${{ needs.verify.outputs.package-version }}
+          PACKAGE_TARBALL: artifacts/${{ needs.verify.outputs.package-tarball }}
+        run: |
+          set -euo pipefail
+          EXPECTED_INTEGRITY=$(node --input-type=module -e "import { readFileSync } from 'node:fs'; const [entry] = JSON.parse(readFileSync('artifacts/pack.json', 'utf8')); process.stdout.write(entry.integrity)")
+          OBSERVED_INTEGRITY=$(npm view "depfresh@${PACKAGE_VERSION}" dist.integrity --registry=https://registry.npmjs.org/ 2>/dev/null || true)
+          if [[ -n "$OBSERVED_INTEGRITY" ]]; then
+            [[ "$OBSERVED_INTEGRITY" == "$EXPECTED_INTEGRITY" ]] || {
+              echo '::error::The existing package has different integrity'
+              exit 1
+            }
+          else
+            npm publish "$PACKAGE_TARBALL" --access public --ignore-scripts
+          fi
+
+      - name: Verify exact public package artifact
+        shell: bash
+        env:
+          PACKAGE_VERSION: ${{ needs.verify.outputs.package-version }}
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3 4 5 6; do
+            if node scripts/verify-packed-package.mjs artifacts/pack.json \
+              --install-spec "depfresh@$PACKAGE_VERSION"; then
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "::error::npm did not expose the exact verified depfresh@$PACKAGE_VERSION artifact"
+          exit 1
+
+      - name: Clean isolated npm
+        if: ${{ always() }}
+        run: |
+          if [[ -n "${NPM_TOOL_ROOT:-}" ]]; then rm -rf -- "$NPM_TOOL_ROOT"; fi
+
+  release:
+    name: Create curated hosted release
+    needs: [verify, publish]
+    runs-on: ubuntu-24.04
+    environment: release-hosted
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6
+
+      - name: Download verified release evidence
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131  # v8
+        with:
+          name: depfresh-${{ needs.verify.outputs.package-version }}-verified
+          path: artifacts
+
+      - name: Create curated GitHub release
         uses: softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b  # v3.0.1
         with:
-          generate_release_notes: true
+          body_path: docs/releases/v2.0.0.md
+          files: artifacts/${{ needs.verify.outputs.package-tarball }}
+          generate_release_notes: false

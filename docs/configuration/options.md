@@ -79,6 +79,7 @@ input; it does not evaluate TypeScript or JavaScript config modules.
 | `long` | `boolean` | `false` | Extended display with the package homepage URL. |
 | `explain` | `boolean` | `false` | Show review-oriented release-shape notes in the interactive detail view, such as "Breaking change. Check migration guide." and "Patch release. Review changes." Only does anything with `interactive: true`. |
 | `explainDiscovery` | `boolean` | `false` | Print or emit discovery diagnostics: chosen root, matched manifests, skipped manifests, and loaded catalogs. |
+| `profile` | `boolean` | `false` | Include measured discovery, registry, cache, and post-write timing/counter diagnostics. It reports observations and grants no authority. |
 
 ## Exit Behavior
 
@@ -123,7 +124,7 @@ For the programmatic API. These do nothing in config files -- they're for when y
 | `beforePackageStart` | `(pkg: PackageMeta) => void` | Before processing each package |
 | `onDependencyResolved` | `(pkg: PackageMeta, dep: ResolvedDepChange) => void` | Each dependency is resolved from the registry |
 | `beforePackageWrite` | `(pkg: PackageMeta) => boolean` | Before writing. Return `false` to skip. |
-| `afterPackageWrite` | `(pkg: PackageMeta) => void` | After a package file is written |
+| `afterPackageWrite` | `(pkg: PackageMeta, changes: ResolvedDepChange[]) => void \| Promise<void>` | After a package file is written |
 | `afterPackagesLoaded` | `(pkgs: PackageMeta[]) => void` | After all package files are discovered and loaded |
 | `afterPackageEnd` | `(pkg: PackageMeta) => void` | After a package is fully processed (resolved + rendered) |
 | `afterPackagesEnd` | `(pkgs: PackageMeta[]) => void` | After all packages are done. The grand finale. |

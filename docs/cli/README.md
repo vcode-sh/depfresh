@@ -37,11 +37,13 @@ depfresh apply --json --write --plan-file depfresh-plan.json
 
 ## Machine Commands
 
-`inspect`, `plan`, and `apply` are commands, not range modes. They require `--json` or
+`capabilities`, `inspect`, `plan`, and `apply` are commands, not range modes. `capabilities`
+discovers the exact installed surface with `--json`. The other three require `--json` or
 `--output json` and write one versioned schema-valid document to stdout. Inspect and plan reject
 write, interactive, legacy post-write, and global flags before discovery. Apply requires explicit
 `--write` plus one `--plan-file`, and rejects unrelated command flags. See
-[Inspect and Plan Contracts](../output-formats/inspect-plan.md) and
+[Capabilities](../output-formats/capabilities.md),
+[Inspect and Plan Contracts](../output-formats/inspect-plan.md), and
 [Compatibility Signals](../output-formats/compatibility-signals.md), plus the
 [Apply Contract](../output-formats/apply.md) for schemas, fingerprints, side-effect boundaries,
 recovery, and exit codes.

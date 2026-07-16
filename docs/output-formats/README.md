@@ -1,7 +1,8 @@
 # Output Formats
 
 Because apparently "printing text to a terminal" needs a whole document now. depfresh has a human
-table, a legacy check JSON envelope, and versioned inspect/plan/apply machine contracts.
+table, a legacy check JSON envelope, deterministic capabilities, and versioned
+inspect/plan/apply/global machine contracts.
 
 ## Pages
 
@@ -9,6 +10,9 @@ table, a legacy check JSON envelope, and versioned inspect/plan/apply machine co
 
 - **[JSON](./json.md)** -- Compatibility check envelope with packages, summary, volatile metadata,
   and optional write outcomes.
+
+- **[Capabilities](./capabilities.md)** -- Deterministic installed commands, schemas, exit
+  semantics, authority grants, runners, registries, and packaged assets.
 
 - **[Inspect and Plan](./inspect-plan.md)** -- Deterministic schema-v1 repository evidence and
   immutable plan operations with canonical fingerprints.
@@ -42,11 +46,15 @@ Legacy `--global[-all] --write` exits `0` only when every selected global item i
 or skipped. Any conflicted, failed, or unknown item makes the compatibility command exit `2`; the
 embedded `globalResults` retain the versioned item truth.
 
+`capabilities` exits `0` only for a complete schema-valid descriptor and `2` for a fatal command
+error. It does not use finding-bearing exit `1`.
+
 ## Quick Reference
 
 ```bash
 depfresh --output table   # default -- for humans
 depfresh --output json    # for machines, scripts, and AI agents
+depfresh capabilities --json
 depfresh inspect --json   # deterministic repository evidence
 depfresh plan --json > depfresh-plan.json
 depfresh apply --json --write --plan-file depfresh-plan.json

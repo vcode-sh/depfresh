@@ -12,6 +12,7 @@ import {
   RegistryError,
   CacheError,
   ConfigError,
+  ContractValidationError,
   WriteError,
   ResolveError,
 } from 'depfresh'
@@ -28,6 +29,7 @@ import {
 | `ConfigError` | `ERR_CONFIG` | `UNKNOWN_OPTION`, `MISSING_OPTION_VALUE`, `CONFLICTING_OPTION`, `INVALID_BOOLEAN`, `INVALID_OPTION_VALUE`, `UNSUPPORTED_COMBINATION`, `AUTHORITY_REQUIRED`, `CONFIG_LOAD_FAILED`, `CONFIG_PARSE_FAILED`, `INVALID_CONFIG` | Invalid argv, config, or invocation authority. |
 | `WriteError` | `ERR_WRITE` | `WRITE_FAILURE` | File system failures during package writes. |
 | `ResolveError` | `ERR_RESOLVE` | `RESOLUTION_FAILURE` | Network timeouts, DNS failures, and non-HTTP fetch errors. |
+| `ContractValidationError` | `ERR_CONTRACT_VALIDATION` | Schema or semantic contract failure | An `assert*()` helper rejects an incomplete, forged, or unsupported public contract. |
 
 ## Usage
 

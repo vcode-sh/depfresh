@@ -7,13 +7,15 @@ body:
       value: |
         Before filing, make sure you're on the latest version.
         Yes, updating is annoying. That's literally what this tool is for.
+        Remove registry tokens, authorization headers, private URLs, usernames,
+        and local absolute paths from every command, contract, and log you attach.
 
   - type: input
     id: depfresh-version
     attributes:
       label: depfresh version
       description: "Run `depfresh --version` or check package.json."
-      placeholder: "0.1.0"
+      placeholder: "2.0.0"
     validations:
       required: true
 
@@ -36,6 +38,19 @@ body:
         - pnpm
         - yarn
         - bun
+    validations:
+      required: true
+
+  - type: textarea
+    id: invocation
+    attributes:
+      label: Invocation and contract
+      description: "Provide the sanitized exact argv, exit code, output contract name/schemaVersion, and relevant capabilities command entry."
+      placeholder: |
+        Command: depfresh plan --json
+        Exit: 1
+        Contract: depfresh.plan / schemaVersion 1
+        Capabilities: depfresh capabilities --json (attach a sanitized excerpt or file)
     validations:
       required: true
 
@@ -72,7 +87,7 @@ body:
     id: actual
     attributes:
       label: What actually happened?
-      description: Reality's version. Screenshots, logs, error messages -- all useful.
+      description: Reality's version. Attach sanitized schema-valid JSON when available; do not include secrets or private paths.
     validations:
       required: true
 

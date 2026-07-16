@@ -5,61 +5,52 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9+-3178c6)](https://www.typescriptlang.org/)
 [![Node.js](https://img.shields.io/badge/Node.js-24.15+-339933)](https://nodejs.org/)
 
-Keep your dependencies fresh. Taze alternative. Zero config, fast, monorepo-ready. Your AI agent already knows how to use this.
+Inspect dependency evidence, create a reviewable immutable plan, then apply only the changes you
+explicitly authorize. depfresh stays fast and zero-config for everyday checks while giving
+monorepos, CI, and automation a deterministic machine contract. Unknown state is never reported as
+success.
 
 ## Install
 
 ### One-off run (no install needed)
 
 ```bash
-npm exec --yes --package=depfresh@1.2.0 -- depfresh
-pnpm dlx depfresh@1.2.0
-bunx depfresh@1.2.0
-yarn dlx depfresh@1.2.0
+npm exec --yes --package=depfresh@2.0.0 -- depfresh
+pnpm dlx depfresh@2.0.0
+bunx depfresh@2.0.0
+yarn dlx depfresh@2.0.0
 ```
 
 ### Global install
 
 ```bash
-npm install -g depfresh@1.2.0
-pnpm add -g depfresh@1.2.0
-bun add -g depfresh@1.2.0
-yarn global add depfresh@1.2.0
+npm install -g depfresh@2.0.0
+pnpm add -g depfresh@2.0.0
+bun add -g depfresh@2.0.0
+yarn global add depfresh@2.0.0
 ```
 
 ### Local devDependency (recommended for team + CI)
 
 ```bash
-npm install -D --save-exact depfresh@1.2.0
-pnpm add -D --save-exact depfresh@1.2.0
-bun add -D --exact depfresh@1.2.0
-yarn add -D --exact depfresh@1.2.0
+npm install -D --save-exact depfresh@2.0.0
+pnpm add -D --save-exact depfresh@2.0.0
+bun add -D --exact depfresh@2.0.0
+yarn add -D --exact depfresh@2.0.0
 ```
 
 | If you want... | Use | Example |
 | --- | --- | --- |
-| Run once in any repo | Exact one-off | `npm exec --yes --package=depfresh@1.2.0 -- depfresh` |
-| Always available on your machine | Exact global | `npm install -g depfresh@1.2.0` |
-| Pinned for team/CI consistency | Exact local devDep + lockfile | `pnpm add -D --save-exact depfresh@1.2.0` |
+| Run once in any repo | Exact one-off | `npm exec --yes --package=depfresh@2.0.0 -- depfresh` |
+| Always available on your machine | Exact global | `npm install -g depfresh@2.0.0` |
+| Pinned for team/CI consistency | Exact local devDep + lockfile | `pnpm add -D --save-exact depfresh@2.0.0` |
 
 Automation should prefer the repository-local binary pinned by the committed lockfile, then an
 exact approved package version. See the [official automation workflow](docs/agents/README.md).
 
-## Quick Start
+## Evidence-backed workflow
 
 ```bash
-# What's outdated?
-depfresh
-
-# Update everything
-depfresh --write
-
-# Interactive -- pick what to update
-depfresh -I
-
-# JSON output for scripts and AI agents
-depfresh --output json
-
 # Deterministic installed command/schema/capability descriptor
 depfresh capabilities --json
 
@@ -71,6 +62,22 @@ depfresh plan --json > depfresh-plan.json
 
 # Apply exactly that reviewed plan with explicit write authority
 depfresh apply --json --write --plan-file depfresh-plan.json
+```
+
+The compatibility check workflow remains available for quick local use:
+
+```bash
+# What's outdated?
+depfresh
+
+# Update everything through the stale-safe compatibility path
+depfresh --write
+
+# Interactive -- pick what to update
+depfresh -wI
+
+# JSON output for existing scripts
+depfresh --output json
 
 # Only minor/patch (living cautiously)
 depfresh minor -w

@@ -8,7 +8,7 @@ Switching from taze? Here's what you need to know. Most workflows translate dire
 |------|----------|-------|
 | `taze` | `depfresh` | Default check mode |
 | `taze -w` | `depfresh -w` | Write updates |
-| `taze -I` | `depfresh -I` | Interactive mode |
+| `taze -I` | `depfresh -wI` | Interactive selection requires explicit write authority |
 | `taze major` | `depfresh major` | Positional mode works the same |
 | `taze --fail-on-outdated` | `depfresh --fail-on-outdated` | CI gate mode |
 | `taze -C path` | `depfresh -C path` | Alternate working directory |
