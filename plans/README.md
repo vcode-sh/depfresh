@@ -54,6 +54,7 @@ may grant side effects. Unknown state is never reported as success.
 | [024](./024-official-agent-workflow.md) | Official workflow and distribution | P2 | M | 010, 018–023 | DONE |
 | [025](./025-ci-portability-ledger-truth.md) | CI portability and ledger truth | P1 | S | 024 | DONE |
 | [026](./026-repository-performance-progress-ux.md) | Repository performance and progress UX | P1 | M | 025 | DONE |
+| [027](./027-wun-demo-release-proof.md) | WUN-shaped demo and release proof | P1 | M | 026 | IN PROGRESS |
 
 The implementation order through 016 is present locally. Plans 011 through 013 passed their final
 blocker replays, regression fixes, full gates, and independent re-reviews on 2026-07-16. Plans 014
@@ -116,6 +117,13 @@ It completed with a 1.35-second median repository inspection, immediate four-pha
 feedback, coordinated durable tables, exact candidate/symlink/unavailable truth, terminal display
 containment, full exact-Node/package gates, and two independent approvals. The final WUN replay
 preserved Git state and the isolated tarball verifier passed.
+
+Plan 027 was opened by the final release request. A sanitized WUN-shaped demo audit exposed two
+release-blocking CLI defects before publication: large machine documents written into a pipe could
+be truncated by immediate process exit, and CLI `--ignore-paths` replaced the safety defaults it
+was documented to extend. The plan owns those focused fixes, deterministic packed-product proof,
+the human-first README and release truth pass, current hosted governance, and the immutable 2.0.0
+publication sequence.
 
 ## Split coverage map
 
