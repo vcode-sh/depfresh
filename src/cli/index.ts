@@ -180,10 +180,10 @@ const main = defineCommand({
       }
 
       const { normalizeArgs } = await import('./normalize-args')
-      const { check } = await import('../commands/check/index')
+      const { checkFromCli } = await import('../commands/check/run-check')
 
       const options = await normalizeArgs(args)
-      const exitCode = await check(options)
+      const exitCode = await checkFromCli(options)
       process.exit(exitCode)
     } catch (error) {
       const machineCommand =

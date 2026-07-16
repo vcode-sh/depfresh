@@ -5,6 +5,7 @@ import {
   colorDiff,
   colorizeVersionDiff,
   padEnd,
+  sanitizeTerminalText,
   timeDifference,
   truncate,
 } from '../../../../utils/format'
@@ -16,7 +17,7 @@ export function renderListView(state: TuiState): string[] {
   const lines: string[] = []
   const depItems = getDepItems(state)
   const nameWidth = Math.min(
-    depItems.reduce((max, item) => Math.max(max, item.dep.name.length), 4),
+    depItems.reduce((max, item) => Math.max(max, sanitizeTerminalText(item.dep.name).length), 4),
     24,
   )
 
@@ -79,11 +80,14 @@ export function renderListDepLine(
 ): string {
   const pointer = focused ? c.cyan('>') : ' '
   const selectedMark = selected ? c.green('*') : c.gray('o')
-  const name = padEnd(truncate(dep.name, nameWidth), nameWidth)
-  const target = colorizeVersionDiff(dep.currentVersion, dep.targetVersion, dep.diff)
+  const safeName = sanitizeTerminalText(dep.name)
+  const currentVersion = sanitizeTerminalText(dep.currentVersion)
+  const targetVersion = sanitizeTerminalText(dep.targetVersion)
+  const name = padEnd(truncate(safeName, nameWidth), nameWidth)
+  const target = colorizeVersionDiff(currentVersion, targetVersion, dep.diff)
   const age = timeDifference(dep.publishedAt)
 
-  let line = `  ${pointer} ${selectedMark} ${name}  ${dep.currentVersion}${arrow()}${target}  ${colorDiff(dep.diff)}`
+  let line = `  ${pointer} ${selectedMark} ${name}  ${currentVersion}${arrow()}${target}  ${colorDiff(dep.diff)}`
   if (age) line += `  ${colorAge(age)}`
 
   return fitLine(line, termCols)

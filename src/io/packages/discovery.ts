@@ -10,13 +10,24 @@ import { resolveDiscoveryContext } from './root-detection'
 import { classifyWorkspaceBoundary } from './workspace-boundary'
 import { getWorkspaceManifestPatterns } from './workspace-discovery'
 
-export async function loadPackages(options: depfreshOptions): Promise<PackageMeta[]> {
-  if (options.global || options.globalAll) return discoverPackages(options)
-  const { inspectRepositoryWithProjection } = await import('../../repository/inspect')
-  return (await inspectRepositoryWithProjection(options)).packages
+export interface PackageLoadObserver {
+  onPackagesDiscovered(packages: PackageMeta[]): void
+  writeDurable?<T>(write: () => T): T
 }
 
-export async function discoverPackages(options: depfreshOptions): Promise<PackageMeta[]> {
+export async function loadPackages(
+  options: depfreshOptions,
+  observer?: PackageLoadObserver,
+): Promise<PackageMeta[]> {
+  if (options.global || options.globalAll) return discoverPackages(options, observer)
+  const { inspectRepositoryWithProjection } = await import('../../repository/inspect')
+  return (await inspectRepositoryWithProjection(options, observer)).packages
+}
+
+export async function discoverPackages(
+  options: depfreshOptions,
+  observer?: PackageLoadObserver,
+): Promise<PackageMeta[]> {
   const logger = createLogger(options.loglevel)
   const discoveryContext = resolveDiscoveryContext(options.cwd)
   const requestedRoot = options.effectiveRoot ?? discoveryContext.effectiveRoot
@@ -46,9 +57,8 @@ export async function discoverPackages(options: depfreshOptions): Promise<Packag
     const packages = options.globalAll
       ? await loadGlobalPackagesAllObserved(loadOptions)
       : await loadGlobalPackagesObserved(undefined, loadOptions)
-    logger.info(
-      `Found ${packages.length} packages with ${packages.reduce((sum, p) => sum + p.deps.length, 0)} dependencies`,
-    )
+    observer?.onPackagesDiscovered(packages)
+    if (!observer) logPackageCount(packages, logger)
     return packages
   }
 
@@ -137,7 +147,9 @@ export async function discoverPackages(options: depfreshOptions): Promise<Packag
     packageFiles = keptFiles
     const skipped = before - packageFiles.length
     if (skipped > 0) {
-      logger.debug(`Skipped ${skipped} package(s) from nested workspaces`)
+      writeDiscoveryDebug(options, observer, () =>
+        logger.debug(`Skipped ${skipped} package(s) from nested workspaces`),
+      )
     }
   }
 
@@ -151,11 +163,13 @@ export async function discoverPackages(options: depfreshOptions): Promise<Packag
         const meta = loadPackage(filepath, options)
         packages.push(meta)
         report.loadedPackages.push(meta.filepath)
-        logger.debug(`Loaded ${filepath} (${meta.deps.length} deps)`)
+        writeDiscoveryDebug(options, observer, () =>
+          logger.debug(`Loaded ${filepath} (${meta.deps.length} deps)`),
+        )
         loaded = true
         break
       } catch (error) {
-        logger.warn(`Failed to load ${filepath}:`, error)
+        writeDiscoveryOutput(observer, () => logger.warn(`Failed to load ${filepath}:`, error))
       }
     }
 
@@ -198,19 +212,40 @@ export async function discoverPackages(options: depfreshOptions): Promise<Packag
           catalogs: [catalog],
         })
         report.loadedCatalogs.push(`${catalog.filepath}:${catalog.name}`)
-        logger.debug(`Loaded catalog ${displayName} (${catalog.deps.length} deps)`)
+        writeDiscoveryDebug(options, observer, () =>
+          logger.debug(`Loaded catalog ${displayName} (${catalog.deps.length} deps)`),
+        )
       }
     } catch (error) {
-      logger.warn('Failed to load workspace catalogs:', error)
+      writeDiscoveryOutput(observer, () => logger.warn('Failed to load workspace catalogs:', error))
     }
   } else {
-    logger.debug('Skipping workspace catalogs because recursive mode is disabled')
+    writeDiscoveryDebug(options, observer, () =>
+      logger.debug('Skipping workspace catalogs because recursive mode is disabled'),
+    )
   }
 
-  logger.info(
-    `Found ${packages.length} packages with ${packages.reduce((sum, p) => sum + p.deps.length, 0)} dependencies`,
-  )
+  observer?.onPackagesDiscovered(packages)
+  if (!observer) logPackageCount(packages, logger)
   return packages
+}
+
+function writeDiscoveryOutput<T>(observer: PackageLoadObserver | undefined, write: () => T): T {
+  return observer?.writeDurable ? observer.writeDurable(write) : write()
+}
+
+function writeDiscoveryDebug<T>(
+  options: depfreshOptions,
+  observer: PackageLoadObserver | undefined,
+  write: () => T,
+): T {
+  return options.loglevel === 'debug' ? writeDiscoveryOutput(observer, write) : write()
+}
+
+function logPackageCount(packages: PackageMeta[], logger: ReturnType<typeof createLogger>): void {
+  logger.info(
+    `Found ${packages.length} packages with ${packages.reduce((sum, pkg) => sum + pkg.deps.length, 0)} dependencies`,
+  )
 }
 
 function groupManifestsByDirectory(filepaths: string[]): string[][] {

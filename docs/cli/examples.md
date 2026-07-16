@@ -144,21 +144,36 @@ file-only plan and block manager execution before apply.
 
 ## Progress Display
 
-When resolving dependencies in a TTY, depfresh shows a dual progress bar:
+Interactive checks report the phase that currently owns the work, starting before repository
+inspection rather than after it:
 
 ```
-Packages         [========----------------] 1/3
-Deps (my-app)    [================--------] 12/24  total 12/47
+◆ Inspecting repository evidence…
+  29 packages · 232 declarations found
+
+◆ Resolving dependencies ━━━━━━━━━━━━──────── 119/201
+  29 packages · 232 declared · 201 eligible · 31 pinned
+
+◆ Rendering results ━━━━━━━━━━━━━━━━━━━─ 27/29
+  29 packages · 232 declared · 201 eligible · 31 pinned
 ```
 
-The top bar tracks packages processed, the bottom tracks individual dependency resolutions within the current package (plus a running total). Both update in real-time as registry calls complete.
+`declared` counts the dependency declarations in the selected packages. `eligible` counts the
+declarations that this invocation will resolve. Exact versions omitted without `--include-locked`
+are reported as `pinned`; any remaining omissions use a separate `other skipped` count. Registry ticks are
+coalesced for smooth output, while phase changes appear immediately.
 
 Progress is suppressed automatically when:
 - Output is `--output json` (machines don't need encouragement)
 - Log level is `--silent` (you asked for silence, you got it)
+- Log level is `--debug` (diagnostic lines remain durable without cursor animation)
 - stdout is not a TTY (pipes, CI, AI agents)
+- `CI` is set or `TERM=dumb` (no cursor control in constrained terminals)
 
-Labels truncate gracefully on narrow terminals. CJK package names are measured correctly (double-width characters get proper accounting). The progress bars clear themselves when resolution finishes, leaving a clean terminal for the results table.
+Lines truncate at visual character boundaries on narrow terminals. Progress clears before every
+durable package table or error and redraws only below it, so cursor movement cannot overwrite a
+result. The final progress clears and leaves a compact summary such as
+`Checked 29 packages · 232 declared · 201 eligible · 31 pinned · 10 updates in 2 packages`.
 
 ---
 

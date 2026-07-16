@@ -4,8 +4,22 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Semver
 
 ## Unreleased
 
+### Changed
+
+- **Immediate large-repository progress** -- recursive checks now inventory only files that can
+  contribute repository evidence instead of retaining and glob-testing every repository file.
+  Unavailable-directory, containment, boundary, lockfile, runtime, and Git evidence remains
+  conservative. Interactive output starts with discovery and repository-inspection phases,
+  coalesces registry ticks, distinguishes declared, eligible, pinned, and other skipped
+  declarations, suspends cursor ownership around durable tables, and finishes with one compact run
+  summary. JSON, redirected output, exit codes, cache behavior, and library results are unchanged.
+
 ### Fixed
 
+- **Contained terminal rendering** -- manifest and registry text is stripped of terminal control,
+  OSC/CSI, zero-width, and bidirectional-control payloads before table, error, interactive, and
+  detail rendering. Narrow progress and package-title rows now stay within the reported terminal
+  width, while selections still return the original dependency records.
 - **Portable exact-Node CI evidence** -- the permission-sensitive repository evidence suite now
   runs on an unprivileged hosted Linux worker for both pushes and pull requests instead of relying
   on a root self-hosted account that can read mode-`000` fixtures. The bounded private verifier

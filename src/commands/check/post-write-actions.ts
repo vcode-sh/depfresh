@@ -1,7 +1,9 @@
 import c from 'ansis'
 import { ConfigError } from '../../errors'
 import type { ResolvedDepChange } from '../../types'
+import { sanitizeTerminalText } from '../../utils/format'
 import type { Logger } from '../../utils/logger'
+import { fitCell, getTerminalWidth } from './render-layout'
 
 export async function runExecute(command: string, cwd: string, logger: Logger): Promise<boolean> {
   void command
@@ -16,7 +18,9 @@ export function renderUpToDate(packageName: string): void {
   // biome-ignore lint/suspicious/noConsole: intentional output
   const log = console.log
   log()
-  log(c.cyan.bold(packageName))
+  const safeName = sanitizeTerminalText(packageName)
+  const terminalWidth = getTerminalWidth()
+  log(c.cyan.bold(terminalWidth ? fitCell(safeName, terminalWidth) : safeName))
   log(`  ${c.green('All dependencies are up to date')}`)
   log()
 }

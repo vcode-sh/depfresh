@@ -1,5 +1,6 @@
 import c from 'ansis'
 import type { DepFieldType, depfreshOptions, ResolvedDepChange } from '../../../types'
+import { sanitizeTerminalText } from '../../../utils/format'
 import { sortDeps } from '../../../utils/sort'
 import { fitCell, getTerminalWidth } from '../render-layout'
 import { renderRows } from './table-rows'
@@ -26,7 +27,10 @@ export function renderTable(
   const log = console.log
 
   const terminalWidth = getTerminalWidth()
-  const title = terminalWidth ? fitCell(packageName, Math.max(1, terminalWidth - 2)) : packageName
+  const safePackageName = sanitizeTerminalText(packageName)
+  const title = terminalWidth
+    ? fitCell(safePackageName, Math.max(1, terminalWidth - 2))
+    : safePackageName
 
   log()
   log(c.cyan.bold(title))

@@ -56,6 +56,29 @@ describe('renderDetailView', () => {
     expect(output).not.toContain('dist-tags:')
     expect(output).not.toContain('Homepage:')
   })
+
+  it('sanitizes hostile detail metadata', () => {
+    const base = createInitialState(
+      [
+        makeDep({
+          name: 'alpha\u001B[2Jowned',
+          pkgData: {
+            name: 'alpha',
+            versions: ['1.0.0', '2.0.0'],
+            distTags: { 'latest\u001B]0;owned\u0007': '2.0.0' },
+            homepage: 'https://example.test/\u202Espoofed',
+          },
+        }),
+      ],
+      { termRows: 20, termCols: 120 },
+    )
+
+    const output = renderDetailView(enterDetail(base)).join('\n')
+
+    expect(output).not.toContain('\u001B[2J')
+    expect(output).not.toContain('\u001B]0;owned')
+    expect(output).not.toContain('\u202E')
+  })
 })
 
 describe('renderDetailVersionLine', () => {

@@ -280,6 +280,53 @@ describe('runInteractive', () => {
     expect(result[0]!.name).toBe('err-pkg')
   })
 
+  it('sanitizes hostile terminal text in grouped fallback without changing selection identity', async () => {
+    clackMock.groupMultiselect.mockResolvedValue(['0'])
+
+    const { runInteractive } = await import('./interactive')
+    const update = makeDep(
+      'bad\x1B[31m-name\x1B]8;;https://evil.example\x07link\x1B]8;;\x07\n',
+      'major',
+      {
+        currentVersion: '^1.0.0\u202E',
+        targetVersion: '^2.0.0\x1B[2J',
+      },
+    )
+
+    const result = await runInteractive([update])
+    const call = clackMock.groupMultiselect.mock.calls[0]![0]
+    const options = Object.values(call.options).flat() as Array<{ label: string }>
+    const plainLabel = stripAnsi(options[0]!.label)
+
+    expect(plainLabel).not.toContain('https://evil.example')
+    expect(plainLabel).not.toContain('\n')
+    expect(plainLabel).not.toContain('\r')
+    expect(plainLabel).not.toContain('\u202E')
+    expect(result).toEqual([update])
+    expect(result[0]).toBe(update)
+  })
+
+  it('sanitizes hostile terminal text in flat fallback without changing selection identity', async () => {
+    clackMock.multiselect.mockResolvedValue(['0'])
+
+    const { runInteractive } = await import('./interactive')
+    const update = makeDep('bad\x1B[31m-name\r\n', 'error', {
+      currentVersion: '^1.0.0\x1B]0;owned\x07',
+      targetVersion: '^2.0.0\u2066',
+    })
+
+    const result = await runInteractive([update])
+    const call = clackMock.multiselect.mock.calls[0]![0]
+    const plainLabel = stripAnsi(call.options[0]!.label)
+
+    expect(plainLabel).not.toContain('owned')
+    expect(plainLabel).not.toContain('\n')
+    expect(plainLabel).not.toContain('\r')
+    expect(plainLabel).not.toContain('\u2066')
+    expect(result).toEqual([update])
+    expect(result[0]).toBe(update)
+  })
+
   it('returns empty array on cancel in flat fallback', async () => {
     clackMock.isCancel.mockReturnValue(true)
     clackMock.multiselect.mockResolvedValue(Symbol('cancel'))

@@ -18,21 +18,28 @@ interface ScenarioResult {
   resolved: Record<string, ResolvedDepChange[]>
   updateCount: number
   beforePackageStartNames: string[]
+  tableOutput?: string
   json?: ReturnType<typeof findJsonEnvelope>
 }
 
 const originalIsTTY = process.stdout.isTTY
+const originalCi = process.env.CI
+const originalTerm = process.env.TERM
 
 describe('run-check orchestration paths', () => {
   let mocks: CheckMocks
 
   beforeEach(async () => {
     vi.clearAllMocks()
+    delete process.env.CI
+    process.env.TERM = 'xterm-256color'
     mocks = await setupMocks()
   })
 
   afterEach(() => {
     setStdoutTTY(originalIsTTY)
+    restoreEnvironment('CI', originalCi)
+    restoreEnvironment('TERM', originalTerm)
     vi.restoreAllMocks()
   })
 
@@ -49,7 +56,7 @@ describe('run-check orchestration paths', () => {
   })
 
   it('passes one shared resolve context and progress callback on the sequential TTY table path', async () => {
-    await runScenario('sequential', { profile: true })
+    const result = await runScenario('sequential', { profile: true })
 
     expect(mocks.resolvePackageMock).toHaveBeenCalledTimes(2)
     const calls = mocks.resolvePackageMock.mock.calls
@@ -59,6 +66,12 @@ describe('run-check orchestration paths', () => {
     expect(calls.every((call) => call.length >= 7)).toBe(true)
     expect(calls.every((call) => typeof call[5] === 'function')).toBe(true)
     expect(calls[1]?.[6]).toBe(firstContext)
+    expect(mocks.loadPackagesMock.mock.calls[0]?.[1]).toEqual({
+      onPackagesDiscovered: expect.any(Function),
+      writeDurable: expect.any(Function),
+    })
+    expect(result.tableOutput).toContain('Checked 2 packages')
+    expect(result.tableOutput).toContain('1 update in 1 package')
   })
 
   it('keeps exit code, resolved sets, counts, and start hooks equal across both paths', async () => {
@@ -142,13 +155,212 @@ describe('run-check orchestration paths', () => {
     expect(findJsonEnvelope(consoleSpy.mock.calls).summary.scannedPackages).toBe(1)
   })
 
+  it('does not render durable package results until the repository resolution phase is complete', async () => {
+    const packages = makeMixedPackages()
+    mocks.loadPackagesMock.mockImplementation(
+      async (
+        _options: depfreshOptions,
+        observer?: { onPackagesDiscovered(pkgs: PackageMeta[]): void },
+      ) => {
+        observer?.onPackagesDiscovered(packages)
+        return packages
+      },
+    )
+    const releases = new Map<string, (changes: ResolvedDepChange[]) => void>()
+    mocks.resolvePackageMock.mockImplementation(
+      (pkg: PackageMeta) =>
+        new Promise<ResolvedDepChange[]>((resolve) => {
+          releases.set(pkg.name ?? pkg.filepath, resolve)
+        }),
+    )
+    setStdoutTTY(true)
+    const stdoutWriteSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+    const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+
+    try {
+      const { checkFromCli } = await import('./run-check')
+      const checkPromise = checkFromCli({ ...baseOptions, output: 'table', loglevel: 'info' })
+      await vi.waitFor(() => expect(releases.size).toBe(2))
+      releases.get('app-update')?.(resolvedForPackage(packages[0]!))
+      await new Promise((resolve) => setTimeout(resolve, 0))
+
+      expect(consoleSpy.mock.calls.flat().map(String).join(' ')).not.toContain('app-update')
+
+      releases.get('app-current')?.(resolvedForPackage(packages[1]!))
+      await expect(checkPromise).resolves.toBe(0)
+      expect(consoleSpy.mock.calls.flat().map(String).join(' ')).toContain('app-update')
+    } finally {
+      stdoutWriteSpy.mockRestore()
+      consoleSpy.mockRestore()
+    }
+  })
+
+  it('suspends progress around the complete discovery report', async () => {
+    const packages = makeMixedPackages()
+    mocks.loadPackagesMock.mockImplementation(
+      async (
+        options: depfreshOptions,
+        observer?: { onPackagesDiscovered(pkgs: PackageMeta[]): void },
+      ) => {
+        options.discoveryReport = {
+          inputCwd: options.cwd,
+          effectiveRoot: options.cwd,
+          discoveryMode: 'direct-root',
+          matchedManifests: ['/tmp/test/package.json'],
+          loadedPackages: ['/tmp/test/package.json'],
+          skippedManifests: [],
+          loadedCatalogs: [],
+        }
+        observer?.onPackagesDiscovered(packages)
+        return packages
+      },
+    )
+    mocks.resolvePackageMock.mockImplementation(async (pkg: PackageMeta) => resolvedForPackage(pkg))
+    setStdoutTTY(true)
+    const stdoutWriteSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+    const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+
+    try {
+      const { checkFromCli } = await import('./run-check')
+      await expect(
+        checkFromCli({ ...baseOptions, output: 'table', loglevel: 'info', explainDiscovery: true }),
+      ).resolves.toBe(0)
+
+      const discoveryCallIndex = consoleSpy.mock.calls.findIndex((call) =>
+        call.map(String).join(' ').includes('Discovery: mode='),
+      )
+      expect(discoveryCallIndex).toBeGreaterThan(-1)
+      const discoveryOrder = consoleSpy.mock.invocationCallOrder[discoveryCallIndex]!
+      const writesBefore = stdoutWriteSpy.mock.calls
+        .map((call, index) => ({
+          output: String(call[0]),
+          order: stdoutWriteSpy.mock.invocationCallOrder[index]!,
+        }))
+        .filter((write) => write.order < discoveryOrder)
+      const writesAfter = stdoutWriteSpy.mock.calls
+        .map((call, index) => ({
+          output: String(call[0]),
+          order: stdoutWriteSpy.mock.invocationCallOrder[index]!,
+        }))
+        .filter((write) => write.order > discoveryOrder)
+
+      expect(writesBefore.some((write) => write.output === '\r\x1B[2K\n')).toBe(true)
+      expect(writesAfter.some((write) => write.output.includes('Resolving dependencies'))).toBe(
+        true,
+      )
+    } finally {
+      stdoutWriteSpy.mockRestore()
+      consoleSpy.mockRestore()
+    }
+  })
+
+  it('never emits cursor control from the exported library check', async () => {
+    const packages = makeMixedPackages()
+    mocks.loadPackagesMock.mockResolvedValue(packages)
+    mocks.resolvePackageMock.mockImplementation(async (pkg: PackageMeta) => resolvedForPackage(pkg))
+    setStdoutTTY(true)
+    const stdoutWriteSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+    const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+
+    try {
+      const { check } = await import('./index')
+      await expect(check({ ...baseOptions, output: 'table', loglevel: 'info' })).resolves.toBe(0)
+      expect(stdoutWriteSpy).not.toHaveBeenCalled()
+    } finally {
+      stdoutWriteSpy.mockRestore()
+      consoleSpy.mockRestore()
+    }
+  })
+
+  it('does not claim repository-evidence inspection for global CLI discovery', async () => {
+    const packages = makeMixedPackages()
+    mocks.loadPackagesMock.mockImplementation(
+      async (
+        _options: depfreshOptions,
+        observer?: { onPackagesDiscovered(pkgs: PackageMeta[]): void },
+      ) => {
+        observer?.onPackagesDiscovered(packages)
+        return packages
+      },
+    )
+    mocks.resolvePackageMock.mockImplementation(async (pkg: PackageMeta) => resolvedForPackage(pkg))
+    setStdoutTTY(true)
+    const stdoutWriteSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+    const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+
+    try {
+      const { checkFromCli } = await import('./run-check')
+      await expect(
+        checkFromCli({ ...baseOptions, output: 'table', loglevel: 'info', global: true }),
+      ).resolves.toBe(0)
+
+      expect(stdoutWriteSpy.mock.calls.flat().map(String).join(' ')).not.toContain(
+        'Inspecting repository evidence',
+      )
+    } finally {
+      stdoutWriteSpy.mockRestore()
+      consoleSpy.mockRestore()
+    }
+  })
+
+  it.each(['direct callback', 'addon hook'] as const)(
+    'disables CLI cursor animation for a dependency lifecycle %s while preserving the hook',
+    async (hookKind) => {
+      const packages = makeMixedPackages()
+      const directCallback = vi.fn()
+      const addonCallback = vi.fn()
+      mocks.loadPackagesMock.mockResolvedValue(packages)
+      mocks.resolvePackageMock.mockImplementation(async (pkg, options) => {
+        const changes = resolvedForPackage(pkg)
+        for (const dependency of changes) await options.onDependencyResolved?.(pkg, dependency)
+        return changes
+      })
+      setStdoutTTY(true)
+      const stdoutWriteSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+
+      try {
+        const { checkFromCli } = await import('./run-check')
+        const lifecycleOptions =
+          hookKind === 'direct callback'
+            ? { onDependencyResolved: directCallback }
+            : { addons: [{ name: 'observer', onDependencyResolved: addonCallback }] }
+
+        await expect(
+          checkFromCli({
+            ...baseOptions,
+            output: 'table',
+            loglevel: 'info',
+            ...lifecycleOptions,
+          }),
+        ).resolves.toBe(0)
+
+        expect(stdoutWriteSpy).not.toHaveBeenCalled()
+        expect(
+          hookKind === 'direct callback' ? directCallback : addonCallback,
+        ).toHaveBeenCalledTimes(2)
+      } finally {
+        stdoutWriteSpy.mockRestore()
+        consoleSpy.mockRestore()
+      }
+    },
+  )
+
   async function runScenario(
     mode: OrchestrationMode,
     overrides: Partial<depfreshOptions> = {},
   ): Promise<ScenarioResult> {
     const packages = makeMixedPackages()
     const beforePackageStart = vi.fn()
-    mocks.loadPackagesMock.mockResolvedValue(packages)
+    mocks.loadPackagesMock.mockImplementation(
+      async (
+        _options: depfreshOptions,
+        observer?: { onPackagesDiscovered(pkgs: PackageMeta[]): void },
+      ) => {
+        observer?.onPackagesDiscovered(packages)
+        return packages
+      },
+    )
     mocks.resolvePackageMock.mockImplementation(async (pkg: PackageMeta) => resolvedForPackage(pkg))
 
     const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
@@ -173,7 +385,8 @@ describe('run-check orchestration paths', () => {
 
     try {
       const { check } = await import('./index')
-      const exitCode = await check(options)
+      const { checkFromCli } = await import('./run-check')
+      const exitCode = await (mode === 'sequential' ? checkFromCli(options) : check(options))
       const resolved = resolvedSnapshot(packages)
 
       return {
@@ -182,6 +395,9 @@ describe('run-check orchestration paths', () => {
         resolved,
         updateCount: countUpdates(resolved),
         beforePackageStartNames: packageNamesFrom(beforePackageStart),
+        ...(mode === 'sequential'
+          ? { tableOutput: consoleSpy.mock.calls.flat().map(String).join(' ') }
+          : {}),
         ...(mode === 'concurrent' ? { json: findJsonEnvelope(consoleSpy.mock.calls) } : {}),
       }
     } finally {
@@ -251,4 +467,9 @@ function setStdoutTTY(value: boolean | undefined): void {
     writable: true,
     value,
   })
+}
+
+function restoreEnvironment(name: 'CI' | 'TERM', value: string | undefined): void {
+  if (value === undefined) delete process.env[name]
+  else process.env[name] = value
 }

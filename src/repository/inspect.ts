@@ -1,4 +1,4 @@
-import { discoverPackages } from '../io/packages/discovery'
+import { discoverPackages, type PackageLoadObserver } from '../io/packages/discovery'
 import { compilePolicy } from '../policy/compiler'
 import { applyPolicyToProjection, evaluateRepositoryPolicy } from '../policy/repository'
 import type { depfreshOptions, PackageMeta, PolicyDecision } from '../types'
@@ -21,9 +21,10 @@ export async function inspectRepository(
 
 export async function inspectRepositoryWithProjection(
   options: depfreshOptions,
+  observer?: PackageLoadObserver,
 ): Promise<RepositoryInspection> {
   const discoveryOptions = { ...options, include: undefined, exclude: undefined }
-  const packages = await discoverPackages(discoveryOptions)
+  const packages = await discoverPackages(discoveryOptions, observer)
   options.discoveryReport = discoveryOptions.discoveryReport
   options.effectiveRoot = discoveryOptions.effectiveRoot
   const root = options.effectiveRoot ?? options.cwd

@@ -1,5 +1,6 @@
 import c from 'ansis'
 import type { ResolvedDepChange } from '../../../types'
+import { sanitizeTerminalText } from '../../../utils/format'
 import { fitCell, getTerminalWidth } from '../render-layout'
 
 function defaultLog(...args: unknown[]): void {
@@ -14,11 +15,17 @@ export function renderResolutionErrors(
 ): void {
   if (errors.length === 0) return
 
+  const safePackageName = sanitizeTerminalText(packageName)
+  const safeErrors = errors.map((dep) => ({
+    ...dep,
+    name: sanitizeTerminalText(dep.name),
+    currentVersion: sanitizeTerminalText(dep.currentVersion),
+  }))
   const terminalWidth = getTerminalWidth()
   const message = 'Failed to resolve from registry'
-  let nameWidth = terminalWidth ? Math.max(4, ...errors.map((dep) => dep.name.length)) : 0
+  let nameWidth = terminalWidth ? Math.max(4, ...safeErrors.map((dep) => dep.name.length)) : 0
   let currentWidth = terminalWidth
-    ? Math.max(4, ...errors.map((dep) => dep.currentVersion.length))
+    ? Math.max(4, ...safeErrors.map((dep) => dep.currentVersion.length))
     : 0
   let messageWidth = terminalWidth ? Math.max(8, message.length) : 0
 
@@ -41,7 +48,11 @@ export function renderResolutionErrors(
   }
 
   log()
-  log(terminalWidth ? fitCell(c.cyan.bold(packageName), terminalWidth) : c.cyan.bold(packageName))
+  log(
+    terminalWidth
+      ? fitCell(c.cyan.bold(safePackageName), terminalWidth)
+      : c.cyan.bold(safePackageName),
+  )
   log(
     terminalWidth
       ? fitCell(`  ${c.red('resolution errors')}`, terminalWidth)
@@ -58,7 +69,7 @@ export function renderResolutionErrors(
       : `    ${c.gray('------------------------------------------------------------')}`,
   )
 
-  for (const dep of errors) {
+  for (const dep of safeErrors) {
     const name = terminalWidth ? fitCell(dep.name, nameWidth) : dep.name
     const current = terminalWidth ? fitCell(dep.currentVersion, currentWidth) : dep.currentVersion
     const msg = terminalWidth ? fitCell(message, messageWidth) : message

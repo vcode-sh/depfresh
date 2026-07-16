@@ -1,7 +1,13 @@
 import * as p from '@clack/prompts'
 import c from 'ansis'
 import type { DiffType, ResolvedDepChange } from '../../types'
-import { arrow, colorDiff, colorizeVersionDiff, stripAnsi } from '../../utils/format'
+import {
+  arrow,
+  colorDiff,
+  colorizeVersionDiff,
+  sanitizeTerminalText,
+  stripAnsi,
+} from '../../utils/format'
 
 const DIFF_GROUP_ORDER: DiffType[] = ['major', 'minor', 'patch']
 
@@ -16,9 +22,12 @@ function getSelectionValue(depIndex: number): string {
 }
 
 function makeOption(dep: ResolvedDepChange, depIndex: number) {
+  const name = sanitizeTerminalText(dep.name)
+  const currentVersion = sanitizeTerminalText(dep.currentVersion)
+  const targetVersion = sanitizeTerminalText(dep.targetVersion)
   return {
     value: getSelectionValue(depIndex),
-    label: `${dep.name}  ${dep.currentVersion}${arrow()}${colorizeVersionDiff(dep.currentVersion, dep.targetVersion, dep.diff)}  ${colorDiff(dep.diff)}`,
+    label: `${name}  ${currentVersion}${arrow()}${colorizeVersionDiff(currentVersion, targetVersion, dep.diff)}  ${colorDiff(dep.diff)}`,
     hint: dep.deprecated ? c.red('deprecated') : undefined,
   }
 }

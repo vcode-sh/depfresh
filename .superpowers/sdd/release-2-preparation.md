@@ -10,6 +10,11 @@
 > fresh hosted green replay is required before this draft can again be treated as release-ready;
 > no push is authorized by this document.
 
+> **PERFORMANCE CORRECTION:** Plan 026 removes the measured large-repository evidence-walk stall
+> and coordinates phase progress with durable output. Its exact-Node, package, and release gates
+> must be reflected in the final figures below before publication; this does not relax the hosted
+> replay requirement.
+
 ## Version lock
 
 The package version changed exactly once from `1.2.0` to **`2.0.0`** after Plans 011 through 024
@@ -38,6 +43,15 @@ review an immutable plan, grant only the authority required for the chosen opera
 what the filesystem and package managers actually did.
 
 This release is designed around one rule: unknown state is never reported as success.
+
+#### Immediate, honest feedback on large repositories
+
+Normal recursive checks now show discovery, repository evidence, dependency resolution, and result
+rendering as distinct phases. The repository inventory retains only files that can contribute
+manifest, workspace, lockfile, runtime, or Git-boundary evidence while still observing unavailable
+directories and never following directory symlinks. Declared, eligible, pinned, and other skipped
+counts stay distinct. Progress relinquishes the cursor around durable tables and errors, then ends
+with a concise run summary; JSON and redirected output remain unchanged.
 
 #### A repository model built from physical evidence
 
@@ -164,17 +178,16 @@ verification is deliberately limited to the public npm registry.
 
 #### Release proof
 
-The final local replay used Node.js 24.15.0, pnpm 10.33.0, and isolated npm 11.12.0 state. Frozen
+The final local replay used Node.js 24.15.0, pnpm 10.33.0, and isolated npm 11.12.1 state. Frozen
 install passed with disposable home, cache, and store directories. The complete coverage run
-passed 137 files and 1,428 tests with 86.91% statement and 89.31% line coverage. The focused
-release suite passed five files and 82 tests in each of three consecutive final runs. Build
+passed 139 files and 1,456 tests with 87.13% statement and 89.51% line coverage. The focused
+release suite passed five files and 84 tests in each of three consecutive final runs. Build
 produced 1.57 MB of distribution output. Practical smoke passed 26 checks and 49 mock-registry
 requests, including one cold and zero additional warm cache requests.
 
-The final local `depfresh-2.0.0.tgz` candidate contains 54 files, is 262,304 bytes packed and
-1,598,785 bytes
-unpacked, and has integrity
-`sha512-Gy0iAQARNFV70qxVOyCDYlFFc/m3+4xy7oU7qGtzKR3fiki7Kqra8lOnQ7Wp7n0j9HqVnpYpK7Wmb8GY/kOnNg==`.
+The final local `depfresh-2.0.0.tgz` candidate contains 53 files, is 263,354 bytes packed and
+1,605,924 bytes unpacked, and has integrity
+`sha512-+KIBEUCCvIn7H0ksnLkGPMHOWiCKZEWGriOv4Nwu15P9legaK4Ioy6sQ/VIgyLKuwI+gpr1XVJFJkOHP48RnLg==`.
 The packed-product verifier installed that exact tarball under isolated state, executed the CLI and
 capabilities contract, imported the library, resolved every export, and checked all seven schemas
 plus the packaged skill, recipes, and examples. Inspect and plan probes preserved status, staged

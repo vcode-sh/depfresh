@@ -53,6 +53,7 @@ may grant side effects. Unknown state is never reported as success.
 | [023](./023-artifact-trust-native-verification.md) | Artifact trust and native verification | P2 | L | 020, 022 | DONE |
 | [024](./024-official-agent-workflow.md) | Official workflow and distribution | P2 | M | 010, 018–023 | DONE |
 | [025](./025-ci-portability-ledger-truth.md) | CI portability and ledger truth | P1 | S | 024 | DONE |
+| [026](./026-repository-performance-progress-ux.md) | Repository performance and progress UX | P1 | M | 025 | DONE |
 
 The implementation order through 016 is present locally. Plans 011 through 013 passed their final
 blocker replays, regression fixes, full gates, and independent re-reviews on 2026-07-16. Plans 014
@@ -105,6 +106,16 @@ single-argument overflow from the 128 KiB private-output fixture. Exact-Node loc
 non-root tests, full coverage, build, smoke, packed-package verification, and independent review
 passed. A hosted replay remains pending because pushing and hosted workflow mutation are outside
 the authorized scope; release preparation therefore remains locally corrected but not hosted-green.
+
+Plan 026 was opened from a real 29-package/232-dependency WUN run that appeared frozen after its
+discovery message. Exact profiling showed manifest discovery at about 87 ms and the subsequent
+unreported repository evidence walk at about 18.45 seconds. The plan owns a generic candidate-only
+evidence inventory, phase-aware coordinated progress, coherent counts, and durable summary output;
+it does not add repository-specific ignore defaults or a Bun-only native TUI dependency.
+It completed with a 1.35-second median repository inspection, immediate four-phase built-CLI
+feedback, coordinated durable tables, exact candidate/symlink/unavailable truth, terminal display
+containment, full exact-Node/package gates, and two independent approvals. The final WUN replay
+preserved Git state and the isolated tarball verifier passed.
 
 ## Split coverage map
 

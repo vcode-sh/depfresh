@@ -96,6 +96,31 @@ describe('renderTable', () => {
     expect(stripped.some((l) => l.includes('my-awesome-project'))).toBe(true)
   })
 
+  it('sanitizes hostile package, dependency, version, and homepage display text', () => {
+    const updates = [
+      makeUpdate({
+        name: 'dep\u001B[2Jowned',
+        currentVersion: '^1.0.0\r\nspoofed',
+        targetVersion: '^2.0.0\u001B]0;owned\u0007',
+        pkgData: {
+          name: 'dep',
+          versions: ['1.0.0', '2.0.0'],
+          distTags: { latest: '2.0.0' },
+          homepage: 'https://example.test/\u202Espoofed',
+        },
+      }),
+    ]
+
+    renderTable('project\u001B[2Jowned', updates, { ...defaultOpts, long: true })
+
+    const output = lines.join('\n')
+    expect(output).not.toContain('\u001B[2J')
+    expect(output).not.toContain('\u001B]0;owned')
+    expect(output).not.toContain('\r\nspoofed')
+    expect(output).not.toContain('\u202E')
+    expect(stripAnsi(output)).toContain('depowned')
+  })
+
   it('does not show deprecated when not deprecated', () => {
     const updates = [makeUpdate({ name: 'normal-pkg', deprecated: undefined })]
 

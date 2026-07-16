@@ -90,6 +90,10 @@ depfresh --fail-on-outdated
 
 - **Zero config** -- run `depfresh` and it works. No YAML. No PhD.
 - **Monorepo & workspace support** -- pnpm, bun, yarn, npm. Auto-detected. Catalogs included.
+- **Responsive large-repository checks** -- repository evidence inventory retains only relevant
+  manifests, workspace declarations, lockfiles, runtimes, and Git boundary markers while still
+  reporting unavailable directories. TTY checks show discovery, evidence, resolution, and
+  rendering phases with coherent declared, eligible, and pinned counts.
 - **Repository model** -- deterministic read-only inspection with stable IDs, exact byte hashes,
   boundaries, package-manager and lockfile conclusions, declared Node runtimes, and read-only Git
   state per effective or nested repository boundary.

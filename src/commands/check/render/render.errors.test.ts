@@ -78,4 +78,19 @@ describe('renderResolutionErrors', () => {
       })
     }
   })
+
+  it('sanitizes hostile names and versions in resolution errors', () => {
+    renderResolutionErrors('broken\u001B[2Japp', [
+      makeUpdate({
+        name: 'missing\u001B]0;owned\u0007dep',
+        currentVersion: '^1.0.0\r\nspoofed',
+        diff: 'error',
+      }),
+    ])
+
+    const output = lines.join('\n')
+    expect(output).not.toContain('\u001B[2J')
+    expect(output).not.toContain('\u001B]0;owned')
+    expect(output).not.toContain('\r\nspoofed')
+  })
 })

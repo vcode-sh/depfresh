@@ -16,6 +16,7 @@ import { summarizeWriteOutcomes } from '../../types'
 import { createLogger } from '../../utils/logger'
 import { loadNpmrc } from '../../utils/npmrc'
 import { getSafeErrorDetails } from '../../utils/redact'
+import { isLocked } from '../../utils/versions'
 import { validateOptions } from '../../validate-options'
 import {
   buildJsonPackage,
@@ -28,12 +29,27 @@ import {
 import { runInstall, runUpdate } from './package-manager'
 import { renderUpToDate, runExecute } from './post-write-actions'
 import { type ProcessPackageHooks, processPackage } from './process-package'
-import { createCheckProgress } from './progress'
+import { type CheckProgress, createCheckProgress } from './progress'
 import { renderResolutionErrors, renderTable } from './render'
 
 export async function check(
   options: depfreshOptions,
   requestedAuthority: InvocationAuthority = createInvocationAuthority(options),
+): Promise<number> {
+  return runCheck(options, requestedAuthority, false)
+}
+
+export async function checkFromCli(
+  options: depfreshOptions,
+  requestedAuthority: InvocationAuthority = createInvocationAuthority(options),
+): Promise<number> {
+  return runCheck(options, requestedAuthority, true)
+}
+
+async function runCheck(
+  options: depfreshOptions,
+  requestedAuthority: InvocationAuthority,
+  renderProgress: boolean,
 ): Promise<number> {
   const authority = snapshotInvocationAuthority(requestedAuthority)
   const totalStart = performance.now()
@@ -44,6 +60,7 @@ export async function check(
   }
   const logger = createLogger(logLevel)
   const addons = createAddonLifecycle(addonOptions)
+  let progress: CheckProgress | null = null
   const runtimeOptions: depfreshOptions = {
     ...addonOptions,
     onDependencyResolved: (pkg, dep) => addons.onDependencyResolved(pkg, dep),
@@ -53,11 +70,30 @@ export async function check(
     validateOptions(runtimeOptions, authority)
     await addons.setup()
 
+    const hasPerDependencyLifecycle = Boolean(
+      options.onDependencyResolved || options.addons?.some((addon) => addon.onDependencyResolved),
+    )
+    const hasAfterPackageEndLifecycle = Boolean(
+      options.afterPackageEnd || options.addons?.some((addon) => addon.afterPackageEnd),
+    )
+    progress = renderProgress && !hasPerDependencyLifecycle ? createCheckProgress(options) : null
     const discoveryStart = performance.now()
-    const packages = await loadPackages(runtimeOptions)
+    const activeProgress = progress
+    const packages = activeProgress
+      ? await loadPackages(runtimeOptions, {
+          onPackagesDiscovered: (discoveredPackages) => {
+            activeProgress.onPackagesDiscovered(discoveredPackages)
+            if (!(runtimeOptions.global || runtimeOptions.globalAll)) {
+              activeProgress.onRepositoryInspectionStart()
+            }
+          },
+          writeDurable: (write) => activeProgress.suspend(write),
+        })
+      : await loadPackages(runtimeOptions)
     const discoveryMs = performance.now() - discoveryStart
+    progress?.onPackagesReady(packages)
     if (runtimeOptions.explainDiscovery && runtimeOptions.output === 'table') {
-      logDiscoveryReport(runtimeOptions, logger)
+      writeDurable(progress, () => logDiscoveryReport(runtimeOptions, logger))
     }
     const executionState: JsonExecutionState = {
       scannedPackages: packages.length,
@@ -77,6 +113,7 @@ export async function check(
     }
 
     if (packages.length === 0) {
+      progress?.done()
       if (runtimeOptions.profile) {
         runtimeOptions.profileReport = {
           discoveryMs,
@@ -100,13 +137,13 @@ export async function check(
       return options.failOnNoPackages ? 2 : 0
     }
 
-    await addons.afterPackagesLoaded(packages)
+    await writeDurableAsync(progress, () => addons.afterPackagesLoaded(packages))
 
     let hasUpdates = false
     let didWrite = false
+    let availableUpdates = 0
     const jsonPackages: JsonPackage[] = []
     const jsonErrors: JsonError[] = []
-    const progress = createCheckProgress(options, packages)
     const totalDependencies = packages.reduce(
       (sum, pkg) => sum + pkg.deps.filter((d) => d.update).length,
       0,
@@ -132,11 +169,12 @@ export async function check(
       onDependencyProcessed: () => undefined,
       onHasUpdates: (updates: ResolvedDepChange[]) => {
         hasUpdates = true
+        availableUpdates += updates.length
         executionState.packagesWithUpdates += 1
         if (options.output === 'json') {
           jsonPackages.push(buildJsonPackage(pkg.name, updates))
         } else {
-          renderTable(pkg.name, updates, options)
+          writeDurable(progress, () => renderTable(pkg.name, updates, options))
         }
       },
       onErrorDeps: (errors: ResolvedDepChange[]) => {
@@ -151,7 +189,7 @@ export async function check(
             })
           }
         } else {
-          renderResolutionErrors(pkg.name, errors)
+          writeDurable(progress, () => renderResolutionErrors(pkg.name, errors))
         }
       },
       onAllModeNoUpdates: () => {
@@ -159,7 +197,7 @@ export async function check(
         if (options.output === 'json') {
           jsonPackages.push(buildJsonPackage(pkg.name, []))
         } else {
-          renderUpToDate(pkg.name)
+          writeDurable(progress, () => renderUpToDate(pkg.name))
         }
       },
       onPlannedUpdates: (count: number) => {
@@ -196,35 +234,50 @@ export async function check(
     try {
       const pendingResolutions = new Map<PackageMeta, Promise<ResolvedDepChange[]>>()
 
+      await writeDurableAsync(progress, async () => {
+        for (const pkg of packages) {
+          await addons.beforePackageStart(pkg)
+          pendingResolutions.set(
+            pkg,
+            resolvePackage(
+              pkg,
+              runtimeOptions,
+              cache,
+              npmrc,
+              workspacePackageNames,
+              progress ? () => progress?.onDependencyProcessed() : undefined,
+              resolveContext,
+            ),
+          )
+        }
+      })
+
+      const completedResolutions = new Map<PackageMeta, ResolvedDepChange[]>()
+      await Promise.all(
+        packages.map(async (pkg) => {
+          const pending = pendingResolutions.get(pkg)
+          if (pending) completedResolutions.set(pkg, await pending)
+        }),
+      )
+      progress?.onRenderingStart()
       for (const pkg of packages) {
-        await addons.beforePackageStart(pkg)
-        pendingResolutions.set(
-          pkg,
-          resolvePackage(
+        const processCurrentPackage = () =>
+          processPackage(
             pkg,
             runtimeOptions,
-            cache,
-            npmrc,
-            workspacePackageNames,
-            progress ? (currentPkg) => progress.onDependencyProcessed(currentPkg) : undefined,
-            resolveContext,
-          ),
-        )
+            authority,
+            packageHooks(pkg),
+            Promise.resolve(completedResolutions.get(pkg) ?? []),
+            true,
+          )
+        if (runtimeOptions.write || runtimeOptions.interactive || hasAfterPackageEndLifecycle) {
+          await writeDurableAsync(progress, processCurrentPackage)
+        } else {
+          await processCurrentPackage()
+        }
+        progress?.onPackageRendered()
       }
-
-      for (const pkg of packages) {
-        progress?.onPackageStart(pkg)
-        await processPackage(
-          pkg,
-          runtimeOptions,
-          authority,
-          packageHooks(pkg),
-          pendingResolutions.get(pkg),
-          true,
-        )
-        progress?.onPackageEnd()
-      }
-      await addons.afterPackagesEnd(packages)
+      await writeDurableAsync(progress, () => addons.afterPackagesEnd(packages))
     } finally {
       progress?.done()
       const stats = cache.stats()
@@ -244,6 +297,28 @@ export async function check(
         scannedDependencies: totalDependencies,
         failedResolutions: executionState.failedResolutions,
       }
+    }
+
+    if (progress && options.output === 'table') {
+      const declaredDependencies = packages.reduce((sum, pkg) => sum + pkg.deps.length, 0)
+      const skippedDependencies = Math.max(0, declaredDependencies - totalDependencies)
+      const pinnedDependencies = packages.reduce(
+        (sum, pkg) =>
+          sum +
+          pkg.deps.filter((dependency) => !dependency.update && isLocked(dependency.currentVersion))
+            .length,
+        0,
+      )
+      const otherSkippedDependencies = Math.max(0, skippedDependencies - pinnedDependencies)
+      const skippedLabel =
+        otherSkippedDependencies === 0
+          ? `${pinnedDependencies} pinned`
+          : `${pinnedDependencies} pinned · ${otherSkippedDependencies} other skipped`
+      const updateLabel = availableUpdates === 1 ? 'update' : 'updates'
+      const packageLabel = executionState.packagesWithUpdates === 1 ? 'package' : 'packages'
+      logger.info(
+        `Checked ${packages.length} packages · ${declaredDependencies} declared · ${totalDependencies} eligible · ${skippedLabel} · ${availableUpdates} ${updateLabel} in ${executionState.packagesWithUpdates} ${packageLabel}`,
+      )
     }
 
     let postWriteFailed = false
@@ -324,6 +399,7 @@ export async function check(
 
     return hasUpdates && !options.write && options.failOnOutdated ? 1 : 0
   } catch (error) {
+    progress?.done()
     if (options.output === 'json') {
       outputJsonError(error, { cwd: options.cwd, mode: options.mode })
     } else {
@@ -331,6 +407,14 @@ export async function check(
     }
     return 2
   }
+}
+
+function writeDurable<T>(progress: CheckProgress | null, write: () => T): T {
+  return progress ? progress.suspend(write) : write()
+}
+
+function writeDurableAsync<T>(progress: CheckProgress | null, write: () => Promise<T>): Promise<T> {
+  return progress ? progress.suspendAsync(write) : write()
 }
 
 function logProfileReport(

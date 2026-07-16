@@ -57,4 +57,16 @@ describe('renderListDepLine', () => {
     expect(line).toContain('major')
     expect(line).toMatch(/~\d+d/)
   })
+
+  it('sanitizes hostile dependency and version display text', () => {
+    const dep = makeDep('alpha\u001B[2Jowned')
+    dep.currentVersion = '^1.0.0\r\nspoofed'
+    dep.targetVersion = '^2.0.0\u001B]0;owned\u0007'
+
+    const line = renderListDepLine(dep, true, true, 30, 120)
+
+    expect(line).not.toContain('\u001B[2J')
+    expect(line).not.toContain('\u001B]0;owned')
+    expect(line).not.toContain('\r\nspoofed')
+  })
 })

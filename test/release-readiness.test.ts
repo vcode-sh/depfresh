@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { globSync } from 'tinyglobby'
 import { describe, expect, expectTypeOf, it } from 'vitest'
 import { parse } from 'yaml'
 import type {
@@ -73,6 +74,14 @@ describe('2.0 release readiness', () => {
 
   it('runs permission-sensitive repository evidence tests as an unprivileged hosted user', () => {
     expect(workflow('.github/workflows/ci.yml').jobs?.test?.['runs-on']).toBe('ubuntu-latest')
+  })
+
+  it('retains the repository-evidence phase notification in the built CLI', () => {
+    const builtJavaScript = globSync('dist/**/*.mjs', { cwd: root, absolute: true })
+      .map((path) => readFileSync(path, 'utf8'))
+      .join('\n')
+
+    expect(builtJavaScript).toMatch(/activeProgress\.onRepositoryInspectionStart\(\)/u)
   })
 
   it('runs the complete release gate before publishing the exact verified tarball', () => {

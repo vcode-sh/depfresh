@@ -263,6 +263,45 @@ describe('loadPackages', () => {
       ]),
     )
   })
+
+  it('routes discovery diagnostics through the observer output coordinator', async () => {
+    writeFileSync(join(tmpDir, 'package.json'), JSON.stringify({ name: 'root' }, null, 2))
+    const onPackagesDiscovered = vi.fn()
+    let durableWrites = 0
+    const writeDurable = <T>(write: () => T): T => {
+      durableWrites += 1
+      return write()
+    }
+    const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+
+    try {
+      await loadPackages(
+        { ...baseOptions, cwd: tmpDir, loglevel: 'debug' },
+        { onPackagesDiscovered, writeDurable },
+      )
+
+      expect(onPackagesDiscovered).toHaveBeenCalledWith([expect.objectContaining({ name: 'root' })])
+      expect(durableWrites).toBeGreaterThan(0)
+    } finally {
+      consoleSpy.mockRestore()
+    }
+  })
+
+  it('does not suspend progress for suppressed debug diagnostics at info level', async () => {
+    writeFileSync(join(tmpDir, 'package.json'), JSON.stringify({ name: 'root' }, null, 2))
+    let durableWrites = 0
+    const writeDurable = <T>(write: () => T): T => {
+      durableWrites += 1
+      return write()
+    }
+
+    await loadPackages(
+      { ...baseOptions, cwd: tmpDir, loglevel: 'info' },
+      { onPackagesDiscovered: vi.fn(), writeDurable },
+    )
+
+    expect(durableWrites).toBe(0)
+  })
 })
 
 describe('loadPackages with global flag', () => {

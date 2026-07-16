@@ -2,6 +2,7 @@ import type { Dirent } from 'node:fs'
 import { existsSync, lstatSync, readdirSync, readFileSync } from 'node:fs'
 import { dirname, join, matchesGlob, relative, resolve, sep } from 'node:path'
 import { parse as parseJsonc } from 'jsonc-parser'
+import { globSync } from 'tinyglobby'
 import YAML from 'yaml'
 import { resolveContainedPath } from '../io/packages/containment'
 import { parsePackageManagerField } from '../io/packages/package-manager-field'
@@ -84,7 +85,7 @@ export function collectRepositoryEvidence(
   ignorePaths: readonly string[],
   vcsMode: 'probe' | 'disabled' = 'probe',
 ): EvidenceExtension {
-  const walk = walkRepository(root, ignorePaths, diagnostics)
+  const walk = collectRepositoryCandidates(root, ignorePaths, diagnostics)
   const files = walk.files
   const modeledSourcePaths = new Set(sourceFiles.map((source) => source.path))
   const parsedManifests = collectManifests(root, files, modeledSourcePaths)
@@ -242,49 +243,66 @@ function createDisabledVcsEvidence(boundaries: RepositoryBoundary[]): Repository
   }
 }
 
-function walkRepository(
+export function collectRepositoryCandidates(
   root: string,
   ignorePaths: readonly string[],
-  diagnostics: RepositoryDiagnostic[],
+  diagnostics: RepositoryDiagnostic[] = [],
 ): RepositoryWalk {
   if (!existsSync(root)) return { files: [], unavailableDirectories: [] }
-  const result: string[] = []
   const unavailableDirectories: string[] = []
-  const visit = (directory: string): void => {
-    let entries: Dirent[]
+  const unavailable = new Set<string>()
+  const gitMarkers = new Set<string>()
+  const evidenceReaddirSync = (directory: string): Dirent[] => {
     try {
-      entries = readdirSync(directory, { withFileTypes: true }).sort((a, b) =>
-        a.name.localeCompare(b.name),
-      )
+      const entries: Dirent[] = []
+      for (const entry of readdirSync(directory, { withFileTypes: true })) {
+        if (entry.name === '.git') {
+          gitMarkers.add(join(directory, entry.name))
+        } else {
+          entries.push(asEvidenceEntry(entry))
+        }
+      }
+      return entries
     } catch {
       const path = repositoryPath(root, directory) ?? '.'
-      unavailableDirectories.push(path)
-      addTopDiagnostic(diagnostics, 'REPOSITORY_DIRECTORY_UNAVAILABLE', path)
-      return
-    }
-    for (const entry of entries) {
-      const filepath = join(directory, entry.name)
-      const path = repositoryPath(root, filepath)
-      if (path && isIgnoredPath(path, ignorePaths)) continue
-      if (entry.name === '.git') {
-        result.push(filepath)
-        continue
+      if (!unavailable.has(path)) {
+        unavailable.add(path)
+        unavailableDirectories.push(path)
+        addTopDiagnostic(diagnostics, 'REPOSITORY_DIRECTORY_UNAVAILABLE', path)
       }
-      if (entry.isDirectory()) {
-        if (entry.name !== 'node_modules') visit(filepath)
-        continue
-      }
-      result.push(filepath)
+      return []
     }
   }
-  visit(root)
+  const globOptions = {
+    cwd: root,
+    absolute: true,
+    dot: true,
+    expandDirectories: false,
+    onlyFiles: true,
+    followSymbolicLinks: false,
+    fs: { readdirSync: evidenceReaddirSync as unknown as typeof readdirSync },
+  } as const
+  const evidenceIgnorePaths = ignorePaths.includes('**/node_modules/**')
+    ? ignorePaths
+    : [...ignorePaths, '**/node_modules/**']
+  const files = globSync(BOUNDARY_CANDIDATE_PATTERNS, {
+    ...globOptions,
+    ignore: evidenceIgnorePaths,
+  })
+  files.push(...gitMarkers)
   return {
-    files: result,
+    files: files
+      .map((filepath) => resolve(filepath))
+      .filter((filepath) => {
+        const path = repositoryPath(root, filepath)
+        return path ? !isIgnoredCandidatePath(path, ignorePaths) : false
+      })
+      .sort((a, b) => a.localeCompare(b)),
     unavailableDirectories: unavailableDirectories.sort((a, b) => a.localeCompare(b)),
   }
 }
 
-function isIgnoredPath(path: string, ignorePaths: readonly string[]): boolean {
+function isIgnoredCandidatePath(path: string, ignorePaths: readonly string[]): boolean {
   for (const pattern of ignorePaths) {
     if (matchesGlob(path, pattern)) return true
     let ancestor = dirname(path).split(sep).join('/')
@@ -296,6 +314,20 @@ function isIgnoredPath(path: string, ignorePaths: readonly string[]): boolean {
     }
   }
   return false
+}
+
+const BOUNDARY_CANDIDATE_PATTERNS = BOUNDARY_CANDIDATE_NAMES.map((name) => `**/${name}`)
+
+function asEvidenceEntry(entry: Dirent): Dirent {
+  if (!entry.isSymbolicLink()) return entry
+  return asFileEntry(entry)
+}
+
+function asFileEntry(entry: Dirent): Dirent {
+  const fileEntry = Object.create(entry) as Dirent
+  fileEntry.isFile = () => true
+  fileEntry.isSymbolicLink = () => false
+  return fileEntry
 }
 
 function collectManifests(

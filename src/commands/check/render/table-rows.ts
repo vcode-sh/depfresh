@@ -4,6 +4,7 @@ import {
   arrow,
   colorDiff,
   colorizeVersionDiff,
+  sanitizeTerminalText,
   timeDifference,
   visualPadEnd,
   visualPadStart,
@@ -17,10 +18,22 @@ export function renderRows(
   showSource: boolean,
   terminalWidth?: number,
 ): void {
+  const safeDeps = deps.map((dep) => ({
+    ...dep,
+    name: sanitizeTerminalText(dep.name),
+    currentVersion: sanitizeTerminalText(dep.currentVersion),
+    targetVersion: sanitizeTerminalText(dep.targetVersion),
+    pkgData: {
+      ...dep.pkgData,
+      homepage: dep.pkgData.homepage
+        ? sanitizeTerminalText(dep.pkgData.homepage)
+        : dep.pkgData.homepage,
+    },
+  }))
   const showTimediff = options.timediff
   const showNodecompat = options.nodecompat
   const showLong = options.long
-  const layout = buildColumnLayout(deps, showSource, showTimediff, terminalWidth)
+  const layout = buildColumnLayout(safeDeps, showSource, showTimediff, terminalWidth)
 
   const header = terminalWidth ? fitCell(buildHeader(layout), terminalWidth) : buildHeader(layout)
   log(header)
@@ -29,7 +42,7 @@ export function renderRows(
   const separator = c.gray(`    ${'-'.repeat(separatorLen)}`)
   log(terminalWidth ? fitCell(separator, terminalWidth) : separator)
 
-  for (const dep of deps) {
+  for (const dep of safeDeps) {
     const name = visualPadEnd(fitCell(dep.name, layout.nameWidth), layout.nameWidth)
     const currentRaw = fitCell(dep.currentVersion, layout.currentWidth)
     const current = visualPadEnd(currentRaw, layout.currentWidth)
