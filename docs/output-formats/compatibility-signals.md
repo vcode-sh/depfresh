@@ -15,6 +15,10 @@ override `{ ruleId, source, from, to }` when they change the default effect.
 Families cover repository runtime constraints, final planned peer compatibility, explicit and
 inferred cohorts, release channel, maturity, current/target deprecation, signature presence,
 provenance presence, evidence completeness, and evidence staleness.
+Apply-time artifact verification adds independent `signature-verification` and
+`provenance-verification` families without changing the passive plan observations. These reasons
+appear only in `depfresh.apply` phase `artifactResults`; they are not appended to immutable
+`plan.signals` or `summary.signals`.
 
 | State | Meaning |
 |---|---|
@@ -65,6 +69,8 @@ evidence, and `block` removes the affected operation. A rule can change only the
 | Target deprecation | `TARGET_NOT_DEPRECATED`, `TARGET_DEPRECATED`, `TARGET_DEPRECATION_UNKNOWN` |
 | Signature presence | `SIGNATURE_PRESENT_UNVERIFIED`, `SIGNATURE_METADATA_ABSENT`, `SIGNATURE_METADATA_UNKNOWN` |
 | Provenance presence | `PROVENANCE_PRESENT_UNVERIFIED`, `PROVENANCE_METADATA_ABSENT`, `PROVENANCE_METADATA_UNKNOWN` |
+| Signature verification | `SIGNATURE_INVALID`, `SIGNATURE_MISSING`, `SIGNATURE_POSITIVE_COVERAGE_UNAVAILABLE`, `SIGNATURE_VERIFIER_UNAVAILABLE`, `SIGNATURE_VERIFIER_ERROR`, `SIGNATURE_VERIFIER_OFFLINE`, `SIGNATURE_VERIFIER_STALE` |
+| Provenance verification | `PROVENANCE_INVALID`, `PROVENANCE_NOT_PRESENT`, `PROVENANCE_VERIFIED`, `PROVENANCE_ARTIFACT_MISMATCH`, `PROVENANCE_VERIFICATION_UNAVAILABLE`, `PROVENANCE_PRESENCE_UNKNOWN`, `PROVENANCE_VERIFIER_UNAVAILABLE`, `PROVENANCE_VERIFIER_ERROR`, `PROVENANCE_VERIFIER_OFFLINE`, `PROVENANCE_VERIFIER_STALE` |
 | Completeness | `REGISTRY_EVIDENCE_COMPLETE`, `REGISTRY_EVIDENCE_UNKNOWN` |
 | Staleness | `STALENESS_NOT_OBSERVED` |
 
@@ -77,6 +83,11 @@ public subject, exact `sourceRefs`, and bounded public `facts`. Evidence kinds a
 declaration and Plan 016 conclusion separately. Cohort facts retain each configured physical member,
 proposed version, and candidate-operation bit separately. Passive evidence retains only presence
 state, never signature bytes, attestation URLs, credentials, or raw registry error text.
+Exact-artifact plans also use `registry-artifact` evidence to bind public npm registry identity,
+target version, canonical SHA-512 integrity, and passive presence to one content-derived physical
+artifact ID. To join apply evidence back to the plan, use `artifactId` to find the planned artifact
+and then its `evidenceRef`; `artifactResults` do not duplicate that reference. Raw verifier output is
+never serialized.
 
 Signal subjects contain exact `occurrenceIds` and may include a public `dependencyName`,
 repository-relative `workspacePath`, or explicit/inferred `cohortId`. The semantic validator binds
@@ -86,4 +97,6 @@ summary counts before accepting a plan.
 Only an explicit cohort or matching `signalRules` entry can create a blocking signal effect.
 Blocking removes affected candidate operations and rebuilds graph-dependent signals without
 selecting another version. Configuration shapes policy but grants no apply or process authority.
-Artifact and manager-native verification belong to the separate verification contract.
+Exact npm artifact verification belongs to the separate apply verification contract. Its default
+effects are `none` for pass/not-applicable and `warn` for fail/unknown; only an exact
+fingerprinted matching rule may block.

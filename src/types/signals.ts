@@ -11,6 +11,8 @@ export const SIGNAL_FAMILIES = [
   'target-deprecation',
   'signature-presence',
   'provenance-presence',
+  'signature-verification',
+  'provenance-verification',
   'evidence-completeness',
   'evidence-staleness',
 ] as const
@@ -58,6 +60,23 @@ export const SIGNAL_REASONS = [
   'PROVENANCE_PRESENT_UNVERIFIED',
   'PROVENANCE_METADATA_ABSENT',
   'PROVENANCE_METADATA_UNKNOWN',
+  'SIGNATURE_INVALID',
+  'SIGNATURE_MISSING',
+  'SIGNATURE_POSITIVE_COVERAGE_UNAVAILABLE',
+  'SIGNATURE_VERIFIER_UNAVAILABLE',
+  'SIGNATURE_VERIFIER_ERROR',
+  'SIGNATURE_VERIFIER_OFFLINE',
+  'SIGNATURE_VERIFIER_STALE',
+  'PROVENANCE_INVALID',
+  'PROVENANCE_NOT_PRESENT',
+  'PROVENANCE_VERIFIED',
+  'PROVENANCE_ARTIFACT_MISMATCH',
+  'PROVENANCE_VERIFICATION_UNAVAILABLE',
+  'PROVENANCE_PRESENCE_UNKNOWN',
+  'PROVENANCE_VERIFIER_UNAVAILABLE',
+  'PROVENANCE_VERIFIER_ERROR',
+  'PROVENANCE_VERIFIER_OFFLINE',
+  'PROVENANCE_VERIFIER_STALE',
   'REGISTRY_EVIDENCE_COMPLETE',
   'REGISTRY_EVIDENCE_UNKNOWN',
   'STALENESS_NOT_OBSERVED',
@@ -92,6 +111,7 @@ export interface SignalEvidence {
     | 'explicit-cohort'
     | 'inferred-cohort'
     | 'clock'
+    | 'registry-artifact'
   status: 'observed' | 'absent' | 'unknown' | 'conflicting'
   subject: string
   sourceRefs: string[]

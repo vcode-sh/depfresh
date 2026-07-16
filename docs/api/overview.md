@@ -43,6 +43,25 @@ const applied = await apply(
 The plan fixes the manager/version, parsed lockfile hash, no-shell argv, timeout, allowed paths, and
 verification argv. Configuration cannot supply those grants.
 
+Exact public-npm artifact verification is an install-only authority:
+
+```ts
+const dependencyPlan = await plan({
+  cwd: process.cwd(),
+  mode: 'minor',
+  install: true,
+  verifyArtifacts: true,
+})
+const applied = await apply(
+  dependencyPlan,
+  { cwd: process.cwd() },
+  createInvocationAuthority({ write: true, install: true, verifyArtifacts: true }),
+)
+```
+
+The resulting authority snapshot contains separate artifact-verification and network grants. The
+plan, configuration, and passive registry metadata grant neither.
+
 These functions return data and never exit the process. `inspect()` and `plan()` are non-mutating;
 `apply()` requires a separate explicit authority snapshot and exact file preconditions. Fatal
 input/configuration/runtime failures throw structured errors for the caller to handle.
@@ -134,6 +153,7 @@ import { DEFAULT_OPTIONS } from 'depfresh'
   failOnResolutionErrors: false,
   failOnNoPackages: false,
   install: false,          // invocation-only manager phase
+  verifyArtifacts: false,  // invocation-only exact artifact verification
   update: false,
   strictPostWrite: false,  // legacy option; explicit use is rejected
 }

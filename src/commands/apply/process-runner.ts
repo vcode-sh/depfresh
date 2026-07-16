@@ -8,6 +8,7 @@ import { redactSensitiveText } from '../../utils/redact'
 
 const OUTPUT_LIMIT = 64 * 1024
 const CAPTURE_LIMIT = 4 * 1024
+const MAX_PRIVATE_OUTPUT_LIMIT = 8 * 1024 * 1024
 const PROCESS_SCAN_LIMIT = 16 * 1024 * 1024
 
 export interface ExecutableHandle {
@@ -29,7 +30,12 @@ export interface ProcessOptions {
   terminationGraceMs?: number
   settlementMs?: number
   inheritedEnv?: NodeJS.ProcessEnv
+  environmentOverrides?: NodeJS.ProcessEnv
   captureStdout?: boolean
+  captureStderr?: boolean
+  redactCapturedStdout?: boolean
+  maxOutputBytes?: number
+  maxCaptureBytes?: number
 }
 
 export interface ProcessRequest extends ProcessOptions {
@@ -53,6 +59,7 @@ export interface ProcessObservation {
   exitCode?: number
   signal?: NodeJS.Signals
   stdout?: string
+  stderr?: string
 }
 
 interface ProcessIdentity {
@@ -83,9 +90,21 @@ const ENVIRONMENT_KEYS = new Set(
     'NODE_EXTRA_CA_CERTS',
   ].map((key) => key.toUpperCase()),
 )
+const ENVIRONMENT_OVERRIDE_KEYS = new Set([
+  'HOME',
+  'USERPROFILE',
+  'TMPDIR',
+  'TMP',
+  'TEMP',
+  'NPM_CONFIG_CACHE',
+  'NPM_CONFIG_USERCONFIG',
+  'NPM_CONFIG_GLOBALCONFIG',
+  'NPM_CONFIG_REGISTRY',
+])
 
 export function sanitizedProcessEnvironment(
   inheritedEnv: NodeJS.ProcessEnv = process.env,
+  overrides: NodeJS.ProcessEnv = {},
 ): NodeJS.ProcessEnv {
   const environment: NodeJS.ProcessEnv = {}
   for (const [key, value] of Object.entries(inheritedEnv)) {
@@ -93,6 +112,11 @@ export function sanitizedProcessEnvironment(
   }
   environment.CI = '1'
   environment.NO_COLOR = '1'
+  for (const [key, value] of Object.entries(overrides)) {
+    if (value !== undefined && ENVIRONMENT_OVERRIDE_KEYS.has(key.toUpperCase())) {
+      environment[key] = value
+    }
+  }
   return environment
 }
 
@@ -154,7 +178,10 @@ export async function runResolvedProcess(
       terminationConfirmed: true,
     }
   }
-  const environment = sanitizedProcessEnvironment(options.inheritedEnv)
+  const environment = sanitizedProcessEnvironment(
+    options.inheritedEnv,
+    options.environmentOverrides,
+  )
   const supervisionToken = randomUUID()
   environment.DEPFRESH_PROCESS_RUN_ID = supervisionToken
   const baselineProcesses = await snapshotUserProcesses()
@@ -185,7 +212,11 @@ export async function runResolvedProcess(
   }
 
   let stdout = Buffer.alloc(0)
-  let outputBytes = 0
+  let stderr = Buffer.alloc(0)
+  const outputLimit = boundedLimit(options.maxOutputBytes, OUTPUT_LIMIT)
+  const captureLimit = Math.min(boundedLimit(options.maxCaptureBytes, CAPTURE_LIMIT), outputLimit)
+  let stdoutBytes = 0
+  let stderrBytes = 0
   let outputExceeded = false
   let timedOut = false
   let spawnError = false
@@ -198,18 +229,26 @@ export async function runResolvedProcess(
     triggerTermination?.()
     triggerTermination = undefined
   }
-  const append = (chunk: Buffer, capture: boolean): void => {
-    outputBytes += chunk.length
-    if (capture && stdout.length < CAPTURE_LIMIT) {
-      stdout = Buffer.concat([stdout, chunk.subarray(0, CAPTURE_LIMIT - stdout.length)])
+  const append = (chunk: Buffer, stream: 'stdout' | 'stderr', capture: boolean): void => {
+    if (stream === 'stdout') stdoutBytes += chunk.length
+    else stderrBytes += chunk.length
+    const captured = stream === 'stdout' ? stdout : stderr
+    if (capture && captured.length < captureLimit) {
+      const next = Buffer.concat([captured, chunk.subarray(0, captureLimit - captured.length)])
+      if (stream === 'stdout') stdout = next
+      else stderr = next
     }
-    if (outputBytes > OUTPUT_LIMIT && !outputExceeded) {
+    if ((stdoutBytes > outputLimit || stderrBytes > outputLimit) && !outputExceeded) {
       outputExceeded = true
       requestTermination()
     }
   }
-  child.stdout.on('data', (chunk: Buffer) => append(chunk, options.captureStdout === true))
-  child.stderr.on('data', (chunk: Buffer) => append(chunk, false))
+  child.stdout.on('data', (chunk: Buffer) =>
+    append(chunk, 'stdout', options.captureStdout === true),
+  )
+  child.stderr.on('data', (chunk: Buffer) =>
+    append(chunk, 'stderr', options.captureStderr === true),
+  )
   child.once('error', () => {
     spawnError = true
   })
@@ -333,9 +372,22 @@ export async function runResolvedProcess(
     terminationConfirmed: true,
   }
   if (options.captureStdout) {
-    result.stdout = redactSensitiveText(stdout.toString('utf8').trim())
+    const captured = stdout.toString('utf8').trim()
+    result.stdout =
+      options.redactCapturedStdout === false ? captured : redactSensitiveText(captured)
+  }
+  if (options.captureStderr) {
+    const captured = stderr.toString('utf8').trim()
+    result.stderr =
+      options.redactCapturedStdout === false ? captured : redactSensitiveText(captured)
   }
   return result
+}
+
+function boundedLimit(value: number | undefined, fallback: number): number {
+  return Number.isSafeInteger(value) && value! > 0
+    ? Math.min(value!, MAX_PRIVATE_OUTPUT_LIMIT)
+    : fallback
 }
 
 function executableCandidates(

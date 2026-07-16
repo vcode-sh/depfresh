@@ -286,4 +286,38 @@ describe('Plan 020 no-shell process runner', () => {
     expect(JSON.stringify(result)).not.toContain('hidden')
     expect(version).toMatchObject({ stdout: 'v24.15.0' })
   })
+
+  it('supports an explicitly bounded private verifier capture in an isolated environment', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'depfresh-process-verifier-'))
+    const isolatedHome = mkdtempSync(join(tmpdir(), 'depfresh-process-verifier-home-'))
+    const payload = 'x'.repeat(128 * 1024)
+    const result = await runProcess({
+      executable: process.execPath,
+      args: [
+        '-e',
+        `process.stdout.write(JSON.stringify({home:process.env.HOME,cache:process.env.npm_config_cache,secret:process.env.DEPFRESH_SECRET,payload:${JSON.stringify(payload)}}));process.stderr.write(JSON.stringify({error:{code:'ENETUNREACH'}}))`,
+      ],
+      cwd: root,
+      timeoutMs: 10_000,
+      inheritedEnv: { ...process.env, DEPFRESH_SECRET: 'must-not-cross' },
+      environmentOverrides: {
+        HOME: isolatedHome,
+        npm_config_cache: join(isolatedHome, 'npm-cache'),
+      },
+      captureStdout: true,
+      captureStderr: true,
+      redactCapturedStdout: false,
+      maxOutputBytes: 256 * 1024,
+      maxCaptureBytes: 256 * 1024,
+    })
+
+    expect(result).toMatchObject({ termination: 'exit', exitCode: 0 })
+    expect(JSON.parse(result.stdout ?? '{}')).toEqual({
+      home: isolatedHome,
+      cache: join(isolatedHome, 'npm-cache'),
+      payload,
+    })
+    expect(JSON.parse(result.stderr ?? '{}')).toEqual({ error: { code: 'ENETUNREACH' } })
+    expect(JSON.stringify(result)).not.toContain('must-not-cross')
+  })
 })

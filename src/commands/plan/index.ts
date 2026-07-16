@@ -1,3 +1,4 @@
+import * as semver from 'semver'
 import { version } from '../../../package.json' with { type: 'json' }
 import { createMemoryCache } from '../../cache'
 import { resolveDataConfigForSource } from '../../config'
@@ -26,6 +27,7 @@ import { inspectRepositoryWithProjection } from '../../repository/inspect'
 import { evaluatePlanSignals, validateSignalConfiguration } from '../../signals'
 import type {
   depfreshOptions,
+  PackageData,
   PlanSignal,
   PolicyDecision,
   PolicyRuleInput,
@@ -62,6 +64,7 @@ export interface PlanOptions {
   asOf?: string
   syncLockfile?: boolean
   install?: boolean
+  verifyArtifacts?: boolean
   verifyArgv?: string[]
   phaseTimeout?: number
   cohorts?: depfreshOptions['cohorts']
@@ -550,7 +553,19 @@ export async function planForInvocation(
     repository,
     evidence,
     lockfiles,
+    resolveContext.metadata,
+    runtimeOptions.signalRules ?? [],
+    options.signalRules !== undefined ? invocationSource : 'config',
   )
+  if (execution.artifactVerification) {
+    const artifactEvidence = artifactVerificationEvidence(execution.artifactVerification)
+    signalResult = {
+      ...signalResult,
+      evidence: [...signalResult.evidence, ...artifactEvidence].sort((left, right) =>
+        compareText(left.id, right.id),
+      ),
+    }
+  }
   const risks = [
     ...projectRepositoryRisks(model),
     ...[...blockedDecisions, ...unknownDecisions, ...errorDecisions].map((decision) => ({
@@ -656,6 +671,11 @@ function validatePhaseOptions(options: PlanOptions): void {
       })
     }
   }
+  if (options.verifyArtifacts && !options.install) {
+    throw new ConfigError('--verify-artifacts requires --install.', {
+      reason: 'INVALID_OPTION_VALUE',
+    })
+  }
   if (
     options.phaseTimeout !== undefined &&
     (!Number.isSafeInteger(options.phaseTimeout) ||
@@ -676,6 +696,9 @@ function buildPlanExecution(
   repository: PlanResult['repository'],
   evidence: PlanResult['evidence'],
   lockfiles: PlanResult['lockfiles'],
+  metadata: ReadonlyMap<string, { packageName: string; currentVersion: string; data: PackageData }>,
+  signalRules: readonly NonNullable<depfreshOptions['signalRules']>[number][],
+  signalPolicySource: Extract<PolicyRuleSource, 'config' | 'library' | 'cli'>,
 ): PlanExecution {
   const mode: PlanExecution['mode'] = options.install
     ? 'install'
@@ -772,12 +795,28 @@ function buildPlanExecution(
     })
   }
 
+  let artifactVerification: PlanExecution['artifactVerification']
+  if (options.verifyArtifacts) {
+    const result = buildArtifactVerification(
+      operations,
+      decisions,
+      targets,
+      metadata,
+      options.phaseTimeout ?? 120_000,
+      signalRules,
+      signalPolicySource,
+    )
+    if ('reason' in result) return blockedExecution(mode, timeoutMs, result.reason)
+    artifactVerification = result
+  }
+
   const verifyArgv = options.verifyArgv
   return {
     mode,
     status: 'ready',
     timeoutMs,
     targets,
+    ...(artifactVerification ? { artifactVerification } : {}),
     ...(verifyArgv
       ? {
           verification: {
@@ -790,6 +829,193 @@ function buildPlanExecution(
         }
       : {}),
   }
+}
+
+function buildArtifactVerification(
+  operations: PlanResult['operations'],
+  decisions: PlanResult['decisions'],
+  targets: PlanExecution['targets'],
+  metadata: ReadonlyMap<string, { packageName: string; currentVersion: string; data: PackageData }>,
+  timeoutMs: number,
+  signalRules: readonly NonNullable<depfreshOptions['signalRules']>[number][],
+  signalPolicySource: Extract<PolicyRuleSource, 'config' | 'library' | 'cli'>,
+): NonNullable<PlanExecution['artifactVerification']> | { reason: string } {
+  const decisionsByOperation = new Map(
+    decisions.map((decision) => [decision.operationId, decision]),
+  )
+  type VerificationTarget = NonNullable<PlanExecution['artifactVerification']>['targets'][number]
+  type Artifact = VerificationTarget['artifacts'][number]
+  const groups = new Map<
+    string,
+    {
+      target: PlanExecution['targets'][number]
+      artifacts: Map<string, Omit<Artifact, 'id' | 'evidenceRef'>>
+    }
+  >()
+
+  for (const operation of operations) {
+    const target = executionTargetForFile(operation.file, targets)
+    if (target?.manager.name !== 'npm') {
+      return { reason: 'ARTIFACT_VERIFIER_UNSUPPORTED' }
+    }
+    if (!semver.satisfies(target.manager.version, '>=11.12.0 <12.0.0')) {
+      return { reason: 'ARTIFACT_VERIFIER_UNSUPPORTED' }
+    }
+    const resolution = metadata.get(operation.occurrenceId)
+    const targetVersion = decisionsByOperation.get(operation.id)?.candidate?.targetVersion
+    if (!(resolution && targetVersion)) return { reason: 'ARTIFACT_IDENTITY_UNAVAILABLE' }
+    const observedRegistry = resolution.data.registry
+    const integrity = resolution.data.artifactIntegrity?.[targetVersion]
+    if (observedRegistry !== 'https://registry.npmjs.org/' || !isExactSha512Integrity(integrity)) {
+      return { reason: 'ARTIFACT_INTEGRITY_UNAVAILABLE' }
+    }
+    const registry = 'https://registry.npmjs.org/' as const
+    const base: Omit<Artifact, 'id' | 'evidenceRef'> = {
+      occurrenceIds: [operation.occurrenceId],
+      packageName: resolution.packageName,
+      version: targetVersion,
+      registry,
+      integrity,
+      signaturePresence: resolution.data.signaturePresence?.[targetVersion] ?? 'unknown',
+      provenancePresence: resolution.data.provenancePresence?.[targetVersion] ?? 'unknown',
+    }
+    const key = canonicalJson({
+      packageName: base.packageName,
+      version: base.version,
+      registry: base.registry,
+      integrity: base.integrity,
+    })
+    const targetGroup = groups.get(target.boundaryId) ?? {
+      target,
+      artifacts: new Map<string, Omit<Artifact, 'id' | 'evidenceRef'>>(),
+    }
+    groups.set(target.boundaryId, targetGroup)
+    const existing = targetGroup.artifacts.get(key)
+    if (existing) {
+      existing.occurrenceIds.push(operation.occurrenceId)
+      existing.occurrenceIds.sort(compareText)
+    } else {
+      targetGroup.artifacts.set(key, base)
+    }
+  }
+
+  const verificationTargets = [...groups.values()]
+    .map(({ target, artifacts }) => {
+      const projected = [...artifacts.values()]
+        .map((artifact) => {
+          const identity = artifactIdentity(artifact)
+          const id = `artifact-${hashExactBytes(canonicalJson(identity)).slice(0, 24)}`
+          const evidence = artifactEvidenceBase(id, artifact)
+          return {
+            id,
+            ...artifact,
+            evidenceRef: `signal-evidence-${hashExactBytes(canonicalJson(evidence)).slice(0, 24)}`,
+          }
+        })
+        .sort((left, right) => compareText(left.id, right.id))
+      return {
+        boundaryId: target.boundaryId,
+        cwd: target.boundaryPath,
+        verifier: { name: 'npm' as const, version: target.manager.version },
+        executable: 'npm' as const,
+        args: [
+          'audit',
+          'signatures',
+          '--json',
+          '--include-attestations',
+          '--ignore-scripts',
+        ] as VerificationTarget['args'],
+        artifacts: projected,
+      }
+    })
+    .sort((left, right) => compareText(left.boundaryId, right.boundaryId))
+  return {
+    kind: 'npm-audit-signatures-v1',
+    timeoutMs,
+    isolatedHome: true,
+    policySource: signalPolicySource,
+    rules: signalRules.map((rule) => structuredClone(rule)),
+    targets: verificationTargets,
+  }
+}
+
+function artifactIdentity(artifact: {
+  packageName: string
+  version: string
+  registry: string
+  integrity: string
+}) {
+  return {
+    packageName: artifact.packageName,
+    version: artifact.version,
+    registry: artifact.registry,
+    integrity: artifact.integrity,
+  }
+}
+
+function artifactEvidenceBase(
+  artifactId: string,
+  artifact: {
+    occurrenceIds: string[]
+    packageName: string
+    version: string
+    registry: string
+    integrity: string
+    signaturePresence: string
+    provenancePresence: string
+  },
+): Omit<SignalEvidence, 'id'> {
+  return {
+    kind: 'registry-artifact',
+    status: 'observed',
+    subject: artifactId,
+    sourceRefs: [...artifact.occurrenceIds],
+    facts: {
+      packageName: artifact.packageName,
+      targetVersion: artifact.version,
+      registry: artifact.registry,
+      integrity: artifact.integrity,
+      signaturePresence: artifact.signaturePresence,
+      provenancePresence: artifact.provenancePresence,
+    },
+  }
+}
+
+function artifactVerificationEvidence(
+  verification: NonNullable<PlanExecution['artifactVerification']>,
+): SignalEvidence[] {
+  return verification.targets.flatMap((target) =>
+    target.artifacts.map((artifact) => ({
+      id: artifact.evidenceRef,
+      ...artifactEvidenceBase(artifact.id, artifact),
+    })),
+  )
+}
+
+function executionTargetForFile(
+  file: string,
+  targets: PlanExecution['targets'],
+): PlanExecution['targets'][number] | undefined {
+  return [...targets]
+    .sort(
+      (left, right) =>
+        right.boundaryPath.length - left.boundaryPath.length ||
+        compareText(left.boundaryId, right.boundaryId),
+    )
+    .find(
+      (target) =>
+        target.boundaryPath === '.' ||
+        file === target.boundaryPath ||
+        file.startsWith(`${target.boundaryPath}/`),
+    )
+}
+
+function isExactSha512Integrity(value: string | undefined): value is string {
+  if (!value) return false
+  const match = /^sha512-([A-Za-z0-9+/]+={0,2})$/u.exec(value)
+  if (!match?.[1]) return false
+  const bytes = Buffer.from(match[1], 'base64')
+  return bytes.length === 64 && bytes.toString('base64') === match[1]
 }
 
 const LOCKFILE_PHASE_FIELDS = new Set([
@@ -847,6 +1073,7 @@ function requiredPlanCapabilities(
   if (execution.mode === 'file-only' || execution.status !== 'ready') return capabilities
   capabilities.push('process-execute', 'lockfile-write')
   if (execution.mode === 'install') capabilities.push('install')
+  if (execution.artifactVerification) capabilities.push('artifact-verify', 'network-access')
   if (execution.verification) capabilities.push('verify-command')
   return capabilities
 }

@@ -115,8 +115,8 @@ For machine planning, place these values in `.depfreshrc`, a JSON config file, o
 ### Invocation-only options
 
 Config files can shape checks, but they cannot authorize side effects. depfresh ignores `write`,
-`syncLockfile`, `install`, `verify`, `verifyArgv`, `phaseTimeout`, legacy `update`, `execute`,
-`verifyCommand`, and `global`/`globalAll` when those values come from any config file or from
+`syncLockfile`, `install`, `verifyArtifacts`, `verify`, `verifyArgv`, `phaseTimeout`, legacy
+`update`, `execute`, `verifyCommand`, and `global`/`globalAll` when those values come from any config file or from
 `package.json#depfresh`. Use `depfresh plan` to fingerprint manager intent and exact verification
 argv, then grant only the matching phase on `depfresh apply`; direct library callers pass an
 explicit immutable `InvocationAuthority`.

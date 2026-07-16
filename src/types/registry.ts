@@ -15,6 +15,8 @@ export interface PackageData {
   repository?: string
   signaturePresence?: Record<string, SignaturePresence>
   provenancePresence?: Record<string, PassivePresence>
+  artifactIntegrity?: Record<string, string>
+  registry?: string
   deprecationPresence?: Record<string, PassivePresence>
   engineMetadata?: Record<string, PassivePresence>
   peerDependencies?: Record<string, Record<string, string>>

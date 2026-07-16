@@ -21,6 +21,7 @@ export const INVOCATION_ONLY_OPTIONS = [
   'update',
   'execute',
   'verify',
+  'verifyArtifacts',
   'verifyArgv',
   'phaseTimeout',
   'verifyCommand',

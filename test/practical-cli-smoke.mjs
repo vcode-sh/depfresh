@@ -614,7 +614,7 @@ await record('global-all write', async () => {
     '--mode',
     'latest',
   ])
-  assert.equal(result.status, 0)
+  assert.equal(result.status, 0, JSON.stringify(result, null, 2))
 
   const entries = readFileSync(logFile, 'utf8')
     .trim()
@@ -636,6 +636,7 @@ await record('global-all write', async () => {
         entry.pm === 'pnpm' &&
         entry.args.join(' ') === 'add -g --ignore-scripts --ignore-pnpmfile -- shared-glob@2.2.0',
     ),
+    JSON.stringify(entries, null, 2),
   )
 })
 

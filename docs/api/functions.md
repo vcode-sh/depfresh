@@ -194,7 +194,9 @@ if (!validateApplyResult(applied)) throw new Error('Unsupported apply contract')
 `plan()` reads only declarative JSON configuration. Set `asOf` to a canonical UTC timestamp when
 cooldown is positive. `syncLockfile` or `install` fingerprints one supported manager phase;
 `verifyArgv` fingerprints one exact non-empty argv array, and `phaseTimeout` bounds every planned
-process. These values express future intent and grant no authority. See
+process. With install, `verifyArtifacts` fingerprints exact npm 11.12.x public-registry artifact
+targets and policy; it runs no process during planning. These values express future intent and grant
+no authority. See
 [Inspect and Plan Contracts](../output-formats/inspect-plan.md) for the schemas, fingerprints,
 terminal vocabulary, and compatibility boundary.
 
@@ -212,10 +214,22 @@ blocked before apply.
 
 `apply()` accepts plain schema-v1 plan data, never re-resolves it, and throws before lock acquisition
 for a forged contract or missing/mismatched authority. A manager plan requires independent
-`processExecute` and `lockfileWrite` grants; install and verification additionally require `install`
-and `verifyCommand`. Operational stale, dirty, lock, staging, manager, verification, recovery, and
+`processExecute` and `lockfileWrite` grants. Install additionally requires `install`; generic
+verification requires `verifyCommand`. Artifact verification additionally requires `artifactVerify` and
+`networkAccess`; configuration cannot supply either. Operational stale, dirty, lock, staging,
+manager, verification, recovery, and
 observation states return a schema-valid result. See the
 [Apply Contract](../output-formats/apply.md) for exact phases and recovery limits.
+
+```ts
+const cwd = process.cwd()
+const reviewed = await plan({ cwd, install: true, verifyArtifacts: true })
+const result = await apply(
+  reviewed,
+  { cwd },
+  createInvocationAuthority({ write: true, install: true, verifyArtifacts: true }),
+)
+```
 
 The module also exports authoritative inspect, plan, apply, and error schema descriptors, runtime assertion/type-guard helpers,
 canonical JSON and fingerprint helpers, plus pure `buildLegacyCheckJsonResult()` and

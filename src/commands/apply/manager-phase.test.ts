@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -6,6 +6,7 @@ import type { PlanResult } from '../../contracts/schemas'
 import {
   diffRepositorySnapshots,
   lockfileDependencyOccurrencesMatch,
+  resolveNpmArtifactTargets,
   snapshotRepositoryTree,
 } from './manager-phase'
 
@@ -176,5 +177,132 @@ describe('Plan 020 repository phase observation', () => {
         Buffer.from('{"lockfileVersion":3,"packages":{}}'),
       ),
     ).toBe(false)
+  })
+
+  it('binds trust targets to exact final lockfile integrity and physical install identity', () => {
+    const root = mkdtempSync(join(tmpdir(), 'depfresh-artifact-binding-'))
+    const integrity = `sha512-${Buffer.alloc(64, 9).toString('base64')}`
+    mkdirSync(join(root, 'node_modules', 'alpha'), { recursive: true })
+    writeFileSync(
+      join(root, 'node_modules', 'alpha', 'package.json'),
+      JSON.stringify({ name: 'alpha', version: '2.0.0' }),
+    )
+    const artifact = {
+      id: 'artifact-alpha',
+      occurrenceIds: ['occurrence-alpha'],
+      packageName: 'alpha',
+      version: '2.0.0',
+      registry: 'https://registry.npmjs.org/' as const,
+      integrity,
+      signaturePresence: 'present' as const,
+      provenancePresence: 'present' as const,
+      evidenceRef: 'signal-evidence-alpha',
+    }
+    const lockfile = Buffer.from(
+      JSON.stringify({
+        lockfileVersion: 3,
+        packages: {
+          '': { dependencies: { alpha: '2.0.0' } },
+          'node_modules/alpha': { version: '2.0.0', integrity },
+        },
+      }),
+    )
+
+    expect(
+      resolveNpmArtifactTargets(root, 'boundary-root', '.', lockfile, [artifact], [operation]),
+    ).toEqual([
+      expect.objectContaining({
+        id: 'artifact-alpha',
+        boundaryId: 'boundary-root',
+        location: 'node_modules/alpha',
+        integrity,
+      }),
+    ])
+    const wrongIntegrity = Buffer.from(
+      lockfile
+        .toString('utf8')
+        .replace(integrity, `sha512-${Buffer.alloc(64, 8).toString('base64')}`),
+    )
+    expect(
+      resolveNpmArtifactTargets(
+        root,
+        'boundary-root',
+        '.',
+        wrongIntegrity,
+        [artifact],
+        [operation],
+      ),
+    ).toBe(undefined)
+
+    const outside = mkdtempSync(join(tmpdir(), 'depfresh-artifact-outside-'))
+    writeFileSync(
+      join(outside, 'package.json'),
+      JSON.stringify({ name: 'alpha', version: '2.0.0' }),
+    )
+    const linkedRoot = mkdtempSync(join(tmpdir(), 'depfresh-artifact-link-'))
+    mkdirSync(join(linkedRoot, 'node_modules'))
+    symlinkSync(outside, join(linkedRoot, 'node_modules', 'alpha'))
+    expect(
+      resolveNpmArtifactTargets(
+        linkedRoot,
+        'boundary-root',
+        '.',
+        lockfile,
+        [artifact],
+        [operation],
+      ),
+    ).toBe(undefined)
+  })
+
+  it('binds a nested npm boundary to its own physical install tree', () => {
+    const root = mkdtempSync(join(tmpdir(), 'depfresh-artifact-nested-binding-'))
+    const boundary = join(root, 'apps', 'service')
+    const integrity = `sha512-${Buffer.alloc(64, 7).toString('base64')}`
+    mkdirSync(join(boundary, 'node_modules', 'alpha'), { recursive: true })
+    writeFileSync(
+      join(boundary, 'node_modules', 'alpha', 'package.json'),
+      JSON.stringify({ name: 'alpha', version: '2.0.0' }),
+    )
+    const nestedOperation = {
+      ...operation,
+      sourceFileId: 'source-service',
+      file: 'apps/service/package.json',
+    }
+    const artifact = {
+      id: 'artifact-alpha',
+      occurrenceIds: ['occurrence-alpha'],
+      packageName: 'alpha',
+      version: '2.0.0',
+      registry: 'https://registry.npmjs.org/' as const,
+      integrity,
+      signaturePresence: 'present' as const,
+      provenancePresence: 'present' as const,
+      evidenceRef: 'signal-evidence-alpha',
+    }
+    const lockfile = Buffer.from(
+      JSON.stringify({
+        lockfileVersion: 3,
+        packages: {
+          '': { dependencies: { alpha: '2.0.0' } },
+          'node_modules/alpha': { version: '2.0.0', integrity },
+        },
+      }),
+    )
+
+    expect(
+      resolveNpmArtifactTargets(
+        root,
+        'boundary-service',
+        'apps/service',
+        lockfile,
+        [artifact],
+        [nestedOperation],
+      ),
+    ).toEqual([
+      expect.objectContaining({
+        boundaryId: 'boundary-service',
+        location: 'node_modules/alpha',
+      }),
+    ])
   })
 })

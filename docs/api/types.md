@@ -11,15 +11,17 @@ The full type catalogue. Every interface, union, and enum that depfresh exports.
 | `CatalogSource` | A workspace catalog entry (pnpm/bun/yarn) with its deps and file path |
 | `DepFieldType` | Union of dependency field names: `'dependencies'`, `'devDependencies'`, `'overrides'`, etc. |
 | `DiffType` | Version diff classification: `'major'` \| `'minor'` \| `'patch'` \| `'none'` \| `'error'` |
-| `InvocationAuthority` | Immutable grants for file write, process execution, lockfile write, install, exact verification, legacy compatibility, and global-write side effects |
+| `InvocationAuthority` | Immutable grants for file write, process execution, lockfile write, install, exact command verification, artifact verification, network access, legacy compatibility, and global-write side effects |
 | `InspectOptions` / `InspectResult` | Process-free schema-v1 repository evidence input and schema-derived result |
 | `PlanOptions` / `PlanResult` | Registry-aware non-mutating planner input, including optional manager/verification intent, and schema-derived semantic plan result |
 | `CohortInput` / `SignalRuleInput` / `SignalRuleEffect` | Strict explicit package-family coordination and ordered `warn`/`block` signal-effect configuration |
 | `EvaluatePlanSignalsInput` / `EvaluatePlanSignalsResult` | Pure fixed-clock repository-signal evaluator input and normalized signals/evidence/summary/block result |
 | `PlanSignal` / `SignalEvidence` / `SignalSummary` | Fingerprinted immutable signal truth, normalized source evidence, policy trace, and exact counts |
-| `SignalState` / `SignalFamily` / `SignalReason` | Public five-state vocabulary, supported compatibility/passive families, and stable reason registry |
+| `SignalState` / `SignalFamily` / `SignalReason` | Public five-state vocabulary plus compatibility, passive, and apply-time artifact-verification families/reasons |
 | `SignalPolicyEffect` / `SignalPolicySource` | `none|warn|block` effect and traced config/library/CLI provenance; neither changes evidence truth |
 | `ApplyOptions` / `ApplyResult` | Explicit root selection and schema-derived observed file, manager, verification, and recovery result for one authorized immutable plan |
+| `ArtifactVerificationTarget` | Exact installed npm artifact identity, location, integrity, occurrence consumers, and independent passive-presence inputs |
+| `ArtifactTrustDimensionResult` / `ArtifactTrustResult` | Sanitized independent signature/provenance verification truth for one exact artifact and location |
 | `GlobalPlanOptions` / `GlobalApplyOptions` | Explicit working directory, timeout, and environment inputs for global inventory/apply operations |
 | `GlobalApplyPlan` / `GlobalApplyResult` | Strict schema-v1 manager-specific global plan and observed non-transactional result |
 | `GlobalInvocationAuthority` | Immutable global-write, process-execute, and exact manager grants |
@@ -29,7 +31,7 @@ The full type catalogue. Every interface, union, and enum that depfresh exports.
 | `InspectRepositoryOptions` | Read-only repository inspection options; contains no side-effect grants |
 | `NpmrcConfig` | Parsed `.npmrc` -- registries, auth tokens, proxy settings |
 | `OutputFormat` | Output mode: `'table'` \| `'json'` |
-| `PackageData` | Normalized registry metadata -- versions/tags/timestamps, deprecation, engines, peer requirements/optionality, repository identity, and passive signature/provenance presence |
+| `PackageData` | Normalized registry metadata -- versions/tags/timestamps, deprecation, engines, peer requirements/optionality, repository identity, passive signature/provenance presence, and canonical public-registry SHA-512 artifact integrity when observed |
 | `PackageManagerField` | Parsed `packageManager` field from a package manifest (`package.json` or `package.yaml`) (name, version, hash) |
 | `PackageManagerName` | `'npm'` \| `'pnpm'` \| `'yarn'` \| `'bun'` |
 | `PackageMeta` | A loaded package with its file path, raw deps, resolved changes, and indent info |

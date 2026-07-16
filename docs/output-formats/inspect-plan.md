@@ -82,8 +82,9 @@ by a material risk; unsafe identity paths fail the contract instead of producing
 `inspect` requires only `filesystem-read`; `plan` adds `registry-read`, and includes `file-write`
 only when its operations would require that separate apply authority. A requested manager phase
 that resolves to `ready` adds `process-execute` and `lockfile-write`; ready full install adds
-`install`, and ready reviewed verification adds `verify-command`. Blocked and operation-free phase
-requests add no process capability. Planning itself uses none of those side-effect capabilities.
+`install`, ready reviewed verification adds `verify-command`, and ready exact-artifact verification
+adds `artifact-verify` plus `network-access`. Blocked and operation-free phase requests add no
+process capability. Planning itself uses none of those side-effect capabilities.
 
 The `execution` object fingerprints `file-only`, `sync-lockfile`, or `install` intent, the phase
 timeout, and each affected boundary's confirmed manager name/version, parsed lockfile ID/path/hash,
@@ -96,6 +97,15 @@ cross-manager lockfile proof; other protocols block manager execution before app
 execution is also blocked on Windows until equivalent inherited-descendant process observation
 exists. For an `npm:` alias, proof binds both the manifest alias key and the exact aliased registry
 package identity; matching only the version is insufficient.
+
+With `verifyArtifacts`, an install plan also fingerprints one verification unit per npm boundary:
+confirmed npm 11.12.x identity, public npm registry, fixed
+`["audit","signatures","--json","--include-attestations","--ignore-scripts"]` argv, timeout,
+policy rules, and every physical artifact's exact package/version/SHA-512 integrity plus occurrence
+consumers and passive-presence evidence. Artifact identity excludes consumers and presence, so it
+remains the identity of the physical registry artifact. Pnpm, Bun, JSR, private registries, missing
+integrity, and unsupported npm versions block the requested verifier rather than weakening the
+claim. Presence is plan evidence only and never becomes verified trust.
 
 Cooldown is time-dependent. When `--cooldown` is positive, supply a canonical UTC instant such as
 `--as-of 2026-07-16T10:00:00.000Z`. The instant is semantic plan input and participates in the plan

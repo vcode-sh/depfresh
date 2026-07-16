@@ -130,6 +130,8 @@ describe('check option validation', () => {
       processExecute: false,
       lockfileWrite: false,
       verifyCommand: false,
+      artifactVerify: false,
+      networkAccess: false,
       globalWrite: false,
     }
     const { check } = await import('./index')
@@ -159,6 +161,8 @@ describe('check option validation', () => {
         processExecute: true,
         lockfileWrite: true,
         verifyCommand: true,
+        artifactVerify: true,
+        networkAccess: true,
         globalWrite: true,
       },
     )

@@ -100,6 +100,7 @@ global writes.
 | `write` | `boolean` | `false` | Grant file mutation for the active invocation. |
 | `syncLockfile` | `boolean` | `false` | On plan, fingerprint supported lockfile-only manager work; on apply, grant its process and lockfile writes. |
 | `install` | `boolean` | `false` | On plan/apply, request or grant the stronger non-transactional install phase. |
+| `verifyArtifacts` | `boolean` | `false` | With install, fingerprint exact public-npm artifact verification on plan or grant its artifact/network authority on apply. Ignored in configuration. |
 | `verifyArgv` | `string[]` | `undefined` | Plan one exact non-empty verification argv array after manager success. |
 | `verify` | `boolean` | `false` | Grant only the verification argv already fingerprinted in the plan. |
 | `phaseTimeout` | `number` | `120000` | Plan the per-process timeout in milliseconds. |

@@ -266,6 +266,8 @@
               "target-deprecation",
               "signature-presence",
               "provenance-presence",
+              "signature-verification",
+              "provenance-verification",
               "evidence-completeness",
               "evidence-staleness"
             ]
@@ -318,6 +320,23 @@
               "PROVENANCE_PRESENT_UNVERIFIED",
               "PROVENANCE_METADATA_ABSENT",
               "PROVENANCE_METADATA_UNKNOWN",
+              "SIGNATURE_INVALID",
+              "SIGNATURE_MISSING",
+              "SIGNATURE_POSITIVE_COVERAGE_UNAVAILABLE",
+              "SIGNATURE_VERIFIER_UNAVAILABLE",
+              "SIGNATURE_VERIFIER_ERROR",
+              "SIGNATURE_VERIFIER_OFFLINE",
+              "SIGNATURE_VERIFIER_STALE",
+              "PROVENANCE_INVALID",
+              "PROVENANCE_NOT_PRESENT",
+              "PROVENANCE_VERIFIED",
+              "PROVENANCE_ARTIFACT_MISMATCH",
+              "PROVENANCE_VERIFICATION_UNAVAILABLE",
+              "PROVENANCE_PRESENCE_UNKNOWN",
+              "PROVENANCE_VERIFIER_UNAVAILABLE",
+              "PROVENANCE_VERIFIER_ERROR",
+              "PROVENANCE_VERIFIER_OFFLINE",
+              "PROVENANCE_VERIFIER_STALE",
               "REGISTRY_EVIDENCE_COMPLETE",
               "REGISTRY_EVIDENCE_UNKNOWN",
               "STALENESS_NOT_OBSERVED"
@@ -442,7 +461,8 @@
               "planned-graph",
               "explicit-cohort",
               "inferred-cohort",
-              "clock"
+              "clock",
+              "registry-artifact"
             ]
           },
           "status": {
@@ -672,6 +692,292 @@
               }
             }
           }
+        },
+        "artifactVerification": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "timeoutMs",
+            "isolatedHome",
+            "policySource",
+            "rules",
+            "targets"
+          ],
+          "properties": {
+            "kind": {
+              "const": "npm-audit-signatures-v1"
+            },
+            "timeoutMs": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 600000
+            },
+            "isolatedHome": {
+              "const": true
+            },
+            "policySource": {
+              "enum": [
+                "config",
+                "library",
+                "cli"
+              ]
+            },
+            "rules": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "id",
+                  "selectors",
+                  "effect"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "selectors": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "minProperties": 1,
+                    "properties": {
+                      "family": {
+                        "enum": [
+                          "runtime",
+                          "peer",
+                          "cohort",
+                          "release-channel",
+                          "maturity",
+                          "current-deprecation",
+                          "target-deprecation",
+                          "signature-presence",
+                          "provenance-presence",
+                          "signature-verification",
+                          "provenance-verification",
+                          "evidence-completeness",
+                          "evidence-staleness"
+                        ]
+                      },
+                      "state": {
+                        "enum": [
+                          "pass",
+                          "warn",
+                          "fail",
+                          "unknown",
+                          "not-applicable"
+                        ]
+                      },
+                      "reason": {
+                        "enum": [
+                          "RUNTIME_COMPATIBLE",
+                          "RUNTIME_PARTIAL_OVERLAP",
+                          "RUNTIME_INCOMPATIBLE",
+                          "RUNTIME_UNCONSTRAINED",
+                          "RUNTIME_EVIDENCE_UNKNOWN",
+                          "TARGET_ENGINE_UNKNOWN",
+                          "PEER_COMPATIBLE",
+                          "PEER_PARTIAL_OVERLAP",
+                          "PEER_INCOMPATIBLE",
+                          "PEER_REQUIRED_MISSING",
+                          "PEER_OPTIONAL_MISSING",
+                          "PEER_METADATA_ABSENT",
+                          "PEER_EVIDENCE_UNKNOWN",
+                          "COHORT_ALIGNED",
+                          "COHORT_DIVERGED",
+                          "COHORT_MEMBER_UNKNOWN",
+                          "COHORT_INFERRED_SUGGESTION",
+                          "TARGET_STABLE",
+                          "TARGET_PRERELEASE",
+                          "TARGET_VERSION_UNKNOWN",
+                          "MATURITY_POLICY_DISABLED",
+                          "TARGET_MATURE",
+                          "TARGET_TOO_NEW",
+                          "TARGET_TIME_UNKNOWN",
+                          "CURRENT_NOT_DEPRECATED",
+                          "CURRENT_DEPRECATED",
+                          "CURRENT_VERSION_UNKNOWN",
+                          "CURRENT_DEPRECATION_UNKNOWN",
+                          "TARGET_NOT_DEPRECATED",
+                          "TARGET_DEPRECATED",
+                          "TARGET_DEPRECATION_UNKNOWN",
+                          "SIGNATURE_PRESENT_UNVERIFIED",
+                          "SIGNATURE_METADATA_ABSENT",
+                          "SIGNATURE_METADATA_UNKNOWN",
+                          "PROVENANCE_PRESENT_UNVERIFIED",
+                          "PROVENANCE_METADATA_ABSENT",
+                          "PROVENANCE_METADATA_UNKNOWN",
+                          "SIGNATURE_INVALID",
+                          "SIGNATURE_MISSING",
+                          "SIGNATURE_POSITIVE_COVERAGE_UNAVAILABLE",
+                          "SIGNATURE_VERIFIER_UNAVAILABLE",
+                          "SIGNATURE_VERIFIER_ERROR",
+                          "SIGNATURE_VERIFIER_OFFLINE",
+                          "SIGNATURE_VERIFIER_STALE",
+                          "PROVENANCE_INVALID",
+                          "PROVENANCE_NOT_PRESENT",
+                          "PROVENANCE_VERIFIED",
+                          "PROVENANCE_ARTIFACT_MISMATCH",
+                          "PROVENANCE_VERIFICATION_UNAVAILABLE",
+                          "PROVENANCE_PRESENCE_UNKNOWN",
+                          "PROVENANCE_VERIFIER_UNAVAILABLE",
+                          "PROVENANCE_VERIFIER_ERROR",
+                          "PROVENANCE_VERIFIER_OFFLINE",
+                          "PROVENANCE_VERIFIER_STALE",
+                          "REGISTRY_EVIDENCE_COMPLETE",
+                          "REGISTRY_EVIDENCE_UNKNOWN",
+                          "STALENESS_NOT_OBSERVED"
+                        ]
+                      },
+                      "dependencyName": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "workspacePath": {
+                        "type": "string",
+                        "minLength": 1,
+                        "pattern": "^(?!/)(?![A-Za-z]:/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*\\\\).+$"
+                      },
+                      "cohortId": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    }
+                  },
+                  "effect": {
+                    "enum": [
+                      "warn",
+                      "block"
+                    ]
+                  }
+                }
+              }
+            },
+            "targets": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "boundaryId",
+                  "cwd",
+                  "verifier",
+                  "executable",
+                  "args",
+                  "artifacts"
+                ],
+                "properties": {
+                  "boundaryId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "cwd": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "^(?!/)(?![A-Za-z]:/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*\\\\).+$"
+                  },
+                  "verifier": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "name",
+                      "version"
+                    ],
+                    "properties": {
+                      "name": {
+                        "const": "npm"
+                      },
+                      "version": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    }
+                  },
+                  "executable": {
+                    "const": "npm"
+                  },
+                  "args": {
+                    "const": [
+                      "audit",
+                      "signatures",
+                      "--json",
+                      "--include-attestations",
+                      "--ignore-scripts"
+                    ]
+                  },
+                  "artifacts": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "id",
+                        "occurrenceIds",
+                        "packageName",
+                        "version",
+                        "registry",
+                        "integrity",
+                        "signaturePresence",
+                        "provenancePresence",
+                        "evidenceRef"
+                      ],
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "pattern": "^artifact-[a-f0-9]{24}$"
+                        },
+                        "occurrenceIds": {
+                          "type": "array",
+                          "minItems": 1,
+                          "uniqueItems": true,
+                          "items": {
+                            "type": "string",
+                            "minLength": 1
+                          }
+                        },
+                        "packageName": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "version": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "registry": {
+                          "const": "https://registry.npmjs.org/"
+                        },
+                        "integrity": {
+                          "type": "string",
+                          "pattern": "^sha512-[A-Za-z0-9+/]+={0,2}$"
+                        },
+                        "signaturePresence": {
+                          "enum": [
+                            "present",
+                            "absent",
+                            "unknown"
+                          ]
+                        },
+                        "provenancePresence": {
+                          "enum": [
+                            "present",
+                            "absent",
+                            "unknown"
+                          ]
+                        },
+                        "evidenceRef": {
+                          "type": "string",
+                          "pattern": "^signal-evidence-[a-f0-9]{24}$"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
         }
       }
     },
@@ -718,7 +1024,9 @@
           "process-execute",
           "lockfile-write",
           "install",
-          "verify-command"
+          "verify-command",
+          "artifact-verify",
+          "network-access"
         ]
       }
     },

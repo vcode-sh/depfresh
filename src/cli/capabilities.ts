@@ -111,6 +111,7 @@ const FLAG_RELATIONSHIPS: Record<string, FlagRelationship> = {
   install: { conflicts: ['sync-lockfile'] },
   'sync-lockfile': { conflicts: ['install'] },
   verify: { requires: ['write', 'plan-file'] },
+  'verify-artifacts': { requires: ['install'] },
   interactive: { requires: ['write'] },
   'deps-only': { conflicts: ['dev-only'] },
   'dev-only': { conflicts: ['deps-only'] },
@@ -127,6 +128,10 @@ const INVOCATION_AUTHORITY: Record<string, InvocationGrant> = {
     grants: ['processExecute', 'lockfileWrite', 'install'],
   },
   verify: { requires: ['write', 'plan-file'], grants: ['verifyCommand'] },
+  'verify-artifacts': {
+    requires: ['write', 'plan-file', 'install'],
+    grants: ['artifactVerify', 'networkAccess'],
+  },
   global: { requires: ['write'], grants: ['globalWrite', 'processExecute'] },
   'global-all': { requires: ['write'], grants: ['globalWrite', 'processExecute'] },
 }

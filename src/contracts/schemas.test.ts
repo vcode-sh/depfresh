@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 import { canonicalJson } from './canonical-json'
 import { createPlanFingerprint, createRepositoryFingerprint, hashExactBytes } from './fingerprint'
 import { globalApplySchema, globalPlanSchema } from './global-schemas'
+import type { ApplyResult } from './schemas'
 import {
   applyResultSchema,
   commandErrorSchema,
@@ -207,6 +208,217 @@ describe('shipped contract schemas', () => {
         recovery: { status: 'partial' },
       }),
     ).toBe(false)
+  })
+
+  it('rejects artifact evidence without an exact completed npm install and verifier command', () => {
+    const forged = {
+      contract: 'depfresh.apply',
+      schemaVersion: 1,
+      toolVersion: '1.2.0',
+      planFingerprint: 'a'.repeat(64),
+      repositoryIdentity: 'repository:fixture',
+      status: 'noop',
+      operations: [],
+      phases: [
+        {
+          name: 'artifact-verify',
+          status: 'passed',
+          reason: 'ARTIFACT_VERIFICATION_RECORDED',
+          artifactResults: [
+            {
+              artifactId: `artifact-${'b'.repeat(24)}`,
+              boundaryId: 'boundary-root',
+              location: 'node_modules/alpha',
+              packageName: 'alpha',
+              version: 'not-semver',
+              registry: 'https://registry.npmjs.org/',
+              integrity: 'sha512-A',
+              lockfile: { path: 'package-lock.json', byteHash: 'c'.repeat(64) },
+              verifier: { name: 'npm', version: '11.12.1' },
+              observedAt: '1970-01-01T00:00:00.000Z',
+              signature: {
+                state: 'unknown',
+                reason: 'SIGNATURE_POSITIVE_COVERAGE_UNAVAILABLE',
+                effect: 'warn',
+                matchedRuleIds: [],
+              },
+              provenance: {
+                state: 'not-applicable',
+                reason: 'PROVENANCE_NOT_PRESENT',
+                effect: 'none',
+                matchedRuleIds: [],
+              },
+            },
+          ],
+        },
+      ],
+      summary: {
+        planned: 0,
+        applied: 0,
+        skipped: 0,
+        conflicted: 0,
+        reverted: 0,
+        failed: 0,
+        unknown: 0,
+      },
+      recovery: { status: 'not-needed' },
+      requiredCapabilities: ['filesystem-read', 'file-write', 'artifact-verify', 'network-access'],
+    }
+
+    expect(validateApplyResult(forged)).toBe(false)
+  })
+
+  it('accepts exact artifact evidence for npm shrinkwrap and workspace-local installs', () => {
+    const integrity = `sha512-${Buffer.alloc(64, 3).toString('base64')}`
+    const identity = {
+      packageName: 'alpha',
+      version: '2.0.0',
+      registry: 'https://registry.npmjs.org/',
+      integrity,
+    }
+    const artifactId = `artifact-${hashExactBytes(canonicalJson(identity)).slice(0, 24)}`
+    const commandBase = {
+      boundaryId: 'boundary-service',
+      manager: 'npm' as const,
+      managerVersion: '11.12.1',
+      cwd: 'apps/service',
+      executable: 'npm',
+      termination: 'exit' as const,
+      terminationConfirmed: true,
+      exitCode: 0,
+      changedPaths: [] as string[],
+      unexpectedPaths: [] as string[],
+      lockfile: {
+        path: 'apps/service/npm-shrinkwrap.json',
+        byteHash: 'd'.repeat(64),
+        parseState: 'parsed' as const,
+        occurrences: 'matched' as const,
+      },
+      externalEffects: [] as string[],
+    }
+    const result = {
+      contract: 'depfresh.apply',
+      schemaVersion: 1,
+      toolVersion: '1.2.0',
+      planFingerprint: 'a'.repeat(64),
+      repositoryIdentity: 'repository:fixture',
+      status: 'applied',
+      operations: [
+        {
+          operationId: 'operation-alpha',
+          occurrenceId: 'occurrence-alpha',
+          sourceFileId: 'source-service',
+          file: 'apps/service/packages/a/package.json',
+          path: ['dependencies', 'alpha'],
+          name: 'alpha',
+          expectedValue: '1.0.0',
+          requestedValue: '2.0.0',
+          observedValue: '2.0.0',
+          observedByteHash: 'e'.repeat(64),
+          status: 'applied',
+          reason: 'APPLIED',
+        },
+      ],
+      phases: [
+        {
+          name: 'install',
+          status: 'passed',
+          reason: 'MANAGER_PHASE_COMPLETED',
+          commands: [
+            {
+              ...commandBase,
+              lifecycle: 'disabled-by-flag',
+              args: ['install', '--ignore-scripts'],
+              externalEffects: ['package-manager-cache', 'dependency-install-state'],
+            },
+          ],
+        },
+        {
+          name: 'artifact-verify',
+          status: 'passed',
+          reason: 'ARTIFACT_VERIFICATION_RECORDED',
+          commands: [
+            {
+              ...commandBase,
+              args: ['audit', 'signatures', '--json', '--include-attestations', '--ignore-scripts'],
+            },
+          ],
+          artifactResults: [
+            {
+              artifactId,
+              boundaryId: 'boundary-service',
+              location: 'packages/a/node_modules/alpha',
+              ...identity,
+              lockfile: {
+                path: 'apps/service/npm-shrinkwrap.json',
+                byteHash: 'd'.repeat(64),
+              },
+              verifier: { name: 'npm', version: '11.12.1' },
+              observedAt: '1970-01-01T00:00:00.000Z',
+              signature: {
+                state: 'unknown',
+                reason: 'SIGNATURE_POSITIVE_COVERAGE_UNAVAILABLE',
+                effect: 'warn',
+                matchedRuleIds: [],
+              },
+              provenance: {
+                state: 'not-applicable',
+                reason: 'PROVENANCE_NOT_PRESENT',
+                effect: 'none',
+                matchedRuleIds: [],
+              },
+            },
+          ],
+        },
+      ],
+      summary: {
+        planned: 1,
+        applied: 1,
+        skipped: 0,
+        conflicted: 0,
+        reverted: 0,
+        failed: 0,
+        unknown: 0,
+      },
+      recovery: { status: 'not-needed' },
+      requiredCapabilities: [
+        'filesystem-read',
+        'file-write',
+        'process-execute',
+        'lockfile-write',
+        'install',
+        'artifact-verify',
+        'network-access',
+      ],
+    }
+
+    expect(validateApplyResult(result)).toBe(true)
+
+    const forgedTimeout = structuredClone(result) as ApplyResult
+    const forgedCommand = forgedTimeout.phases[1]!.commands![0]!
+    forgedCommand.termination = 'timeout'
+    forgedCommand.exitCode = undefined
+    forgedTimeout.phases[1]!.artifactResults![0]!.provenance = {
+      state: 'pass',
+      reason: 'PROVENANCE_VERIFIED',
+      effect: 'none',
+      matchedRuleIds: [],
+    }
+    expect(validateApplyResult(forgedTimeout)).toBe(false)
+
+    const cleanupFailure = structuredClone(result) as ApplyResult
+    cleanupFailure.status = 'unknown'
+    cleanupFailure.operations[0]!.status = 'unknown'
+    cleanupFailure.operations[0]!.reason = 'NOT_OBSERVED'
+    cleanupFailure.operations[0]!.observedValue = undefined
+    cleanupFailure.operations[0]!.observedByteHash = undefined
+    cleanupFailure.phases[1]!.status = 'unknown'
+    cleanupFailure.phases[1]!.reason = 'ARTIFACT_VERIFIER_CLEANUP_FAILED'
+    cleanupFailure.summary.applied = 0
+    cleanupFailure.summary.unknown = 1
+    cleanupFailure.recovery.status = 'unknown'
+
+    expect(validateApplyResult(cleanupFailure)).toBe(true)
   })
 
   it('rejects cross-platform absolute paths', () => {

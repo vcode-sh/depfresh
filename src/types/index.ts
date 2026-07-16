@@ -120,6 +120,11 @@ export {
   type SignalSummary,
 } from './signals'
 export type {
+  ArtifactTrustDimensionResult,
+  ArtifactTrustResult,
+  ArtifactVerificationTarget,
+} from './trust'
+export type {
   CanonicalOccurrencePath,
   WriteOutcome,
   WriteOutcomeReason,

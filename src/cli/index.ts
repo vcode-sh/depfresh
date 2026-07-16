@@ -151,6 +151,7 @@ const main = defineCommand({
               write: commandArgs.write === true,
               syncLockfile: commandArgs['sync-lockfile'] === true,
               install: commandArgs.install === true,
+              verifyArtifacts: commandArgs['verify-artifacts'] === true,
               verify: commandArgs.verify === true,
             }),
           )

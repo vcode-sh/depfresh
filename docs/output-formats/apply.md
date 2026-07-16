@@ -23,7 +23,9 @@ one `--plan-file`; stdin and legacy check JSON are not accepted as plan transpor
 For a plan containing manager phases, callers must grant only the matching capabilities. For
 example, sync plus verification uses
 `createInvocationAuthority({ write: true, syncLockfile: true, verify: true })`; install uses
-`install: true` instead. Plan data and configuration never grant authority.
+`install: true` instead. An artifact-verification install additionally requires
+`verifyArtifacts: true`; the authority snapshot records its `artifactVerify` and `networkAccess`
+grants. Plan data and configuration never grant authority.
 
 ## Preconditions and phases
 
@@ -36,7 +38,8 @@ assumed clean. Unrelated dirty paths neither block nor change.
 
 The result records `preflight`, `lock`, optional `manager-preflight`, `stage`, `precommit`, `commit`,
 optional `sync-lockfile` or `install`, optional `verify`, `recovery`, `inspect`, and `cleanup` phase
-evidence when reached. Every active physical file is rendered once into an
+evidence when reached. An exact-artifact install inserts `artifact-verify` after `install` and
+before generic `verify`. Every active physical file is rendered once into an
 exclusive same-directory stage file, preserves its mode, is fsynced, reparsed, and checked for every
 requested occurrence. A byte-exact same-directory backup is also fsynced. Immediately before the
 first replacement, every target identity, inode, hash, expected value, Git state, and lock owner is
@@ -80,6 +83,41 @@ protocols. The exact unsupported protocol vocabulary is `workspace`, `jsr`, `git
 manager phase before apply. An `npm:` alias must reconcile its manifest alias key, exact aliased
 registry package name, exact specifier, and exact resolved version. A same-version package-name swap
 is a mismatch for npm, pnpm, and Bun.
+
+## Exact npm artifact verification
+
+Artifact verification is optional and currently supports only public-registry npm artifacts with
+npm `>=11.12.0 <12.0.0`. Apply reuses the executable pinned during manager preflight and runs the
+plan's fixed `npm audit signatures --json --include-attestations --ignore-scripts` argv after a
+successful install. It never runs lifecycle scripts. Each expected artifact is rebound to the final
+`package-lock.json` or `npm-shrinkwrap.json` entry, exact SHA-512 integrity, installed location, and
+contained non-symlink package manifest with the exact physical name/version before the verifier is
+started.
+
+The verifier receives a private `0700` temporary home and cache plus empty `0600` user/global npm
+configuration and a fixed public registry. Inherited credentials and npm configuration are not
+passed through. A project `.npmrc` makes verification unavailable rather than risking credential or
+registry inheritance. Stdout and stderr are separately bounded to 8 MiB, parsed privately, and
+discarded; public command evidence contains termination metadata but no raw verifier response,
+attestation bundle, secret, or stack. Timeout and output overflow retain distinct command
+termination metadata. Offline codes, expired signature-key evidence, and other malformed/tool
+failures become sanitized offline, stale, or error trust reasons.
+
+`artifactResults` records the artifact ID, boundary, installed location, package/version,
+registry/integrity, final lockfile path/hash, verifier/version, evidence time, and separate
+signature and provenance states. npm's JSON does not provide safe per-artifact positive signature
+coverage, so a signature is never promoted to pass: exact invalid or missing records fail, otherwise
+the result is `SIGNATURE_POSITIVE_COVERAGE_UNAVAILABLE`. Provenance passes only when npm supplies one
+verified SLSA provenance v1 DSSE statement whose in-toto subject PURL and SHA-512 digest exactly
+match the planned artifact. Presence alone never passes.
+
+Default fail/unknown results warn and do not make trust claims. Fingerprinted ordered signal rules
+may change only the effect to `warn` or `block`; results retain every matched rule ID and the winning
+ID. A block invokes normal recovery. Repository mutation, lock/source/install drift, binding loss,
+or verifier-home cleanup failure is failed/unknown and retains sanitized evidence. Package-manager
+caches and install trees remain non-transactional. Pnpm, Bun, JSR, private-registry, custom
+cryptographic, and broader native-audit claims are unsupported until an official mechanism can bind
+its result to the exact artifact safely.
 
 ## Lock and journal
 
@@ -139,7 +177,7 @@ redacted `depfresh.error` document. Missing or mismatched grants are fatal. A wr
 stale lockfile, nonzero exit, signal, timeout, unexpected mutation, or recovery problem is a
 schema-valid non-success result. Global updates use the separate
 [`depfresh.global-plan`/`depfresh.global-apply` contract](./global-apply.md); package trust remains
-outside this contract.
+inside the optional `artifact-verify` phase only when it was fingerprinted by the immutable plan.
 
 An operation-free plan can still return top-level `unknown` with zero operation counts when
 retained or ambiguous apply state prevents a trustworthy no-op. The preflight phase and recovery

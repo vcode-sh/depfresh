@@ -191,6 +191,20 @@ Verification uses only the fingerprinted JSON argv and may not mutate repository
 execution currently fails closed on Windows because equivalent process-tree observation is not
 available.
 
+For `artifact-verify`, first confirm the immutable plan selected npm 11.12.x, public npm registry
+artifacts, canonical SHA-512 integrity, and full install. Pnpm, Bun, JSR, private registries,
+unsupported npm versions, or missing integrity block planning. A project `.npmrc` produces
+verifier-unavailable apply evidence rather than being inherited.
+Offline network codes and expired signature-key evidence are reported as distinct unknown states;
+retry only after the environment or upstream evidence changes. Timeout/output-limit termination is
+visible on the command; malformed or oversized JSON becomes a sanitized verifier-error trust state.
+These fail/unknown trust results warn by default, so apply may still succeed without claiming trust;
+only a matching fingerprinted `block` rule triggers recovery. A final-lockfile/install mismatch,
+unexpected repository mutation, or temporary-home cleanup failure is a safety failure. A missing
+npm executable fails manager preflight before the artifact phase. Raw npm output is intentionally
+not retained; use the stable phase, command termination, artifact reason, and matched/winning policy
+IDs.
+
 ### Recovery is partial or unknown
 
 Lockfile recovery occurs only when the current physical identity still matches evidence observed

@@ -111,6 +111,7 @@ function hasValidApplySemantics(result: ApplyResult): boolean {
       'commit',
       'sync-lockfile',
       'install',
+      'artifact-verify',
       'verify',
       'recovery',
       'inspect',
@@ -237,12 +238,14 @@ function hasValidApplySemantics(result: ApplyResult): boolean {
   )
   const hasInstallPhase = result.phases.some((entry) => entry.name === 'install')
   const hasVerifyPhase = result.phases.some((entry) => entry.name === 'verify')
+  const hasArtifactPhase = result.phases.some((entry) => entry.name === 'artifact-verify')
   const expectedCapabilities: ApplyResult['requiredCapabilities'] = [
     'filesystem-read',
     'file-write',
   ]
   if (hasManagerPhase) expectedCapabilities.push('process-execute', 'lockfile-write')
   if (hasInstallPhase) expectedCapabilities.push('install')
+  if (hasArtifactPhase) expectedCapabilities.push('artifact-verify', 'network-access')
   if (hasVerifyPhase) expectedCapabilities.push('verify-command')
   if (canonicalJson(expectedCapabilities) !== canonicalJson(result.requiredCapabilities)) {
     return false
@@ -281,15 +284,18 @@ function hasValidApplySemantics(result: ApplyResult): boolean {
         if (command.lockfile?.parseState === 'parsed' && command.lockfile.byteHash === undefined) {
           return true
         }
+        if (entry.status !== 'passed') return false
+        if (entry.name === 'artifact-verify') {
+          return !command.terminationConfirmed || command.unexpectedPaths.length > 0
+        }
         return (
-          entry.status === 'passed' &&
-          (command.termination !== 'exit' ||
-            command.exitCode !== 0 ||
-            !command.terminationConfirmed ||
-            (command.manager !== undefined && command.lockfile?.parseState !== 'parsed') ||
-            ((entry.name === 'sync-lockfile' || entry.name === 'install') &&
-              command.lockfile?.occurrences !== 'matched') ||
-            command.unexpectedPaths.length > 0)
+          command.termination !== 'exit' ||
+          command.exitCode !== 0 ||
+          !command.terminationConfirmed ||
+          (command.manager !== undefined && command.lockfile?.parseState !== 'parsed') ||
+          ((entry.name === 'sync-lockfile' || entry.name === 'install') &&
+            command.lockfile?.occurrences !== 'matched') ||
+          command.unexpectedPaths.length > 0
         )
       })
     ) {
@@ -306,6 +312,7 @@ function hasValidApplySemantics(result: ApplyResult): boolean {
   ) {
     return false
   }
+  if (!hasValidApplyArtifactResults(result)) return false
   const expectedStatus =
     result.recovery.status === 'unknown'
       ? 'unknown'
@@ -321,6 +328,168 @@ function hasValidApplySemantics(result: ApplyResult): boolean {
                 ? 'applied'
                 : 'noop'
   return result.status === expectedStatus
+}
+
+function hasValidApplyArtifactResults(result: ApplyResult): boolean {
+  const artifactPhases = result.phases.filter((phase) => phase.name === 'artifact-verify')
+  if (artifactPhases.length === 0) {
+    return result.phases.every((phase) => phase.artifactResults === undefined)
+  }
+  const phase = artifactPhases[0]!
+  if (phase.status === 'skipped') return phase.artifactResults === undefined
+  const results = phase.artifactResults
+  if (!results || results.length === 0) return phase.status === 'unknown'
+  const installPhase = result.phases.find((entry) => entry.name === 'install')
+  const commands = phase.commands
+  if (
+    result.operations.length === 0 ||
+    installPhase?.status !== 'passed' ||
+    !commands ||
+    commands.length === 0
+  ) {
+    return false
+  }
+  const commandsByBoundary = new Map<string, (typeof commands)[number]>()
+  for (const command of commands) {
+    if (
+      !command.boundaryId ||
+      commandsByBoundary.has(command.boundaryId) ||
+      command.manager !== 'npm' ||
+      command.executable !== 'npm' ||
+      !semver.satisfies(command.managerVersion ?? '', '>=11.12.0 <12.0.0') ||
+      canonicalJson(command.args) !==
+        canonicalJson([
+          'audit',
+          'signatures',
+          '--json',
+          '--include-attestations',
+          '--ignore-scripts',
+        ]) ||
+      !command.lockfile ||
+      !isNpmLockfileForCwd(command.lockfile.path, command.cwd) ||
+      command.lockfile.parseState !== 'parsed' ||
+      command.lockfile.occurrences !== 'matched'
+    ) {
+      return false
+    }
+    commandsByBoundary.set(command.boundaryId, command)
+  }
+  const keys = new Set<string>()
+  for (const artifact of results) {
+    const key = `${artifact.artifactId}\0${artifact.boundaryId}\0${artifact.location}`
+    const command = commandsByBoundary.get(artifact.boundaryId)
+    if (
+      keys.has(key) ||
+      !isCanonicalUtcInstant(artifact.observedAt) ||
+      !command ||
+      artifact.artifactId !==
+        `artifact-${hashExactBytes(canonicalJson(artifactIdentity(artifact))).slice(0, 24)}` ||
+      !semver.valid(artifact.version) ||
+      !isExactSha512Integrity(artifact.integrity) ||
+      artifact.verifier.name !== 'npm' ||
+      artifact.verifier.version !== command.managerVersion ||
+      artifact.lockfile.path !== command.lockfile?.path ||
+      artifact.lockfile.byteHash !== command.lockfile.byteHash ||
+      !isNpmInstallLocation(artifact.location)
+    ) {
+      return false
+    }
+    keys.add(key)
+    if (
+      ![
+        artifact.artifactId,
+        artifact.boundaryId,
+        artifact.location,
+        artifact.packageName,
+        artifact.version,
+        artifact.registry,
+        artifact.integrity,
+        artifact.lockfile.path,
+        artifact.lockfile.byteHash,
+        artifact.verifier.name,
+        artifact.verifier.version,
+        artifact.observedAt,
+      ].every(isContractSafeText)
+    ) {
+      return false
+    }
+    for (const [family, dimension] of [
+      ['signature-verification', artifact.signature],
+      ['provenance-verification', artifact.provenance],
+    ] as const) {
+      const truth = SIGNAL_TRUTH[dimension.reason]
+      if (
+        truth[0] !== family ||
+        truth[1] !== dimension.state ||
+        new Set(dimension.matchedRuleIds).size !== dimension.matchedRuleIds.length ||
+        (dimension.winningRuleId !== undefined &&
+          dimension.winningRuleId !== dimension.matchedRuleIds.at(-1)) ||
+        (dimension.matchedRuleIds.length === 0 &&
+          dimension.effect !==
+            (dimension.state === 'pass' || dimension.state === 'not-applicable'
+              ? 'none'
+              : 'warn')) ||
+        (dimension.matchedRuleIds.length > 0 && dimension.winningRuleId === undefined)
+      ) {
+        return false
+      }
+    }
+    if (!trustReasonsMatchCommand(command, artifact.signature.reason, artifact.provenance.reason)) {
+      return false
+    }
+  }
+  const blocked = results.some(
+    (artifact) => artifact.signature.effect === 'block' || artifact.provenance.effect === 'block',
+  )
+  const safetyStatus = {
+    ARTIFACT_VERIFIER_CLEANUP_FAILED: 'unknown',
+    ARTIFACT_VERIFIER_MUTATED_REPOSITORY: 'failed',
+    ARTIFACT_VERIFICATION_STATE_CHANGED: 'unknown',
+    ARTIFACT_BINDING_FAILED: 'unknown',
+  }[phase.reason]
+  return (
+    commandsByBoundary.size === new Set(results.map((artifact) => artifact.boundaryId)).size &&
+    (safetyStatus
+      ? phase.status === safetyStatus
+      : blocked
+        ? phase.status === 'failed' && phase.reason === 'ARTIFACT_POLICY_BLOCKED'
+        : phase.status === 'passed' && phase.reason === 'ARTIFACT_VERIFICATION_RECORDED')
+  )
+}
+
+function trustReasonsMatchCommand(
+  command: NonNullable<ApplyResult['phases'][number]['commands']>[number],
+  signatureReason: string,
+  provenanceReason: string,
+): boolean {
+  const signatureFailure = verifierFailureKind(signatureReason)
+  const provenanceFailure = verifierFailureKind(provenanceReason)
+  const completedOutput =
+    command.termination === 'exit' && (command.exitCode === 0 || command.exitCode === 1)
+  if (signatureFailure === undefined && provenanceFailure === undefined) return completedOutput
+  if (signatureFailure !== provenanceFailure) return false
+  if (signatureFailure === 'unavailable') return command.termination === 'unavailable'
+  if (signatureFailure === 'offline' || signatureFailure === 'stale') return completedOutput
+  return signatureFailure === 'error' && command.termination !== 'unavailable'
+}
+
+function verifierFailureKind(
+  reason: string,
+): 'unavailable' | 'offline' | 'stale' | 'error' | undefined {
+  if (reason.endsWith('_VERIFIER_UNAVAILABLE')) return 'unavailable'
+  if (reason.endsWith('_VERIFIER_OFFLINE')) return 'offline'
+  if (reason.endsWith('_VERIFIER_STALE')) return 'stale'
+  if (reason.endsWith('_VERIFIER_ERROR')) return 'error'
+  return undefined
+}
+
+function isNpmLockfileForCwd(path: string, cwd: string): boolean {
+  const prefix = cwd === '.' ? '' : `${cwd}/`
+  return path === `${prefix}package-lock.json` || path === `${prefix}npm-shrinkwrap.json`
+}
+
+function isNpmInstallLocation(path: string): boolean {
+  return /^(?:[^/]+\/)*node_modules\/(?:@[^/]+\/)?[^/]+$/u.test(path)
 }
 
 function hasValidPlanSemantics(plan: PlanResult): boolean {
@@ -612,6 +781,23 @@ const SIGNAL_TRUTH = {
   PROVENANCE_PRESENT_UNVERIFIED: ['provenance-presence', 'warn'],
   PROVENANCE_METADATA_ABSENT: ['provenance-presence', 'warn'],
   PROVENANCE_METADATA_UNKNOWN: ['provenance-presence', 'unknown'],
+  SIGNATURE_INVALID: ['signature-verification', 'fail'],
+  SIGNATURE_MISSING: ['signature-verification', 'fail'],
+  SIGNATURE_POSITIVE_COVERAGE_UNAVAILABLE: ['signature-verification', 'unknown'],
+  SIGNATURE_VERIFIER_UNAVAILABLE: ['signature-verification', 'unknown'],
+  SIGNATURE_VERIFIER_ERROR: ['signature-verification', 'unknown'],
+  SIGNATURE_VERIFIER_OFFLINE: ['signature-verification', 'unknown'],
+  SIGNATURE_VERIFIER_STALE: ['signature-verification', 'unknown'],
+  PROVENANCE_INVALID: ['provenance-verification', 'fail'],
+  PROVENANCE_NOT_PRESENT: ['provenance-verification', 'not-applicable'],
+  PROVENANCE_VERIFIED: ['provenance-verification', 'pass'],
+  PROVENANCE_ARTIFACT_MISMATCH: ['provenance-verification', 'unknown'],
+  PROVENANCE_VERIFICATION_UNAVAILABLE: ['provenance-verification', 'unknown'],
+  PROVENANCE_PRESENCE_UNKNOWN: ['provenance-verification', 'unknown'],
+  PROVENANCE_VERIFIER_UNAVAILABLE: ['provenance-verification', 'unknown'],
+  PROVENANCE_VERIFIER_ERROR: ['provenance-verification', 'unknown'],
+  PROVENANCE_VERIFIER_OFFLINE: ['provenance-verification', 'unknown'],
+  PROVENANCE_VERIFIER_STALE: ['provenance-verification', 'unknown'],
   REGISTRY_EVIDENCE_COMPLETE: ['evidence-completeness', 'pass'],
   REGISTRY_EVIDENCE_UNKNOWN: ['evidence-completeness', 'unknown'],
   STALENESS_NOT_OBSERVED: ['evidence-staleness', 'not-applicable'],
@@ -983,6 +1169,24 @@ function hasValidSignalEvidenceTruth(
       const clock = one('clock')
       return clock?.status === 'absent' && clock.facts.observation === 'not-recorded'
     }
+    case 'SIGNATURE_INVALID':
+    case 'SIGNATURE_MISSING':
+    case 'SIGNATURE_POSITIVE_COVERAGE_UNAVAILABLE':
+    case 'SIGNATURE_VERIFIER_UNAVAILABLE':
+    case 'SIGNATURE_VERIFIER_ERROR':
+    case 'SIGNATURE_VERIFIER_OFFLINE':
+    case 'SIGNATURE_VERIFIER_STALE':
+    case 'PROVENANCE_INVALID':
+    case 'PROVENANCE_NOT_PRESENT':
+    case 'PROVENANCE_VERIFIED':
+    case 'PROVENANCE_ARTIFACT_MISMATCH':
+    case 'PROVENANCE_VERIFICATION_UNAVAILABLE':
+    case 'PROVENANCE_PRESENCE_UNKNOWN':
+    case 'PROVENANCE_VERIFIER_UNAVAILABLE':
+    case 'PROVENANCE_VERIFIER_ERROR':
+    case 'PROVENANCE_VERIFIER_OFFLINE':
+    case 'PROVENANCE_VERIFIER_STALE':
+      return false
   }
 }
 
@@ -1539,6 +1743,9 @@ function hasValidPlanExecution(plan: PlanResult): boolean {
     if (execution.mode !== 'file-only' && execution.status === 'ready') {
       expectedCapabilities.push('process-execute', 'lockfile-write')
       if (execution.mode === 'install') expectedCapabilities.push('install')
+      if (execution.artifactVerification) {
+        expectedCapabilities.push('artifact-verify', 'network-access')
+      }
       if (execution.verification) expectedCapabilities.push('verify-command')
     }
   }
@@ -1549,7 +1756,8 @@ function hasValidPlanExecution(plan: PlanResult): boolean {
       execution.status === 'ready' &&
       execution.targets.length === 0 &&
       execution.reason === undefined &&
-      execution.verification === undefined
+      execution.verification === undefined &&
+      execution.artifactVerification === undefined
     )
   }
   if (plan.operations.length === 0) {
@@ -1557,7 +1765,8 @@ function hasValidPlanExecution(plan: PlanResult): boolean {
       execution.status === 'not-needed' &&
       execution.targets.length === 0 &&
       execution.reason === undefined &&
-      execution.verification === undefined
+      execution.verification === undefined &&
+      execution.artifactVerification === undefined
     )
   }
   if (execution.status === 'blocked') {
@@ -1565,11 +1774,13 @@ function hasValidPlanExecution(plan: PlanResult): boolean {
       execution.targets.length === 0 &&
       execution.reason !== undefined &&
       isContractSafeText(execution.reason) &&
-      execution.verification === undefined
+      execution.verification === undefined &&
+      execution.artifactVerification === undefined
     )
   }
   if (execution.status !== 'ready' || execution.targets.length === 0) return false
   if (execution.reason !== undefined) return false
+  if (execution.artifactVerification && !hasValidArtifactVerification(plan)) return false
   const decisionsByOperation = new Map(
     plan.decisions.map((decision) => [decision.operationId, decision]),
   )
@@ -1615,6 +1826,197 @@ function hasValidPlanExecution(plan: PlanResult): boolean {
     }
   }
   return true
+}
+
+function hasValidArtifactVerification(plan: PlanResult): boolean {
+  const verification = plan.execution.artifactVerification
+  if (!verification) return true
+  if (plan.execution.mode !== 'install' || plan.execution.status !== 'ready') return false
+  const ruleIds = new Set<string>()
+  for (const rule of verification.rules) {
+    if (
+      ruleIds.has(rule.id) ||
+      ![
+        rule.id,
+        rule.selectors.family,
+        rule.selectors.state,
+        rule.selectors.reason,
+        rule.selectors.dependencyName,
+        rule.selectors.workspacePath,
+        rule.selectors.cohortId,
+      ]
+        .filter((value): value is string => value !== undefined)
+        .every(isContractSafeText)
+    ) {
+      return false
+    }
+    ruleIds.add(rule.id)
+  }
+  if (
+    !isSortedBy(verification.targets, (target) => target.boundaryId) ||
+    verification.targets.length !== plan.execution.targets.length
+  ) {
+    return false
+  }
+
+  const executionTargets = new Map(
+    plan.execution.targets.map((target) => [target.boundaryId, target]),
+  )
+  const decisions = new Map(plan.decisions.map((decision) => [decision.operationId, decision]))
+  const operations = new Map(
+    plan.operations.map((operation) => [operation.occurrenceId, operation]),
+  )
+  const occurrences = new Map(plan.occurrences.map((occurrence) => [occurrence.id, occurrence]))
+  const evidence = new Map((plan.signalEvidence ?? []).map((item) => [item.id, item]))
+  const covered = new Set<string>()
+  const evidenceRefs = new Set<string>()
+  for (const verificationTarget of verification.targets) {
+    const target = executionTargets.get(verificationTarget.boundaryId)
+    if (
+      target?.manager.name !== 'npm' ||
+      target.boundaryPath !== verificationTarget.cwd ||
+      target.manager.version !== verificationTarget.verifier.version ||
+      !semver.satisfies(target.manager.version, '>=11.12.0 <12.0.0') ||
+      !isSortedById(verificationTarget.artifacts)
+    ) {
+      return false
+    }
+    const identities = new Set<string>()
+    for (const artifact of verificationTarget.artifacts) {
+      const identity = artifactIdentity(artifact)
+      const identityJson = canonicalJson(identity)
+      if (
+        identities.has(identityJson) ||
+        artifact.id !== `artifact-${hashExactBytes(identityJson).slice(0, 24)}` ||
+        !isExactSha512Integrity(artifact.integrity) ||
+        !isSorted(artifact.occurrenceIds) ||
+        evidenceRefs.has(artifact.evidenceRef)
+      ) {
+        return false
+      }
+      identities.add(identityJson)
+      evidenceRefs.add(artifact.evidenceRef)
+      const expectedEvidence = artifactEvidenceBase(artifact.id, artifact)
+      const observedEvidence = evidence.get(artifact.evidenceRef)
+      if (
+        artifact.evidenceRef !==
+          `signal-evidence-${hashExactBytes(canonicalJson(expectedEvidence)).slice(0, 24)}` ||
+        canonicalJson(observedEvidence) !==
+          canonicalJson({ id: artifact.evidenceRef, ...expectedEvidence })
+      ) {
+        return false
+      }
+      for (const occurrenceId of artifact.occurrenceIds) {
+        if (covered.has(occurrenceId)) return false
+        covered.add(occurrenceId)
+        const operation = operations.get(occurrenceId)
+        const occurrence = occurrences.get(occurrenceId)
+        const decision = operation ? decisions.get(operation.id) : undefined
+        const expectedTarget = operation
+          ? executionTargetForFile(operation.file, plan.execution.targets)
+          : undefined
+        if (
+          !(operation && occurrence) ||
+          decision?.candidate?.targetVersion !== artifact.version ||
+          expectedTarget?.boundaryId !== verificationTarget.boundaryId ||
+          resolvedPackageName(occurrence.name, occurrence.declaredValue) !== artifact.packageName
+        ) {
+          return false
+        }
+      }
+    }
+  }
+  const registryEvidenceIds = new Set(
+    (plan.signalEvidence ?? [])
+      .filter((item) => item.kind === 'registry-artifact')
+      .map((item) => item.id),
+  )
+  return (
+    covered.size === plan.operations.length &&
+    [...operations].every(([id]) => covered.has(id)) &&
+    registryEvidenceIds.size === evidenceRefs.size &&
+    [...registryEvidenceIds].every((id) => evidenceRefs.has(id))
+  )
+}
+
+function artifactIdentity(artifact: {
+  packageName: string
+  version: string
+  registry: string
+  integrity: string
+}) {
+  return {
+    packageName: artifact.packageName,
+    version: artifact.version,
+    registry: artifact.registry,
+    integrity: artifact.integrity,
+  }
+}
+
+function artifactEvidenceBase(
+  artifactId: string,
+  artifact: {
+    occurrenceIds: string[]
+    packageName: string
+    version: string
+    registry: string
+    integrity: string
+    signaturePresence: string
+    provenancePresence: string
+  },
+) {
+  return {
+    kind: 'registry-artifact' as const,
+    status: 'observed' as const,
+    subject: artifactId,
+    sourceRefs: [...artifact.occurrenceIds],
+    facts: {
+      packageName: artifact.packageName,
+      targetVersion: artifact.version,
+      registry: artifact.registry,
+      integrity: artifact.integrity,
+      signaturePresence: artifact.signaturePresence,
+      provenancePresence: artifact.provenancePresence,
+    },
+  }
+}
+
+function isSorted(values: readonly string[]): boolean {
+  return values.every((value, index) => index === 0 || values[index - 1]! < value)
+}
+
+function isSortedBy<T>(values: readonly T[], select: (value: T) => string): boolean {
+  return values.every((value, index) => index === 0 || select(values[index - 1]!) < select(value))
+}
+
+function executionTargetForFile(
+  file: string,
+  targets: PlanResult['execution']['targets'],
+): PlanResult['execution']['targets'][number] | undefined {
+  return [...targets]
+    .sort(
+      (left, right) =>
+        right.boundaryPath.length - left.boundaryPath.length ||
+        left.boundaryId.localeCompare(right.boundaryId),
+    )
+    .find(
+      (target) =>
+        target.boundaryPath === '.' ||
+        file === target.boundaryPath ||
+        file.startsWith(`${target.boundaryPath}/`),
+    )
+}
+
+function resolvedPackageName(name: string, declaredValue: string): string {
+  const alias = /^npm:((?:@[^/]+\/)?[^@]+)@.+$/u.exec(declaredValue)
+  return alias?.[1] ?? name
+}
+
+function isExactSha512Integrity(value: string): boolean {
+  const match = /^sha512-([A-Za-z0-9+/]+={0,2})$/u.exec(value)
+  if (!match?.[1]) return false
+  const bytes = Buffer.from(match[1], 'base64')
+  return bytes.length === 64 && bytes.toString('base64') === match[1]
 }
 
 function hasValidExecutionReferences(

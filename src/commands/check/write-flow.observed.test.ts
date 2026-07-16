@@ -58,6 +58,8 @@ const authority: InvocationAuthority = {
   processExecute: false,
   lockfileWrite: false,
   verifyCommand: false,
+  artifactVerify: false,
+  networkAccess: false,
   globalWrite: true,
 }
 

@@ -201,6 +201,9 @@ export async function applyPlanWithRuntime(
           'MANAGER_PREFLIGHT_FAILED',
         ),
       )
+      if (plan.execution.artifactVerification) {
+        phases.push(phase('artifact-verify', 'skipped', 'MANAGER_PREFLIGHT_FAILED'))
+      }
       if (plan.execution.verification) {
         phases.push(phase('verify', 'skipped', 'MANAGER_PREFLIGHT_FAILED'))
       }
@@ -400,6 +403,8 @@ export async function applyPlanWithRuntime(
           preparedManagerPhases,
           lock,
           journal,
+          process.env,
+          new Date(runtime.now()).toISOString(),
         )
       } catch {
         managerPhaseExecution = {
@@ -412,6 +417,9 @@ export async function applyPlanWithRuntime(
               'unknown',
               'PHASE_OBSERVATION_FAILED',
             ),
+            ...(plan.execution.artifactVerification
+              ? [phase('artifact-verify', 'skipped', 'PHASE_OBSERVATION_FAILED')]
+              : []),
             ...(plan.execution.verification
               ? [phase('verify', 'skipped', 'PHASE_OBSERVATION_FAILED')]
               : []),
@@ -549,11 +557,14 @@ function validateExecutionAuthority(plan: PlanResult, authority: InvocationAutho
     plan.execution.mode !== 'file-only'
   const installRequired = phaseRequired && plan.execution.mode === 'install'
   const verifyRequired = phaseRequired && plan.execution.verification !== undefined
+  const artifactRequired = phaseRequired && plan.execution.artifactVerification !== undefined
   const grants: Array<[boolean, boolean, string]> = [
     [phaseRequired, authority.processExecute, 'process-execute'],
     [phaseRequired, authority.lockfileWrite, 'lockfile-write'],
     [installRequired, authority.install, 'install'],
     [verifyRequired, authority.verifyCommand, 'verify-command'],
+    [artifactRequired, authority.artifactVerify, 'artifact-verify'],
+    [artifactRequired, authority.networkAccess, 'network-access'],
   ]
   for (const [required, granted, capability] of grants) {
     if (required && !granted) {
@@ -1209,6 +1220,12 @@ function blockedResult(
     if (!phases.some((entry) => entry.name === managerPhaseName)) {
       phases.push(phase(managerPhaseName, 'skipped', 'PRECONDITION_FAILED'))
     }
+    if (
+      plan.execution.artifactVerification &&
+      !phases.some((entry) => entry.name === 'artifact-verify')
+    ) {
+      phases.push(phase('artifact-verify', 'skipped', 'PRECONDITION_FAILED'))
+    }
     if (plan.execution.verification && !phases.some((entry) => entry.name === 'verify')) {
       phases.push(phase('verify', 'skipped', 'PRECONDITION_FAILED'))
     }
@@ -1262,6 +1279,12 @@ function createResult(
     const missing: ApplyPhase[] = []
     if (!completePhases.some((entry) => entry.name === managerPhaseName)) {
       missing.push(phase(managerPhaseName, 'skipped', 'PHASE_NOT_EXECUTED'))
+    }
+    if (
+      plan.execution.artifactVerification &&
+      !completePhases.some((entry) => entry.name === 'artifact-verify')
+    ) {
+      missing.push(phase('artifact-verify', 'skipped', 'PHASE_NOT_EXECUTED'))
     }
     if (plan.execution.verification && !completePhases.some((entry) => entry.name === 'verify')) {
       missing.push(phase('verify', 'skipped', 'PHASE_NOT_EXECUTED'))
@@ -1332,6 +1355,9 @@ function applyCapabilities(plan: PlanResult): ApplyResult['requiredCapabilities'
   }
   capabilities.push('process-execute', 'lockfile-write')
   if (plan.execution.mode === 'install') capabilities.push('install')
+  if (plan.execution.artifactVerification) {
+    capabilities.push('artifact-verify', 'network-access')
+  }
   if (plan.execution.verification) capabilities.push('verify-command')
   return capabilities
 }

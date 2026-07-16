@@ -98,8 +98,25 @@ block before apply. A baseline observation failure prevents spawn; a final obser
 unknown. Alias reconciliation binds the manifest alias key, exact registry package identity, exact
 specifier, and exact version, so a same-version identity swap fails. The sanitized manager environment
 excludes arbitrary credential and proxy variables, so private registries must use manager-readable
-configuration and some proxy setups require an explicit future contract. These phases do not
-establish package trust or update global packages.
+configuration and some proxy setups require an explicit future contract. Manager install and
+generic verification phases alone do not establish package trust or update global packages.
+
+Exact artifact trust is an optional install-only boundary for public npm registry artifacts with
+npm `>=11.12.0 <12.0.0`. It requires explicit process, install, artifact-verification, and network
+authority that configuration cannot grant. Apply binds the planned package/version/SHA-512 identity
+to the final npm lockfile, contained installed location, and exact package manifest before reusing
+the preflight-pinned npm executable for fixed lifecycle-disabled `audit signatures` argv. The
+verifier receives an owned temporary home/cache, empty user/global config, and fixed public
+registry; a project `.npmrc` makes verification unavailable. Private stdout/stderr are separately
+bounded and never enter public evidence. Signature and provenance results remain independent;
+presence never passes, unknown never passes, and policy can block only through a fingerprinted
+matching rule. Install trees and package-manager caches remain non-transactional, and every safety
+ambiguity retains recovery evidence.
+The npm result does not expose safe per-artifact positive signature coverage, so signature
+verification never passes. Provenance passes only for one verified SLSA v1 DSSE statement whose
+package PURL and SHA-512 subject digest exactly match. Fail/unknown trust warns by default unless an
+embedded fingerprinted rule blocks. Pnpm, Bun, JSR, and private-registry exact verification remain
+unsupported.
 
 Global updates use a separate non-transactional state machine for npm 10/11, pnpm 10/11, and Bun
 `>=1.2.0 <2.0.0`. It preflights every selected occurrence, immediately rechecks its manager before

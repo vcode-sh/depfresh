@@ -15,6 +15,8 @@ export function createInvocationAuthority(options: Partial<depfreshOptions>): In
     verifyCommand:
       options.verify === true ||
       (typeof options.verifyCommand === 'string' && options.verifyCommand.length > 0),
+    artifactVerify: options.verifyArtifacts === true,
+    networkAccess: options.verifyArtifacts === true,
     globalWrite: write && (options.global === true || options.globalAll === true),
   })
 }
@@ -28,6 +30,8 @@ export function snapshotInvocationAuthority(authority: InvocationAuthority): Inv
     processExecute: authority.processExecute === true,
     lockfileWrite: authority.lockfileWrite === true,
     verifyCommand: authority.verifyCommand === true,
+    artifactVerify: authority.artifactVerify === true,
+    networkAccess: authority.networkAccess === true,
     globalWrite: authority.globalWrite === true,
   })
 }
@@ -44,6 +48,8 @@ export function validateInvocationAuthority(
     [Boolean(options.syncLockfile || options.install), authority.processExecute, 'process-execute'],
     [Boolean(options.syncLockfile || options.install), authority.lockfileWrite, 'lockfile-write'],
     [Boolean(options.verifyCommand), authority.verifyCommand, 'verify-command'],
+    [Boolean(options.verifyArtifacts), authority.artifactVerify, 'artifact-verify'],
+    [Boolean(options.verifyArtifacts), authority.networkAccess, 'network-access'],
     [
       options.write && (options.global || options.globalAll === true),
       authority.globalWrite,

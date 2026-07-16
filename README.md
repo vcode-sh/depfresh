@@ -117,12 +117,31 @@ depfresh --fail-on-outdated
   plan's fixed clock.
 - **Passive trust presence** -- signature and provenance metadata remain distinct
   `present`/`absent`/`unknown` observations and never claim artifact verification.
+- **Exact npm artifact verification** -- install plans may fingerprint npm 11.12.x
+  `audit signatures` verification for public npm artifacts. Apply binds each result to the final
+  lockfile integrity and installed location, keeps signature and provenance truth independent, and
+  requires explicit process, install, artifact-verification, and network authority. Unsupported
+  managers, registries, npm versions, or missing integrity block planning. Offline, stale, or
+  unavailable execution stays unknown; matching policy rules may warn or block without changing
+  the observed state.
 - **Cooldown filter** -- skip versions published less than N days ago; immutable planning requires
   an explicit `--as-of`, while legacy check uses its active invocation clock
 - **Candidate safety** -- filtered versions never re-enter through tags or fallbacks, and updates never implicitly downgrade
 - **Programmatic API** -- lifecycle callbacks + addon system for custom workflows
 
 Full CLI reference: **[docs/cli/](docs/cli/)**
+
+Exact artifact verification uses the reviewed machine workflow:
+
+```bash
+depfresh plan --json --install --verify-artifacts > depfresh-plan.json
+depfresh apply --json --write --install --verify-artifacts --plan-file depfresh-plan.json
+```
+
+General dependency resolution supports private registries, but exact artifact verification is
+currently public npm registry only and treats project `.npmrc` configuration as unavailable.
+The npm result can prove exact invalid/missing signature records but does not expose safe
+per-artifact positive signature coverage, so signature verification never reports pass.
 
 ## Configuration
 

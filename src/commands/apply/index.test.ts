@@ -45,6 +45,8 @@ const authority: InvocationAuthority = {
   processExecute: false,
   lockfileWrite: false,
   verifyCommand: false,
+  artifactVerify: false,
+  networkAccess: false,
   globalWrite: false,
 }
 
@@ -226,6 +228,11 @@ function withManagerExecution(
     mode?: 'sync-lockfile' | 'install'
     timeoutMs?: number
     verification?: { executable: string; args?: string[]; cwd?: string; timeoutMs?: number }
+    artifactVerification?: {
+      integrity: string
+      signaturePresence?: 'present' | 'absent' | 'unknown'
+      provenancePresence?: 'present' | 'absent' | 'unknown'
+    }
   } = {},
 ): PlanResult {
   const mode = options.mode ?? 'sync-lockfile'
@@ -246,6 +253,43 @@ function withManagerExecution(
         ? (['package-manager-cache'] as const)
         : (['dependency-install-state', 'package-manager-cache'] as const),
   }
+  const managerVersion = options.artifactVerification ? '11.12.1' : '11.0.0'
+  const artifactOperation = plan.operations[0]
+  const artifactVersion = artifactOperation
+    ? semver.coerce(artifactOperation.requestedValue)?.version
+    : undefined
+  const artifactIdentity =
+    options.artifactVerification && artifactOperation && artifactVersion
+      ? {
+          packageName: artifactOperation.name,
+          version: artifactVersion,
+          registry: 'https://registry.npmjs.org/' as const,
+          integrity: options.artifactVerification.integrity,
+        }
+      : undefined
+  const artifactId = artifactIdentity
+    ? `artifact-${hashExactBytes(canonicalJson(artifactIdentity)).slice(0, 24)}`
+    : undefined
+  const artifactEvidenceBase =
+    artifactId && artifactIdentity && artifactOperation
+      ? {
+          kind: 'registry-artifact' as const,
+          status: 'observed' as const,
+          subject: artifactId,
+          sourceRefs: [artifactOperation.occurrenceId],
+          facts: {
+            packageName: artifactIdentity.packageName,
+            targetVersion: artifactIdentity.version,
+            registry: artifactIdentity.registry,
+            integrity: artifactIdentity.integrity,
+            signaturePresence: options.artifactVerification?.signaturePresence ?? 'present',
+            provenancePresence: options.artifactVerification?.provenancePresence ?? 'absent',
+          },
+        }
+      : undefined
+  const artifactEvidenceId = artifactEvidenceBase
+    ? `signal-evidence-${hashExactBytes(canonicalJson(artifactEvidenceBase)).slice(0, 24)}`
+    : undefined
   const execution = {
     mode,
     status: 'ready' as const,
@@ -254,7 +298,7 @@ function withManagerExecution(
       {
         boundaryId,
         boundaryPath: '.',
-        manager: { name: 'npm' as const, version: '11.0.0' },
+        manager: { name: 'npm' as const, version: managerVersion },
         lockfile: { id: lockfileId, path: lockfilePath, byteHash: lockfileHash },
         adapter: {
           ...adapter,
@@ -262,6 +306,49 @@ function withManagerExecution(
         },
       },
     ],
+    ...(artifactIdentity && artifactId && artifactEvidenceId && artifactOperation
+      ? {
+          artifactVerification: {
+            kind: 'npm-audit-signatures-v1' as const,
+            timeoutMs: options.timeoutMs ?? 2_000,
+            isolatedHome: true as const,
+            policySource: 'library' as const,
+            rules: [],
+            targets: [
+              {
+                boundaryId,
+                cwd: '.',
+                verifier: { name: 'npm' as const, version: managerVersion },
+                executable: 'npm' as const,
+                args: [
+                  'audit',
+                  'signatures',
+                  '--json',
+                  '--include-attestations',
+                  '--ignore-scripts',
+                ] as [
+                  'audit',
+                  'signatures',
+                  '--json',
+                  '--include-attestations',
+                  '--ignore-scripts',
+                ],
+                artifacts: [
+                  {
+                    id: artifactId,
+                    occurrenceIds: [artifactOperation.occurrenceId],
+                    ...artifactIdentity,
+                    signaturePresence: options.artifactVerification?.signaturePresence ?? 'present',
+                    provenancePresence:
+                      options.artifactVerification?.provenancePresence ?? 'absent',
+                    evidenceRef: artifactEvidenceId,
+                  },
+                ],
+              },
+            ],
+          },
+        }
+      : {}),
     ...(options.verification
       ? {
           verification: {
@@ -303,7 +390,7 @@ function withManagerExecution(
         kind: 'package-manager' as const,
         boundaryId,
         status: 'confirmed' as const,
-        values: [{ name: 'npm', version: '11.0.0' }],
+        values: [{ name: 'npm', version: managerVersion }],
         sources: [],
         diagnostics: [],
       },
@@ -335,8 +422,29 @@ function withManagerExecution(
       'process-execute' as const,
       'lockfile-write' as const,
       ...(mode === 'install' ? (['install' as const] as const) : []),
+      ...(options.artifactVerification
+        ? (['artifact-verify' as const, 'network-access' as const] as const)
+        : []),
       ...(options.verification ? (['verify-command' as const] as const) : []),
     ],
+    ...(artifactEvidenceBase && artifactEvidenceId
+      ? {
+          signals: [],
+          signalEvidence: [{ id: artifactEvidenceId, ...artifactEvidenceBase }],
+          summary: {
+            ...plan.summary,
+            signals: {
+              total: 0,
+              pass: 0,
+              warn: 0,
+              fail: 0,
+              unknown: 0,
+              notApplicable: 0,
+              blocking: 0,
+            },
+          },
+        }
+      : {}),
   }
   return { ...semantic, planFingerprint: createPlanFingerprint(semantic) }
 }
@@ -770,6 +878,194 @@ printf '%s\\n' '{"name":"fixture","lockfileVersion":3,"packages":{"":{"dependenc
         synced: true,
       })
       expect(existsSync(join(root, '.depfresh'))).toBe(false)
+    } finally {
+      process.env.PATH = originalPath
+    }
+  })
+
+  it('records exact artifact trust after install without promoting presence or warnings to pass', async () => {
+    const root = temporaryRoot('depfresh-apply-artifact-trust-')
+    const bin = join(root, 'bin')
+    mkdirSync(bin)
+    const content = '{"name":"fixture","dependencies":{"alpha":"1.0.0"}}\n'
+    const lockfile = '{"name":"fixture","lockfileVersion":3}\n'
+    const integrity = `sha512-${Buffer.alloc(64, 6).toString('base64')}`
+    writeFileSync(join(root, 'package.json'), content)
+    writeFileSync(join(root, 'package-lock.json'), lockfile)
+    writeExecutable(
+      join(bin, 'npm'),
+      `if [ "\${1:-}" = '--version' ]; then printf '11.12.1'; exit 0; fi
+if [ "\${1:-}" = 'install' ]; then
+  mkdir -p node_modules/alpha
+  printf '%s\\n' '{"name":"alpha","version":"2.0.0"}' > node_modules/alpha/package.json
+  printf '%s\\n' '${JSON.stringify({ name: 'fixture', lockfileVersion: 3, packages: { '': { dependencies: { alpha: '2.0.0' } }, 'node_modules/alpha': { version: '2.0.0', integrity } } })}' > package-lock.json
+  exit 0
+fi
+[ "\${1:-}" = 'audit' ] && [ "\${2:-}" = 'signatures' ] || exit 91
+printf '%s\\n' '${JSON.stringify({ invalid: [], missing: [{ name: 'alpha', version: '2.0.0', registry: 'https://registry.npmjs.org/', location: 'node_modules/alpha', integrity }], verified: [] })}'
+exit 1`,
+    )
+    const plan = withManagerExecution(
+      makePlan([
+        {
+          file: 'package.json',
+          content,
+          path: ['dependencies', 'alpha'],
+          name: 'alpha',
+          expectedValue: '1.0.0',
+          requestedValue: '2.0.0',
+        },
+      ]),
+      root,
+      {
+        mode: 'install',
+        artifactVerification: {
+          integrity,
+          signaturePresence: 'present',
+          provenancePresence: 'absent',
+        },
+      },
+    )
+    expect(validatePlanResult(plan)).toBe(true)
+    const originalPath = process.env.PATH
+    process.env.PATH = `${bin}:${originalPath ?? ''}`
+    try {
+      await expect(
+        apply(
+          plan,
+          { cwd: root },
+          managerAuthority({ install: true, artifactVerify: true, networkAccess: false }),
+        ),
+      ).rejects.toMatchObject({ reason: 'AUTHORITY_REQUIRED' })
+      expect(readFileSync(join(root, 'package.json'), 'utf8')).toBe(content)
+      const result = await apply(
+        plan,
+        { cwd: root },
+        managerAuthority({
+          install: true,
+          artifactVerify: true,
+          networkAccess: true,
+        }),
+      )
+
+      expect(validateApplyResult(result)).toBe(true)
+      expect(result.status).toBe('applied')
+      expect(result.phases).toContainEqual(
+        expect.objectContaining({
+          name: 'artifact-verify',
+          status: 'passed',
+          artifactResults: [
+            expect.objectContaining({
+              location: 'node_modules/alpha',
+              integrity,
+              signature: expect.objectContaining({
+                state: 'fail',
+                reason: 'SIGNATURE_MISSING',
+                effect: 'warn',
+              }),
+              provenance: expect.objectContaining({
+                state: 'not-applicable',
+                reason: 'PROVENANCE_NOT_PRESENT',
+                effect: 'none',
+              }),
+            }),
+          ],
+        }),
+      )
+      expect(result.requiredCapabilities).toEqual([
+        'filesystem-read',
+        'file-write',
+        'process-execute',
+        'lockfile-write',
+        'install',
+        'artifact-verify',
+        'network-access',
+      ])
+      expect(JSON.stringify(result)).not.toContain('attestationBundles')
+      expect(existsSync(join(root, '.depfresh'))).toBe(false)
+    } finally {
+      process.env.PATH = originalPath
+    }
+  })
+
+  it('blocks artifact findings only through a fingerprinted matching rule id', async () => {
+    const root = temporaryRoot('depfresh-apply-artifact-gate-')
+    const bin = join(root, 'bin')
+    mkdirSync(bin)
+    const content = '{"name":"fixture","dependencies":{"alpha":"1.0.0"}}\n'
+    const lockfile = '{"name":"fixture","lockfileVersion":3}\n'
+    const integrity = `sha512-${Buffer.alloc(64, 4).toString('base64')}`
+    writeFileSync(join(root, 'package.json'), content)
+    writeFileSync(join(root, 'package-lock.json'), lockfile)
+    writeExecutable(
+      join(bin, 'npm'),
+      `if [ "\${1:-}" = '--version' ]; then printf '11.12.1'; exit 0; fi
+if [ "\${1:-}" = 'install' ]; then
+  mkdir -p node_modules/alpha
+  printf '%s\\n' '{"name":"alpha","version":"2.0.0"}' > node_modules/alpha/package.json
+  printf '%s\\n' '${JSON.stringify({ name: 'fixture', lockfileVersion: 3, packages: { '': { dependencies: { alpha: '2.0.0' } }, 'node_modules/alpha': { version: '2.0.0', integrity } } })}' > package-lock.json
+  exit 0
+fi
+printf '%s\\n' '${JSON.stringify({ invalid: [], missing: [{ name: 'alpha', version: '2.0.0', registry: 'https://registry.npmjs.org/', location: 'node_modules/alpha', integrity }], verified: [] })}'
+exit 1`,
+    )
+    const base = withManagerExecution(
+      makePlan([
+        {
+          file: 'package.json',
+          content,
+          path: ['dependencies', 'alpha'],
+          name: 'alpha',
+          expectedValue: '1.0.0',
+          requestedValue: '2.0.0',
+        },
+      ]),
+      root,
+      { mode: 'install', artifactVerification: { integrity } },
+    )
+    const semantic = structuredClone(base)
+    semantic.execution.artifactVerification!.rules = [
+      {
+        id: 'block-missing-signature',
+        selectors: { family: 'signature-verification', state: 'fail' },
+        effect: 'block',
+      },
+    ]
+    const { planFingerprint: _fingerprint, ...semanticWithoutFingerprint } = semantic
+    const plan = {
+      ...semanticWithoutFingerprint,
+      planFingerprint: createPlanFingerprint(semanticWithoutFingerprint),
+    }
+    expect(validatePlanResult(plan)).toBe(true)
+    const originalPath = process.env.PATH
+    process.env.PATH = `${bin}:${originalPath ?? ''}`
+    try {
+      const result = await apply(
+        plan,
+        { cwd: root },
+        managerAuthority({ install: true, artifactVerify: true, networkAccess: true }),
+      )
+
+      expect(validateApplyResult(result)).toBe(true)
+      expect(result.status).toBe('unknown')
+      expect(result.phases).toContainEqual(
+        expect.objectContaining({
+          name: 'artifact-verify',
+          status: 'failed',
+          reason: 'ARTIFACT_POLICY_BLOCKED',
+          artifactResults: [
+            expect.objectContaining({
+              signature: expect.objectContaining({
+                effect: 'block',
+                matchedRuleIds: ['block-missing-signature'],
+                winningRuleId: 'block-missing-signature',
+              }),
+            }),
+          ],
+        }),
+      )
+      expect(readFileSync(join(root, 'package.json'), 'utf8')).toBe(content)
+      expect(readFileSync(join(root, 'package-lock.json'), 'utf8')).toBe(lockfile)
     } finally {
       process.env.PATH = originalPath
     }

@@ -193,6 +193,11 @@ export const args: ArgsDef = {
     description: 'Grant the exact verification argv embedded in an apply plan',
     default: false,
   },
+  'verify-artifacts': {
+    type: 'boolean',
+    description: 'Plan or grant exact npm artifact signature and provenance verification',
+    default: false,
+  },
   'verify-argv': {
     type: 'string',
     description: 'JSON string array for an exact post-manager verification command in a plan',

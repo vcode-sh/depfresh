@@ -466,6 +466,29 @@ const policyDecisionSchema = {
   },
 } as const
 
+const signalRuleInputSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['id', 'selectors', 'effect'],
+  properties: {
+    id: { type: 'string', minLength: 1 },
+    selectors: {
+      type: 'object',
+      additionalProperties: false,
+      minProperties: 1,
+      properties: {
+        family: { enum: SIGNAL_FAMILIES },
+        state: { enum: SIGNAL_STATES },
+        reason: { enum: SIGNAL_REASONS },
+        dependencyName: { type: 'string', minLength: 1 },
+        workspacePath: relativePathSchema,
+        cohortId: { type: 'string', minLength: 1 },
+      },
+    },
+    effect: { enum: ['warn', 'block'] },
+  },
+} as const
+
 const planExecutionSchema = {
   type: 'object',
   additionalProperties: false,
@@ -535,6 +558,88 @@ const planExecutionSchema = {
         permittedPaths: { type: 'array', maxItems: 0, items: relativePathSchema },
       },
     },
+    artifactVerification: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['kind', 'timeoutMs', 'isolatedHome', 'policySource', 'rules', 'targets'],
+      properties: {
+        kind: { const: 'npm-audit-signatures-v1' },
+        timeoutMs: { type: 'integer', minimum: 1, maximum: 600000 },
+        isolatedHome: { const: true },
+        policySource: { enum: ['config', 'library', 'cli'] },
+        rules: { type: 'array', items: signalRuleInputSchema },
+        targets: {
+          type: 'array',
+          minItems: 1,
+          items: {
+            type: 'object',
+            additionalProperties: false,
+            required: ['boundaryId', 'cwd', 'verifier', 'executable', 'args', 'artifacts'],
+            properties: {
+              boundaryId: { type: 'string', minLength: 1 },
+              cwd: relativePathSchema,
+              verifier: {
+                type: 'object',
+                additionalProperties: false,
+                required: ['name', 'version'],
+                properties: {
+                  name: { const: 'npm' },
+                  version: { type: 'string', minLength: 1 },
+                },
+              },
+              executable: { const: 'npm' },
+              args: {
+                const: [
+                  'audit',
+                  'signatures',
+                  '--json',
+                  '--include-attestations',
+                  '--ignore-scripts',
+                ],
+              },
+              artifacts: {
+                type: 'array',
+                minItems: 1,
+                items: {
+                  type: 'object',
+                  additionalProperties: false,
+                  required: [
+                    'id',
+                    'occurrenceIds',
+                    'packageName',
+                    'version',
+                    'registry',
+                    'integrity',
+                    'signaturePresence',
+                    'provenancePresence',
+                    'evidenceRef',
+                  ],
+                  properties: {
+                    id: { type: 'string', pattern: '^artifact-[a-f0-9]{24}$' },
+                    occurrenceIds: {
+                      type: 'array',
+                      minItems: 1,
+                      uniqueItems: true,
+                      items: { type: 'string', minLength: 1 },
+                    },
+                    packageName: { type: 'string', minLength: 1 },
+                    version: { type: 'string', minLength: 1 },
+                    registry: { const: 'https://registry.npmjs.org/' },
+                    integrity: { type: 'string', pattern: '^sha512-[A-Za-z0-9+/]+={0,2}$' },
+                    signaturePresence: { enum: ['present', 'absent', 'unknown'] },
+                    provenancePresence: { enum: ['present', 'absent', 'unknown'] },
+                    evidenceRef: {
+                      type: 'string',
+                      pattern: '^signal-evidence-[a-f0-9]{24}$',
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
   },
 } as const
 
@@ -552,6 +657,7 @@ const signalEvidenceSchema = {
         'explicit-cohort',
         'inferred-cohort',
         'clock',
+        'registry-artifact',
       ],
     },
     status: { enum: ['observed', 'absent', 'unknown', 'conflicting'] },
@@ -737,6 +843,8 @@ export const planResultSchema = {
           'lockfile-write',
           'install',
           'verify-command',
+          'artifact-verify',
+          'network-access',
         ],
       },
     },
@@ -853,6 +961,7 @@ export const applyResultSchema = {
               'commit',
               'sync-lockfile',
               'install',
+              'artifact-verify',
               'verify',
               'recovery',
               'inspect',
@@ -912,6 +1021,55 @@ export const applyResultSchema = {
               },
             },
           },
+          artifactResults: {
+            type: 'array',
+            minItems: 1,
+            items: {
+              type: 'object',
+              additionalProperties: false,
+              required: [
+                'artifactId',
+                'boundaryId',
+                'location',
+                'packageName',
+                'version',
+                'registry',
+                'integrity',
+                'lockfile',
+                'verifier',
+                'observedAt',
+                'signature',
+                'provenance',
+              ],
+              properties: {
+                artifactId: { type: 'string', pattern: '^artifact-[a-f0-9]{24}$' },
+                boundaryId: { type: 'string', minLength: 1 },
+                location: relativePathSchema,
+                packageName: { type: 'string', minLength: 1 },
+                version: { type: 'string', minLength: 1 },
+                registry: { const: 'https://registry.npmjs.org/' },
+                integrity: { type: 'string', pattern: '^sha512-[A-Za-z0-9+/]+={0,2}$' },
+                lockfile: {
+                  type: 'object',
+                  additionalProperties: false,
+                  required: ['path', 'byteHash'],
+                  properties: { path: relativePathSchema, byteHash: hashSchema },
+                },
+                verifier: {
+                  type: 'object',
+                  additionalProperties: false,
+                  required: ['name', 'version'],
+                  properties: { name: { const: 'npm' }, version: { type: 'string' } },
+                },
+                observedAt: {
+                  type: 'string',
+                  pattern: '^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$',
+                },
+                signature: { $ref: '#/definitions/artifactTrustDimension' },
+                provenance: { $ref: '#/definitions/artifactTrustDimension' },
+              },
+            },
+          },
         },
       },
     },
@@ -941,11 +1099,27 @@ export const applyResultSchema = {
           'lockfile-write',
           'install',
           'verify-command',
+          'artifact-verify',
+          'network-access',
         ],
       },
     },
   },
-  definitions: commonDefinitions,
+  definitions: {
+    ...commonDefinitions,
+    artifactTrustDimension: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['state', 'reason', 'effect', 'matchedRuleIds'],
+      properties: {
+        state: { enum: SIGNAL_STATES },
+        reason: { enum: SIGNAL_REASONS },
+        effect: { enum: ['none', 'warn', 'block'] },
+        matchedRuleIds: { type: 'array', items: { type: 'string', minLength: 1 } },
+        winningRuleId: { type: 'string', minLength: 1 },
+      },
+    },
+  },
 } as const satisfies JSONSchema
 
 export const commandErrorSchema = {

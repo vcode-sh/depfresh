@@ -6,6 +6,7 @@ import {
   fstatSync,
   fsyncSync,
   lstatSync,
+  mkdirSync,
   openSync,
   readdirSync,
   readFileSync,
@@ -22,6 +23,14 @@ import YAML from 'yaml'
 import { hashExactBytes } from '../../contracts/fingerprint'
 import type { ApplyResult, PlanResult } from '../../contracts/schemas'
 import { inspectRepository } from '../../repository/inspect'
+import { applySignalPolicy } from '../../signals/policy'
+import { classifyNpmAuditSignaturesFailure, parseNpmAuditSignatures } from '../../trust/npm-audit'
+import type {
+  ArtifactTrustDimensionResult,
+  ArtifactVerificationTarget,
+  PlanSignal,
+  SignalReason,
+} from '../../types'
 import { fsyncDirectory, type JournalHandle, ownsJournal } from './journal'
 import { type ApplyLock, ownsApplyLock } from './lock'
 import {
@@ -169,6 +178,7 @@ export async function executeManagerPhases(
   lock: ApplyLock,
   journal: JournalHandle,
   inheritedEnv: NodeJS.ProcessEnv = process.env,
+  evidenceTime = new Date().toISOString(),
 ): Promise<ManagerPhaseExecution> {
   const backupPaths: string[] = []
   const phases: ApplyPhase[] = []
@@ -310,8 +320,31 @@ export async function executeManagerPhases(
     commands: managerCommands,
   })
 
+  if (failure && plan.execution.artifactVerification) {
+    phases.push({ name: 'artifact-verify', status: 'skipped', reason: 'MANAGER_PHASE_FAILED' })
+  }
   if (failure && plan.execution.verification) {
     phases.push({ name: 'verify', status: 'skipped', reason: 'MANAGER_PHASE_FAILED' })
+  }
+
+  if (!failure && plan.execution.artifactVerification) {
+    const verification = await executeArtifactVerification(
+      root,
+      plan,
+      prepared,
+      observedLockfiles,
+      lock,
+      journal,
+      inheritedEnv,
+      evidenceTime,
+      sourceSnapshots,
+    )
+    phases.push(verification.phase)
+    if (verification.failure) failure = verification.failure
+  }
+
+  if (failure && plan.execution.verification && !phases.some((entry) => entry.name === 'verify')) {
+    phases.push({ name: 'verify', status: 'skipped', reason: 'ARTIFACT_VERIFICATION_BLOCKED' })
   }
 
   if (!failure && plan.execution.verification) {
@@ -477,6 +510,305 @@ export async function executeManagerPhases(
           ],
     externalEffects: [...externalEffects].sort(),
     artifactsClean,
+  }
+}
+
+async function executeArtifactVerification(
+  root: string,
+  plan: PlanResult,
+  prepared: PreparedManagerPhases,
+  observedLockfiles: Map<string, PhysicalLockfile>,
+  lock: ApplyLock,
+  journal: JournalHandle,
+  inheritedEnv: NodeJS.ProcessEnv,
+  evidenceTime: string,
+  sourceSnapshots: Map<string, PhysicalLockfile>,
+): Promise<{ phase: ApplyPhase; failure?: { reason: string; unknown: boolean } }> {
+  const verification = plan.execution.artifactVerification!
+  const commands: ApplyCommand[] = []
+  const artifactResults: NonNullable<ApplyPhase['artifactResults']> = []
+  let bindingFailed = false
+  let safetyFailure: { reason: string; unknown: boolean } | undefined
+
+  for (let index = 0; index < verification.targets.length; index += 1) {
+    const verificationTarget = verification.targets[index]!
+    const preparedTarget = prepared.targets.find(
+      (entry) => entry.plan.boundaryId === verificationTarget.boundaryId,
+    )
+    const finalLockfile = preparedTarget
+      ? observedLockfiles.get(preparedTarget.plan.lockfile.path)
+      : undefined
+    if (!(preparedTarget && finalLockfile && ownsPhase(lock, journal))) {
+      bindingFailed = true
+      break
+    }
+    const operations = operationsForTarget(plan, preparedTarget)
+    const targets = resolveNpmArtifactTargets(
+      root,
+      verificationTarget.boundaryId,
+      verificationTarget.cwd,
+      finalLockfile.bytes,
+      verificationTarget.artifacts,
+      operations,
+    )
+    if (!targets) {
+      bindingFailed = true
+      break
+    }
+
+    const cwd = absoluteBoundary(root, verificationTarget.cwd)
+    const before = snapshotRepositoryTree(root)
+    let observation: ProcessObservation
+    let trustResults: ReturnType<typeof parseNpmAuditSignatures>
+    const verifierHome = join(journal.directory, `artifact-verifier-${index}`)
+    const projectConfigPresent = existsSync(join(cwd, '.npmrc'))
+    if (projectConfigPresent) {
+      observation = {
+        termination: 'unavailable',
+        reason: 'EXECUTABLE_UNAVAILABLE',
+        terminationConfirmed: true,
+      }
+      trustResults = unavailableTrustResults(targets, 'unavailable')
+    } else {
+      try {
+        mkdirSync(verifierHome, { mode: 0o700 })
+        const cache = join(verifierHome, 'cache')
+        mkdirSync(cache, { mode: 0o700 })
+        const userConfig = join(verifierHome, 'user.npmrc')
+        const globalConfig = join(verifierHome, 'global.npmrc')
+        writeFileSync(userConfig, '', { mode: 0o600, flag: 'wx' })
+        writeFileSync(globalConfig, '', { mode: 0o600, flag: 'wx' })
+        observation = await runResolvedProcess(preparedTarget.executable, verificationTarget.args, {
+          cwd,
+          timeoutMs: verification.timeoutMs,
+          inheritedEnv,
+          environmentOverrides: {
+            HOME: verifierHome,
+            USERPROFILE: verifierHome,
+            npm_config_cache: cache,
+            npm_config_userconfig: userConfig,
+            npm_config_globalconfig: globalConfig,
+            npm_config_registry: 'https://registry.npmjs.org/',
+          },
+          captureStdout: true,
+          captureStderr: true,
+          redactCapturedStdout: false,
+          maxOutputBytes: 8 * 1024 * 1024,
+          maxCaptureBytes: 8 * 1024 * 1024,
+        })
+        trustResults =
+          observation.termination === 'exit' &&
+          (observation.exitCode === 0 || observation.exitCode === 1) &&
+          (observation.stdout !== undefined || observation.stderr !== undefined)
+            ? parseVerifierOutput(observation.stdout ?? '', observation.stderr ?? '', targets)
+            : unavailableTrustResults(targets, 'error')
+      } catch {
+        observation = {
+          termination: 'unknown',
+          reason: 'PROCESS_START_FAILED',
+          terminationConfirmed: true,
+        }
+        trustResults = unavailableTrustResults(targets, 'error')
+      } finally {
+        try {
+          rmSync(verifierHome, { recursive: true, force: true })
+        } catch {
+          safetyFailure = { reason: 'ARTIFACT_VERIFIER_CLEANUP_FAILED', unknown: true }
+        }
+      }
+    }
+
+    const changedPaths = diffRepositorySnapshots(before, snapshotRepositoryTree(root))
+    const command: ApplyCommand = {
+      boundaryId: verificationTarget.boundaryId,
+      manager: 'npm',
+      managerVersion: verificationTarget.verifier.version,
+      cwd: verificationTarget.cwd,
+      executable: verificationTarget.executable,
+      args: [...verificationTarget.args],
+      ...processFields(observation),
+      changedPaths,
+      unexpectedPaths: [...changedPaths],
+      lockfile: {
+        path: preparedTarget.plan.lockfile.path,
+        byteHash: finalLockfile.hash,
+        parseState: 'parsed',
+        occurrences: 'matched',
+      },
+      externalEffects: [],
+    }
+    commands.push(command)
+    const plannedById = new Map(
+      verificationTarget.artifacts.map((artifact) => [artifact.id, artifact]),
+    )
+    for (const target of targets) {
+      const trust = trustResults.find(
+        (result) => result.artifactId === target.id && result.location === target.location,
+      )
+      const planned = plannedById.get(target.id)
+      if (!(trust && planned)) {
+        bindingFailed = true
+        continue
+      }
+      artifactResults.push({
+        artifactId: target.id,
+        boundaryId: target.boundaryId,
+        location: target.location,
+        packageName: target.packageName,
+        version: target.version,
+        registry: target.registry,
+        integrity: target.integrity,
+        lockfile: { path: preparedTarget.plan.lockfile.path, byteHash: finalLockfile.hash },
+        verifier: { name: 'npm', version: verificationTarget.verifier.version },
+        observedAt: evidenceTime,
+        signature: projectTrustPolicy(
+          plan,
+          verification,
+          target,
+          planned.evidenceRef,
+          trust.signature,
+        ),
+        provenance: projectTrustPolicy(
+          plan,
+          verification,
+          target,
+          planned.evidenceRef,
+          trust.provenance,
+        ),
+      })
+    }
+    if (changedPaths.length > 0) {
+      safetyFailure = { reason: 'ARTIFACT_VERIFIER_MUTATED_REPOSITORY', unknown: false }
+    }
+    if (
+      !(
+        ownsPhase(lock, journal) &&
+        sourcesMatchExpected(root, sourceSnapshots) &&
+        lockfilesMatchObserved(root, prepared.targets, observedLockfiles) &&
+        safeInstallState(root, preparedTarget.plan)
+      )
+    ) {
+      safetyFailure = { reason: 'ARTIFACT_VERIFICATION_STATE_CHANGED', unknown: true }
+    }
+  }
+
+  artifactResults.sort(
+    (left, right) =>
+      left.artifactId.localeCompare(right.artifactId) ||
+      left.location.localeCompare(right.location),
+  )
+  const blocked = artifactResults.some(
+    (result) => result.signature.effect === 'block' || result.provenance.effect === 'block',
+  )
+  const failure =
+    safetyFailure ??
+    (bindingFailed
+      ? { reason: 'ARTIFACT_BINDING_FAILED', unknown: true }
+      : blocked
+        ? { reason: 'ARTIFACT_POLICY_BLOCKED', unknown: false }
+        : undefined)
+  return {
+    phase: {
+      name: 'artifact-verify',
+      status: failure ? (failure.unknown ? 'unknown' : 'failed') : 'passed',
+      reason: failure?.reason ?? 'ARTIFACT_VERIFICATION_RECORDED',
+      ...(commands.length > 0 ? { commands } : {}),
+      ...(artifactResults.length > 0 ? { artifactResults } : {}),
+    },
+    ...(failure ? { failure } : {}),
+  }
+}
+
+function parseVerifierOutput(
+  stdout: string,
+  stderr: string,
+  targets: readonly ArtifactVerificationTarget[],
+): ReturnType<typeof parseNpmAuditSignatures> {
+  try {
+    return parseNpmAuditSignatures(stdout, targets)
+  } catch {
+    const stdoutKind = classifyNpmAuditSignaturesFailure(stdout)
+    const stderrKind = classifyNpmAuditSignaturesFailure(stderr)
+    return unavailableTrustResults(targets, stdoutKind !== 'error' ? stdoutKind : stderrKind)
+  }
+}
+
+function unavailableTrustResults(
+  targets: readonly ArtifactVerificationTarget[],
+  kind: 'unavailable' | 'offline' | 'stale' | 'error',
+): ReturnType<typeof parseNpmAuditSignatures> {
+  return targets.map((target) => ({
+    artifactId: target.id,
+    location: target.location,
+    signature: {
+      state: 'unknown',
+      reason:
+        kind === 'unavailable'
+          ? 'SIGNATURE_VERIFIER_UNAVAILABLE'
+          : kind === 'offline'
+            ? 'SIGNATURE_VERIFIER_OFFLINE'
+            : kind === 'stale'
+              ? 'SIGNATURE_VERIFIER_STALE'
+              : 'SIGNATURE_VERIFIER_ERROR',
+    },
+    provenance: {
+      state: 'unknown',
+      reason:
+        kind === 'unavailable'
+          ? 'PROVENANCE_VERIFIER_UNAVAILABLE'
+          : kind === 'offline'
+            ? 'PROVENANCE_VERIFIER_OFFLINE'
+            : kind === 'stale'
+              ? 'PROVENANCE_VERIFIER_STALE'
+              : 'PROVENANCE_VERIFIER_ERROR',
+    },
+  }))
+}
+
+function projectTrustPolicy(
+  plan: PlanResult,
+  verification: NonNullable<PlanResult['execution']['artifactVerification']>,
+  target: ArtifactVerificationTarget,
+  evidenceRef: string,
+  result: ArtifactTrustDimensionResult,
+): NonNullable<ApplyPhase['artifactResults']>[number]['signature'] {
+  const family = result.reason.startsWith('SIGNATURE_')
+    ? ('signature-verification' as const)
+    : ('provenance-verification' as const)
+  const workspacePaths = new Set(
+    target.occurrenceIds.flatMap((id) => {
+      const occurrence = plan.occurrences.find((item) => item.id === id)
+      const owner = occurrence
+        ? plan.repository.packages.find((item) => item.id === occurrence.ownerId)
+        : undefined
+      return owner ? [owner.workspacePath] : []
+    }),
+  )
+  const base: Omit<PlanSignal, 'id' | 'effect' | 'matchedRuleIds' | 'winningRuleId' | 'override'> =
+    {
+      family,
+      state: result.state,
+      reason: result.reason as SignalReason,
+      subject: {
+        occurrenceIds: [...target.occurrenceIds],
+        dependencyName: target.packageName,
+        ...(workspacePaths.size === 1 ? { workspacePath: [...workspacePaths][0]! } : {}),
+      },
+      evidenceRefs: [evidenceRef],
+    }
+  const projected = applySignalPolicy(
+    base,
+    verification.rules,
+    verification.policySource,
+    false,
+    false,
+  )
+  return {
+    state: projected.state,
+    reason: projected.reason,
+    effect: projected.effect,
+    matchedRuleIds: [...projected.matchedRuleIds],
+    ...(projected.winningRuleId ? { winningRuleId: projected.winningRuleId } : {}),
   }
 }
 
@@ -925,6 +1257,114 @@ export function lockfileDependencyOccurrencesMatch(
         descriptor === `${resolvedPackageName(operation)}@${targetVersion}`
       )
     })
+  } catch {
+    return false
+  }
+}
+
+type PlannedArtifact = NonNullable<
+  PlanResult['execution']['artifactVerification']
+>['targets'][number]['artifacts'][number]
+
+export function resolveNpmArtifactTargets(
+  root: string,
+  boundaryId: string,
+  boundaryPath: string,
+  lockfileBytes: Buffer,
+  artifacts: readonly PlannedArtifact[],
+  operations: readonly PlanResult['operations'][number][],
+): ArtifactVerificationTarget[] | undefined {
+  try {
+    const boundaryRoot = absoluteBoundary(root, boundaryPath)
+    const parsed = parseLockfileData('npm', lockfileBytes)
+    const packages = ownRecord(parsed, 'packages')
+    if (!packages) return undefined
+    const operationsByOccurrence = new Map(
+      operations.map((operation) => [operation.occurrenceId, operation]),
+    )
+    const targets = new Map<string, ArtifactVerificationTarget>()
+    for (const artifact of artifacts) {
+      for (const occurrenceId of artifact.occurrenceIds) {
+        const operation = operationsByOccurrence.get(occurrenceId)
+        if (!operation) return undefined
+        const workspace = workspaceKey(boundaryPath, operation.file)
+        const candidates = [
+          ...(workspace === '.' ? [] : [`${workspace}/node_modules/${operation.name}`]),
+          `node_modules/${operation.name}`,
+        ]
+        const location = candidates.find((candidate) => {
+          const entry = ownRecord(packages, candidate)
+          const observedName = ownString(entry, 'name')
+          return (
+            Boolean(entry) &&
+            (observedName === undefined
+              ? artifact.packageName === operation.name
+              : observedName === artifact.packageName) &&
+            ownString(entry, 'version') === artifact.version &&
+            ownString(entry, 'integrity') === artifact.integrity &&
+            hasExactInstalledPackage(
+              boundaryRoot,
+              candidate,
+              artifact.packageName,
+              artifact.version,
+            )
+          )
+        })
+        if (!location) return undefined
+        const key = `${artifact.id}\0${location}`
+        const existing = targets.get(key)
+        if (existing) {
+          existing.occurrenceIds.push(occurrenceId)
+          existing.occurrenceIds.sort()
+        } else {
+          targets.set(key, {
+            id: artifact.id,
+            occurrenceIds: [occurrenceId],
+            boundaryId,
+            location,
+            packageName: artifact.packageName,
+            version: artifact.version,
+            registry: artifact.registry,
+            integrity: artifact.integrity,
+            signaturePresence: artifact.signaturePresence,
+            provenancePresence: artifact.provenancePresence,
+          })
+        }
+      }
+    }
+    return [...targets.values()].sort(
+      (left, right) =>
+        left.id.localeCompare(right.id) || left.location.localeCompare(right.location),
+    )
+  } catch {
+    return undefined
+  }
+}
+
+function hasExactInstalledPackage(
+  root: string,
+  location: string,
+  packageName: string,
+  version: string,
+): boolean {
+  try {
+    const directory = containedAbsolute(root, location)
+    const lexical = lstatSync(directory)
+    if (!lexical.isDirectory() || lexical.isSymbolicLink()) return false
+    const physical = realpathSync.native(directory)
+    const physicalRelative = relative(realpathSync.native(root), physical)
+    if (physicalRelative === '..' || physicalRelative.startsWith(`..${sep}`)) return false
+    const manifestPath = join(directory, 'package.json')
+    const manifest = lstatSync(manifestPath)
+    if (!manifest.isFile() || manifest.isSymbolicLink()) return false
+    const parsed: unknown = JSON.parse(readFileSync(manifestPath, 'utf8'))
+    return (
+      Boolean(parsed) &&
+      typeof parsed === 'object' &&
+      !Array.isArray(parsed) &&
+      (parsed as Record<string, unknown>).name === packageName &&
+      (parsed as Record<string, unknown>).version === version
+    )
   } catch {
     return false
   }

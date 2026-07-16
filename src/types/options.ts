@@ -12,6 +12,8 @@ export interface InvocationAuthority {
   readonly processExecute: boolean
   readonly lockfileWrite: boolean
   readonly verifyCommand: boolean
+  readonly artifactVerify: boolean
+  readonly networkAccess: boolean
   readonly globalWrite: boolean
 }
 
@@ -83,6 +85,7 @@ export interface depfreshOptions {
   execute?: string
   verifyCommand?: string
   verify?: boolean
+  verifyArtifacts?: boolean
   verifyArgv?: string[]
   phaseTimeout?: number
 
@@ -159,6 +162,7 @@ export const DEFAULT_OPTIONS: Partial<depfreshOptions> = {
   failOnResolutionErrors: false,
   failOnNoPackages: false,
   install: false,
+  verifyArtifacts: false,
   update: false,
   strictPostWrite: false,
 }

@@ -26,6 +26,8 @@ describe('createInvocationAuthority', () => {
       lockfileWrite: true,
       verifyCommand: false,
       globalWrite: true,
+      artifactVerify: false,
+      networkAccess: false,
     })
     expect(() => Object.assign(authority, { write: false })).toThrow(TypeError)
   })
@@ -43,6 +45,21 @@ describe('createInvocationAuthority', () => {
       lockfileWrite: true,
       install: false,
       verifyCommand: true,
+      artifactVerify: false,
+      networkAccess: false,
+    })
+  })
+
+  it('grants artifact verification and network separately from install configuration', () => {
+    expect(createInvocationAuthority({ install: true, verifyArtifacts: true })).toMatchObject({
+      install: true,
+      processExecute: true,
+      artifactVerify: true,
+      networkAccess: true,
+    })
+    expect(createInvocationAuthority({ install: true })).toMatchObject({
+      artifactVerify: false,
+      networkAccess: false,
     })
   })
 

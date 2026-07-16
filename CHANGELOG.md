@@ -6,6 +6,18 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Semver
 
 ### Added
 
+- **Exact-artifact npm trust verification** -- install plans may fingerprint npm 11.12.x public
+  registry artifacts by physical package/version/SHA-512 identity and per-boundary verifier intent.
+  Apply rebinds every target to the final npm lockfile and contained installed location, runs fixed
+  lifecycle-disabled `npm audit signatures` in an isolated temporary home/cache/config under
+  explicit artifact/network authority, and records independent signature and provenance states,
+  verifier identity/version, evidence time, and traceable rule effects without raw output or
+  credentials. Signature presence is never promoted to pass; exact invalid/missing evidence fails,
+  while provenance passes only for one exact SLSA v1 DSSE subject/digest match. Offline, stale,
+  unavailable, malformed, and binding failures remain unknown. Unsupported managers, registries,
+  npm versions, and missing integrity block planning. Default findings warn; only a fingerprinted
+  matching rule blocks and enters observed recovery.
+
 - **Deterministic compatibility and passive-evidence signals** -- every new immutable plan carries
   fingerprinted repository-runtime, exact-owner proposed peer-constraint graph, explicit/inferred cohort,
   release-channel, fixed-clock maturity, current/target deprecation, completeness, staleness, and

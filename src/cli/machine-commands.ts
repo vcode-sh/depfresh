@@ -42,6 +42,7 @@ const planOptions = new Set([
   'as-of',
   'sync-lockfile',
   'install',
+  'verify-artifacts',
   'verify-argv',
   'phase-timeout',
 ])
@@ -53,6 +54,7 @@ const applyOptions = new Set([
   'plan-file',
   'sync-lockfile',
   'install',
+  'verify-artifacts',
   'verify',
 ])
 const aliasNames = new Map<string, { name: string; type: string }>()
@@ -180,6 +182,7 @@ export function normalizePlanCommandArgs(args: Record<string, unknown>): PlanOpt
     ...(typeof args['as-of'] === 'string' ? { asOf: args['as-of'] } : {}),
     syncLockfile: args['sync-lockfile'] === true,
     install: args.install === true,
+    verifyArtifacts: args['verify-artifacts'] === true,
     ...(verifyArgv ? { verifyArgv } : {}),
     phaseTimeout: parseIntegerOption(args['phase-timeout'], '--phase-timeout', 1),
   }

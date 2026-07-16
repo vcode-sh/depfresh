@@ -428,6 +428,25 @@ describe('fetchPackageData', () => {
     expect(JSON.stringify(result.provenancePresence)).not.toContain('registry.example')
   })
 
+  it('records only exact sha512 artifact integrity and the credential-free registry identity', async () => {
+    const valid = `sha512-${Buffer.alloc(64, 3).toString('base64')}`
+    globalThis.fetch = mockFetchResponse({
+      versions: {
+        '1.0.0': { dist: { integrity: valid } },
+        '2.0.0': { dist: { integrity: 'sha512-not-base64' } },
+        '3.0.0': { dist: { integrity: `sha512-${Buffer.alloc(63).toString('base64')}` } },
+        '4.0.0': { dist: { integrity: `sha256-${Buffer.alloc(32).toString('base64')}` } },
+      },
+      'dist-tags': { latest: '4.0.0' },
+    })
+
+    const { fetchPackageData } = await import('./registry')
+    const result = await fetchPackageData('artifact-fixture', defaultOptions)
+
+    expect(result.registry).toBe('https://registry.npmjs.org/')
+    expect(result.artifactIntegrity).toEqual({ '1.0.0': valid })
+  })
+
   it('keeps hostile peer metadata unknown instead of serializing control text', async () => {
     const hostile = '\u001B[31mpeer\nname'
     globalThis.fetch = mockFetchResponse({

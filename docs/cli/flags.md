@@ -71,7 +71,8 @@ stable reason code. Enum values are also strict:
 This applies to both normal flag usage and positional mode shorthand (`depfresh <mode>`).
 
 `--deps-only` conflicts with `--dev-only`. In the machine workflow, `--sync-lockfile` conflicts with
-`--install`, and `--verify-argv` requires one of those planned phases. Legacy `--update`,
+`--install`, `--verify-argv` requires one of those planned phases, and `--verify-artifacts` requires
+`--install`. Legacy `--update`,
 `--execute`, `--verify-command`, and `--strict-post-write` are rejected; legacy check-mode
 `--install` is redirected to plan/apply. `--version` must be used alone. Use `--name=value` when a
 string value intentionally starts with `-`, such as `--include=--write`.
@@ -96,7 +97,8 @@ Both machine commands accept `--cwd`, `--recursive`, `--ignore-paths`,
 selection and registry flags including `--mode`, `--include`, `--exclude`, `--force`, `--peer`,
 `--include-locked`, `--deps-only`, `--dev-only`, `--concurrency`, and `--cooldown`. It may also
 fingerprint `--sync-lockfile` or `--install`, optional `--verify-argv '<JSON string array>'`, and
-`--phase-timeout <milliseconds>`.
+`--phase-timeout <milliseconds>`. `--verify-artifacts` requires `--install` and fingerprints exact
+public-npm verification; it does not execute the verifier while planning.
 
 | Flag | Command | Description |
 | --- | --- | --- |
@@ -110,7 +112,8 @@ discovery. Planning phase intent grants no authority and runs no process.
 
 Apply accepts `--cwd`, JSON output selection, explicit `--write`, exactly one `--plan-file <path>`,
 and only the matching `--sync-lockfile` or `--install` grant. `--verify` grants only verification
-argv already fingerprinted in the plan. Apply flags cannot add, replace, or weaken a phase. It
+argv already fingerprinted in the plan. `--verify-artifacts` grants only the artifact/network work
+already fingerprinted in an install plan. Apply flags cannot add, replace, or weaken a phase. It
 validates the immutable plan and current target evidence before mutation. The `--plan-file` flag is
 rejected by every other command. Apply rejects selection, registry, interactive, legacy post-write,
 and global flags.
@@ -180,10 +183,16 @@ apply flags grant only that reviewed intent.
 |------|-------|------|---------|-------------|
 | `--sync-lockfile` | -- | boolean | `false` | On `plan`, fingerprint a supported lifecycle-disabled lockfile-only adapter; on `apply`, grant its process and lockfile writes. |
 | `--install` | `-i` | boolean | `false` | On `plan`, fingerprint the stronger full-install adapter; on `apply`, grant process, lockfile, install-tree, and cache effects. |
+| `--verify-artifacts` | -- | boolean | `false` | With `--install`, fingerprint or grant exact npm 11.12.x public-registry artifact verification. Configuration cannot supply this authority. |
 | `--verify-argv <json>` | -- | string | -- | On `plan`, fingerprint one non-empty public JSON string array such as `'["pnpm","test"]'`; absolute paths and credential/auth-shaped flags, headers, or values are rejected with `INVALID_OPTION_VALUE`. Never inferred from scripts. |
 | `--verify` | -- | boolean | `false` | On `apply`, grant only the exact verification argv already in the plan. |
-| `--phase-timeout <ms>` | -- | integer | `120000` | Fingerprinted timeout for manager version, manager execution, and verification; maximum `600000`. |
+| `--phase-timeout <ms>` | -- | integer | `120000` | Fingerprinted timeout for manager version, manager execution, generic verification, and artifact verification; maximum `600000`. |
 | `--execute`, `--update`, `--verify-command`, `--strict-post-write` | legacy | -- | -- | Rejected before discovery. Use plan/apply exact argv and phase results. |
+
+```bash
+depfresh plan --json --install --verify-artifacts > depfresh-plan.json
+depfresh apply --json --write --install --verify-artifacts --plan-file depfresh-plan.json
+```
 
 ## Behavior
 

@@ -89,6 +89,10 @@ describe('getCliCapabilities', () => {
       requires: ['write', 'plan-file'],
       grants: ['processExecute', 'lockfileWrite'],
     })
+    expect(capabilities.invocationAuthority['verify-artifacts']).toEqual({
+      requires: ['write', 'plan-file', 'install'],
+      grants: ['artifactVerify', 'networkAccess'],
+    })
     expect(capabilities.invocationAuthority.global).toEqual({
       requires: ['write'],
       grants: ['globalWrite', 'processExecute'],
@@ -101,6 +105,7 @@ describe('getCliCapabilities', () => {
         'update',
         'execute',
         'verify',
+        'verifyArtifacts',
         'verifyArgv',
         'phaseTimeout',
         'verifyCommand',

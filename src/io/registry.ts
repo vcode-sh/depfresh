@@ -79,6 +79,7 @@ async function fetchNpmPackage(
   const optionalPeerDependencies: Record<string, string[]> = {}
   const peerMetadata: Record<string, PassivePresence> = {}
   const engines: Record<string, string> = {}
+  const artifactIntegrity: Record<string, string> = {}
 
   for (const ver of versions) {
     const data = versionsObj[ver]
@@ -92,6 +93,8 @@ async function fetchNpmPackage(
 
     signaturePresence[ver] = readSignaturePresence(data)
     provenancePresence[ver] = readProvenancePresence(data)
+    const integrity = readArtifactIntegrity(data)
+    if (integrity) artifactIntegrity[ver] = integrity
 
     const enginesValue = data.engines
     if (enginesValue === undefined) engineMetadata[ver] = 'absent'
@@ -127,6 +130,8 @@ async function fetchNpmPackage(
     deprecated: Object.keys(deprecated).length > 0 ? deprecated : undefined,
     signaturePresence: Object.keys(signaturePresence).length > 0 ? signaturePresence : undefined,
     provenancePresence: Object.keys(provenancePresence).length > 0 ? provenancePresence : undefined,
+    artifactIntegrity: Object.keys(artifactIntegrity).length > 0 ? artifactIntegrity : undefined,
+    registry: canonicalRegistryIdentity(registry.url),
     deprecationPresence,
     engineMetadata,
     peerDependencies: Object.keys(peerDependencies).length > 0 ? peerDependencies : undefined,
@@ -142,6 +147,28 @@ async function fetchNpmPackage(
         : isRecord(json.repository) && typeof json.repository.url === 'string'
           ? json.repository.url
           : undefined,
+  }
+}
+
+function readArtifactIntegrity(data: Record<string, unknown>): string | undefined {
+  if (!isRecord(data.dist) || typeof data.dist.integrity !== 'string') return undefined
+  const match = /^sha512-([A-Za-z0-9+/]+={0,2})$/u.exec(data.dist.integrity)
+  if (!match?.[1]) return undefined
+  const bytes = Buffer.from(match[1], 'base64')
+  if (bytes.length !== 64 || bytes.toString('base64') !== match[1]) return undefined
+  return data.dist.integrity
+}
+
+function canonicalRegistryIdentity(value: string): string | undefined {
+  try {
+    const url = new URL(value)
+    if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash) {
+      return undefined
+    }
+    url.pathname = `${url.pathname.replace(/\/+$/u, '')}/`
+    return url.toString()
+  } catch {
+    return undefined
   }
 }
 

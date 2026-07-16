@@ -19,12 +19,14 @@ describe('machine phase options', () => {
     expect(
       normalizePlanCommandArgs({
         ...planArgs,
-        'sync-lockfile': true,
+        install: true,
+        'verify-artifacts': true,
         'verify-argv': '["node","--test","literal;not-a-shell"]',
       }),
     ).toMatchObject({
-      syncLockfile: true,
-      install: false,
+      syncLockfile: false,
+      install: true,
+      verifyArtifacts: true,
       verifyArgv: ['node', '--test', 'literal;not-a-shell'],
       phaseTimeout: 4321,
     })
@@ -49,8 +51,22 @@ describe('machine phase options', () => {
     ).not.toThrow()
     expect(() =>
       assertMachineCommandSafety(
-        { json: true, write: true, install: true, 'plan-file': 'plan.json' },
-        ['apply', '--json', '--write', '--install', '--plan-file', 'plan.json'],
+        {
+          json: true,
+          write: true,
+          install: true,
+          'verify-artifacts': true,
+          'plan-file': 'plan.json',
+        },
+        [
+          'apply',
+          '--json',
+          '--write',
+          '--install',
+          '--verify-artifacts',
+          '--plan-file',
+          'plan.json',
+        ],
         'apply',
       ),
     ).not.toThrow()
