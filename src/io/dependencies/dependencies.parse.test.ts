@@ -20,6 +20,27 @@ describe('parseDependencies', () => {
     expect(deps[1]?.source).toBe('devDependencies')
   })
 
+  it('requires includeLocked authority for every exact semver spelling', () => {
+    const raw = {
+      dependencies: {
+        equals: '=1.2.3',
+        prerelease: '1.0.0-next.1',
+      },
+      overrides: {
+        nested: '=2.0.0',
+      },
+    }
+
+    expect(parseDependencies(raw, baseOptions).map((dep) => dep.update)).toEqual([
+      false,
+      false,
+      false,
+    ])
+    expect(
+      parseDependencies(raw, { ...baseOptions, includeLocked: true }).map((dep) => dep.update),
+    ).toEqual([true, true, true])
+  })
+
   it('skips file: and link: protocols', () => {
     const raw = {
       dependencies: {

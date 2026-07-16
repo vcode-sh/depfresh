@@ -533,30 +533,14 @@ await record('update command', async () => {
 })
 
 await record('global json', async () => {
-  const result = await runCli([
-    '--cwd',
-    singleRepo,
-    '--global',
-    '--mode',
-    'latest',
-    '--output',
-    'json',
-  ])
+  const result = await runCli(['--cwd', singleRepo, '--global', '--output', 'json'])
   assert.equal(result.status, 0)
   const payload = parseJsonStdout(result)
   assert.ok(payload.summary.total >= 1, JSON.stringify({ result, payload }, null, 2))
 })
 
 await record('global-all json', async () => {
-  const result = await runCli([
-    '--cwd',
-    singleRepo,
-    '--global-all',
-    '--mode',
-    'latest',
-    '--output',
-    'json',
-  ])
+  const result = await runCli(['--cwd', singleRepo, '--global-all', '--output', 'json'])
   assert.equal(result.status, 0)
   const payload = parseJsonStdout(result)
   assert.ok(payload.summary.total >= 1)

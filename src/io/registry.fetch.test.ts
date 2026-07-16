@@ -76,6 +76,23 @@ describe('fetchPackageData', () => {
     expect(result.distTags.latest).toBe('2.0.0')
   })
 
+  it('retains only string registry timestamps', async () => {
+    globalThis.fetch = mockFetchResponse({
+      versions: { '1.0.0': {}, '2.0.0': {} },
+      'dist-tags': { latest: '2.0.0' },
+      time: {
+        '1.0.0': '2025-01-01T00:00:00.000Z',
+        '2.0.0': 1,
+        modified: null,
+      },
+    })
+
+    const { fetchPackageData } = await import('./registry')
+    const result = await fetchPackageData('timestamp-fixture', defaultOptions)
+
+    expect(result.time).toEqual({ '1.0.0': '2025-01-01T00:00:00.000Z' })
+  })
+
   it('routes jsr: packages to jsr.io', async () => {
     const jsrResponse = {
       versions: {

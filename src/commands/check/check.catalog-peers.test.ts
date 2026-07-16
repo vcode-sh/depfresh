@@ -139,7 +139,7 @@ async function runCheck(
       output: 'json',
       loglevel: 'silent',
       failOnOutdated: true,
-      timeout: 1_000,
+      timeout: 5_000,
       retries: 0,
       recursive: true,
       ...overrides,

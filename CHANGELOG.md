@@ -61,9 +61,11 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Semver
 
 - **Resolution now selects from one authoritative eligible set** -- direct dependencies, catalogs,
   overrides, and global occurrences share normalization, prerelease-channel, mode, deprecation,
-  cooldown, and downgrade checks. Exact pins included with `--include-locked` now advance correctly,
-  global-all compares from the highest installed manager version, and missing publish times remain
-  unknown while cooldown is active instead of being treated as safe.
+  cooldown, and downgrade checks. Every exact semver spelling, including equals-prefixed and
+  prerelease pins, requires `--include-locked` for manifest updates, while globally observed exact
+  versions still resolve in default mode. Global-all compares from the highest installed manager
+  version, and missing or malformed publish times remain unknown while cooldown is active instead
+  of being treated as safe.
 
 - **Registry signature data is described as presence, not proof** -- current output and public
   types report `present` or `absent` signature metadata without claiming verification or trust.
@@ -80,8 +82,9 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Semver
 
 - **Rejected registry candidates cannot return through a fallback** -- deprecated, too-recent,
   unknown-age, wrong-channel, missing-tag, and downgrade candidates remain rejected after mode
-  selection. Stable reason codes record why selection stopped, and malformed current specs are
-  skipped when a safe comparison cannot be proven.
+  selection. A present valid `next` tag never falls back after rejection, named and numeric
+  prerelease channels cannot cross, stable reason codes record why selection stopped, and malformed
+  current specs are skipped when a safe comparison cannot be proven.
 - **Prerelease and JSR version truth is preserved** -- prerelease increments and same-core stable
   transitions classify as patch changes, JSR uses its explicit `latest` field rather than object
   order, and JSR publish times and yanked versions feed the same candidate safety checks as npm.

@@ -89,15 +89,26 @@ describe('isRange', () => {
   it('rejects exact version', () => {
     expect(isRange('1.2.3')).toBe(false)
   })
+
+  it('does not mistake exact prerelease identifiers for ranges', () => {
+    expect(isRange('1.0.0-next.1')).toBe(false)
+  })
 })
 
 describe('isLocked', () => {
-  it('detects locked version', () => {
-    expect(isLocked('1.2.3')).toBe(true)
+  it.each(['1.2.3', '=1.2.3', '1.0.0-next.1'])('detects exact locked version %s', (version) => {
+    expect(isLocked(version)).toBe(true)
   })
 
-  it('rejects ranges', () => {
-    expect(isLocked('^1.2.3')).toBe(false)
+  it.each(['^1.2.3', '~1.2.3', '>=1.2.3', '1.x'])(
+    'rejects range %s as a locked version',
+    (version) => {
+      expect(isLocked(version)).toBe(false)
+    },
+  )
+
+  it('rejects malformed versions', () => {
+    expect(isLocked('not-semver')).toBe(false)
   })
 })
 

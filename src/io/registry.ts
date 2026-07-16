@@ -58,7 +58,7 @@ async function fetchNpmPackage(
   const versions = Object.keys(versionsObj).filter((v) => semver.valid(v))
 
   const distTags = (json['dist-tags'] ?? {}) as Record<string, string>
-  const time = (json.time ?? {}) as Record<string, string>
+  const time = readStringRecord(json.time)
   const deprecated: Record<string, string> = {}
 
   const signaturePresence: Record<string, SignaturePresence> = {}
@@ -94,6 +94,16 @@ async function fetchNpmPackage(
         ? json.repository
         : ((json.repository as Record<string, unknown> | undefined)?.url as string | undefined),
   }
+}
+
+function readStringRecord(value: unknown): Record<string, string> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
+
+  return Object.fromEntries(
+    Object.entries(value).filter(
+      (entry): entry is [string, string] => typeof entry[1] === 'string',
+    ),
+  )
 }
 
 async function fetchJsrPackage(name: string, options: FetchOptions): Promise<PackageData> {

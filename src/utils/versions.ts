@@ -35,11 +35,16 @@ export function rebuildXRange(original: string, target: string): string | null {
 }
 
 export function isRange(version: string): boolean {
-  return /[~^>=<|*x ]/.test(version)
+  const trimmed = version.trim()
+  const exact = trimmed.startsWith('=') ? trimmed.slice(1).trim() : trimmed
+  if (semver.valid(exact)) return false
+  return semver.validRange(trimmed) !== null
 }
 
 export function isLocked(version: string): boolean {
-  return !isRange(version) && !!semver.valid(version)
+  const trimmed = version.trim()
+  const exact = trimmed.startsWith('=') ? trimmed.slice(1).trim() : trimmed
+  return semver.valid(exact) !== null
 }
 
 export function getMaxSatisfying(versions: string[], range: string): string | null {

@@ -62,6 +62,9 @@ export function selectVersionCandidate(input: VersionCandidateInput): VersionCan
 
   const modeStage = filterByMode(input, channelCandidates, current)
   if (modeStage.versions.length === 0) {
+    if (wasDistTagBlockedByChannel(input, normalized, channelCandidates)) {
+      return selection(null, [], 'PRERELEASE_CHANNEL_BLOCKED')
+    }
     return selection(null, [], modeStage.reason ?? 'MODE_NO_MATCH')
   }
 
@@ -156,12 +159,7 @@ function filterByChannel(versions: string[], current: string): string[] {
     if (!candidatePrerelease?.length) return true
     if (!currentPrerelease?.length) return false
 
-    const candidateChannel = candidatePrerelease[0]
-    return (
-      typeof currentChannel !== 'string' ||
-      typeof candidateChannel !== 'string' ||
-      candidateChannel === currentChannel
-    )
+    return candidatePrerelease[0] === currentChannel
   })
 }
 
@@ -174,8 +172,10 @@ function filterByMode(
     case 'latest':
       return filterByDistTag(input.pkgData.distTags.latest, versions)
     case 'next': {
-      const next = filterByDistTag(input.pkgData.distTags.next, versions)
-      if (next.versions.length > 0) return next
+      const nextTag = input.pkgData.distTags.next
+      if (typeof nextTag === 'string' && semver.valid(nextTag)) {
+        return filterByDistTag(nextTag, versions)
+      }
       return filterByDistTag(input.pkgData.distTags.latest, versions)
     }
     case 'newest':
@@ -206,16 +206,20 @@ function filterByMode(
     case 'ignore':
       return { versions: [], reason: 'MODE_NO_MATCH' }
     default:
-      return filterDefaultMode(input, versions)
+      return filterDefaultMode(input, versions, current)
   }
 }
 
-function filterDefaultMode(input: VersionCandidateInput, versions: string[]): CandidateStage {
+function filterDefaultMode(
+  input: VersionCandidateInput,
+  versions: string[],
+  current: string,
+): CandidateStage {
   if (isLocked(input.currentVersion)) {
     return {
       versions: input.includeLocked
         ? versions
-        : versions.filter((version) => semver.eq(version, input.currentVersion)),
+        : versions.filter((version) => semver.eq(version, current)),
       reason: 'MODE_NO_MATCH',
     }
   }
@@ -235,7 +239,7 @@ function filterDefaultMode(input: VersionCandidateInput, versions: string[]): Ca
 }
 
 function filterByDistTag(tag: string | undefined, versions: string[]): CandidateStage {
-  const normalizedTag = tag ? semver.valid(tag) : null
+  const normalizedTag = typeof tag === 'string' ? semver.valid(tag) : null
   if (!normalizedTag) {
     return { versions: [], reason: 'DIST_TAG_MISSING' }
   }
@@ -243,6 +247,28 @@ function filterByDistTag(tag: string | undefined, versions: string[]): Candidate
     return { versions: [], reason: 'DIST_TAG_NOT_ELIGIBLE' }
   }
   return { versions: [normalizedTag] }
+}
+
+function wasDistTagBlockedByChannel(
+  input: VersionCandidateInput,
+  normalized: string[],
+  channelCandidates: string[],
+): boolean {
+  let tag: string | undefined
+  if (input.mode === 'latest') {
+    tag = input.pkgData.distTags.latest
+  } else if (input.mode === 'next') {
+    const nextTag = input.pkgData.distTags.next
+    tag =
+      typeof nextTag === 'string' && semver.valid(nextTag) ? nextTag : input.pkgData.distTags.latest
+  }
+
+  const normalizedTag = typeof tag === 'string' ? semver.valid(tag) : null
+  return Boolean(
+    normalizedTag &&
+      normalized.includes(normalizedTag) &&
+      !channelCandidates.includes(normalizedTag),
+  )
 }
 
 function filterByMaturity(
@@ -288,9 +314,28 @@ function hasRemovedUpgrade(before: string[], after: string[], current: string): 
 
 function getPublishedAt(time: Record<string, string> | undefined, version: string): number | null {
   const value = time?.[version]
-  if (!value) return null
+  if (typeof value !== 'string' || !isRfc3339Timestamp(value)) return null
   const publishedAt = Date.parse(value)
   return Number.isFinite(publishedAt) ? publishedAt : null
+}
+
+function isRfc3339Timestamp(value: string): boolean {
+  const match = value.match(
+    /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/,
+  )
+  if (!match) return false
+
+  const [, yearText, monthText, dayText, hourText, minuteText, secondText] = match
+  const year = Number(yearText)
+  const month = Number(monthText)
+  const day = Number(dayText)
+  const hour = Number(hourText)
+  const minute = Number(minuteText)
+  const second = Number(secondText)
+  if (month < 1 || month > 12 || hour > 23 || minute > 59 || second > 59) return false
+
+  const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate()
+  return day >= 1 && day <= daysInMonth
 }
 
 function selection(

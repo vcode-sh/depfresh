@@ -199,7 +199,9 @@ Supported package managers: **npm**, **pnpm**, **bun**. Yarn global packages are
 
 `--global` detection order: if `pnpm` is installed, it checks pnpm globals. Then `bun`. Falls back to `npm`.
 
-`--global-all` always scans all three managers and deduplicates by package name. The version shown for duplicates comes from first-seen manager order: npm, then pnpm, then bun.
+`--global-all` always scans all three managers and deduplicates by package name. For a package found
+in multiple managers, the version shown is the highest valid installed version so shared resolution
+cannot propose a downgrade for a manager that is already ahead.
 
 depfresh runs the appropriate list command for each:
 

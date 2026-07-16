@@ -1,9 +1,10 @@
 import * as semver from 'semver'
 import { describe, expect, it, vi } from 'vitest'
 import type { Cache } from '../../cache/index'
-import type { depfreshOptions, NpmrcConfig, PackageData, RawDep } from '../../types'
+import type { depfreshOptions, NpmrcConfig, PackageData, PackageMeta, RawDep } from '../../types'
 import { createLogger } from '../../utils/logger'
 import { resolveDependency } from './resolve-dependency'
+import { resolvePackage } from './resolve-package'
 import {
   selectVersionCandidate,
   type VersionCandidateInput,
@@ -193,6 +194,146 @@ describe('authoritative resolution candidate truth', () => {
       expect(result?.diff).toBe('major')
     },
   )
+
+  it.each([
+    ['global:npm', { global: true }],
+    ['global:npm+pnpm+bun', { globalAll: true }],
+  ] as const)(
+    'resolves exact observed versions for %s in default mode',
+    async (filepath, flags) => {
+      const pkg: PackageMeta = {
+        name: 'Global packages',
+        type: 'global',
+        filepath,
+        deps: [makeDep({ currentVersion: '1.0.0' })],
+        resolved: [],
+        raw: {},
+        indent: '  ',
+      }
+
+      const result = await resolvePackage(
+        pkg,
+        makeOptions(flags),
+        makeCache({
+          name: 'test-dep',
+          versions: ['1.0.0', '2.0.0'],
+          distTags: { latest: '2.0.0' },
+        }),
+        npmrc,
+      )
+
+      expect(result).toHaveLength(1)
+      expect(result[0]?.targetVersion).toBe('2.0.0')
+    },
+  )
+
+  it('advances an included exact prerelease pin within its channel', async () => {
+    const result = await resolveFromCache(
+      {
+        name: 'test-dep',
+        versions: ['1.0.0-next.1', '1.0.0-next.2'],
+        distTags: { latest: '1.0.0-next.2', next: '1.0.0-next.2' },
+      },
+      makeDep({ currentVersion: '1.0.0-next.1' }),
+      { includeLocked: true },
+    )
+
+    expect(result?.targetVersion).toBe('1.0.0-next.2')
+    expect(result?.diff).toBe('patch')
+  })
+
+  it('retains an equals-prefixed pin when includeLocked is disabled', () => {
+    expect(
+      selectVersionCandidate({
+        currentVersion: '=1.2.3',
+        pkgData: {
+          name: 'test-dep',
+          versions: ['1.2.3', '2.0.0'],
+          distTags: { latest: '2.0.0' },
+        },
+        mode: 'default',
+        includeLocked: false,
+        cooldown: 0,
+        now: fixedNow,
+      }),
+    ).toEqual({
+      targetVersion: null,
+      eligibleVersions: ['1.2.3'],
+      reason: 'CURRENT_VERSION_SELECTED',
+    })
+  })
+
+  it('does not fall back from a present next tag rejected by channel safety', () => {
+    const result = selectVersionCandidate({
+      currentVersion: '1.0.0',
+      pkgData: {
+        name: 'test-dep',
+        versions: ['1.0.0', '1.1.0', '2.0.0-next.1'],
+        distTags: { latest: '1.1.0', next: '2.0.0-next.1' },
+      },
+      mode: 'next',
+      includeLocked: false,
+      cooldown: 0,
+      now: fixedNow,
+    })
+
+    expect(result).toEqual({
+      targetVersion: null,
+      eligibleVersions: [],
+      reason: 'PRERELEASE_CHANNEL_BLOCKED',
+    })
+  })
+
+  it.each([
+    ['1.0.0-0', '2.0.0-beta.1'],
+    ['1.0.0-beta.1', '2.0.0-0'],
+  ])('does not cross prerelease channels from %s to %s', (currentVersion, candidate) => {
+    expect(
+      selectVersionCandidate({
+        currentVersion,
+        pkgData: {
+          name: 'test-dep',
+          versions: [currentVersion, candidate],
+          distTags: { latest: candidate },
+        },
+        mode: 'major',
+        includeLocked: true,
+        cooldown: 0,
+        now: fixedNow,
+      }),
+    ).toEqual({
+      targetVersion: null,
+      eligibleVersions: [currentVersion],
+      reason: 'PRERELEASE_CHANNEL_BLOCKED',
+    })
+  })
+
+  it.each([1, '1'])('treats coercive publish timestamp %j as unknown', (publishedAt) => {
+    const time = {
+      '1.0.0': oldPublishTime,
+      '2.0.0': publishedAt,
+    } as unknown as Record<string, string>
+
+    expect(
+      selectVersionCandidate({
+        currentVersion: '1.0.0',
+        pkgData: {
+          name: 'test-dep',
+          versions: ['1.0.0', '2.0.0'],
+          distTags: { latest: '2.0.0' },
+          time,
+        },
+        mode: 'major',
+        includeLocked: true,
+        cooldown: 7,
+        now: fixedNow,
+      }),
+    ).toEqual({
+      targetVersion: null,
+      eligibleVersions: ['1.0.0'],
+      reason: 'MISSING_PUBLISH_TIME',
+    })
+  })
 
   it('uses the normalized current version to allow escape from deprecation', async () => {
     const result = await resolveFromCache(

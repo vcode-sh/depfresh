@@ -58,6 +58,8 @@ export async function resolvePackage(
   const cache = externalCache ?? createSqliteCache()
   const ownCache = !externalCache
   const limit = resolveContext?.limit ?? pLimit(options.concurrency)
+  const dependencyOptions =
+    pkg.type === 'global' && !options.includeLocked ? { ...options, includeLocked: true } : options
 
   try {
     const results = await Promise.allSettled(
@@ -68,7 +70,7 @@ export async function resolvePackage(
             try {
               return await resolveDependency(
                 dep,
-                options,
+                dependencyOptions,
                 cache,
                 npmrc,
                 logger,

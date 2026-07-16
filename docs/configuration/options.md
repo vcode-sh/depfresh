@@ -158,7 +158,7 @@ If nothing matches, the global `mode` applies. If you set a package to `'ignore'
 | `minor` | Up to minor updates. The sensible middle ground. |
 | `patch` | Patch updates only. Maximum conservatism. |
 | `latest` | Whatever the `latest` dist-tag points to. Living dangerously. |
-| `newest` | The most recently published version, regardless of dist-tags. Chaotic neutral. |
+| `newest` | Highest eligible semantic version, regardless of dist-tags. Chaotic neutral. |
 | `next` | The `next` dist-tag. For beta enthusiasts. |
 | `ignore` | Skip this package entirely. Out of sight, out of mind. |
 
