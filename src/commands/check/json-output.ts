@@ -6,7 +6,7 @@ import type {
   ResolvedDepChange,
   WriteOutcome,
 } from '../../types'
-import { getSafeErrorDetails, redactSensitiveText } from '../../utils/redact'
+import { getSafeErrorDetails, redactSensitiveText, redactSensitiveValue } from '../../utils/redact'
 
 export interface JsonPackage {
   name: string
@@ -160,7 +160,7 @@ export function outputJsonEnvelope(
   }
 
   // biome-ignore lint/suspicious/noConsole: intentional JSON output
-  console.log(JSON.stringify(output, null, 2))
+  console.log(JSON.stringify(redactSensitiveValue(output), null, 2))
 }
 
 export function outputJsonError(error: unknown, options: { cwd: string; mode: string }): void {

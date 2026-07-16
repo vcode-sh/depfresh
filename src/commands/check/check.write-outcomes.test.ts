@@ -59,6 +59,40 @@ describe('observed write outcome reporting', () => {
     })
   })
 
+  it('redacts secrets from itemized JSON write outcomes', async () => {
+    const pkg = makePkg('my-app')
+    const dep = makeResolved({
+      name: 'hostile',
+      currentVersion: '1.0.0',
+      targetVersion: '2.0.0',
+    })
+    mocks.loadPackagesMock.mockResolvedValue([pkg])
+    mocks.resolvePackageMock.mockResolvedValue([dep])
+    mocks.writePackageMock.mockReturnValue([
+      {
+        name: 'hostile',
+        occurrence: { file: pkg.filepath, path: ['dependencies', 'hostile'] },
+        expectedValue: 'https://user:password@registry.example/pkg?token=expected-secret',
+        requestedValue: 'Bearer requested-secret',
+        observedValue: 'NPM_TOKEN=observed-secret',
+        status: 'conflicted',
+        reason: 'EXPECTED_VALUE_MISMATCH',
+      },
+    ])
+    const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+
+    const { check } = await import('./index')
+    const exitCode = await check({ ...baseOptions, output: 'json', write: true })
+    const serialized = consoleSpy.mock.calls.map(([value]) => String(value)).join('\n')
+
+    expect(exitCode).toBe(2)
+    expect(serialized).toContain('registry.example')
+    expect(serialized).toContain('[REDACTED]')
+    expect(serialized).not.toMatch(
+      /user:password|expected-secret|requested-secret|observed-secret/u,
+    )
+  })
+
   it('does not run post-write actions after a conflicted physical occurrence', async () => {
     const pkg = makePkg('my-app')
     const dep = makeResolved({ name: 'shared', currentVersion: '1.0.0', targetVersion: '2.0.0' })

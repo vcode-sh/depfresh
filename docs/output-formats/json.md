@@ -154,6 +154,10 @@ separate records.
 | `status` | `string` | `applied`, `skipped`, `conflicted`, `reverted`, `failed`, or `unknown` |
 | `reason` | `string` | Stable machine-readable reason for the terminal status |
 
+The complete JSON envelope is redacted immediately before serialization. Credential-bearing
+dependency values, observed write outcomes, authorization assignments, URL userinfo, and sensitive
+query parameters retain their structural fields but replace secret material with `[REDACTED]`.
+
 ### `meta`
 
 | Field | Type | Description |
@@ -195,9 +199,8 @@ Fatal input and runtime failures use a single error envelope instead of `package
 }
 ```
 
-`reason` is the stable machine-specific classification. Messages and nested failure details are
-redacted before rendering; credentials, authorization values, and sensitive URL parameters are
-never emitted in this envelope.
+`reason` is the stable machine-specific classification. Messages and nested failure details use the
+same whole-envelope redaction boundary described above.
 
 ### `discovery`
 

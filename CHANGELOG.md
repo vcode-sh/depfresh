@@ -36,8 +36,9 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Semver
 - **Invocation authority is separate from configuration** -- config files can no longer grant
   write, install, update, command execution, verification-command, or global-write authority.
   Unknown and malformed CLI input now fails before discovery or side effects with stable reason
-  codes. Human and JSON failure rendering centrally redact credentials, authorization values,
-  sensitive URLs, environment assignments, and nested causes.
+  codes. Human failure rendering and complete JSON envelopes centrally redact credentials,
+  authorization values, sensitive URLs, environment assignments, nested causes, and observed
+  write-outcome values.
 
 - **The GitHub Action now treats every input as data** -- the Action validates exact booleans,
   modes, Node versions, and workspace-contained directories before installation or writes. The
