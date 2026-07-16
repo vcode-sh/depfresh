@@ -61,7 +61,7 @@ jobs:
           plan="$GITHUB_WORKSPACE/.depfresh-input/depfresh-plan.json"
           test -f "$plan" && test ! -L "$plan"
           printf '%s  %s\n' "$PLAN_SHA256" "$plan" | sha256sum --check --strict -
-      - uses: vcode-sh/depfresh@REPLACE_WITH_FULL_COMMIT_SHA
+      - uses: vcode-sh/depfresh@d90574717322ac71dfd615fec81e2b2100a8844b
         with:
           command: apply
           node-version: 24.15.0

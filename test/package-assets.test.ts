@@ -47,4 +47,17 @@ describe('published workflow assets', () => {
       expect(content).not.toMatch(/\b(?:git add|git commit|git push|npm publish)\b/u)
     }
   })
+
+  it('pins every shipped or documented Action example to one full commit SHA', () => {
+    for (const path of [
+      'skills/depfresh/examples/read-only-gate.yml',
+      'skills/depfresh/examples/protected-apply.yml',
+      'docs/integrations/github-action.md',
+    ]) {
+      const content = readFileSync(join(root, path), 'utf8')
+      const references = [...content.matchAll(/uses:\s+vcode-sh\/depfresh@([^\s]+)/gu)]
+      expect(references, path).toHaveLength(1)
+      expect(references[0]?.[1], path).toMatch(/^[a-f0-9]{40}$/u)
+    }
+  })
 })

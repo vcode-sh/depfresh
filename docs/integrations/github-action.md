@@ -49,7 +49,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009b4744f4bb1efb9dd2dec
-      - uses: vcode-sh/depfresh@REPLACE_WITH_FULL_COMMIT_SHA
+      - uses: vcode-sh/depfresh@d90574717322ac71dfd615fec81e2b2100a8844b
         id: depfresh
         with:
           command: plan
