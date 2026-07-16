@@ -6,6 +6,7 @@ import {
   mkdtempSync,
   readFileSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -87,6 +88,20 @@ describe('inspectRepository model core', () => {
       trailingNewline: true,
     })
     expect(yamlSource?.byteHash).toBe(createHash('sha256').update(yamlBytes).digest('hex'))
+  })
+
+  it('deduplicates manifest symlink spellings by physical source identity', async () => {
+    symlinkSync(join(root, 'packages', 'app'), join(root, 'packages', 'alias'))
+
+    const model = await inspectRepository({ cwd: root })
+
+    expect(model.sourceFiles.map((source) => source.path)).toEqual([
+      'package.json',
+      'packages/app/package.yaml',
+    ])
+    expect(model.diagnostics).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ code: 'ID_COLLISION' })]),
+    )
   })
 
   it('produces identical IDs and JSON at different absolute roots', async () => {

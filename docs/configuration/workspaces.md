@@ -53,6 +53,10 @@ reasons such as `workspace-pattern:PARENT_TRAVERSAL`, `workspace-pattern:ABSOLUT
 inside the root remain supported; their real path is used so duplicate spellings cannot produce
 duplicate packages or write targets.
 
+If aliases cause more than one package-manager catalog format to claim the same physical file,
+depfresh reports `catalog:DUPLICATE_IDENTITY` and excludes that ambiguous file instead of choosing a
+manager by loader order. Multiple named catalogs in one unambiguous manager file remain supported.
+
 ## Nested Workspace Detection
 
 `ignoreOtherWorkspaces` (default: `true`) detects when a subdirectory belongs to a separate workspace. In read-only discovery, the nested root remains visible while its descendants are skipped. depfresh looks for these markers:

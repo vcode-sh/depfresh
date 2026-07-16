@@ -78,7 +78,7 @@ export function catalogCandidateExists(candidate: string): boolean {
   return existsSync(candidate)
 }
 
-function recordBlockedCatalogPath(
+export function recordBlockedCatalogPath(
   options: depfreshOptions | undefined,
   path: string,
   reason: string,

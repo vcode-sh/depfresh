@@ -29,9 +29,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Semver
 - **Repository discovery is contained to one canonical root** -- workspace patterns containing
   parent traversal or absolute paths are rejected before globbing, and package, workspace-marker,
   lockfile, and catalog symlinks must resolve inside the selected repository. In-root symlinks are
-  canonicalised and deduplicated; external candidates are reported without parsing their contents.
-  Write runs cannot mutate nested repository roots or descendants unless that repository is targeted
-  by a separate invocation.
+  canonicalised and deduplicated; cross-format catalog aliases that claim one physical file as
+  multiple manager formats are blocked as ambiguous, and external candidates are reported without
+  parsing their contents. Write runs cannot mutate nested repository roots or descendants unless
+  that repository is targeted by a separate invocation.
 
 - **Invocation authority is separate from configuration** -- config files can no longer grant
   write, install, update, command execution, verification-command, or global-write authority.

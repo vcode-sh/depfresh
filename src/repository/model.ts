@@ -50,10 +50,13 @@ export function buildRepositoryModel(
 ): RepositoryModel {
   const diagnostics = diagnosticsFromDiscovery(root, report)
   const sourcePaths = collectSourcePaths(root, projection, report)
-  const parsedSources = sourcePaths.flatMap((filepath) => {
+  const parsedSourceCandidates = sourcePaths.flatMap((filepath) => {
     const parsed = parseSource(root, filepath, diagnostics)
     return parsed ? [parsed] : []
   })
+  const parsedSources = [
+    ...new Map(parsedSourceCandidates.map((parsed) => [parsed.source.path, parsed])).values(),
+  ]
   const sourcesByPath = new Map(parsedSources.map((parsed) => [parsed.source.path, parsed]))
   const packages = buildPackages(root, projection, sourcesByPath)
   const catalogDefinitions = buildCatalogDefinitions(parsedSources)

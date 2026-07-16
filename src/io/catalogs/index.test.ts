@@ -182,6 +182,34 @@ describe('loadCatalogs', () => {
     expect(catalogs[0]?.filepath).toBe(realpathSync(catalogFile))
   })
 
+  it('blocks one physical catalog file claimed by multiple manager formats', async () => {
+    const catalogFile = join(tmpDir, 'pnpm-workspace.yaml')
+    writeFileSync(catalogFile, 'catalog:\n  react: ^19.0.0\n', 'utf-8')
+    symlinkSync(catalogFile, join(tmpDir, '.yarnrc.yml'))
+    const options = {
+      ...baseOptions,
+      cwd: tmpDir,
+      effectiveRoot: tmpDir,
+      discoveryReport: {
+        inputCwd: tmpDir,
+        effectiveRoot: tmpDir,
+        discoveryMode: 'direct-root' as const,
+        matchedManifests: [],
+        loadedPackages: [],
+        skippedManifests: [],
+        loadedCatalogs: [],
+      },
+    }
+
+    const catalogs = await loadCatalogs(tmpDir, options)
+
+    expect(catalogs).toEqual([])
+    expect(options.discoveryReport.skippedManifests).toContainEqual({
+      path: realpathSync(catalogFile),
+      reason: 'catalog:DUPLICATE_IDENTITY',
+    })
+  })
+
   it('blocks a symlinked external Bun catalog before parsing it', async () => {
     const externalFile = join(tmpDir, '..', `${tmpDir.split('/').at(-1)}-external-package.json`)
     writeFileSync(
