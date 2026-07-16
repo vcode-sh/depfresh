@@ -107,6 +107,7 @@ export {
   type CohortInput,
   type PlanSignal,
   SIGNAL_FAMILIES,
+  SIGNAL_POLICY_EFFECTS,
   SIGNAL_REASONS,
   SIGNAL_STATES,
   type SignalEvidence,

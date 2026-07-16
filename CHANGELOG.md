@@ -6,6 +6,16 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Semver
 
 ### Added
 
+- **Official schema-backed automation workflow** -- `depfresh capabilities --json` now emits a
+  deterministic `depfresh.capabilities` v1 document generated from the shipped command, schema,
+  selector, signal, manager, and apply-phase registries. The package includes its capabilities
+  schema, a concise public-API-only operational skill, pinned-runner and manager/CI recipes, and
+  sanitized audit, catalog-policy, stale-plan, trust-review, and protected-apply examples. The
+  composite Action preserves legacy check behavior while adding fixed-input capabilities,
+  inspect, plan, and exact reviewed apply commands with contained plan-file validation and explicit
+  sync/install/artifact grants. The historical broad agent design is demoted to a pointer; no
+  workflow infers Git, PR, publishing, or deployment authority.
+
 - **Exact-artifact npm trust verification** -- install plans may fingerprint npm 11.12.x public
   registry artifacts by physical package/version/SHA-512 identity and per-boundary verifier intent.
   Apply rebinds every target to the final npm lockfile and contained installed location, runs fixed
@@ -138,12 +148,14 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Semver
   write-outcome values.
 
 - **The GitHub Action now treats every input as data** -- the Action validates exact booleans,
-  modes, Node versions, and workspace-contained directories before installation or writes. The
-  shell-split `extra-args` escape hatch is gone, so only `write: 'true'` grants mutation authority.
+  commands, modes, Node versions, workspace-contained directories, phase relationships, and
+  contained regular plan files before installation or writes. The shell-split `extra-args` escape
+  hatch remains absent; machine inspect cannot receive authority, plan cannot receive write
+  authority, and apply requires both explicit write authority and the exact reviewed plan.
   Include and exclude patterns remain single inert arguments even when they contain spaces,
-  quotes, newlines, option-looking text, or shell syntax. Fatal install, runtime, and JSON errors
-  return stable annotations without replaying raw output, and temporary diagnostic files are
-  cleaned on every path.
+  quotes, newlines, option-looking text, or shell syntax. Fatal install, runtime, contract/exit,
+  and JSON errors return stable annotations without replaying raw output, and temporary diagnostic
+  files are cleaned on every path.
 
 ### Changed
 

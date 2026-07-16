@@ -1,0 +1,50 @@
+import { existsSync, readFileSync } from 'node:fs'
+import { dirname, join, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { describe, expect, it } from 'vitest'
+import { parse } from 'yaml'
+
+const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
+const packageJson = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as {
+  exports: Record<string, string | Record<string, string>>
+  files: string[]
+}
+
+const publicAssets = [
+  'schemas/capabilities-v1.json',
+  'skills/depfresh/SKILL.md',
+  'skills/depfresh/recipes/runners.md',
+  'skills/depfresh/recipes/manager-phases.md',
+  'skills/depfresh/recipes/ci.md',
+  'skills/depfresh/examples/README.md',
+  'skills/depfresh/examples/catalog-policy.json',
+  'skills/depfresh/examples/read-only-gate.yml',
+  'skills/depfresh/examples/protected-apply.yml',
+]
+
+describe('published workflow assets', () => {
+  it('allowlists dist and skills without publishing plans or scratch state', () => {
+    expect(packageJson.files).toEqual(['dist', 'skills'])
+    expect(packageJson.files).not.toEqual(expect.arrayContaining(['plans', '.superpowers', 'src']))
+    expect(packageJson.exports['./schemas/capabilities-v1.json']).toBe(
+      './dist/schemas/capabilities-v1.json',
+    )
+    for (const asset of publicAssets.filter((entry) => entry.startsWith('skills/'))) {
+      expect(packageJson.exports[`./${asset}`]).toBe(`./${asset}`)
+    }
+  })
+
+  it('keeps every documented public asset present and sanitized', () => {
+    for (const asset of publicAssets) expect(existsSync(join(root, asset)), asset).toBe(true)
+
+    const skill = readFileSync(join(root, 'skills/depfresh/SKILL.md'), 'utf8')
+    expect(skill).not.toContain('src/')
+    expect(skill).not.toMatch(/\b(?:git add|git commit|git push|npm publish)\b/u)
+
+    for (const filename of ['read-only-gate.yml', 'protected-apply.yml']) {
+      const content = readFileSync(join(root, 'skills/depfresh/examples', filename), 'utf8')
+      expect(() => parse(content)).not.toThrow()
+      expect(content).not.toMatch(/\b(?:git add|git commit|git push|npm publish)\b/u)
+    }
+  })
+})

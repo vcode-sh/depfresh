@@ -1,5 +1,6 @@
 import { basename } from 'node:path'
 import * as semver from 'semver'
+import { getManagerPhaseSupport } from './manager-registry'
 
 export type ManagerPhaseMode = 'sync-lockfile' | 'install'
 
@@ -51,10 +52,12 @@ export function resolveManagerAdapter(
   if (lockfileName === 'bun.lockb') return { unsupported: 'LOCKFILE_UNSUPPORTED' }
 
   if (request.manager === 'npm') {
+    const support = getManagerPhaseSupport('npm')
+    if (!support) return { unsupported: 'MANAGER_UNSUPPORTED' }
     if (lockfileName !== 'package-lock.json' && lockfileName !== 'npm-shrinkwrap.json') {
       return { unsupported: 'MANAGER_LOCKFILE_MISMATCH' }
     }
-    if (!satisfies(request.version, '>=10.0.0 <12.0.0')) {
+    if (!satisfies(request.version, support.versionRange)) {
       return { unsupported: 'MANAGER_VERSION_UNSUPPORTED' }
     }
     return adapter(
@@ -70,10 +73,12 @@ export function resolveManagerAdapter(
   }
 
   if (request.manager === 'pnpm') {
+    const support = getManagerPhaseSupport('pnpm')
+    if (!support) return { unsupported: 'MANAGER_UNSUPPORTED' }
     if (lockfileName !== 'pnpm-lock.yaml') {
       return { unsupported: 'MANAGER_LOCKFILE_MISMATCH' }
     }
-    if (!satisfies(request.version, '>=10.0.0 <12.0.0')) {
+    if (!satisfies(request.version, support.versionRange)) {
       return { unsupported: 'MANAGER_VERSION_UNSUPPORTED' }
     }
     return adapter(
@@ -102,8 +107,10 @@ export function resolveManagerAdapter(
   }
 
   if (request.manager === 'bun') {
+    const support = getManagerPhaseSupport('bun')
+    if (!support) return { unsupported: 'MANAGER_UNSUPPORTED' }
     if (lockfileName !== 'bun.lock') return { unsupported: 'MANAGER_LOCKFILE_MISMATCH' }
-    if (!satisfies(request.version, '>=1.2.0 <2.0.0')) {
+    if (!satisfies(request.version, support.versionRange)) {
       return { unsupported: 'MANAGER_VERSION_UNSUPPORTED' }
     }
     return adapter(

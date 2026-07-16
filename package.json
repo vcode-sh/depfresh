@@ -46,10 +46,20 @@
     "./schemas/apply-v1.json": "./dist/schemas/apply-v1.json",
     "./schemas/error-v1.json": "./dist/schemas/error-v1.json",
     "./schemas/global-plan-v1.json": "./dist/schemas/global-plan-v1.json",
-    "./schemas/global-apply-v1.json": "./dist/schemas/global-apply-v1.json"
+    "./schemas/global-apply-v1.json": "./dist/schemas/global-apply-v1.json",
+    "./schemas/capabilities-v1.json": "./dist/schemas/capabilities-v1.json",
+    "./skills/depfresh/SKILL.md": "./skills/depfresh/SKILL.md",
+    "./skills/depfresh/recipes/runners.md": "./skills/depfresh/recipes/runners.md",
+    "./skills/depfresh/recipes/manager-phases.md": "./skills/depfresh/recipes/manager-phases.md",
+    "./skills/depfresh/recipes/ci.md": "./skills/depfresh/recipes/ci.md",
+    "./skills/depfresh/examples/README.md": "./skills/depfresh/examples/README.md",
+    "./skills/depfresh/examples/catalog-policy.json": "./skills/depfresh/examples/catalog-policy.json",
+    "./skills/depfresh/examples/read-only-gate.yml": "./skills/depfresh/examples/read-only-gate.yml",
+    "./skills/depfresh/examples/protected-apply.yml": "./skills/depfresh/examples/protected-apply.yml"
   },
   "files": [
-    "dist"
+    "dist",
+    "skills"
   ],
   "scripts": {
     "prebuild": "pnpm schemas:check",

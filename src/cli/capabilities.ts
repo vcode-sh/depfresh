@@ -1,7 +1,13 @@
 import type { ArgsDef } from 'citty'
 import { version } from '../../package.json' with { type: 'json' }
+import { MANAGER_PHASE_SUPPORT } from '../commands/apply/manager-registry'
 import { CONFIG_FILES, INVOCATION_ONLY_OPTIONS } from '../config'
+import { NPM_ARTIFACT_VERIFIER_SUPPORT } from '../contracts/artifact-verifier'
+import { APPLY_PHASE_NAMES } from '../contracts/schemas'
 import { DEPFRESH_ERROR_REASONS } from '../errors'
+import { POLICY_SELECTOR_KEYS } from '../policy/schema'
+import { SIGNAL_SELECTOR_KEYS } from '../signals/config'
+import { SIGNAL_FAMILIES, SIGNAL_POLICY_EFFECTS, SIGNAL_REASONS, SIGNAL_STATES } from '../types'
 import { VALID_LOG_LEVELS, VALID_MODES, VALID_OUTPUTS, VALID_SORT_OPTIONS } from './arg-values'
 import { args } from './args-schema'
 
@@ -28,11 +34,12 @@ interface InvocationGrant {
   grants: string[]
 }
 
-interface CliCapabilities {
+export interface CliCapabilities {
+  contract: 'depfresh.capabilities'
   schemaVersion: number
+  schema: 'depfresh/schemas/capabilities-v1.json'
   version: string
   command: string
-  generatedAt: string
   enums: {
     mode: readonly string[]
     output: readonly string[]
@@ -41,7 +48,7 @@ interface CliCapabilities {
   }
   exitCodes: Record<string, string>
   machineExitCodes: Record<string, string>
-  commands: Record<string, { description: string; schema?: string }>
+  commands: Record<string, { description: string; schema?: string; surface?: 'cli' | 'library' }>
   contractSchemas: Record<string, string>
   positional: Record<string, CapabilityFlag>
   flags: Record<string, CapabilityFlag>
@@ -56,6 +63,28 @@ interface CliCapabilities {
     helpJsonFlag: string
     capabilitiesCommand: string
   }
+  registries: {
+    policySelectors: readonly string[]
+    signalSelectors: readonly string[]
+    signalStates: readonly string[]
+    signalFamilies: readonly string[]
+    signalReasons: readonly string[]
+    signalEffects: readonly string[]
+    applyPhases: readonly string[]
+    managers: Array<{
+      name: string
+      versionRange: string
+      lockfiles: readonly string[]
+    }>
+    artifactVerification: typeof NPM_ARTIFACT_VERIFIER_SUPPORT
+  }
+  runners: Array<{
+    priority: number
+    name: string
+    command: string
+    requirement: string
+  }>
+  assets: string[]
 }
 
 const ENUM_VALUES_BY_FLAG: Record<string, readonly string[]> = {
@@ -66,9 +95,9 @@ const ENUM_VALUES_BY_FLAG: Record<string, readonly string[]> = {
 }
 
 const EXIT_CODES: Record<string, string> = {
-  '0': 'Success (no updates found, or updates written successfully).',
+  '0': 'Legacy check completed without an enforced failure; outdated dependencies may still be reported when --fail-on-outdated is false, or requested writes may have completed.',
   '1': 'Outdated dependencies found with --fail-on-outdated and without --write.',
-  '2': 'Fatal/runtime/configuration error (including invalid enum flag values and runs failed by --fail-on-resolution-errors or --fail-on-no-packages).',
+  '2': 'Fatal, configuration, runtime, incomplete-write, or strict discovery/resolution failure (including invalid enum flags, --fail-on-resolution-errors, and --fail-on-no-packages).',
 }
 
 const WORKFLOWS: Record<string, Workflow> = {
@@ -84,26 +113,28 @@ const WORKFLOWS: Record<string, Workflow> = {
     description: 'Apply one reviewed immutable plan with explicit file-write authority',
     command: 'depfresh apply --output json --write --plan-file depfresh-plan.json',
   },
-  checkOnly: {
-    description: 'Check for outdated dependencies and return structured JSON',
-    command: 'depfresh --output json',
+  syncLockfile: {
+    description: 'Apply a reviewed sync-lockfile plan with only its required authority',
+    command: 'depfresh apply --output json --write --sync-lockfile --plan-file depfresh-plan.json',
   },
-  safeUpdate: {
-    description: 'Apply only minor and patch updates',
-    command: 'depfresh --write --mode minor --output json',
+  installAndVerifyArtifacts: {
+    description: 'Apply a reviewed install and exact artifact-verification plan',
+    command:
+      'depfresh apply --output json --write --install --verify-artifacts --plan-file depfresh-plan.json',
   },
-  fullUpdate: {
-    description: 'Update everything to the latest version',
-    command: 'depfresh --write --mode latest --output json',
+  globalInspect: {
+    description: 'Inspect supported global managers without write authority',
+    command: 'depfresh --global-all --output json',
   },
-  selective: {
-    description: 'Update specific packages by name',
-    command: 'depfresh --write --include "pkg1,pkg2" --output json',
-  },
-  globalUpdate: {
+  globalApplyObserved: {
     description:
       'Apply observed per-manager global updates with explicit global-write and process authority',
     command: 'depfresh --global-all --write --output json',
+  },
+  readOnlyGate: {
+    description: 'Run a non-mutating legacy freshness gate with structured JSON',
+    command:
+      'depfresh --output json --fail-on-outdated --fail-on-resolution-errors --fail-on-no-packages',
   },
 }
 
@@ -215,10 +246,11 @@ export function getCliCapabilities(): CliCapabilities {
   const { positional, flags } = buildFlagDefinitions(args)
 
   return {
+    contract: 'depfresh.capabilities',
     schemaVersion: 1,
+    schema: 'depfresh/schemas/capabilities-v1.json',
     version,
     command: 'depfresh',
-    generatedAt: new Date().toISOString(),
     enums: {
       mode: VALID_MODES,
       output: VALID_OUTPUTS,
@@ -227,26 +259,50 @@ export function getCliCapabilities(): CliCapabilities {
     },
     exitCodes: EXIT_CODES,
     machineExitCodes: {
-      '0': 'Inspect or plan completed without actionable or incomplete findings, or apply completed as applied or noop.',
+      '0': 'Capabilities completed, inspect or plan had no actionable/incomplete findings, or apply completed as applied or noop.',
       '1': 'Schema-valid inspect or plan findings, or a schema-valid conflicted, reverted, failed, or unknown apply result.',
       '2': 'Fatal input, contract, configuration, or runtime error prevented a trustworthy result.',
     },
     commands: {
+      check: {
+        description: 'Legacy human/table or JSON dependency check and compatibility write flow.',
+        surface: 'cli',
+      },
+      capabilities: {
+        description:
+          'Deterministic installed command, schema, feature, runner, and asset descriptor.',
+        schema: 'depfresh/schemas/capabilities-v1.json',
+        surface: 'cli',
+      },
       inspect: {
         description: 'Process-free repository model and evidence inspection.',
         schema: 'depfresh/schemas/inspect-v1.json',
+        surface: 'cli',
       },
       plan: {
         description: 'Registry-aware planning without file or process side effects.',
         schema: 'depfresh/schemas/plan-v1.json',
+        surface: 'cli',
       },
       apply: {
         description:
           'Stale-safe file and explicitly granted manager phases from one immutable plan.',
         schema: 'depfresh/schemas/apply-v1.json',
+        surface: 'cli',
+      },
+      globalPlan: {
+        description: 'Observed global update plan API; no standalone machine CLI command.',
+        schema: 'depfresh/schemas/global-plan-v1.json',
+        surface: 'library',
+      },
+      globalApply: {
+        description: 'Observed global apply API; legacy global CLI delegates to this contract.',
+        schema: 'depfresh/schemas/global-apply-v1.json',
+        surface: 'library',
       },
     },
     contractSchemas: {
+      capabilities: 'depfresh/schemas/capabilities-v1.json',
       inspect: 'depfresh/schemas/inspect-v1.json',
       plan: 'depfresh/schemas/plan-v1.json',
       apply: 'depfresh/schemas/apply-v1.json',
@@ -267,6 +323,46 @@ export function getCliCapabilities(): CliCapabilities {
       helpJsonFlag: 'depfresh --help-json',
       capabilitiesCommand: 'depfresh capabilities --json',
     },
+    registries: {
+      policySelectors: POLICY_SELECTOR_KEYS,
+      signalSelectors: SIGNAL_SELECTOR_KEYS,
+      signalStates: SIGNAL_STATES,
+      signalFamilies: SIGNAL_FAMILIES,
+      signalReasons: SIGNAL_REASONS,
+      signalEffects: SIGNAL_POLICY_EFFECTS,
+      applyPhases: APPLY_PHASE_NAMES,
+      managers: MANAGER_PHASE_SUPPORT.map((entry) => ({
+        name: entry.name,
+        versionRange: entry.versionRange,
+        lockfiles: entry.lockfiles,
+      })),
+      artifactVerification: NPM_ARTIFACT_VERIFIER_SUPPORT,
+    },
+    runners: [
+      {
+        priority: 1,
+        name: 'repository-local',
+        command: 'pnpm exec depfresh',
+        requirement: 'The repository lockfile pins depfresh.',
+      },
+      {
+        priority: 2,
+        name: 'exact-package',
+        command: `npm exec --yes --package=depfresh@${version} -- depfresh`,
+        requirement: 'The exact package version is approved.',
+      },
+    ],
+    assets: [
+      'depfresh/schemas/capabilities-v1.json',
+      'depfresh/skills/depfresh/SKILL.md',
+      'depfresh/skills/depfresh/recipes/runners.md',
+      'depfresh/skills/depfresh/recipes/manager-phases.md',
+      'depfresh/skills/depfresh/recipes/ci.md',
+      'depfresh/skills/depfresh/examples/README.md',
+      'depfresh/skills/depfresh/examples/catalog-policy.json',
+      'depfresh/skills/depfresh/examples/read-only-gate.yml',
+      'depfresh/skills/depfresh/examples/protected-apply.yml',
+    ],
   }
 }
 

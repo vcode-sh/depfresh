@@ -27,6 +27,11 @@ export { plan } from './commands/plan'
 export { resolveConfig } from './config'
 export { canonicalJson } from './contracts/canonical-json'
 export {
+  CAPABILITIES_SCHEMA_ID,
+  capabilitiesSchema,
+  validateCapabilities,
+} from './contracts/capabilities-schema'
+export {
   createPlanFingerprint,
   createRepositoryFingerprint,
   hashExactBytes,
@@ -215,6 +220,7 @@ export {
   DEFAULT_OPTIONS,
   REPOSITORY_MODEL_SCHEMA_VERSION,
   SIGNAL_FAMILIES,
+  SIGNAL_POLICY_EFFECTS,
   SIGNAL_REASONS,
   SIGNAL_STATES,
   summarizeWriteOutcomes,

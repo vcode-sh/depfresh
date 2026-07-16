@@ -2,6 +2,10 @@ import * as semver from 'semver'
 import { version } from '../../../package.json' with { type: 'json' }
 import { createMemoryCache } from '../../cache'
 import { resolveDataConfigForSource } from '../../config'
+import {
+  EXACT_SHA512_INTEGRITY_REGEX,
+  NPM_ARTIFACT_VERIFIER_SUPPORT,
+} from '../../contracts/artifact-verifier'
 import { canonicalJson } from '../../contracts/canonical-json'
 import { createPlanFingerprint, hashExactBytes } from '../../contracts/fingerprint'
 import { assertPlainDataInput } from '../../contracts/input'
@@ -855,10 +859,10 @@ function buildArtifactVerification(
 
   for (const operation of operations) {
     const target = executionTargetForFile(operation.file, targets)
-    if (target?.manager.name !== 'npm') {
+    if (target?.manager.name !== NPM_ARTIFACT_VERIFIER_SUPPORT.manager) {
       return { reason: 'ARTIFACT_VERIFIER_UNSUPPORTED' }
     }
-    if (!semver.satisfies(target.manager.version, '>=11.12.0 <12.0.0')) {
+    if (!semver.satisfies(target.manager.version, NPM_ARTIFACT_VERIFIER_SUPPORT.versionRange)) {
       return { reason: 'ARTIFACT_VERIFIER_UNSUPPORTED' }
     }
     const resolution = metadata.get(operation.occurrenceId)
@@ -866,10 +870,13 @@ function buildArtifactVerification(
     if (!(resolution && targetVersion)) return { reason: 'ARTIFACT_IDENTITY_UNAVAILABLE' }
     const observedRegistry = resolution.data.registry
     const integrity = resolution.data.artifactIntegrity?.[targetVersion]
-    if (observedRegistry !== 'https://registry.npmjs.org/' || !isExactSha512Integrity(integrity)) {
+    if (
+      observedRegistry !== NPM_ARTIFACT_VERIFIER_SUPPORT.registry ||
+      !isExactSha512Integrity(integrity)
+    ) {
       return { reason: 'ARTIFACT_INTEGRITY_UNAVAILABLE' }
     }
-    const registry = 'https://registry.npmjs.org/' as const
+    const registry = NPM_ARTIFACT_VERIFIER_SUPPORT.registry
     const base: Omit<Artifact, 'id' | 'evidenceRef'> = {
       occurrenceIds: [operation.occurrenceId],
       packageName: resolution.packageName,
@@ -1012,7 +1019,7 @@ function executionTargetForFile(
 
 function isExactSha512Integrity(value: string | undefined): value is string {
   if (!value) return false
-  const match = /^sha512-([A-Za-z0-9+/]+={0,2})$/u.exec(value)
+  const match = EXACT_SHA512_INTEGRITY_REGEX.exec(value)
   if (!match?.[1]) return false
   const bytes = Buffer.from(match[1], 'base64')
   return bytes.length === 64 && bytes.toString('base64') === match[1]

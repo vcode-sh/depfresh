@@ -1,19 +1,23 @@
 import { isContractSafeText } from '../contracts/sanitize'
 import { ConfigError } from '../errors'
 import type { CohortInput, SignalRuleInput } from '../types'
-import { SIGNAL_FAMILIES, SIGNAL_REASONS, SIGNAL_STATES } from '../types'
+import { SIGNAL_FAMILIES, SIGNAL_POLICY_EFFECTS, SIGNAL_REASONS, SIGNAL_STATES } from '../types'
 import { isValidPackageName } from '../utils/package-name'
 
 const COHORT_KEYS = new Set(['id', 'members', 'strategy'])
 const RULE_KEYS = new Set(['id', 'selectors', 'effect'])
-const SELECTOR_KEYS = new Set([
+const RULE_EFFECTS: ReadonlySet<unknown> = new Set(
+  SIGNAL_POLICY_EFFECTS.filter((effect) => effect !== 'none'),
+)
+export const SIGNAL_SELECTOR_KEYS = [
   'family',
   'state',
   'reason',
   'dependencyName',
   'workspacePath',
   'cohortId',
-])
+] as const
+const SELECTOR_KEYS = new Set<string>(SIGNAL_SELECTOR_KEYS)
 const RELATIVE_WORKSPACE_PATH = /^(?!\/)(?![A-Za-z]:\/)(?!.*(?:^|\/)\.\.(?:\/|$))(?!.*\\).+$/u
 
 export function validateSignalConfiguration(
@@ -61,7 +65,7 @@ function validateRules(rules: SignalRuleInput[], cohortIds: Set<string>): void {
       invalid('signal rule selectors contain an unknown field')
     }
     if (Object.keys(rule.selectors).length === 0) invalid('signal rule selectors cannot be empty')
-    if (rule.effect !== 'warn' && rule.effect !== 'block') invalid('signal rule effect is invalid')
+    if (!RULE_EFFECTS.has(rule.effect)) invalid('signal rule effect is invalid')
     const selectors = rule.selectors
     if (selectors.family && !SIGNAL_FAMILIES.includes(selectors.family))
       invalid('signal family is invalid')

@@ -12,8 +12,10 @@ import {
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { parse } from 'yaml'
+import { getCliCapabilities } from '../src/cli/capabilities'
+import { apply, createInvocationAuthority, inspect, plan } from '../src/index'
 
 interface ActionStep {
   env?: Record<string, string>
@@ -70,10 +72,14 @@ function runStep(
 ): ReturnType<typeof spawnSync> {
   const step = getStep(name)
   if (!step.run) throw new Error(`Action step has no script: ${name}`)
+  const validatorEnv =
+    name === 'Parse outputs'
+      ? { DEPFRESH_MODULE: join(repoRoot, 'src/index.ts'), NODE_OPTIONS: '--import tsx' }
+      : {}
   return spawnSync('bash', ['--noprofile', '--norc', '-e', '-o', 'pipefail', '-c', step.run], {
     cwd,
     encoding: 'utf8',
-    env: { ...process.env, ...env },
+    env: { ...process.env, ...validatorEnv, ...env },
   })
 }
 
@@ -81,12 +87,17 @@ function validInputEnv(fixture: ReturnType<typeof createFixture>): Record<string
   return {
     GITHUB_OUTPUT: fixture.githubOutput,
     GITHUB_WORKSPACE: fixture.workspace,
+    INPUT_COMMAND: 'check',
     INPUT_EXCLUDE: '',
     INPUT_FAIL_ON_OUTDATED: 'true',
     INPUT_INCLUDE: '',
     INPUT_MODE: 'default',
     INPUT_NODE_VERSION: '24.15.0',
+    INPUT_INSTALL: 'false',
+    INPUT_PLAN_FILE: '',
     INPUT_RECURSIVE: 'true',
+    INPUT_SYNC_LOCKFILE: 'false',
+    INPUT_VERIFY_ARTIFACTS: 'false',
     INPUT_WORKING_DIRECTORY: 'project with spaces',
     INPUT_WRITE: 'false',
     RUNNER_TEMP: fixture.runnerTemp,
@@ -119,6 +130,7 @@ process.stdout.write(process.env.DEPFRESH_STDOUT || '{"summary":{"total":0}}')
 process.exit(Number(process.env.DEPFRESH_EXIT_CODE || 0))
 `,
   )
+  writeFileSync(join(fixture.bin, 'index.mjs'), 'export {}\n')
   writeExecutable(
     join(fixture.bin, 'npm'),
     `#!/usr/bin/env node
@@ -145,6 +157,7 @@ function readOutputValue(content: string, name: string): string | undefined {
 }
 
 afterEach(() => {
+  vi.unstubAllEnvs()
   while (tempRoots.length > 0) {
     const root = tempRoots.pop()
     if (root) rmSync(root, { force: true, recursive: true })
@@ -157,6 +170,11 @@ describe('GitHub Action metadata', () => {
 
     expect(action.inputs['node-version']?.default).toBe('24.15.0')
     expect(action.inputs['extra-args']).toBeUndefined()
+    expect(action.inputs.command?.default).toBe('check')
+    expect(action.inputs['plan-file']?.default).toBe('')
+    expect(action.inputs['sync-lockfile']?.default).toBe('false')
+    expect(action.inputs.install?.default).toBe('false')
+    expect(action.inputs['verify-artifacts']?.default).toBe('false')
   })
 
   it('validates inputs before setup and installation', () => {
@@ -295,6 +313,56 @@ describe('GitHub Action input validation', () => {
       expect(result.stdout).not.toContain(workingDirectory)
     }
   })
+
+  it('accepts a contained regular reviewed plan for apply', () => {
+    const fixture = createFixture()
+    const plan = join(fixture.project, 'reviewed plan.json')
+    writeFileSync(plan, '{}')
+    const result = runStep('Validate inputs', {
+      ...validInputEnv(fixture),
+      INPUT_COMMAND: 'apply',
+      INPUT_PLAN_FILE: 'reviewed plan.json',
+      INPUT_WRITE: 'true',
+    })
+
+    expect(result.status).toBe(0)
+    expect(readOutputValue(readFileSync(fixture.githubOutput, 'utf8'), 'plan-file')).toBe(
+      realpathSync(plan),
+    )
+  })
+
+  it.each([
+    { INPUT_COMMAND: 'inspect', INPUT_WRITE: 'true' },
+    { INPUT_COMMAND: 'plan', INPUT_WRITE: 'true' },
+    { INPUT_COMMAND: 'apply', INPUT_PLAN_FILE: '' },
+    { INPUT_INSTALL: 'true', INPUT_SYNC_LOCKFILE: 'true' },
+    { INPUT_VERIFY_ARTIFACTS: 'true' },
+  ])('rejects unsafe machine input combinations before side effects: %j', (overrides) => {
+    const fixture = createFixture()
+    const result = runStep('Validate inputs', { ...validInputEnv(fixture), ...overrides })
+
+    expect(result.status).toBe(2)
+    expect(result.stdout).toContain('::error title=depfresh input error::')
+  })
+
+  it('rejects escaping and symlinked plan files', () => {
+    const fixture = createFixture()
+    const outside = join(fixture.root, 'outside-plan.json')
+    writeFileSync(outside, '{}')
+    symlinkSync(outside, join(fixture.project, 'plan-link.json'))
+
+    for (const planFile of ['../../outside-plan.json', 'plan-link.json']) {
+      writeFileSync(fixture.githubOutput, '')
+      const result = runStep('Validate inputs', {
+        ...validInputEnv(fixture),
+        INPUT_COMMAND: 'apply',
+        INPUT_PLAN_FILE: planFile,
+        INPUT_WRITE: 'true',
+      })
+      expect(result.status).toBe(2)
+      expect(result.stdout).not.toContain(planFile)
+    }
+  })
 })
 
 describe('GitHub Action version coupling', () => {
@@ -303,6 +371,7 @@ describe('GitHub Action version coupling', () => {
     const { npmArgsFile } = installCommandStubs(fixture)
     const result = runStep('Install depfresh', {
       DEPFRESH_PACKAGE_JSON: join(repoRoot, 'package.json'),
+      GITHUB_OUTPUT: fixture.githubOutput,
       GITHUB_ACTION_PATH: repoRoot,
       INSTALLED_DEPFRESH_VERSION: packageJson.version,
       NPM_ARGS_FILE: npmArgsFile,
@@ -324,6 +393,7 @@ describe('GitHub Action version coupling', () => {
     const { npmArgsFile } = installCommandStubs(fixture)
     const result = runStep('Install depfresh', {
       DEPFRESH_PACKAGE_JSON: join(repoRoot, 'package.json'),
+      GITHUB_OUTPUT: fixture.githubOutput,
       GITHUB_ACTION_PATH: repoRoot,
       INSTALLED_DEPFRESH_VERSION: '0.0.0-wrong',
       NPM_ARGS_FILE: npmArgsFile,
@@ -342,6 +412,7 @@ describe('GitHub Action version coupling', () => {
     const secret = 'https://token@example.test/private-registry'
     const result = runStep('Install depfresh', {
       DEPFRESH_PACKAGE_JSON: join(repoRoot, 'package.json'),
+      GITHUB_OUTPUT: fixture.githubOutput,
       GITHUB_ACTION_PATH: repoRoot,
       INSTALLED_DEPFRESH_VERSION: packageJson.version,
       NPM_ARGS_FILE: npmArgsFile,
@@ -360,6 +431,53 @@ describe('GitHub Action version coupling', () => {
 })
 
 describe('GitHub Action argument authority', () => {
+  it.each([
+    ['capabilities', ['capabilities', '--json']],
+    ['inspect', ['inspect', '--output', 'json', '--no-recursive']],
+    ['plan', ['plan', '--output', 'json', '--mode', 'latest', '--no-recursive', '--sync-lockfile']],
+    [
+      'apply',
+      [
+        'apply',
+        '--output',
+        'json',
+        '--write',
+        '--plan-file',
+        '/tmp/reviewed plan.json',
+        '--install',
+        '--verify-artifacts',
+      ],
+    ],
+  ])('builds exact argv for the %s machine command', (command, expected) => {
+    const fixture = createFixture()
+    const { argsFile } = installCommandStubs(fixture)
+    const result = runStep(
+      'Run depfresh',
+      {
+        ARGS_FILE: argsFile,
+        DEPFRESH_EXIT_CODE: '0',
+        GITHUB_OUTPUT: fixture.githubOutput,
+        INPUT_COMMAND: command,
+        INPUT_EXCLUDE: '',
+        INPUT_FAIL_ON_OUTDATED: 'true',
+        INPUT_INCLUDE: '',
+        INPUT_INSTALL: command === 'apply' ? 'true' : 'false',
+        INPUT_MODE: command === 'plan' ? 'latest' : 'default',
+        INPUT_PLAN_FILE: '/tmp/reviewed plan.json',
+        INPUT_RECURSIVE: command === 'inspect' || command === 'plan' ? 'false' : 'true',
+        INPUT_SYNC_LOCKFILE: command === 'plan' ? 'true' : 'false',
+        INPUT_VERIFY_ARTIFACTS: command === 'apply' ? 'true' : 'false',
+        INPUT_WRITE: command === 'apply' ? 'true' : 'false',
+        PATH: `${fixture.bin}:${process.env.PATH ?? ''}`,
+        RUNNER_TEMP: fixture.runnerTemp,
+      },
+      fixture.project,
+    )
+
+    expect(result.status).toBe(0)
+    expect(JSON.parse(readFileSync(argsFile, 'utf8'))).toEqual(expected)
+  })
+
   it('keeps spaces, quotes, newlines, option-looking values, and shell syntax inert', () => {
     const fixture = createFixture()
     const { argsFile } = installCommandStubs(fixture)
@@ -537,6 +655,142 @@ describe('GitHub Action argument authority', () => {
 })
 
 describe('GitHub Action outputs and cleanup', () => {
+  it.each([
+    [
+      'capabilities',
+      0,
+      { contract: 'depfresh.capabilities', schemaVersion: 1 },
+      'depfresh.capabilities',
+      'false',
+    ],
+    [
+      'inspect',
+      0,
+      { contract: 'depfresh.inspect', schemaVersion: 1, risks: [], errors: [] },
+      'depfresh.inspect',
+      'false',
+    ],
+    [
+      'plan',
+      1,
+      {
+        contract: 'depfresh.plan',
+        schemaVersion: 1,
+        operations: [{}],
+        summary: { blocked: 0, unknown: 0, errors: 0 },
+        risks: [],
+      },
+      'depfresh.plan',
+      'true',
+    ],
+    [
+      'apply',
+      1,
+      {
+        contract: 'depfresh.apply',
+        schemaVersion: 1,
+        status: 'conflicted',
+        operations: [],
+        phases: [],
+      },
+      'depfresh.apply',
+      'true',
+    ],
+  ])(
+    'rejects a partial %s document even when its top-level fields look plausible',
+    (command, exitCode, payload) => {
+      const fixture = createFixture()
+      const outputFile = join(fixture.runnerTemp, 'depfresh-output.json')
+      const errorFile = join(fixture.runnerTemp, 'depfresh-error.log')
+      writeFileSync(outputFile, JSON.stringify(payload))
+      writeFileSync(errorFile, '')
+      const result = runStep('Parse outputs', {
+        COMMAND: command,
+        ERROR_FILE: errorFile,
+        EXIT_CODE: String(exitCode),
+        GITHUB_OUTPUT: fixture.githubOutput,
+        OUTPUT_FILE: outputFile,
+      })
+
+      expect(result.status).toBe(2)
+      expect(readFileSync(fixture.githubOutput, 'utf8')).toBe('')
+    },
+  )
+
+  it('accepts complete schema-valid capabilities, inspect, plan, and apply documents', async () => {
+    const fixture = createFixture()
+    vi.stubEnv('HOME', fixture.root)
+    vi.stubEnv('XDG_CACHE_HOME', join(fixture.root, 'cache'))
+    writeFileSync(
+      join(fixture.project, 'package.json'),
+      JSON.stringify({ name: 'action-machine-contract', private: true, version: '1.0.0' }),
+    )
+    const planned = await plan({ cwd: fixture.project })
+    const planFindings =
+      planned.operations.length > 0 ||
+      planned.summary.blocked > 0 ||
+      planned.summary.unknown > 0 ||
+      planned.summary.errors > 0 ||
+      planned.risks.length > 0
+    const documents = [
+      ['capabilities', getCliCapabilities(), 0],
+      ['inspect', await inspect({ cwd: fixture.project }), 0],
+      ['plan', planned, planFindings ? 1 : 0],
+      [
+        'apply',
+        await apply(planned, { cwd: fixture.project }, createInvocationAuthority({ write: true })),
+        0,
+      ],
+    ] as const
+
+    for (const [command, payload, exitCode] of documents) {
+      writeFileSync(fixture.githubOutput, '')
+      const outputFile = join(fixture.runnerTemp, `${command}-output.json`)
+      const errorFile = join(fixture.runnerTemp, `${command}-error.log`)
+      writeFileSync(outputFile, JSON.stringify(payload))
+      writeFileSync(errorFile, '')
+      const result = runStep('Parse outputs', {
+        COMMAND: command,
+        ERROR_FILE: errorFile,
+        EXIT_CODE: String(exitCode),
+        GITHUB_OUTPUT: fixture.githubOutput,
+        OUTPUT_FILE: outputFile,
+      })
+
+      expect(result.status, `${command}: ${result.stderr}`).toBe(0)
+      expect(readOutputValue(readFileSync(fixture.githubOutput, 'utf8'), 'contract')).toBe(
+        payload.contract,
+      )
+    }
+  })
+
+  it('rejects a machine contract whose result disagrees with its exit code', () => {
+    const fixture = createFixture()
+    const outputFile = join(fixture.runnerTemp, 'depfresh-output.json')
+    const errorFile = join(fixture.runnerTemp, 'depfresh-error.log')
+    writeFileSync(
+      outputFile,
+      JSON.stringify({
+        contract: 'depfresh.apply',
+        schemaVersion: 1,
+        status: 'conflicted',
+        operations: [],
+        phases: [],
+      }),
+    )
+    writeFileSync(errorFile, '')
+    const result = runStep('Parse outputs', {
+      COMMAND: 'apply',
+      ERROR_FILE: errorFile,
+      EXIT_CODE: '0',
+      GITHUB_OUTPUT: fixture.githubOutput,
+      OUTPUT_FILE: outputFile,
+    })
+
+    expect(result.status).toBe(2)
+    expect(readFileSync(fixture.githubOutput, 'utf8')).toBe('')
+  })
+
   it('parses JSON without jq and transports the exact payload', () => {
     const fixture = createFixture()
     const outputFile = join(fixture.runnerTemp, 'depfresh-output.json')
@@ -651,6 +905,7 @@ describe('GitHub Action documented workflow', () => {
 
     const installation = runStep('Install depfresh', {
       DEPFRESH_PACKAGE_JSON: join(repoRoot, 'package.json'),
+      GITHUB_OUTPUT: fixture.githubOutput,
       INSTALLED_DEPFRESH_VERSION: packageJson.version,
       NPM_ARGS_FILE: npmArgsFile,
       PATH: path,

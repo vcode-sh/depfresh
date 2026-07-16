@@ -1,0 +1,12 @@
+{
+  "mode": "latest",
+  "policyRules": [
+    {
+      "id": "native-catalog-minor",
+      "selectors": {
+        "catalogName": "native"
+      },
+      "mode": "minor"
+    }
+  ]
+}

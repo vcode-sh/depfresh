@@ -4,7 +4,8 @@ Reference patterns for running depfresh in CI and tool ecosystems.
 
 Want a ready-made workflow instead of copy-paste therapy?
 
-- **[GitHub Action](./github-action.md)** -- Composite action for CI with structured JSON output and 4 workflow recipes.
+- **[GitHub Action](./github-action.md)** -- fixed-input check/capabilities/inspect/plan/apply
+  workflows with structured contracts.
 - Repository workflow: `.github/workflows/dependency-freshness.yml`
 
 Looking for taze comparisons? Those live in [docs/compare/](../compare/).
@@ -25,14 +26,14 @@ jobs:
   depfresh:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@de0fac2e4500dabe0009b4744f4bb1efb9dd2dec
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 24.15.0
       - run: corepack enable
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec depfresh --output json --fail-on-outdated > depfresh-report.json
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:
           name: depfresh-report

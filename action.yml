@@ -7,6 +7,10 @@ branding:
   color: 'green'
 
 inputs:
+  command:
+    description: 'Workflow command: check, capabilities, inspect, plan, apply'
+    required: false
+    default: 'check'
   mode:
     description: 'Version range mode: default, major, minor, patch, latest, newest, next'
     required: false
@@ -39,6 +43,22 @@ inputs:
     description: 'Exact Node.js version to use (must be >= 24.15.0)'
     required: false
     default: '24.15.0'
+  plan-file:
+    description: 'Reviewed plan file, relative to working-directory (apply only)'
+    required: false
+    default: ''
+  sync-lockfile:
+    description: 'Plan or grant the sync-lockfile phase'
+    required: false
+    default: 'false'
+  install:
+    description: 'Plan or grant the contained install phase'
+    required: false
+    default: 'false'
+  verify-artifacts:
+    description: 'Plan or grant exact npm artifact verification (requires install)'
+    required: false
+    default: 'false'
 
 outputs:
   json:
@@ -48,11 +68,20 @@ outputs:
     description: 'Number of outdated dependencies found'
     value: ${{ steps.parse.outputs.outdated-count }}
   exit-code:
-    description: 'Raw exit code from depfresh (0=up-to-date, 1=outdated, 2=error)'
+    description: 'Raw exit code; interpret it with the selected command contract and JSON result'
     value: ${{ steps.run.outputs.exit-code }}
   has-updates:
     description: 'Whether outdated dependencies were found (true/false)'
     value: ${{ steps.parse.outputs.has-updates }}
+  contract:
+    description: 'Machine contract identifier for capabilities, inspect, plan, or apply'
+    value: ${{ steps.parse.outputs.contract }}
+  result-status:
+    description: 'Apply result status; blank for other commands'
+    value: ${{ steps.parse.outputs.result-status }}
+  has-findings:
+    description: 'Whether the selected machine workflow reported reviewable findings'
+    value: ${{ steps.parse.outputs.has-findings }}
 
 runs:
   using: composite
@@ -61,10 +90,17 @@ runs:
       id: validate
       shell: bash
       env:
+        INPUT_COMMAND: ${{ inputs.command }}
+        INPUT_EXCLUDE: ${{ inputs.exclude }}
         INPUT_MODE: ${{ inputs.mode }}
+        INPUT_INCLUDE: ${{ inputs.include }}
+        INPUT_INSTALL: ${{ inputs.install }}
+        INPUT_PLAN_FILE: ${{ inputs.plan-file }}
         INPUT_WRITE: ${{ inputs.write }}
         INPUT_FAIL_ON_OUTDATED: ${{ inputs.fail-on-outdated }}
         INPUT_RECURSIVE: ${{ inputs.recursive }}
+        INPUT_SYNC_LOCKFILE: ${{ inputs.sync-lockfile }}
+        INPUT_VERIFY_ARTIFACTS: ${{ inputs.verify-artifacts }}
         INPUT_WORKING_DIRECTORY: ${{ inputs.working-directory }}
         INPUT_NODE_VERSION: ${{ inputs.node-version }}
       run: |
@@ -73,12 +109,24 @@ runs:
           exit 2
         }
 
+        case "$INPUT_COMMAND" in
+          check|capabilities|inspect|plan|apply) ;;
+          *) fail 'Invalid command input' ;;
+        esac
+
         case "$INPUT_MODE" in
           default|major|minor|patch|latest|newest|next) ;;
           *) fail 'Invalid mode input' ;;
         esac
 
-        for value in "$INPUT_WRITE" "$INPUT_FAIL_ON_OUTDATED" "$INPUT_RECURSIVE"; do
+        for value in \
+          "$INPUT_WRITE" \
+          "$INPUT_FAIL_ON_OUTDATED" \
+          "$INPUT_RECURSIVE" \
+          "$INPUT_SYNC_LOCKFILE" \
+          "$INPUT_INSTALL" \
+          "$INPUT_VERIFY_ARTIFACTS"
+        do
           case "$value" in
             true|false) ;;
             *) fail 'Invalid boolean input' ;;
@@ -118,6 +166,65 @@ runs:
           *) fail 'Invalid working directory' ;;
         esac
 
+        if [ "$INPUT_SYNC_LOCKFILE" = "true" ] && [ "$INPUT_INSTALL" = "true" ]; then
+          fail 'Conflicting manager phase inputs'
+        fi
+        if [ "$INPUT_VERIFY_ARTIFACTS" = "true" ] && [ "$INPUT_INSTALL" != "true" ]; then
+          fail 'Artifact verification requires install'
+        fi
+
+        case "$INPUT_COMMAND" in
+          check)
+            if [ -n "$INPUT_PLAN_FILE" ] || [ "$INPUT_SYNC_LOCKFILE" = "true" ] || \
+              [ "$INPUT_INSTALL" = "true" ] || [ "$INPUT_VERIFY_ARTIFACTS" = "true" ]; then
+              fail 'Unsupported check input combination'
+            fi
+            ;;
+          capabilities|inspect)
+            if [ "$INPUT_MODE" != "default" ] || [ "$INPUT_WRITE" = "true" ] || \
+              [ -n "$INPUT_PLAN_FILE" ] || [ "$INPUT_SYNC_LOCKFILE" = "true" ] || \
+              [ "$INPUT_INSTALL" = "true" ] || [ "$INPUT_VERIFY_ARTIFACTS" = "true" ] || \
+              [ -n "$INPUT_INCLUDE" ] || [ -n "$INPUT_EXCLUDE" ]; then
+              fail 'Unsupported machine command input combination'
+            fi
+            if [ "$INPUT_COMMAND" = "capabilities" ] && [ "$INPUT_RECURSIVE" != "true" ]; then
+              fail 'Unsupported machine command input combination'
+            fi
+            ;;
+          plan)
+            if [ "$INPUT_WRITE" = "true" ] || [ -n "$INPUT_PLAN_FILE" ]; then
+              fail 'Unsupported plan input combination'
+            fi
+            ;;
+          apply)
+            if [ "$INPUT_WRITE" != "true" ] || [ -z "$INPUT_PLAN_FILE" ]; then
+              fail 'Apply requires write and plan file'
+            fi
+            if [ "$INPUT_MODE" != "default" ] || [ -n "$INPUT_INCLUDE" ] || \
+              [ -n "$INPUT_EXCLUDE" ] || [ "$INPUT_RECURSIVE" != "true" ]; then
+              fail 'Unsupported apply input combination'
+            fi
+            if [[ "$INPUT_PLAN_FILE" == *$'\n'* || "$INPUT_PLAN_FILE" == *$'\r'* ]]; then
+              fail 'Invalid plan file'
+            fi
+            case "$INPUT_PLAN_FILE" in
+              /*) plan_candidate="$INPUT_PLAN_FILE" ;;
+              *) plan_candidate="$working_directory/$INPUT_PLAN_FILE" ;;
+            esac
+            if [ -L "$plan_candidate" ] || [ ! -f "$plan_candidate" ]; then
+              fail 'Invalid plan file'
+            fi
+            if ! plan_file=$(realpath -- "$plan_candidate" 2>/dev/null); then
+              fail 'Invalid plan file'
+            fi
+            case "$plan_file" in
+              "$working_directory"/*) ;;
+              *) fail 'Invalid plan file' ;;
+            esac
+            printf 'plan-file=%s\n' "$plan_file" >> "$GITHUB_OUTPUT"
+            ;;
+        esac
+
         printf 'working-directory=%s\n' "$working_directory" >> "$GITHUB_OUTPUT"
 
     - name: Setup Node.js
@@ -126,6 +233,7 @@ runs:
         node-version: ${{ inputs.node-version }}
 
     - name: Install depfresh
+      id: install
       shell: bash
       env:
         DEPFRESH_PACKAGE_JSON: ${{ github.action_path }}/package.json
@@ -154,31 +262,75 @@ runs:
           echo '::error title=depfresh install error::Version mismatch'
           exit 2
         fi
+        if ! DEPFRESH_BIN=$(command -v depfresh); then
+          echo '::error title=depfresh install error::Installed module unavailable'
+          exit 2
+        fi
+        DEPFRESH_CLI=$(realpath -- "$DEPFRESH_BIN")
+        DEPFRESH_MODULE="$(dirname -- "$DEPFRESH_CLI")/index.mjs"
+        if [ ! -f "$DEPFRESH_MODULE" ]; then
+          echo '::error title=depfresh install error::Installed module unavailable'
+          exit 2
+        fi
+        printf 'module=%s\n' "$DEPFRESH_MODULE" >> "$GITHUB_OUTPUT"
 
     - name: Run depfresh
       id: run
       shell: bash
       working-directory: ${{ steps.validate.outputs.working-directory }}
       env:
+        INPUT_COMMAND: ${{ inputs.command }}
         INPUT_MODE: ${{ inputs.mode }}
         INPUT_WRITE: ${{ inputs.write }}
         INPUT_FAIL_ON_OUTDATED: ${{ inputs.fail-on-outdated }}
         INPUT_RECURSIVE: ${{ inputs.recursive }}
         INPUT_INCLUDE: ${{ inputs.include }}
         INPUT_EXCLUDE: ${{ inputs.exclude }}
+        INPUT_INSTALL: ${{ inputs.install }}
+        INPUT_PLAN_FILE: ${{ steps.validate.outputs.plan-file }}
+        INPUT_SYNC_LOCKFILE: ${{ inputs.sync-lockfile }}
+        INPUT_VERIFY_ARTIFACTS: ${{ inputs.verify-artifacts }}
       run: |
-        ARGS=(--output json)
-        if [ "$INPUT_MODE" != "default" ]; then ARGS+=(--mode "$INPUT_MODE"); fi
-        if [ "$INPUT_WRITE" = "true" ]; then ARGS+=(--write); fi
-        if [ "$INPUT_FAIL_ON_OUTDATED" = "true" ] && [ "$INPUT_WRITE" != "true" ]; then ARGS+=(--fail-on-outdated); fi
-        if [ "$INPUT_RECURSIVE" = "false" ]; then ARGS+=(--no-recursive); fi
-        if [ -n "$INPUT_INCLUDE" ]; then ARGS+=("--include=$INPUT_INCLUDE"); fi
-        if [ -n "$INPUT_EXCLUDE" ]; then ARGS+=("--exclude=$INPUT_EXCLUDE"); fi
+        case "$INPUT_COMMAND" in
+          capabilities)
+            ARGS=(capabilities --json)
+            ;;
+          inspect)
+            ARGS=(inspect --output json)
+            if [ "$INPUT_RECURSIVE" = "false" ]; then ARGS+=(--no-recursive); fi
+            ;;
+          plan)
+            ARGS=(plan --output json)
+            if [ "$INPUT_MODE" != "default" ]; then ARGS+=(--mode "$INPUT_MODE"); fi
+            if [ "$INPUT_RECURSIVE" = "false" ]; then ARGS+=(--no-recursive); fi
+            if [ -n "$INPUT_INCLUDE" ]; then ARGS+=("--include=$INPUT_INCLUDE"); fi
+            if [ -n "$INPUT_EXCLUDE" ]; then ARGS+=("--exclude=$INPUT_EXCLUDE"); fi
+            if [ "$INPUT_SYNC_LOCKFILE" = "true" ]; then ARGS+=(--sync-lockfile); fi
+            if [ "$INPUT_INSTALL" = "true" ]; then ARGS+=(--install); fi
+            if [ "$INPUT_VERIFY_ARTIFACTS" = "true" ]; then ARGS+=(--verify-artifacts); fi
+            ;;
+          apply)
+            ARGS=(apply --output json --write --plan-file "$INPUT_PLAN_FILE")
+            if [ "$INPUT_SYNC_LOCKFILE" = "true" ]; then ARGS+=(--sync-lockfile); fi
+            if [ "$INPUT_INSTALL" = "true" ]; then ARGS+=(--install); fi
+            if [ "$INPUT_VERIFY_ARTIFACTS" = "true" ]; then ARGS+=(--verify-artifacts); fi
+            ;;
+          *)
+            ARGS=(--output json)
+            if [ "$INPUT_MODE" != "default" ]; then ARGS+=(--mode "$INPUT_MODE"); fi
+            if [ "$INPUT_WRITE" = "true" ]; then ARGS+=(--write); fi
+            if [ "$INPUT_FAIL_ON_OUTDATED" = "true" ] && [ "$INPUT_WRITE" != "true" ]; then ARGS+=(--fail-on-outdated); fi
+            if [ "$INPUT_RECURSIVE" = "false" ]; then ARGS+=(--no-recursive); fi
+            if [ -n "$INPUT_INCLUDE" ]; then ARGS+=("--include=$INPUT_INCLUDE"); fi
+            if [ -n "$INPUT_EXCLUDE" ]; then ARGS+=("--exclude=$INPUT_EXCLUDE"); fi
+            ;;
+        esac
 
         DEPFRESH_OUTPUT=$(mktemp "$RUNNER_TEMP/depfresh-output.XXXXXX")
         DEPFRESH_ERROR=$(mktemp "$RUNNER_TEMP/depfresh-error.XXXXXX")
         printf 'output-file=%s\n' "$DEPFRESH_OUTPUT" >> "$GITHUB_OUTPUT"
         printf 'error-file=%s\n' "$DEPFRESH_ERROR" >> "$GITHUB_OUTPUT"
+        printf 'command=%s\n' "$INPUT_COMMAND" >> "$GITHUB_OUTPUT"
         EXIT_CODE=0
 
         depfresh "${ARGS[@]}" > "$DEPFRESH_OUTPUT" 2> "$DEPFRESH_ERROR" || EXIT_CODE=$?
@@ -194,20 +346,80 @@ runs:
       id: parse
       shell: bash
       env:
+        COMMAND: ${{ steps.run.outputs.command }}
+        DEPFRESH_MODULE: ${{ steps.install.outputs.module }}
         OUTPUT_FILE: ${{ steps.run.outputs.output-file }}
         ERROR_FILE: ${{ steps.run.outputs.error-file }}
+        EXIT_CODE: ${{ steps.run.outputs.exit-code }}
       run: |
         # JavaScript is intentionally single-quoted shell data.
         # shellcheck disable=SC2016
         if ! node --input-type=module --eval '
           import { randomUUID } from "node:crypto"
           import { appendFileSync, readFileSync } from "node:fs"
+          import { pathToFileURL } from "node:url"
 
           const content = readFileSync(process.env.OUTPUT_FILE, "utf8")
           const data = JSON.parse(content)
-          const total = data?.summary?.total
-          if (!Number.isSafeInteger(total) || total < 0) {
-            throw new Error("Invalid summary.total")
+          const command = process.env.COMMAND || "check"
+          const exitCode = Number(process.env.EXIT_CODE || "0")
+          if (exitCode !== 0 && exitCode !== 1) throw new Error("Invalid exit code")
+
+          let total = 0
+          let contract = ""
+          let resultStatus = ""
+          let hasFindings = false
+          if (command === "check") {
+            total = data?.summary?.total
+            if (!Number.isSafeInteger(total) || total < 0) {
+              throw new Error("Invalid summary.total")
+            }
+            hasFindings = total > 0
+          } else {
+            if (!process.env.DEPFRESH_MODULE) throw new Error("Missing contract validator")
+            const validators = await import(pathToFileURL(process.env.DEPFRESH_MODULE).href)
+            const expectedContract = {
+              capabilities: "depfresh.capabilities",
+              inspect: "depfresh.inspect",
+              plan: "depfresh.plan",
+              apply: "depfresh.apply",
+            }[command]
+            if (!expectedContract || data?.contract !== expectedContract || data?.schemaVersion !== 1) {
+              throw new Error("Invalid machine contract")
+            }
+            const validate = {
+              capabilities: validators.validateCapabilities,
+              inspect: validators.validateInspectResult,
+              plan: validators.validatePlanResult,
+              apply: validators.validateApplyResult,
+            }[command]
+            if (typeof validate !== "function" || !validate(data)) {
+              throw new Error("Invalid machine contract")
+            }
+            contract = expectedContract
+            if (command === "inspect") {
+              if (!Array.isArray(data.risks) || !Array.isArray(data.errors)) {
+                throw new Error("Invalid inspect result")
+              }
+              hasFindings = data.risks.length > 0 || data.errors.length > 0
+            } else if (command === "plan") {
+              if (!Array.isArray(data.operations) || !data.summary || !Array.isArray(data.risks)) {
+                throw new Error("Invalid plan result")
+              }
+              const counts = [data.summary.blocked, data.summary.unknown, data.summary.errors]
+              if (counts.some((value) => !Number.isSafeInteger(value) || value < 0)) {
+                throw new Error("Invalid plan summary")
+              }
+              hasFindings = data.operations.length > 0 || counts.some((value) => value > 0) || data.risks.length > 0
+            } else if (command === "apply") {
+              const statuses = new Set(["applied", "noop", "conflicted", "reverted", "failed", "unknown"])
+              if (!statuses.has(data.status) || !Array.isArray(data.operations) || !Array.isArray(data.phases)) {
+                throw new Error("Invalid apply result")
+              }
+              resultStatus = data.status
+              hasFindings = data.status !== "applied" && data.status !== "noop"
+            }
+            if ((exitCode === 1) !== hasFindings) throw new Error("Result and exit code disagree")
           }
 
           const lines = new Set(content.split(/\r?\n/u))
@@ -220,7 +432,10 @@ runs:
             process.env.GITHUB_OUTPUT,
             `json<<${delimiter}\n${content}${terminator}${delimiter}\n` +
               `outdated-count=${total}\n` +
-              `has-updates=${total > 0}\n`,
+              `has-updates=${total > 0}\n` +
+              `contract=${contract}\n` +
+              `result-status=${resultStatus}\n` +
+              `has-findings=${hasFindings}\n`,
           )
         ' 2>> "$ERROR_FILE"; then
           echo '::error title=depfresh output error::Invalid JSON output'
@@ -234,6 +449,13 @@ runs:
         OUTDATED_COUNT: ${{ steps.parse.outputs.outdated-count }}
       run: |
         printf '::warning::depfresh found %s outdated dependencies\n' "$OUTDATED_COUNT"
+        exit 1
+
+    - name: Handle machine findings
+      if: ${{ steps.run.outputs.exit-code == '1' && inputs.command != 'check' }}
+      shell: bash
+      run: |
+        echo '::warning::depfresh returned a reviewable non-success result'
         exit 1
 
     - name: Clean up

@@ -2,12 +2,14 @@ import Ajv, { type ErrorObject, type ValidateFunction } from 'ajv'
 import * as semver from 'semver'
 import { resolveManagerAdapter } from '../commands/apply/manager-adapters'
 import { exactDeclaredVersion } from '../utils/exact-version'
+import { EXACT_SHA512_INTEGRITY_REGEX, NPM_ARTIFACT_VERIFIER_SUPPORT } from './artifact-verifier'
 import { canonicalJson } from './canonical-json'
 import { createPlanFingerprint, createRepositoryFingerprint, hashExactBytes } from './fingerprint'
 import { isSupportedManagerOccurrence } from './manager-occurrence'
 import { isContractSafeArgv, isContractSafeText } from './sanitize'
 import type { ApplyResult, InspectResult, MachineCommandError, PlanResult } from './schemas'
 import {
+  APPLY_PHASE_NAMES,
   applyResultSchema,
   commandErrorSchema,
   inspectResultSchema,
@@ -101,23 +103,7 @@ function hasValidApplySemantics(result: ApplyResult): boolean {
     return false
   }
   if (new Set(result.phases.map((entry) => entry.name)).size !== result.phases.length) return false
-  const phaseOrder = new Map(
-    [
-      'preflight',
-      'lock',
-      'manager-preflight',
-      'stage',
-      'precommit',
-      'commit',
-      'sync-lockfile',
-      'install',
-      'artifact-verify',
-      'verify',
-      'recovery',
-      'inspect',
-      'cleanup',
-    ].map((name, index) => [name, index]),
-  )
+  const phaseOrder = new Map<string, number>(APPLY_PHASE_NAMES.map((name, index) => [name, index]))
   if (
     result.phases.some(
       (entry, index) =>
@@ -354,9 +340,9 @@ function hasValidApplyArtifactResults(result: ApplyResult): boolean {
     if (
       !command.boundaryId ||
       commandsByBoundary.has(command.boundaryId) ||
-      command.manager !== 'npm' ||
+      command.manager !== NPM_ARTIFACT_VERIFIER_SUPPORT.manager ||
       command.executable !== 'npm' ||
-      !semver.satisfies(command.managerVersion ?? '', '>=11.12.0 <12.0.0') ||
+      !semver.satisfies(command.managerVersion ?? '', NPM_ARTIFACT_VERIFIER_SUPPORT.versionRange) ||
       canonicalJson(command.args) !==
         canonicalJson([
           'audit',
@@ -1873,10 +1859,10 @@ function hasValidArtifactVerification(plan: PlanResult): boolean {
   for (const verificationTarget of verification.targets) {
     const target = executionTargets.get(verificationTarget.boundaryId)
     if (
-      target?.manager.name !== 'npm' ||
+      target?.manager.name !== NPM_ARTIFACT_VERIFIER_SUPPORT.manager ||
       target.boundaryPath !== verificationTarget.cwd ||
       target.manager.version !== verificationTarget.verifier.version ||
-      !semver.satisfies(target.manager.version, '>=11.12.0 <12.0.0') ||
+      !semver.satisfies(target.manager.version, NPM_ARTIFACT_VERIFIER_SUPPORT.versionRange) ||
       !isSortedById(verificationTarget.artifacts)
     ) {
       return false
@@ -2013,7 +1999,7 @@ function resolvedPackageName(name: string, declaredValue: string): string {
 }
 
 function isExactSha512Integrity(value: string): boolean {
-  const match = /^sha512-([A-Za-z0-9+/]+={0,2})$/u.exec(value)
+  const match = EXACT_SHA512_INTEGRITY_REGEX.exec(value)
   if (!match?.[1]) return false
   const bytes = Buffer.from(match[1], 'base64')
   return bytes.length === 64 && bytes.toString('base64') === match[1]

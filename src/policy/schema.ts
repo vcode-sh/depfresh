@@ -3,7 +3,7 @@ import type { PolicyAction, PolicyMode, PolicyRuleInput, PolicySelectors } from 
 import { patternToRegex } from '../utils/patterns'
 
 const RULE_KEYS = new Set(['id', 'selectors', 'action', 'mode'])
-const SELECTOR_KEYS = new Set([
+export const POLICY_SELECTOR_KEYS = [
   'dependencyName',
   'workspacePath',
   'packageName',
@@ -15,7 +15,8 @@ const SELECTOR_KEYS = new Set([
   'protocol',
   'currentChannel',
   'specifierStatus',
-])
+] as const
+const SELECTOR_KEYS = new Set<string>(POLICY_SELECTOR_KEYS)
 const PATTERN_SELECTOR_KEYS = new Set([
   'dependencyName',
   'workspacePath',

@@ -1,0 +1,76 @@
+name: Apply reviewed dependency plan
+
+on:
+  workflow_dispatch:
+    inputs:
+      reviewed-ref:
+        description: Exact 40-character commit reviewed with the plan
+        required: true
+        type: string
+      plan-run-id:
+        description: Numeric workflow run containing the reviewed depfresh-plan artifact
+        required: true
+        type: string
+      plan-sha256:
+        description: Reviewed SHA-256 of depfresh-plan.json
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  apply:
+    environment: dependency-update-approval
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate reviewed identities
+        env:
+          PLAN_RUN_ID: ${{ inputs.plan-run-id }}
+          PLAN_SHA256: ${{ inputs.plan-sha256 }}
+          REVIEWED_REF: ${{ inputs.reviewed-ref }}
+        run: |
+          [[ "$PLAN_RUN_ID" =~ ^[1-9][0-9]*$ ]]
+          [[ "$PLAN_SHA256" =~ ^[a-f0-9]{64}$ ]]
+          [[ "$REVIEWED_REF" =~ ^[a-f0-9]{40}$ ]]
+      - uses: actions/checkout@de0fac2e4500dabe0009b4744f4bb1efb9dd2dec
+        with:
+          ref: ${{ inputs.reviewed-ref }}
+          persist-credentials: false
+      - name: Confirm reviewed checkout
+        env:
+          REVIEWED_REF: ${{ inputs.reviewed-ref }}
+        run: test "$(git rev-parse HEAD)" = "$REVIEWED_REF"
+      - name: Reserve contained plan input
+        run: |
+          input="$GITHUB_WORKSPACE/.depfresh-input"
+          test ! -e "$input" && test ! -L "$input"
+          install -d -m 700 "$input"
+          : > "$input/.workflow-owned"
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
+        with:
+          name: depfresh-plan
+          path: ${{ github.workspace }}/.depfresh-input
+          run-id: ${{ inputs.plan-run-id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Verify reviewed plan digest
+        env:
+          PLAN_SHA256: ${{ inputs.plan-sha256 }}
+        run: |
+          plan="$GITHUB_WORKSPACE/.depfresh-input/depfresh-plan.json"
+          test -f "$plan" && test ! -L "$plan"
+          printf '%s  %s\n' "$PLAN_SHA256" "$plan" | sha256sum --check --strict -
+      - uses: vcode-sh/depfresh@REPLACE_WITH_FULL_COMMIT_SHA
+        with:
+          command: apply
+          node-version: 24.15.0
+          plan-file: .depfresh-input/depfresh-plan.json
+          write: true
+      - name: Remove reviewed plan input
+        if: always()
+        run: |
+          input="$GITHUB_WORKSPACE/.depfresh-input"
+          if [ -f "$input/.workflow-owned" ] && [ ! -L "$input" ]; then
+            rm -rf -- "$input"
+          fi

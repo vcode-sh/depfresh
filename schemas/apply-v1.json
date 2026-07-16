@@ -136,8 +136,8 @@
           "name": {
             "enum": [
               "preflight",
-              "manager-preflight",
               "lock",
+              "manager-preflight",
               "stage",
               "precommit",
               "commit",

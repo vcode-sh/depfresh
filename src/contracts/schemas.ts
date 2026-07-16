@@ -1,5 +1,22 @@
 import type { FromSchema, JSONSchema } from 'json-schema-to-ts'
 import { SIGNAL_FAMILIES, SIGNAL_REASONS, SIGNAL_STATES } from '../types'
+import { EXACT_SHA512_INTEGRITY_PATTERN, NPM_ARTIFACT_VERIFIER_SUPPORT } from './artifact-verifier'
+
+export const APPLY_PHASE_NAMES = [
+  'preflight',
+  'lock',
+  'manager-preflight',
+  'stage',
+  'precommit',
+  'commit',
+  'sync-lockfile',
+  'install',
+  'artifact-verify',
+  'verify',
+  'recovery',
+  'inspect',
+  'cleanup',
+] as const
 
 const hashSchema = { type: 'string', pattern: '^[a-f0-9]{64}$' } as const
 const relativePathSchema = {
@@ -624,8 +641,8 @@ const planExecutionSchema = {
                     },
                     packageName: { type: 'string', minLength: 1 },
                     version: { type: 'string', minLength: 1 },
-                    registry: { const: 'https://registry.npmjs.org/' },
-                    integrity: { type: 'string', pattern: '^sha512-[A-Za-z0-9+/]+={0,2}$' },
+                    registry: { const: NPM_ARTIFACT_VERIFIER_SUPPORT.registry },
+                    integrity: { type: 'string', pattern: EXACT_SHA512_INTEGRITY_PATTERN },
                     signaturePresence: { enum: ['present', 'absent', 'unknown'] },
                     provenancePresence: { enum: ['present', 'absent', 'unknown'] },
                     evidenceRef: {
@@ -951,23 +968,7 @@ export const applyResultSchema = {
         additionalProperties: false,
         required: ['name', 'status', 'reason'],
         properties: {
-          name: {
-            enum: [
-              'preflight',
-              'manager-preflight',
-              'lock',
-              'stage',
-              'precommit',
-              'commit',
-              'sync-lockfile',
-              'install',
-              'artifact-verify',
-              'verify',
-              'recovery',
-              'inspect',
-              'cleanup',
-            ],
-          },
+          name: { enum: APPLY_PHASE_NAMES },
           status: { enum: ['passed', 'skipped', 'failed', 'unknown'] },
           reason: { type: 'string', minLength: 1 },
           commands: {
@@ -1047,8 +1048,8 @@ export const applyResultSchema = {
                 location: relativePathSchema,
                 packageName: { type: 'string', minLength: 1 },
                 version: { type: 'string', minLength: 1 },
-                registry: { const: 'https://registry.npmjs.org/' },
-                integrity: { type: 'string', pattern: '^sha512-[A-Za-z0-9+/]+={0,2}$' },
+                registry: { const: NPM_ARTIFACT_VERIFIER_SUPPORT.registry },
+                integrity: { type: 'string', pattern: EXACT_SHA512_INTEGRITY_PATTERN },
                 lockfile: {
                   type: 'object',
                   additionalProperties: false,

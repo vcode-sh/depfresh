@@ -18,7 +18,8 @@ export const SIGNAL_FAMILIES = [
 ] as const
 export type SignalFamily = (typeof SIGNAL_FAMILIES)[number]
 
-export type SignalPolicyEffect = 'none' | 'warn' | 'block'
+export const SIGNAL_POLICY_EFFECTS = ['none', 'warn', 'block'] as const
+export type SignalPolicyEffect = (typeof SIGNAL_POLICY_EFFECTS)[number]
 export type SignalRuleEffect = Exclude<SignalPolicyEffect, 'none'>
 export type SignalPolicySource = 'config' | 'library' | 'cli'
 

@@ -1,0 +1,451 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://depfresh.dev/schemas/capabilities-v1.json",
+  "title": "depfresh capabilities contract v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract",
+    "schemaVersion",
+    "schema",
+    "version",
+    "command",
+    "enums",
+    "exitCodes",
+    "machineExitCodes",
+    "commands",
+    "contractSchemas",
+    "positional",
+    "flags",
+    "workflows",
+    "flagRelationships",
+    "invocationAuthority",
+    "configIgnoredOptions",
+    "errorReasons",
+    "configFiles",
+    "jsonOutputSchema",
+    "discoverability",
+    "registries",
+    "runners",
+    "assets"
+  ],
+  "properties": {
+    "contract": {
+      "const": "depfresh.capabilities"
+    },
+    "schemaVersion": {
+      "const": 1
+    },
+    "schema": {
+      "const": "depfresh/schemas/capabilities-v1.json"
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:[-+].+)?$"
+    },
+    "command": {
+      "const": "depfresh"
+    },
+    "enums": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mode",
+        "output",
+        "sort",
+        "loglevel"
+      ],
+      "properties": {
+        "mode": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "output": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "sort": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "loglevel": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "exitCodes": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "machineExitCodes": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "commands": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "description"
+        ],
+        "properties": {
+          "description": {
+            "type": "string",
+            "minLength": 1
+          },
+          "schema": {
+            "type": "string",
+            "minLength": 1
+          },
+          "surface": {
+            "enum": [
+              "cli",
+              "library"
+            ]
+          }
+        }
+      }
+    },
+    "contractSchemas": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "positional": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "type"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1
+          },
+          "alias": {
+            "type": "string",
+            "minLength": 1
+          },
+          "default": {},
+          "values": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "flags": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "type"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1
+          },
+          "alias": {
+            "type": "string",
+            "minLength": 1
+          },
+          "default": {},
+          "values": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "workflows": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "description",
+          "command"
+        ],
+        "properties": {
+          "description": {
+            "type": "string",
+            "minLength": 1
+          },
+          "command": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "flagRelationships": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "requires": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "conflicts": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "invocationAuthority": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "grants"
+        ],
+        "properties": {
+          "requires": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "grants": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "configIgnoredOptions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "errorReasons": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "configFiles": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "jsonOutputSchema": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "discoverability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "helpJsonFlag",
+        "capabilitiesCommand"
+      ],
+      "properties": {
+        "helpJsonFlag": {
+          "type": "string",
+          "minLength": 1
+        },
+        "capabilitiesCommand": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "registries": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "policySelectors",
+        "signalSelectors",
+        "signalStates",
+        "signalFamilies",
+        "signalReasons",
+        "signalEffects",
+        "applyPhases",
+        "managers",
+        "artifactVerification"
+      ],
+      "properties": {
+        "policySelectors": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "signalSelectors": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "signalStates": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "signalFamilies": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "signalReasons": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "signalEffects": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "applyPhases": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "managers": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "name",
+              "versionRange",
+              "lockfiles"
+            ],
+            "properties": {
+              "name": {
+                "enum": [
+                  "npm",
+                  "pnpm",
+                  "bun"
+                ]
+              },
+              "versionRange": {
+                "type": "string",
+                "minLength": 1
+              },
+              "lockfiles": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "artifactVerification": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "manager",
+            "versionRange",
+            "registry",
+            "integrity"
+          ],
+          "properties": {
+            "manager": {
+              "const": "npm"
+            },
+            "versionRange": {
+              "const": ">=11.12.0 <12.0.0"
+            },
+            "registry": {
+              "const": "https://registry.npmjs.org/"
+            },
+            "integrity": {
+              "const": "sha512"
+            }
+          }
+        }
+      }
+    },
+    "runners": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "priority",
+          "name",
+          "command",
+          "requirement"
+        ],
+        "properties": {
+          "priority": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "command": {
+            "type": "string",
+            "minLength": 1
+          },
+          "requirement": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "assets": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

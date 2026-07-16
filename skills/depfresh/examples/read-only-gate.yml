@@ -1,0 +1,44 @@
+name: Dependency freshness plan
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      plan-sha256: ${{ steps.digest.outputs.plan-sha256 }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009b4744f4bb1efb9dd2dec
+      - uses: vcode-sh/depfresh@REPLACE_WITH_FULL_COMMIT_SHA
+        id: depfresh
+        continue-on-error: true
+        with:
+          command: plan
+          node-version: 24.15.0
+      - name: Save immutable plan and digest
+        id: digest
+        if: always()
+        env:
+          DEPFRESH_JSON: ${{ steps.depfresh.outputs.json }}
+        run: |
+          test -n "$DEPFRESH_JSON"
+          install -d "$RUNNER_TEMP/depfresh-plan"
+          printf '%s' "$DEPFRESH_JSON" > "$RUNNER_TEMP/depfresh-plan/depfresh-plan.json"
+          digest=$(sha256sum "$RUNNER_TEMP/depfresh-plan/depfresh-plan.json" | cut -d ' ' -f 1)
+          printf 'plan-sha256=%s\n' "$digest" >> "$GITHUB_OUTPUT"
+          printf 'Reviewed plan SHA-256: `%s`\n' "$digest" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: depfresh-plan
+          path: ${{ runner.temp }}/depfresh-plan/depfresh-plan.json
+          if-no-files-found: error
+      - name: Enforce review gate
+        if: steps.depfresh.outputs.exit-code != '0'
+        env:
+          EXIT_CODE: ${{ steps.depfresh.outputs.exit-code }}
+        run: exit "$EXIT_CODE"

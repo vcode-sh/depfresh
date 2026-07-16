@@ -1,5 +1,6 @@
 import { type Node as JsonNode, parseTree } from 'jsonc-parser'
 import * as semver from 'semver'
+import { getManagerPhaseSupport } from '../commands/apply/manager-registry'
 import {
   type ExecutableHandle,
   type ProcessObservation,
@@ -250,8 +251,8 @@ export async function inspectGlobalManager(
 export function supportsManagerVersion(manager: GlobalManagerName, value: string): boolean {
   const parsed = semver.parse(value)
   if (!parsed) return false
-  if (manager === 'bun') return semver.gte(parsed, '1.2.0') && semver.lt(parsed, '2.0.0')
-  return parsed.major === 10 || parsed.major === 11
+  const support = getManagerPhaseSupport(manager)
+  return support ? semver.satisfies(parsed, support.versionRange) : false
 }
 
 async function inspectRealm(

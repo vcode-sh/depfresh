@@ -20,6 +20,7 @@ import { dirname, join, relative, resolve, sep } from 'node:path'
 import { parse as parseJsonc } from 'jsonc-parser'
 import * as semver from 'semver'
 import YAML from 'yaml'
+import { NPM_ARTIFACT_VERIFIER_SUPPORT } from '../../contracts/artifact-verifier'
 import { hashExactBytes } from '../../contracts/fingerprint'
 import type { ApplyResult, PlanResult } from '../../contracts/schemas'
 import { inspectRepository } from '../../repository/inspect'
@@ -588,7 +589,7 @@ async function executeArtifactVerification(
             npm_config_cache: cache,
             npm_config_userconfig: userConfig,
             npm_config_globalconfig: globalConfig,
-            npm_config_registry: 'https://registry.npmjs.org/',
+            npm_config_registry: NPM_ARTIFACT_VERIFIER_SUPPORT.registry,
           },
           captureStdout: true,
           captureStderr: true,

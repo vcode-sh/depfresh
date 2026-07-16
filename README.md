@@ -12,35 +12,38 @@ Keep your dependencies fresh. Taze alternative. Zero config, fast, monorepo-read
 ### One-off run (no install needed)
 
 ```bash
-npx depfresh
-pnpm dlx depfresh
-bunx depfresh
-yarn dlx depfresh
+npm exec --yes --package=depfresh@1.2.0 -- depfresh
+pnpm dlx depfresh@1.2.0
+bunx depfresh@1.2.0
+yarn dlx depfresh@1.2.0
 ```
 
 ### Global install
 
 ```bash
-npm install -g depfresh
-pnpm add -g depfresh
-bun add -g depfresh
-yarn global add depfresh
+npm install -g depfresh@1.2.0
+pnpm add -g depfresh@1.2.0
+bun add -g depfresh@1.2.0
+yarn global add depfresh@1.2.0
 ```
 
 ### Local devDependency (recommended for team + CI)
 
 ```bash
-npm install -D depfresh
-pnpm add -D depfresh
-bun add -D depfresh
-yarn add -D depfresh
+npm install -D --save-exact depfresh@1.2.0
+pnpm add -D --save-exact depfresh@1.2.0
+bun add -D --exact depfresh@1.2.0
+yarn add -D --exact depfresh@1.2.0
 ```
 
 | If you want... | Use | Example |
 | --- | --- | --- |
-| Run once in any repo | One-off | `npx depfresh` / `pnpm dlx depfresh` / `bunx depfresh` |
-| Always available on your machine | Global | `npm install -g depfresh` |
-| Pinned for team/CI consistency | Local devDep | `npm install -D depfresh` |
+| Run once in any repo | Exact one-off | `npm exec --yes --package=depfresh@1.2.0 -- depfresh` |
+| Always available on your machine | Exact global | `npm install -g depfresh@1.2.0` |
+| Pinned for team/CI consistency | Exact local devDep + lockfile | `pnpm add -D --save-exact depfresh@1.2.0` |
+
+Automation should prefer the repository-local binary pinned by the committed lockfile, then an
+exact approved package version. See the [official automation workflow](docs/agents/README.md).
 
 ## Quick Start
 
@@ -56,6 +59,9 @@ depfresh -I
 
 # JSON output for scripts and AI agents
 depfresh --output json
+
+# Deterministic installed command/schema/capability descriptor
+depfresh capabilities --json
 
 # Deterministic repository evidence (no registry or subprocess)
 depfresh inspect --json
