@@ -11,6 +11,7 @@ import {
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { basename, dirname, join, resolve } from 'node:path'
+import { extractSinglePackEntry } from './pack-manifest.mjs'
 
 const PUBLIC_REGISTRY = 'https://registry.npmjs.org/'
 const manifestArgument = process.argv[2]
@@ -24,8 +25,12 @@ if (!manifestArgument || (installSpecIndex >= 0 && !explicitInstallSpec)) {
 const manifestPath = resolve(manifestArgument)
 const packageJson = JSON.parse(readFileSync(resolve('package.json'), 'utf8'))
 const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'))
-if (!Array.isArray(manifest) || manifest.length !== 1) fail('Expected one packed package')
-const entry = manifest[0]
+let entry
+try {
+  entry = extractSinglePackEntry(manifest)
+} catch (error) {
+  fail(error instanceof Error ? error.message : 'Invalid npm pack manifest')
+}
 if (!isRecord(entry) || !Array.isArray(entry.files)) fail('Invalid npm pack manifest')
 if (entry.name !== packageJson.name || entry.version !== packageJson.version) {
   fail('Packed package identity does not match package.json')

@@ -3,6 +3,7 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { parse } from 'yaml'
+import { extractSinglePackEntry } from '../scripts/pack-manifest.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const packageJson = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as {
@@ -59,5 +60,28 @@ describe('published workflow assets', () => {
       expect(references, path).toHaveLength(1)
       expect(references[0]?.[1], path).toMatch(/^[a-f0-9]{40}$/u)
     }
+  })
+})
+
+describe('npm pack manifest compatibility', () => {
+  const entry = { name: 'depfresh', version: '2.0.0' }
+
+  it('accepts the npm 11 single-package array format', () => {
+    expect(extractSinglePackEntry([entry])).toBe(entry)
+  })
+
+  it('accepts the npm 12 single-package keyed format', () => {
+    expect(extractSinglePackEntry({ depfresh: entry })).toBe(entry)
+  })
+
+  it.each([
+    null,
+    [],
+    [entry, entry],
+    {},
+    { depfresh: entry, other: { name: 'other' } },
+    { unexpected: entry },
+  ])('rejects ambiguous or malformed manifests: %j', (manifest) => {
+    expect(() => extractSinglePackEntry(manifest)).toThrow()
   })
 })
