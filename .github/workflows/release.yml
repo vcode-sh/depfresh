@@ -40,7 +40,8 @@ jobs:
           : > "$NPM_TOOL_ROOT/global.npmrc"
           NODE_CLI=$(command -v node)
           NPM_BOOTSTRAP=$(command -v npm)
-          [[ "$(dirname "$(realpath "$NODE_CLI")")" == "$(dirname "$(realpath "$NPM_BOOTSTRAP")")" ]]
+          [[ "$(env -i HOME="$NPM_TOOL_ROOT/home" PATH="$(dirname "$NODE_CLI"):/usr/bin:/bin" \
+            "$NODE_CLI" --version)" == 'v24.15.0' ]]
           env -i HOME="$NPM_TOOL_ROOT/home" PATH="$(dirname "$NODE_CLI"):/usr/bin:/bin" \
             "$NPM_BOOTSTRAP" install --global --ignore-scripts --no-audit --no-fund \
             --registry https://registry.npmjs.org/ --userconfig "$NPM_TOOL_ROOT/user.npmrc" \
@@ -171,7 +172,8 @@ jobs:
           : > "$NPM_TOOL_ROOT/global.npmrc"
           NODE_CLI=$(command -v node)
           NPM_BOOTSTRAP=$(command -v npm)
-          [[ "$(dirname "$(realpath "$NODE_CLI")")" == "$(dirname "$(realpath "$NPM_BOOTSTRAP")")" ]]
+          [[ "$(env -i HOME="$NPM_TOOL_ROOT/home" PATH="$(dirname "$NODE_CLI"):/usr/bin:/bin" \
+            "$NODE_CLI" --version)" == 'v24.15.0' ]]
           env -i HOME="$NPM_TOOL_ROOT/home" PATH="$(dirname "$NODE_CLI"):/usr/bin:/bin" \
             "$NPM_BOOTSTRAP" install --global --ignore-scripts --no-audit --no-fund \
             --registry https://registry.npmjs.org/ --userconfig "$NPM_TOOL_ROOT/user.npmrc" \
@@ -233,7 +235,7 @@ jobs:
           PACKAGE_VERSION: ${{ needs.verify.outputs.package-version }}
         run: |
           set -euo pipefail
-          for attempt in 1 2 3 4 5 6; do
+          for _attempt in 1 2 3 4 5 6; do
             if node scripts/verify-packed-package.mjs artifacts/pack.json \
               --install-spec "depfresh@$PACKAGE_VERSION"; then
               exit 0

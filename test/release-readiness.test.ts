@@ -161,6 +161,8 @@ describe('2.0 release readiness', () => {
     expect(release.match(/NPM_CONFIG_USERCONFIG=/gu)).toHaveLength(2)
     expect(release.match(/NPM_CONFIG_GLOBALCONFIG=/gu)).toHaveLength(2)
     expect(release.match(/NPM_CONFIG_REGISTRY=https:\/\/registry\.npmjs\.org\//gu)).toHaveLength(2)
+    expect(release).not.toContain('dirname "$(realpath "$NODE_CLI")"')
+    expect(release.match(/"\$NODE_CLI" --version\)" == 'v24\.15\.0'/gu)).toHaveLength(2)
     expect(release).toContain(
       'pnpm install --frozen-lockfile --store-dir "$NPM_TOOL_ROOT/pnpm-store"',
     )

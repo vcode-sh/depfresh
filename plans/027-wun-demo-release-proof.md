@@ -113,3 +113,18 @@ Stop before tagging if large JSON is incomplete, native exclusions update a phys
 ignore additions weaken default containment, the final tarball differs from reviewed evidence,
 the required-check ruleset is stale, npm trusted publishing rejects the workflow identity, or any
 release job is non-success. Never replace a failed release with a manual unverified publish.
+
+## Hosted release attempt
+
+The release-preparation commit `75cacb7` passed every local gate, independent review, and hosted
+`main` check in run `29542182146`. The annotated immutable `v2.0.0` tag was then pushed at that exact
+commit. Tag run `29542342329` stopped in `Verify exact release artifact` before packing or
+publishing: setup-node exposes npm through a symlink into its installed package, so comparing the
+resolved parent directories of `node` and `npm` was not a valid executable-identity check. Publish
+and hosted-release jobs were skipped; npm and GitHub therefore still expose no depfresh 2.0.0
+release.
+
+The regression test retains the failing guard as RED evidence and requires both isolated npm
+bootstrap blocks to execute the selected Node binary and observe exactly `v24.15.0`. Plan 027 stays
+IN PROGRESS until a provenance-bound immutable release path completes all remaining hosted and
+public-artifact gates. The failed tag is not moved, recreated, or bypassed with a manual publish.

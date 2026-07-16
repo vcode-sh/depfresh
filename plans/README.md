@@ -126,6 +126,12 @@ was documented to extend. The plan owns those focused fixes, deterministic packe
 the human-first README and release truth pass, current hosted governance, and the immutable 2.0.0
 publication sequence.
 
+Release-preparation commit `75cacb7` and hosted `main` run `29542182146` passed, but immutable tag
+run `29542342329` stopped before packing or publishing because its npm bootstrap incorrectly
+required the setup-node npm symlink to resolve beside the Node executable. The portable exact-Node
+regression and workflow repair are recorded in Plan 027. npm 2.0.0 and the hosted release remain
+absent, and the plan remains IN PROGRESS; the existing immutable tag has not been moved or bypassed.
+
 ## Split coverage map
 
 No requirement from the prior plans was dropped. This map records its new owner.
