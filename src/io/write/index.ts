@@ -11,6 +11,9 @@ export { detectLineEnding } from './text'
 /**
  * Single-writer architecture: reads once, applies all mutations, writes once.
  * Never allow independent writers to clobber each other.
+ *
+ * @deprecated Use the immutable `plan()` and explicitly authorized `apply()` workflow. This direct
+ * compatibility writer does not provide the run-level stale, lock, journal, or recovery contract.
  */
 export function writePackage(
   pkg: PackageMeta,

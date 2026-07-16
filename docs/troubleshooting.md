@@ -112,6 +112,28 @@ Supported lockfile names are `package-lock.json`, `npm-shrinkwrap.json`, `pnpm-l
 format. Declared Node evidence is limited to
 `engines.node`, `.nvmrc`, `.node-version`, and the `nodejs` entry in `.tool-versions`.
 
+### Apply says a plan is stale or a target is dirty
+
+Apply requires the target file, occurrence value, physical identity, repository identity, and
+target-only Git evidence to match the reviewed plan exactly. Do not edit hashes or expected values
+to force a plan through. Run inspect and plan again, review the new operations, then apply the new
+document. Dirty paths that are not targets do not block the run.
+
+An unavailable Git probe is not the same as a clean target. Fix the Git availability or repository
+problem before retrying. A definite non-Git directory can still apply from exact file evidence.
+
+### Apply reports a lock or recovery requirement
+
+The active owner is recorded at `.depfresh/apply.lock/owner.json`; durable run evidence is recorded
+with repository-relative paths at `.depfresh/runs/<run-id>/journal.json`. Never delete a live,
+foreign-host, malformed, unreadable, or otherwise unknown owner. Stop every apply process before
+inspecting a confirmed dead run.
+
+For a dead crashed run, verify each same-directory backup against the journal's original hash,
+atomically restore it over the target, and verify the final target bytes and occurrences. Remove
+the retained run evidence only after every target is known. If any owner, backup, target, or final
+state is ambiguous, preserve the evidence and keep the outcome `unknown`.
+
 ### Catalogs not updating
 
 depfresh handles workspace catalogs (pnpm, bun, yarn) by updating them in-place in their respective source files — `pnpm-workspace.yaml`, root `package.json` (`workspaces.catalog` / `workspaces.catalogs`), or `.yarnrc.yml`. If your catalog entries aren't updating, make sure `--write` is set and that depfresh actually detected the catalog. Check debug output with `--loglevel debug`.

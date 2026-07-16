@@ -135,7 +135,7 @@ export default defineConfig({
 
 ---
 
-## `inspect(options)` and `plan(options)`
+## `inspect(options)`, `plan(options)`, and `apply(plan, options, authority)`
 
 `inspect()` returns the schema-v1 process-free repository evidence contract. `plan()` returns the
 schema-v1 registry-aware plan with one terminal decision per occurrence and exact future file
@@ -146,10 +146,23 @@ errors.
 ```ts
 function inspect(options: InspectOptions): Promise<InspectResult>
 function plan(options: PlanOptions): Promise<PlanResult>
+function apply(
+  plan: PlanResult,
+  options: ApplyOptions,
+  authority: InvocationAuthority,
+): Promise<ApplyResult>
 ```
 
 ```ts
-import { inspect, plan, validateInspectResult, validatePlanResult } from 'depfresh'
+import {
+  apply,
+  createInvocationAuthority,
+  inspect,
+  plan,
+  validateApplyResult,
+  validateInspectResult,
+  validatePlanResult,
+} from 'depfresh'
 
 const evidence = await inspect({ cwd: process.cwd() })
 const dependencyPlan = await plan({ cwd: process.cwd(), mode: 'latest' })
@@ -157,13 +170,25 @@ const dependencyPlan = await plan({ cwd: process.cwd(), mode: 'latest' })
 if (!validateInspectResult(evidence) || !validatePlanResult(dependencyPlan)) {
   throw new Error('Unsupported contract')
 }
+
+const applied = await apply(
+  dependencyPlan,
+  { cwd: process.cwd() },
+  createInvocationAuthority({ write: true }),
+)
+if (!validateApplyResult(applied)) throw new Error('Unsupported apply contract')
 ```
 
 `plan()` reads only declarative JSON configuration. Set `asOf` to a canonical UTC timestamp when
 cooldown is positive. See [Inspect and Plan Contracts](../output-formats/inspect-plan.md) for the
 schemas, fingerprints, terminal vocabulary, and compatibility boundary.
 
-The module also exports authoritative schema descriptors, runtime assertion/type-guard helpers,
+`apply()` accepts plain schema-v1 plan data, never re-resolves it, and throws before lock acquisition
+for a forged contract or missing authority. Operational stale, dirty, lock, staging, commit,
+recovery, and observation states return a schema-valid result. See the
+[Apply Contract](../output-formats/apply.md) for exact phases and recovery limits.
+
+The module also exports authoritative inspect, plan, apply, and error schema descriptors, runtime assertion/type-guard helpers,
 canonical JSON and fingerprint helpers, plus pure `buildLegacyCheckJsonResult()` and
 `buildLegacyCheckJsonError()` compatibility builders.
 

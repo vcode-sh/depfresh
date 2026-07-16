@@ -6,7 +6,7 @@ import { VALID_MODES } from './arg-values'
 import { args as argsSchema } from './args-schema'
 import { parseCommaSeparatedArg } from './parse-list-arg'
 
-export type MachineCommand = 'inspect' | 'plan'
+export type MachineCommand = 'inspect' | 'plan' | 'apply'
 
 const forbiddenOptions = [
   ['write', '--write'],
@@ -42,6 +42,7 @@ const planOptions = new Set([
   'cooldown',
   'as-of',
 ])
+const applyOptions = new Set(['cwd', 'json', 'output', 'write', 'plan-file'])
 const aliasNames = new Map<string, { name: string; type: string }>()
 for (const [name, definition] of Object.entries(argsSchema)) {
   const rawDefinition = definition as {
@@ -60,7 +61,7 @@ for (const [name, definition] of Object.entries(argsSchema)) {
 }
 
 export function getMachineCommand(value: unknown): MachineCommand | undefined {
-  return value === 'inspect' || value === 'plan' ? value : undefined
+  return value === 'inspect' || value === 'plan' || value === 'apply' ? value : undefined
 }
 
 export function assertMachineCommandSafety(
@@ -69,22 +70,35 @@ export function assertMachineCommandSafety(
   command: MachineCommand,
 ): void {
   if (collectExplicitOptions(rawArgs).has('output') && args.output !== 'json') {
-    throw new ConfigError('Read-only machine commands only support --output json.', {
+    throw new ConfigError('Machine commands only support --output json.', {
       reason: 'INVALID_OPTION_VALUE',
     })
   }
   for (const [name, flag] of forbiddenOptions) {
-    if (args[name]) {
+    if (args[name] && !(command === 'apply' && name === 'write')) {
       throw new ConfigError(`${flag} is not valid for read-only machine commands.`, {
         reason: 'UNSUPPORTED_COMBINATION',
       })
     }
   }
-  const allowed = command === 'inspect' ? commonMachineOptions : planOptions
+  const allowed =
+    command === 'inspect' ? commonMachineOptions : command === 'plan' ? planOptions : applyOptions
   for (const name of collectExplicitOptions(rawArgs)) {
     if (!allowed.has(name)) {
       throw new ConfigError(`--${name} is not valid for the ${command} command.`, {
         reason: 'UNSUPPORTED_COMBINATION',
+      })
+    }
+  }
+  if (command === 'apply') {
+    if (args.write !== true) {
+      throw new ConfigError('depfresh apply requires explicit --write authority.', {
+        reason: 'AUTHORITY_REQUIRED',
+      })
+    }
+    if (typeof args['plan-file'] !== 'string' || args['plan-file'].length === 0) {
+      throw new ConfigError('depfresh apply requires --plan-file.', {
+        reason: 'MISSING_OPTION_VALUE',
       })
     }
   }

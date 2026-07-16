@@ -108,6 +108,11 @@ describe('addons', () => {
         vscode: '^1.92.0',
       },
     })
-    expect(mocks.writePackageMock).toHaveBeenCalledWith(pkg, resolved, 'silent')
+    expect(mocks.writePackageMock).toHaveBeenCalledWith(
+      pkg,
+      resolved,
+      'silent',
+      expect.objectContaining({ write: true }),
+    )
   })
 })

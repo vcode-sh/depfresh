@@ -72,6 +72,9 @@ depfresh inspect --json > depfresh-inspect.json
 # Resolve candidates and exact future write operations; still no writes
 depfresh plan --json > depfresh-plan.json
 
+# Apply exactly that reviewed plan; no re-resolution
+depfresh apply --json --write --plan-file depfresh-plan.json
+
 # Reproducible cooldown evaluation
 depfresh plan --json --cooldown 7 --as-of 2026-07-16T10:00:00.000Z
 ```
@@ -79,6 +82,10 @@ depfresh plan --json --cooldown 7 --as-of 2026-07-16T10:00:00.000Z
 Exit `1` from `plan` means the document is valid and contains operations, material risks, or
 explicitly incomplete decisions. Parse the document; reserve exit `2` for a fatal command error
 document.
+
+Exit `1` from `apply` is also a valid result: at least one operation is conflicted, reverted,
+failed, or unknown. Re-plan after a stale conflict. Preserve retained lock and journal evidence
+when recovery is incomplete or ownership is unknown.
 
 ## Global Packages
 

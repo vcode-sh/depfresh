@@ -390,6 +390,7 @@ const commonDefinitions = {
 
 export const INSPECT_SCHEMA_ID = 'https://depfresh.dev/schemas/inspect-v1.schema.json'
 export const PLAN_SCHEMA_ID = 'https://depfresh.dev/schemas/plan-v1.schema.json'
+export const APPLY_SCHEMA_ID = 'https://depfresh.dev/schemas/apply-v1.schema.json'
 export const COMMAND_ERROR_SCHEMA_ID = 'https://depfresh.dev/schemas/error-v1.schema.json'
 
 export const inspectResultSchema = {
@@ -575,6 +576,124 @@ export const planResultSchema = {
   definitions: commonDefinitions,
 } as const satisfies JSONSchema
 
+const writeOutcomeSummarySchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['planned', 'applied', 'skipped', 'conflicted', 'reverted', 'failed', 'unknown'],
+  properties: {
+    planned: { type: 'integer', minimum: 0 },
+    applied: { type: 'integer', minimum: 0 },
+    skipped: { type: 'integer', minimum: 0 },
+    conflicted: { type: 'integer', minimum: 0 },
+    reverted: { type: 'integer', minimum: 0 },
+    failed: { type: 'integer', minimum: 0 },
+    unknown: { type: 'integer', minimum: 0 },
+  },
+} as const
+
+export const applyResultSchema = {
+  $schema: 'http://json-schema.org/draft-07/schema#',
+  $id: APPLY_SCHEMA_ID,
+  title: 'depfresh apply contract v1',
+  type: 'object',
+  additionalProperties: false,
+  required: [
+    'contract',
+    'schemaVersion',
+    'toolVersion',
+    'planFingerprint',
+    'repositoryIdentity',
+    'status',
+    'operations',
+    'phases',
+    'summary',
+    'recovery',
+    'requiredCapabilities',
+  ],
+  properties: {
+    contract: { const: 'depfresh.apply' },
+    schemaVersion: { const: 1 },
+    toolVersion: { type: 'string', minLength: 1 },
+    planFingerprint: hashSchema,
+    repositoryIdentity: { type: 'string', minLength: 1 },
+    status: { enum: ['applied', 'noop', 'conflicted', 'reverted', 'failed', 'unknown'] },
+    operations: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: [
+          'operationId',
+          'occurrenceId',
+          'sourceFileId',
+          'file',
+          'path',
+          'name',
+          'expectedValue',
+          'requestedValue',
+          'status',
+          'reason',
+        ],
+        properties: {
+          operationId: { type: 'string', minLength: 1 },
+          occurrenceId: { type: 'string', minLength: 1 },
+          sourceFileId: { type: 'string', minLength: 1 },
+          file: relativePathSchema,
+          path: { type: 'array', minItems: 1, items: { type: 'string' } },
+          name: { type: 'string', minLength: 1 },
+          expectedValue: { type: 'string' },
+          requestedValue: { type: 'string' },
+          observedValue: { type: 'string' },
+          observedByteHash: hashSchema,
+          status: {
+            enum: ['applied', 'skipped', 'conflicted', 'reverted', 'failed', 'unknown'],
+          },
+          reason: { type: 'string', minLength: 1 },
+        },
+      },
+    },
+    phases: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['name', 'status', 'reason'],
+        properties: {
+          name: {
+            enum: [
+              'preflight',
+              'lock',
+              'stage',
+              'precommit',
+              'commit',
+              'recovery',
+              'inspect',
+              'cleanup',
+            ],
+          },
+          status: { enum: ['passed', 'skipped', 'failed', 'unknown'] },
+          reason: { type: 'string', minLength: 1 },
+        },
+      },
+    },
+    summary: writeOutcomeSummarySchema,
+    recovery: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['status'],
+      properties: {
+        status: { enum: ['not-needed', 'completed', 'partial', 'unknown'] },
+        journalId: { type: 'string', minLength: 1 },
+      },
+    },
+    requiredCapabilities: {
+      type: 'array',
+      items: { enum: ['filesystem-read', 'file-write'] },
+    },
+  },
+  definitions: commonDefinitions,
+} as const satisfies JSONSchema
+
 export const commandErrorSchema = {
   $schema: 'http://json-schema.org/draft-07/schema#',
   $id: COMMAND_ERROR_SCHEMA_ID,
@@ -586,7 +705,7 @@ export const commandErrorSchema = {
     contract: { const: 'depfresh.error' },
     schemaVersion: { const: 1 },
     toolVersion: { type: 'string', minLength: 1 },
-    command: { enum: ['inspect', 'plan'] },
+    command: { enum: ['inspect', 'plan', 'apply'] },
     errors: { type: 'array', minItems: 1, items: { $ref: '#/definitions/error' } },
   },
   definitions: commonDefinitions,
@@ -594,4 +713,5 @@ export const commandErrorSchema = {
 
 export type InspectResult = FromSchema<typeof inspectResultSchema>
 export type PlanResult = FromSchema<typeof planResultSchema>
+export type ApplyResult = FromSchema<typeof applyResultSchema>
 export type MachineCommandError = FromSchema<typeof commandErrorSchema>

@@ -29,18 +29,24 @@ depfresh --fail-on-outdated --output json
 depfresh inspect --json
 
 # Registry-aware plan without writes
-depfresh plan --json
+depfresh plan --json > depfresh-plan.json
+
+# Apply one reviewed immutable plan with explicit authority
+depfresh apply --json --write --plan-file depfresh-plan.json
 ```
 
 ## Machine Commands
 
-`inspect` and `plan` are commands, not range modes. Both require `--json` or `--output json`, write
-one versioned schema-valid document to stdout, and reject write, interactive, post-write, and global
-flags before discovery. See [Inspect and Plan Contracts](../output-formats/inspect-plan.md) for
-schemas, fingerprints, side-effect boundaries, and exit codes.
+`inspect`, `plan`, and `apply` are commands, not range modes. They require `--json` or
+`--output json` and write one versioned schema-valid document to stdout. Inspect and plan reject
+write, interactive, post-write, and global flags before discovery. Apply requires explicit
+`--write` plus one `--plan-file`, and rejects unrelated command flags. See
+[Inspect and Plan Contracts](../output-formats/inspect-plan.md) and
+[Apply Contract](../output-formats/apply.md) for schemas, fingerprints, side-effect boundaries,
+recovery, and exit codes.
 
 ## See Also
 
 - [Configuration](../configuration/) -- `.depfreshrc`, `depfresh.config.ts`, and `package.json#depfresh`
 - [Programmatic API](../api/) -- using depfresh as a library with callbacks
-- [Output Formats](../output-formats/) -- legacy JSON, inspect/plan schemas, and table behavior
+- [Output Formats](../output-formats/) -- legacy JSON, inspect/plan/apply schemas, and table behavior

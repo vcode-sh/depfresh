@@ -6,19 +6,27 @@ ESM-only, obviously. It's not 2019.
 
 ## Quick Start
 
-For a side-effect-free machine workflow, use the typed contracts directly:
+For a reviewable machine workflow, use the typed contracts directly:
 
 ```ts
-import { inspect, plan } from 'depfresh'
+import { apply, createInvocationAuthority, inspect, plan } from 'depfresh'
 
 const evidence = await inspect({ cwd: process.cwd() })
 const dependencyPlan = await plan({ cwd: process.cwd(), mode: 'minor' })
 
 console.log(evidence.repository.fingerprint, dependencyPlan.planFingerprint)
+
+const applied = await apply(
+  dependencyPlan,
+  { cwd: process.cwd() },
+  createInvocationAuthority({ write: true }),
+)
+console.log(applied.status, applied.summary)
 ```
 
-These functions return data and never exit the process. Fatal input/configuration/runtime failures
-throw structured errors for the caller to handle.
+These functions return data and never exit the process. `inspect()` and `plan()` are non-mutating;
+`apply()` requires a separate explicit authority snapshot and exact file preconditions. Fatal
+input/configuration/runtime failures throw structured errors for the caller to handle.
 
 The legacy check API remains available:
 

@@ -27,6 +27,7 @@ import type {
 } from '../../types'
 import { summarizeWriteOutcomes } from '../../types'
 import type { Logger } from '../../utils/logger'
+import { applyLegacyPackageWrite } from '../apply/legacy'
 
 export interface PackageWriteResult extends WriteOutcomeSummary {
   outcomes: WriteOutcome[]
@@ -181,7 +182,9 @@ export async function applyPackageWrite(
     return applyGlobalWrites(pkg, changes, logger)
   }
 
-  return resultFromOutcomes(writePackage(pkg, changes, options.loglevel))
+  return resultFromOutcomes(
+    await applyLegacyPackageWrite(pkg, changes, options.loglevel, authority),
+  )
 }
 
 async function applyGlobalWrites(

@@ -61,7 +61,10 @@ depfresh --output json
 depfresh inspect --json
 
 # Reviewable dependency plan (registry reads, no writes)
-depfresh plan --json
+depfresh plan --json > depfresh-plan.json
+
+# Apply exactly that reviewed plan with explicit write authority
+depfresh apply --json --write --plan-file depfresh-plan.json
 
 # Only minor/patch (living cautiously)
 depfresh minor -w
@@ -81,13 +84,18 @@ depfresh --fail-on-outdated
   repository and plan fingerprints, exact occurrence operations, complete policy traces, candidate
   traces when registry resolution runs, and one terminal decision per occurrence. Planning uses
   memory-only cache state and never writes.
+- **Stale-safe apply contract** -- validates one immutable plan, exact target hashes and values,
+  target Git state, and explicit write authority before same-filesystem staging. Every target is
+  reparsed and rechecked before atomic per-file replacement; byte-exact backups and a durable
+  journal support observed recovery without claiming a repository-wide transaction.
 - **7 range modes** -- `default`, `major`, `minor`, `patch`, `latest`, `newest`, `next`
 - **Interactive cherry-picking** -- grouped multiselect with colour-coded severity
 - **Occurrence policy** -- validated ordered rules select by dependency, workspace, catalog,
   field, role, manager, protocol, and current specifier context, with independent action and mode
   winners and complete decision traces.
-- **Write safely** -- exact manifest/catalog occurrences are preconditioned and re-read after writes;
-  `--verify-command` tests each dependency and proves rollback outcomes.
+- **Write safely** -- exact manifest/catalog occurrences are preconditioned and re-read after writes.
+  Legacy `--write` file changes delegate to the same stale-safe file engine; process verification
+  remains a separate post-write compatibility flow.
 - **Post-write hooks** -- `--execute`, `--install`, `--update`. Chain commands after writing.
 - **Global packages** -- `--global` for one manager, `--global-all` scans npm + pnpm + bun (deduped)
 - **Private registries** -- full `.npmrc` support. Scoped registries, auth tokens, env vars.
@@ -139,11 +147,13 @@ Details: **[docs/configuration/workspaces.md](docs/configuration/workspaces.md)*
 ## AI Agent Friendly
 
 depfresh was built for humans and machines. `depfresh inspect --json` describes repository evidence,
-and `depfresh plan --json` resolves a reviewable dependency plan. The compatibility
+`depfresh plan --json` resolves a reviewable dependency plan, and
+`depfresh apply --json --write --plan-file <path>` applies only that exact plan. The compatibility
 `--output json` check report remains available for existing automation. `--help-json` returns the
-CLI contract, schema paths, and workflows. Machine-command exits are `0` for a complete result with
-no findings, `1` for a valid actionable, risky, or incomplete result, and `2` for a fatal error. Non-TTY
-environments suppress spinners and interactive prompts.
+CLI contract, schema paths, and workflows. Inspect and plan exit `0` when complete without
+actionable or incomplete findings and `1` for a valid finding-bearing document. Apply exits `0` for
+`applied` or `noop` and `1` for a valid `conflicted`, `reverted`, `failed`, or `unknown` result. Exit
+`2` is a fatal machine-command error. Non-TTY environments suppress spinners and interactive prompts.
 
 Details: **[docs/agents/README.md](docs/agents/README.md)**
 

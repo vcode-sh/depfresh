@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import {
+  validateApplyResult,
   validateInspectResult,
   validateMachineCommandError,
   validatePlanResult,
@@ -45,6 +46,35 @@ describe('inspect and plan CLI routing', () => {
     expect(result.status).toBe(1)
     expect(result.stderr).toBe('')
     expect(validatePlanResult(output)).toBe(true)
+  })
+
+  it('applies one explicit plan file with one schema-valid result document', () => {
+    const root = mkdtempSync(join(tmpdir(), 'depfresh-cli-apply-'))
+    const planFile = join(root, 'plan.json')
+    writeFileSync(join(root, 'package.json'), JSON.stringify({ name: 'fixture' }))
+    const planned = runCli(['plan', '--json', '--cwd', root])
+    writeFileSync(planFile, planned.stdout)
+
+    const result = runCli(['apply', '--json', '--write', '--cwd', root, '--plan-file', planFile])
+    const output: unknown = JSON.parse(result.stdout)
+
+    expect(result.status).toBe(0)
+    expect(result.stderr).toBe('')
+    expect(validateApplyResult(output)).toBe(true)
+    expect(output).toMatchObject({ contract: 'depfresh.apply', status: 'noop' })
+  }, 30_000)
+
+  it('requires explicit apply authority before reading the plan file', () => {
+    const missing = join(tmpdir(), `depfresh-missing-plan-${process.pid}`)
+    const result = runCli(['apply', '--json', '--plan-file', missing])
+    const output: unknown = JSON.parse(result.stdout)
+
+    expect(result.status).toBe(2)
+    expect(validateMachineCommandError(output)).toBe(true)
+    expect(output).toMatchObject({
+      command: 'apply',
+      errors: [{ reason: 'AUTHORITY_REQUIRED', fatal: true }],
+    })
   })
 
   it('records CLI policy provenance in plan traces', () => {

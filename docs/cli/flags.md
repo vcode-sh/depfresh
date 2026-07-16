@@ -50,8 +50,9 @@ depfresh next      # same as depfresh --mode next
 Valid modes: `default`, `major`, `minor`, `patch`, `latest`, `newest`, `next`. Invalid values fail fast with exit code `2`.
 Machine-discoverability command: `depfresh capabilities --json`.
 
-Reserved machine commands are `depfresh inspect --json` and `depfresh plan --json`. They are not
-mode shorthands and use their own exit contract.
+Reserved machine commands are `depfresh inspect --json`, `depfresh plan --json`, and
+`depfresh apply --json --write --plan-file <path>`. They are not mode shorthands and use their own
+exit contract.
 
 ---
 
@@ -84,7 +85,7 @@ depfresh capabilities --json
 ```
 
 The output includes supported commands, packaged schema paths, flags, defaults, valid enum values,
-and both legacy-check and inspect/plan exit semantics.
+and the separate legacy-check, inspect/plan, and apply exit semantics.
 
 ### Inspect and plan flags
 
@@ -97,8 +98,18 @@ selection and registry flags including `--mode`, `--include`, `--exclude`, `--fo
 | --- | --- | --- |
 | `--as-of <timestamp>` | `plan` | Canonical UTC semantic time required when cooldown is positive, for example `2026-07-16T10:00:00.000Z` |
 
-Machine commands reject `--write`, `--interactive`, `--install`, `--update`, `--execute`,
+Inspect and plan reject `--write`, `--interactive`, `--install`, `--update`, `--execute`,
 `--verify-command`, `--strict-post-write`, `--global`, and `--global-all` before discovery.
+
+### Apply flags
+
+Apply accepts `--cwd`, JSON output selection, explicit `--write`, and exactly one
+`--plan-file <path>`. It validates the immutable plan and current target evidence before mutation.
+The `--plan-file` flag is rejected by every other command. Apply rejects the inspect/plan selection,
+registry, interactive, post-write, and global flags.
+
+Apply exits `0` only for `applied` or `noop`, `1` for a schema-valid `conflicted`, `reverted`,
+`failed`, or `unknown` result, and `2` for a fatal command-error document.
 
 ---
 
@@ -144,7 +155,8 @@ Machine commands reject `--write`, `--interactive`, `--install`, `--update`, `--
 | `--profile` | -- | boolean | `false` | Emit runtime timing and cache/network diagnostics for this run. Useful when "it feels slower" is not a bug report, it's a shrug. |
 | `--loglevel <level>` | -- | string | `info` | Log level: `silent`, `info`, or `debug`. `silent` suppresses everything except output. `debug` tells you things you didn't ask to know. |
 | `--help-json` | -- | boolean | `false` | Print machine-readable CLI capabilities (flags, enums, defaults, exit codes) as JSON. |
-| `--json` | -- | boolean | `false` | JSON mode for `capabilities`, `inspect`, and `plan`. |
+| `--json` | -- | boolean | `false` | JSON mode for `capabilities`, `inspect`, `plan`, and `apply`. |
+| `--plan-file <path>` | -- | string | -- | Immutable `depfresh.plan` JSON input for `apply`; invalid for every other command. |
 
 `--profile`'s `networkFetches` and `dedupeHits` count real registry fetches and real in-flight cache hits in every output mode, interactive terminal runs included. Before 1.2.0 those two numbers were always `0` on an interactive run, which made them worse than useless -- they were reassuring.
 

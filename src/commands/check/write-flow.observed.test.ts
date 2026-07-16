@@ -82,7 +82,7 @@ describe('applyPackageWrite observed outcome accounting', () => {
     rmSync(tmpDir, { recursive: true, force: true })
   })
 
-  it('derives reconciled counts from one applied and one conflicted physical result', async () => {
+  it('blocks the full legacy file run when any physical occurrence is stale', async () => {
     const filepath = join(tmpDir, 'package.json')
     writeFileSync(
       filepath,
@@ -107,18 +107,18 @@ describe('applyPackageWrite observed outcome accounting', () => {
     )) as ResultWithOutcomes
     const parsed = JSON.parse(readFileSync(filepath, 'utf-8'))
 
-    expect(result.outcomes.map((outcome) => outcome.status)).toEqual(['applied', 'conflicted'])
+    expect(result.outcomes.map((outcome) => outcome.status)).toEqual(['conflicted', 'conflicted'])
     expect(result).toMatchObject({
       planned: 2,
-      applied: 1,
+      applied: 0,
       skipped: 0,
-      conflicted: 1,
+      conflicted: 2,
       reverted: 0,
       failed: 0,
       unknown: 0,
-      didWrite: true,
+      didWrite: false,
     })
-    expect(parsed.dependencies.first).toBe('2.0.0')
+    expect(parsed.dependencies.first).toBe('1.0.0')
     expect(parsed.dependencies.second).toBe('1.5.0')
   })
 

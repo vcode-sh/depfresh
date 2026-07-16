@@ -6,8 +6,8 @@ I take security seriously. Yes, I know that sentence usually precedes a data bre
 
 | Version | Supported |
 |---------|-----------|
-| 0.1.x   | Yes       |
-| < 0.1   | No        |
+| 1.2.x   | Yes       |
+| < 1.2   | No        |
 
 Only the latest release gets patches. Running something older? Update first. That's literally what this tool does.
 
@@ -34,11 +34,38 @@ If I go silent, follow up. I'm one person with a keyboard, not a 24/7 SOC team.
 
 So you don't have to:
 
-- **SQLite cache with WAL mode** -- no corruption from concurrent access. Your cache is safe even if you run depfresh from 5 terminals simultaneously. Don't ask me how I know.
-- **Auth token handling** -- `.npmrc` tokens are used for registry requests but never logged, cached, or written anywhere. Debug mode redacts them. I'm not trying to end up on HackerNews.
+- **SQLite cache with WAL mode** -- WAL and transactional writes reduce cross-process contention.
+  If the cache path or database is unavailable, depfresh falls back to memory for the run. These
+  controls are not a blanket guarantee against storage, filesystem, or process failure.
+- **Auth token handling** -- `.npmrc` credentials are used for registry requests and are excluded
+  from cache keys and public result contracts. Error and machine-output boundaries redact
+  credential-like values instead of serializing raw request failures.
 - **Exponential backoff** -- prevents request amplification. I won't accidentally DDoS npm. You're welcome, Isaac.
 - **AbortController timeouts** -- every request has a timeout. No hanging connections, no resource leaks, no "why is my process still running" at 3am.
-- **No arbitrary code execution** -- depfresh reads JSON and fetches metadata. That's it. No install scripts, no postinstall hooks, no eval(). Boring by design.
+- **Explicit process authority** -- inspect and file planning do not run package-manager or
+  lifecycle commands. Legacy `--execute`, `--install`, `--update`, and `--verify-command` features
+  run processes only when their required flags and explicit write authority are present. File apply
+  does not run those commands.
+
+## Stale-safe file apply
+
+`depfresh apply --json --write --plan-file <path>` and the public `apply()` API validate a strict
+immutable plan, its semantic fingerprint, clone-stable repository identity, target containment,
+regular-file identity, exact source hashes and occurrence values, and target-only Git state before
+mutation. Configuration cannot grant write authority. Dirty targets block; unrelated dirty paths do
+not. An unavailable Git probe remains unavailable and cannot be treated as clean.
+
+Apply owns a root-local `.depfresh/apply.lock` and a relative-path journal under
+`.depfresh/runs/<run-id>/`. It stages and backs up in each target's directory, fsyncs durable
+evidence, rechecks all targets before the first replacement and each target before its rename, and
+derives results from observed final bytes and occurrence values. Incomplete or unobservable recovery
+retains evidence and returns `unknown`; it never becomes success.
+
+Replacement is atomic per file, not across the repository. Recovery across several files is best
+effort. A portable pure-JavaScript API cannot hold an ancestor directory descriptor through rename,
+so hostile replacement of an ancestor after the final pathname check remains an operating-system
+boundary. Apply does not synchronize lockfiles, invoke managers, install packages, update globals,
+or establish package trust.
 
 ## Disclosure
 

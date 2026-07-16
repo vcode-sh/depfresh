@@ -4,7 +4,7 @@ import { migrationParityArgs } from './migration-flags'
 export const args: ArgsDef = {
   mode_arg: {
     type: 'positional',
-    description: 'Command (inspect, plan, capabilities) or version range mode shorthand',
+    description: 'Command (inspect, plan, apply, capabilities) or version range mode shorthand',
     required: false,
   },
   cwd: {
@@ -91,6 +91,10 @@ export const args: ArgsDef = {
     type: 'boolean',
     description: 'Print JSON output for machine-discoverability commands',
     default: false,
+  },
+  'plan-file': {
+    type: 'string',
+    description: 'Path to one immutable JSON plan for the apply command',
   },
   concurrency: {
     type: 'string',

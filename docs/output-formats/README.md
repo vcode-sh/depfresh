@@ -1,7 +1,7 @@
 # Output Formats
 
 Because apparently "printing text to a terminal" needs a whole document now. depfresh has a human
-table, a legacy check JSON envelope, and versioned inspect/plan machine contracts.
+table, a legacy check JSON envelope, and versioned inspect/plan/apply machine contracts.
 
 ## Pages
 
@@ -12,6 +12,8 @@ table, a legacy check JSON envelope, and versioned inspect/plan machine contract
 
 - **[Inspect and Plan](./inspect-plan.md)** -- Deterministic schema-v1 repository evidence and
   immutable plan operations with canonical fingerprints.
+- **[Apply](./apply.md)** -- Explicitly authorized stale-safe file application, phase evidence,
+  observed outcomes, and recovery limits.
 
 ## Exit Codes
 
@@ -28,11 +30,15 @@ unknown, or error;
 `1` means the JSON document is valid but contains actionable operations, material risks, or
 non-fatal incomplete decisions; `2` means a fatal error prevented a trustworthy result.
 
+`apply` exits `0` for an observed `applied` or `noop` result, `1` for a schema-valid `conflicted`,
+`reverted`, `failed`, or `unknown` result, and `2` for a fatal command-error document.
+
 ## Quick Reference
 
 ```bash
 depfresh --output table   # default -- for humans
 depfresh --output json    # for machines, scripts, and AI agents
 depfresh inspect --json   # deterministic repository evidence
-depfresh plan --json      # deterministic semantic update plan
+depfresh plan --json > depfresh-plan.json
+depfresh apply --json --write --plan-file depfresh-plan.json
 ```

@@ -1,6 +1,8 @@
 # Inspect and Plan Contracts
 
 `inspect` and `plan` are the versioned machine interfaces for reviewable dependency automation.
+The separate [Apply Contract](./apply.md) consumes one validated plan under explicit authority and
+never silently re-resolves it.
 Both emit exactly one JSON document to stdout in JSON mode. Fatal command failures use the separate
 error contract and exit `2`; diagnostics never corrupt stdout.
 

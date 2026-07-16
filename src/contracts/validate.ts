@@ -1,12 +1,19 @@
 import Ajv, { type ErrorObject, type ValidateFunction } from 'ajv'
 import { canonicalJson } from './canonical-json'
 import { createPlanFingerprint, createRepositoryFingerprint, hashExactBytes } from './fingerprint'
-import type { InspectResult, MachineCommandError, PlanResult } from './schemas'
-import { commandErrorSchema, inspectResultSchema, planResultSchema } from './schemas'
+import { isContractSafeText } from './sanitize'
+import type { ApplyResult, InspectResult, MachineCommandError, PlanResult } from './schemas'
+import {
+  applyResultSchema,
+  commandErrorSchema,
+  inspectResultSchema,
+  planResultSchema,
+} from './schemas'
 
 const ajv = new Ajv({ allErrors: true, strict: true })
 const inspectValidator = ajv.compile(inspectResultSchema) as ValidateFunction<InspectResult>
 const planValidator = ajv.compile(planResultSchema) as ValidateFunction<PlanResult>
+const applyValidator = ajv.compile(applyResultSchema) as ValidateFunction<ApplyResult>
 const errorValidator = ajv.compile(commandErrorSchema) as ValidateFunction<MachineCommandError>
 
 export class ContractValidationError extends Error {
@@ -45,6 +52,13 @@ export function assertPlanResult(value: unknown): asserts value is PlanResult {
   }
 }
 
+export function assertApplyResult(value: unknown): asserts value is ApplyResult {
+  assertValid('depfresh.apply', applyValidator, value)
+  if (!hasValidApplySemantics(value)) {
+    throw new ContractValidationError('depfresh.apply', [semanticError])
+  }
+}
+
 export function assertMachineCommandError(value: unknown): asserts value is MachineCommandError {
   assertValid('depfresh.error', errorValidator, value)
 }
@@ -57,6 +71,10 @@ export function validatePlanResult(value: unknown): value is PlanResult {
   return planValidator(value) && hasValidPlanSemantics(value)
 }
 
+export function validateApplyResult(value: unknown): value is ApplyResult {
+  return applyValidator(value) && hasValidApplySemantics(value)
+}
+
 export function validateMachineCommandError(value: unknown): value is MachineCommandError {
   return errorValidator(value)
 }
@@ -67,6 +85,133 @@ const semanticError: ErrorObject = {
   keyword: 'semantic',
   params: {},
   message: 'cross-field plan invariants are invalid',
+}
+
+function hasValidApplySemantics(result: ApplyResult): boolean {
+  const operationIds = new Set(result.operations.map((operation) => operation.operationId))
+  if (operationIds.size !== result.operations.length) return false
+  if (
+    new Set(result.operations.map((operation) => operation.occurrenceId)).size !==
+    result.operations.length
+  ) {
+    return false
+  }
+  if (new Set(result.phases.map((entry) => entry.name)).size !== result.phases.length) return false
+  if (
+    !isContractSafeText(result.repositoryIdentity) ||
+    result.phases.some((entry) => !isContractSafeText(entry.reason)) ||
+    (result.recovery.journalId !== undefined && !isContractSafeText(result.recovery.journalId))
+  ) {
+    return false
+  }
+  const counts = {
+    planned: result.operations.length,
+    applied: result.operations.filter((operation) => operation.status === 'applied').length,
+    skipped: result.operations.filter((operation) => operation.status === 'skipped').length,
+    conflicted: result.operations.filter((operation) => operation.status === 'conflicted').length,
+    reverted: result.operations.filter((operation) => operation.status === 'reverted').length,
+    failed: result.operations.filter((operation) => operation.status === 'failed').length,
+    unknown: result.operations.filter((operation) => operation.status === 'unknown').length,
+  }
+  if (
+    (Object.keys(counts) as Array<keyof typeof counts>).some(
+      (key) => counts[key] !== result.summary[key],
+    )
+  ) {
+    return false
+  }
+  for (const operation of result.operations) {
+    if (
+      ![
+        operation.file,
+        ...operation.path,
+        operation.operationId,
+        operation.occurrenceId,
+        operation.sourceFileId,
+        operation.name,
+        operation.expectedValue,
+        operation.requestedValue,
+        operation.reason,
+        ...(operation.observedValue === undefined ? [] : [operation.observedValue]),
+      ].every(isContractSafeText)
+    ) {
+      return false
+    }
+    if (
+      (operation.status === 'applied' || operation.status === 'skipped') &&
+      (operation.observedValue !== operation.requestedValue ||
+        operation.observedByteHash === undefined)
+    ) {
+      return false
+    }
+    if (operation.status === 'applied' && operation.expectedValue === operation.requestedValue) {
+      return false
+    }
+    if (operation.status === 'skipped' && operation.expectedValue !== operation.requestedValue) {
+      return false
+    }
+    if (
+      operation.status === 'reverted' &&
+      (operation.observedValue !== operation.expectedValue ||
+        operation.observedByteHash === undefined)
+    ) {
+      return false
+    }
+  }
+  if (
+    (result.status === 'applied' || result.status === 'noop') &&
+    (result.recovery.status !== 'not-needed' ||
+      result.phases.some((entry) => entry.status === 'failed' || entry.status === 'unknown'))
+  ) {
+    return false
+  }
+  if (
+    (result.recovery.status === 'partial' || result.recovery.status === 'unknown') &&
+    (result.status === 'applied' || result.status === 'noop' || result.status === 'conflicted')
+  ) {
+    return false
+  }
+  if (
+    result.status === 'unknown' &&
+    result.operations.length === 0 &&
+    !result.phases.some((entry) => entry.status === 'unknown')
+  ) {
+    return false
+  }
+  if (
+    result.recovery.status === 'completed' &&
+    result.operations.some(
+      (operation) =>
+        operation.status === 'applied' ||
+        operation.status === 'skipped' ||
+        operation.status === 'conflicted' ||
+        operation.status === 'unknown',
+    )
+  ) {
+    return false
+  }
+  if (
+    result.requiredCapabilities.length !== 2 ||
+    result.requiredCapabilities[0] !== 'filesystem-read' ||
+    result.requiredCapabilities[1] !== 'file-write'
+  ) {
+    return false
+  }
+  const expectedStatus =
+    result.operations.length === 0 && result.recovery.status === 'unknown'
+      ? 'unknown'
+      : counts.unknown > 0
+        ? 'unknown'
+        : counts.failed > 0
+          ? 'failed'
+          : counts.reverted > 0
+            ? 'reverted'
+            : counts.conflicted > 0
+              ? 'conflicted'
+              : counts.applied > 0
+                ? 'applied'
+                : 'noop'
+  return result.status === expectedStatus
 }
 
 function hasValidPlanSemantics(plan: PlanResult): boolean {
@@ -226,7 +371,19 @@ function hasValidReferences(result: InspectResult | PlanResult): boolean {
   ) {
     return false
   }
+  if (new Set(repository.sourceFiles.map((source) => source.path)).size !== sourceFiles.size) {
+    return false
+  }
   if (repository.root && !evidence.has(repository.root.evidenceId)) return false
+  const vcsTargets = new Set(result.vcs.targetFiles.map((target) => target.path))
+  const unrelatedDirty = new Set(result.vcs.unrelatedDirtyPaths)
+  if (
+    vcsTargets.size !== result.vcs.targetFiles.length ||
+    unrelatedDirty.size !== result.vcs.unrelatedDirtyPaths.length ||
+    [...vcsTargets].some((path) => unrelatedDirty.has(path))
+  ) {
+    return false
+  }
 
   for (const source of repository.sourceFiles) {
     if (

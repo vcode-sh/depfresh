@@ -199,8 +199,13 @@ describe('CLI unsupported combinations', () => {
     [['--verify-command', 'pnpm test'], '--verify-command requires --write'],
     [['--write', '--install', '--update'], '--install cannot be combined with --update'],
     [['--deps-only', '--dev-only'], '--deps-only cannot be combined with --dev-only'],
+    [['--plan-file', 'plan.json'], '--plan-file is only valid with the apply command'],
     [['--json'], '--json is only valid with the capabilities command'],
     [['capabilities'], 'capabilities requires --json'],
+    [
+      ['capabilities', '--json', '--plan-file', 'plan.json'],
+      '--plan-file is only valid with the apply command',
+    ],
   ])('rejects %j before starting a check', (argv, message) => {
     const result = runCli([...argv, '--output', 'json'])
 

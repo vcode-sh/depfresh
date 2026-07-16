@@ -8,7 +8,7 @@ interface CliOptionDefinition {
 
 const optionDefinitions = new Map<string, CliOptionDefinition>()
 const numericOptionNames = new Set(['concurrency', 'cooldown'])
-const commandNames = new Set(['capabilities', 'inspect', 'plan'])
+const commandNames = new Set(['capabilities', 'inspect', 'plan', 'apply'])
 
 for (const [name, rawDefinition] of Object.entries(args)) {
   if (rawDefinition.type !== 'boolean' && rawDefinition.type !== 'string') continue

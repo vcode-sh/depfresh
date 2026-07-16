@@ -3,8 +3,13 @@ import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { canonicalJson } from './canonical-json'
 import { createPlanFingerprint, createRepositoryFingerprint, hashExactBytes } from './fingerprint'
-import { commandErrorSchema, inspectResultSchema, planResultSchema } from './schemas'
-import { validateInspectResult, validatePlanResult } from './validate'
+import {
+  applyResultSchema,
+  commandErrorSchema,
+  inspectResultSchema,
+  planResultSchema,
+} from './schemas'
+import { validateApplyResult, validateInspectResult, validatePlanResult } from './validate'
 
 const root = resolve(import.meta.dirname, '../..')
 
@@ -37,6 +42,7 @@ describe('shipped contract schemas', () => {
   it.each([
     ['schemas/inspect-v1.json', inspectResultSchema],
     ['schemas/plan-v1.json', planResultSchema],
+    ['schemas/apply-v1.json', applyResultSchema],
     ['schemas/error-v1.json', commandErrorSchema],
   ])('matches the authoritative descriptor for %s', (path, schema) => {
     expect(JSON.parse(readFileSync(resolve(root, path), 'utf8'))).toEqual(schema)
@@ -101,6 +107,73 @@ describe('shipped contract schemas', () => {
     }
 
     expect(validatePlanResult(invalid)).toBe(false)
+  })
+
+  it('reconciles apply operation outcomes, summary, status, and capabilities', () => {
+    const base = {
+      contract: 'depfresh.apply',
+      schemaVersion: 1,
+      toolVersion: '1.2.0',
+      planFingerprint: 'a'.repeat(64),
+      repositoryIdentity: 'repository:fixture',
+      status: 'applied',
+      operations: [
+        {
+          operationId: 'operation-1',
+          occurrenceId: 'occurrence-1',
+          sourceFileId: 'source-1',
+          file: 'package.json',
+          path: ['dependencies', 'alpha'],
+          name: 'alpha',
+          expectedValue: '1.0.0',
+          requestedValue: '2.0.0',
+          observedValue: '2.0.0',
+          observedByteHash: 'b'.repeat(64),
+          status: 'applied',
+          reason: 'APPLIED',
+        },
+      ],
+      phases: [{ name: 'inspect', status: 'passed', reason: 'FINAL_STATE_OBSERVED' }],
+      summary: {
+        planned: 1,
+        applied: 1,
+        skipped: 0,
+        conflicted: 0,
+        reverted: 0,
+        failed: 0,
+        unknown: 0,
+      },
+      recovery: { status: 'not-needed' },
+      requiredCapabilities: ['filesystem-read', 'file-write'],
+    }
+
+    expect(validateApplyResult(base)).toBe(true)
+    expect(validateApplyResult({ ...base, status: 'unknown' })).toBe(false)
+    expect(
+      validateApplyResult({
+        ...base,
+        summary: { ...base.summary, applied: 0, unknown: 1 },
+      }),
+    ).toBe(false)
+    expect(validateApplyResult({ ...base, requiredCapabilities: ['file-write'] })).toBe(false)
+    const {
+      observedValue: _observedValue,
+      observedByteHash: _observedByteHash,
+      ...unobserved
+    } = base.operations[0]!
+    expect(
+      validateApplyResult({
+        ...base,
+        operations: [
+          {
+            ...unobserved,
+            reason: 'NOT_OBSERVED',
+          },
+        ],
+        phases: [{ name: 'preflight', status: 'failed', reason: 'FAILED' }],
+        recovery: { status: 'partial' },
+      }),
+    ).toBe(false)
   })
 
   it('rejects cross-platform absolute paths', () => {
@@ -283,6 +356,40 @@ describe('shipped contract schemas', () => {
     }
 
     expect(validatePlanResult(validOperationPlan)).toBe(true)
+    const duplicateSourcePath = {
+      ...validOperationPlan,
+      repository: {
+        ...validOperationPlan.repository,
+        sourceFiles: [
+          ...validOperationPlan.repository.sourceFiles,
+          { ...validOperationPlan.repository.sourceFiles[0]!, id: 'source-duplicate' },
+        ],
+      },
+    }
+    expect(
+      validatePlanResult({
+        ...duplicateSourcePath,
+        planFingerprint: createPlanFingerprint(duplicateSourcePath),
+      }),
+    ).toBe(false)
+    const duplicateVcs = {
+      ...validOperationPlan,
+      vcs: {
+        status: 'confirmed' as const,
+        targetFiles: [
+          { path: 'package.json', state: 'unstaged' as const },
+          { path: 'package.json', state: 'clean' as const },
+        ],
+        unrelatedDirtyPaths: [],
+        diagnostics: [],
+      },
+    }
+    expect(
+      validatePlanResult({
+        ...duplicateVcs,
+        planFingerprint: createPlanFingerprint(duplicateVcs),
+      }),
+    ).toBe(false)
     expect(
       validatePlanResult({
         ...contradictoryPlan,

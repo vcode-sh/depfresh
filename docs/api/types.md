@@ -14,7 +14,8 @@ The full type catalogue. Every interface, union, and enum that depfresh exports.
 | `InvocationAuthority` | Immutable grants for write, install, update, execute, verification-command, and global-write side effects |
 | `InspectOptions` / `InspectResult` | Process-free schema-v1 repository evidence input and schema-derived result |
 | `PlanOptions` / `PlanResult` | Registry-aware non-mutating planner input and schema-derived semantic plan result |
-| `MachineCommandError` | Schema-derived fatal `inspect`/`plan` CLI error document |
+| `ApplyOptions` / `ApplyResult` | Explicit root selection and schema-derived observed result for one authorized immutable-plan file phase |
+| `MachineCommandError` | Schema-derived fatal `inspect`/`plan`/`apply` CLI error document |
 | `LegacyCheckJsonResult` / `LegacyCheckJsonError` | Compatibility schema-v1 check report and fatal error shapes; not immutable plans |
 | `InspectRepositoryOptions` | Read-only repository inspection options; contains no side-effect grants |
 | `NpmrcConfig` | Parsed `.npmrc` -- registries, auth tokens, proxy settings |

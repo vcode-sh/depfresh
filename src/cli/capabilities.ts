@@ -80,6 +80,10 @@ const WORKFLOWS: Record<string, Workflow> = {
     description: 'Resolve a deterministic non-mutating dependency plan',
     command: 'depfresh plan --output json',
   },
+  apply: {
+    description: 'Apply one reviewed immutable plan with explicit file-write authority',
+    command: 'depfresh apply --output json --write --plan-file depfresh-plan.json',
+  },
   checkOnly: {
     description: 'Check for outdated dependencies and return structured JSON',
     command: 'depfresh --output json',
@@ -188,7 +192,7 @@ function buildFlagDefinitions(argsDef: ArgsDef): {
   }
 
   if (positional.mode_arg) {
-    positional.mode_arg.values = [...VALID_MODES, 'inspect', 'plan', 'capabilities']
+    positional.mode_arg.values = [...VALID_MODES, 'inspect', 'plan', 'apply', 'capabilities']
   }
 
   return { positional, flags }
@@ -210,8 +214,8 @@ export function getCliCapabilities(): CliCapabilities {
     },
     exitCodes: EXIT_CODES,
     machineExitCodes: {
-      '0': 'Complete result with no operation, material risk, block, unknown, or error.',
-      '1': 'Schema-valid result with operations, material risks, or non-fatal blocked, unknown, or error decisions.',
+      '0': 'Inspect or plan completed without actionable or incomplete findings, or apply completed as applied or noop.',
+      '1': 'Schema-valid inspect or plan findings, or a schema-valid conflicted, reverted, failed, or unknown apply result.',
       '2': 'Fatal input, contract, configuration, or runtime error prevented a trustworthy result.',
     },
     commands: {
@@ -223,10 +227,15 @@ export function getCliCapabilities(): CliCapabilities {
         description: 'Registry-aware planning without file or process side effects.',
         schema: 'depfresh/schemas/plan-v1.json',
       },
+      apply: {
+        description: 'Stale-safe file application from one immutable plan.',
+        schema: 'depfresh/schemas/apply-v1.json',
+      },
     },
     contractSchemas: {
       inspect: 'depfresh/schemas/inspect-v1.json',
       plan: 'depfresh/schemas/plan-v1.json',
+      apply: 'depfresh/schemas/apply-v1.json',
       error: 'depfresh/schemas/error-v1.json',
     },
     positional,

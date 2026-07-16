@@ -7,8 +7,10 @@ import { normalizeCliRawArgs } from './raw-args'
 import { showUsageWithLinks } from './usage'
 import './signals'
 
-function rawMachineCommand(rawArgs: string[]): 'inspect' | 'plan' | undefined {
-  return rawArgs[0] === 'inspect' || rawArgs[0] === 'plan' ? rawArgs[0] : undefined
+function rawMachineCommand(rawArgs: string[]): 'inspect' | 'plan' | 'apply' | undefined {
+  return rawArgs[0] === 'inspect' || rawArgs[0] === 'plan' || rawArgs[0] === 'apply'
+    ? rawArgs[0]
+    : undefined
 }
 
 function wantsJsonOutput(rawArgs: string[]): boolean {
@@ -37,7 +39,8 @@ function getRawMode(rawArgs: string[]): string {
       arg !== 'help' &&
       arg !== 'capabilities' &&
       arg !== 'inspect' &&
-      arg !== 'plan'
+      arg !== 'plan' &&
+      arg !== 'apply'
     ) {
       return arg
     }
@@ -76,6 +79,12 @@ const main = defineCommand({
         const { showUsage } = await import('citty')
         await showUsage(main)
         process.exit(0)
+      }
+
+      if (args.mode_arg !== 'apply' && typeof args['plan-file'] === 'string') {
+        throw new ConfigError('--plan-file is only valid with the apply command.', {
+          reason: 'UNSUPPORTED_COMBINATION',
+        })
       }
 
       if (args['help-json']) {
@@ -124,6 +133,26 @@ const main = defineCommand({
           console.log(JSON.stringify(result, null, 2))
           process.exit(result.risks.length > 0 || result.errors.length > 0 ? 1 : 0)
         }
+        if (machineCommand === 'apply') {
+          const { readFileSync } = await import('node:fs')
+          const { apply } = await import('../commands/apply')
+          const { createInvocationAuthority } = await import('../invocation-authority')
+          const planPath = commandArgs['plan-file']
+          if (typeof planPath !== 'string') {
+            throw new ConfigError('depfresh apply requires --plan-file.', {
+              reason: 'MISSING_OPTION_VALUE',
+            })
+          }
+          const planInput: unknown = JSON.parse(readFileSync(planPath, 'utf8'))
+          const result = await apply(
+            planInput as import('../contracts/schemas').PlanResult,
+            { cwd: typeof commandArgs.cwd === 'string' ? commandArgs.cwd : process.cwd() },
+            createInvocationAuthority({ write: commandArgs.write === true }),
+          )
+          // biome-ignore lint/suspicious/noConsole: intentional stable machine output
+          console.log(JSON.stringify(result, null, 2))
+          process.exit(result.status === 'applied' || result.status === 'noop' ? 0 : 1)
+        }
         const { planForInvocation } = await import('../commands/plan')
         const { normalizePlanCommandArgs } = await import('./machine-commands')
         const result = await planForInvocation(normalizePlanCommandArgs(commandArgs), 'cli')
@@ -152,7 +181,9 @@ const main = defineCommand({
       process.exit(exitCode)
     } catch (error) {
       const machineCommand =
-        args.mode_arg === 'inspect' || args.mode_arg === 'plan' ? args.mode_arg : undefined
+        args.mode_arg === 'inspect' || args.mode_arg === 'plan' || args.mode_arg === 'apply'
+          ? args.mode_arg
+          : undefined
       if (machineCommand) {
         const { buildMachineCommandError } = await import('../contracts/error-document')
         // biome-ignore lint/suspicious/noConsole: intentional stable machine output

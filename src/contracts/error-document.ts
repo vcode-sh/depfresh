@@ -6,7 +6,7 @@ import { assertMachineCommandError } from './validate'
 const RETRYABLE_CODES = new Set(['ERR_REGISTRY', 'ERR_CACHE'])
 
 export function buildMachineCommandError(
-  command: 'inspect' | 'plan',
+  command: 'inspect' | 'plan' | 'apply',
   error: unknown,
 ): MachineCommandError {
   const details = getSafeErrorDetails(error)

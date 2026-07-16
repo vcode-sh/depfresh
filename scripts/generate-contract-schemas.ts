@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import {
+  applyResultSchema,
   commandErrorSchema,
   inspectResultSchema,
   planResultSchema,
@@ -10,6 +11,7 @@ const root = resolve(import.meta.dirname, '..')
 const artifacts = [
   ['schemas/inspect-v1.json', inspectResultSchema],
   ['schemas/plan-v1.json', planResultSchema],
+  ['schemas/apply-v1.json', applyResultSchema],
   ['schemas/error-v1.json', commandErrorSchema],
 ] as const
 const check = process.argv.includes('--check')

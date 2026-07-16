@@ -6,6 +6,16 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Semver
 
 ### Added
 
+- **Stale-safe file apply contract** -- `depfresh apply --json --write --plan-file <path>` and the
+  public `apply()` API validate a strict immutable plan, explicit invocation authority, contained
+  unique physical targets, exact source hashes and occurrence values, and fresh target Git state.
+  All changed target files render beside their sources, preserve formatting and mode, and reparse before an
+  all-target precommit recheck. Atomic per-file renames retain byte-exact backups under a versioned
+  root-local lock and relative-path journal. Commit failures trigger observed best-effort recovery;
+  schema-v1 results reconcile `applied`, `skipped`, `conflicted`, `reverted`, `failed`, and `unknown`
+  outcomes without claiming repository-wide atomicity. The apply schema ships at
+  `depfresh/schemas/apply-v1.json`.
+
 - **Versioned inspect and plan contracts** -- `depfresh inspect --json` and the public `inspect()`
   API emit deterministic process-free repository evidence, while `depfresh plan --json` and
   `plan()` add registry candidate resolution without filesystem writes or persistent cache access.
@@ -86,6 +96,14 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Semver
   cleaned on every path.
 
 ### Changed
+
+- **Legacy local writes use the stale-safe file engine** -- normal manifest and catalog `--write`
+  calls now block every replacement in that package/apply invocation if any selected occurrence is
+  stale, instead of applying a known subset within that invocation. Earlier package invocations are
+  not a repository transaction and are not rolled back by a later stale package. The direct
+  `writePackage()` library export remains as a deprecated compatibility surface without the apply
+  lock/journal contract. Manager, lockfile, install, execute, and verification phases remain
+  separate compatibility behavior.
 
 - **Legacy check JSON is an explicit compatibility contract** -- `depfresh --output json` keeps its
   schema-v1 fields, absolute cwd/discovery paths, timestamp, formatting, redaction, and exit

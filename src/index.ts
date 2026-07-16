@@ -1,4 +1,6 @@
 export { addonVSCode, createVSCodeAddon } from './addons'
+export type { ApplyOptions } from './commands/apply'
+export { apply } from './commands/apply'
 export { check } from './commands/check/index'
 export type {
   LegacyCheckJsonError,
@@ -20,11 +22,14 @@ export {
   hashExactBytes,
 } from './contracts/fingerprint'
 export type {
+  ApplyResult,
   InspectResult,
   MachineCommandError,
   PlanResult,
 } from './contracts/schemas'
 export {
+  APPLY_SCHEMA_ID,
+  applyResultSchema,
   COMMAND_ERROR_SCHEMA_ID,
   commandErrorSchema,
   INSPECT_SCHEMA_ID,
@@ -33,10 +38,12 @@ export {
   planResultSchema,
 } from './contracts/schemas'
 export {
+  assertApplyResult,
   assertInspectResult,
   assertMachineCommandError,
   assertPlanResult,
   ContractValidationError,
+  validateApplyResult,
   validateInspectResult,
   validateMachineCommandError,
   validatePlanResult,

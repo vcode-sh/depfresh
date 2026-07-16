@@ -14,7 +14,10 @@ depfresh --output json
 depfresh inspect --json
 
 # Registry-aware review plan, with no writes
-depfresh plan --json
+depfresh plan --json > depfresh-plan.json
+
+# Apply that exact reviewed plan under explicit write authority
+depfresh apply --json --write --plan-file depfresh-plan.json
 
 # Safe write (minor + patch)
 depfresh --write --mode minor
@@ -49,8 +52,20 @@ unknown, and error decision, and do not treat the legacy check report as an appl
 
 ```bash
 depfresh inspect --json
-depfresh plan --json
+depfresh plan --json > depfresh-plan.json
 ```
+
+Validate the plan schema and semantic fingerprint before approval. To mutate, pass the unchanged
+document to `apply`; do not rebuild operations, relax hashes, or convert the legacy check report:
+
+```bash
+depfresh apply --json --write --plan-file depfresh-plan.json
+```
+
+A stale target, dirty target, identity mismatch, or unavailable target Git state prevents every
+replacement in that apply run. Re-inspect and re-plan instead of editing preconditions. Unrelated
+dirty paths do not block. An incomplete recovery retains root-local lock and journal evidence; keep
+it until every target is observed and known.
 
 **Guarded writes:**
 
@@ -61,6 +76,10 @@ Check outdated dependencies with depfresh JSON output, group by diff severity, a
 ```bash
 depfresh --write --mode minor --verify-command "pnpm test"
 ```
+
+This compatibility workflow delegates normal local file mutation to the stale-safe apply engine.
+Per-dependency `--verify-command`, manager commands, and global updates remain separate workflows
+with their own authority and recovery boundaries.
 
 **CI enforcement:**
 

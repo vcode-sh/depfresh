@@ -41,6 +41,7 @@ describe('getCliCapabilities', () => {
     expect(Object.keys(capabilities.workflows)).toEqual([
       'inspect',
       'plan',
+      'apply',
       'checkOnly',
       'safeUpdate',
       'fullUpdate',
@@ -58,12 +59,14 @@ describe('getCliCapabilities', () => {
     const capabilities = getCliCapabilities()
 
     expect(capabilities.positional.mode_arg?.values).toEqual(
-      expect.arrayContaining(['major', 'inspect', 'plan', 'capabilities']),
+      expect.arrayContaining(['major', 'inspect', 'plan', 'apply', 'capabilities']),
     )
     expect(capabilities.commands.inspect?.schema).toBe('depfresh/schemas/inspect-v1.json')
     expect(capabilities.commands.plan?.schema).toBe('depfresh/schemas/plan-v1.json')
+    expect(capabilities.commands.apply?.schema).toBe('depfresh/schemas/apply-v1.json')
     expect(capabilities.contractSchemas.error).toBe('depfresh/schemas/error-v1.json')
-    expect(capabilities.machineExitCodes['1']).toContain('operations')
+    expect(capabilities.machineExitCodes['0']).toContain('applied')
+    expect(capabilities.machineExitCodes['1']).toContain('conflicted')
   })
 
   it('includes flag relationships with requires and conflicts', () => {

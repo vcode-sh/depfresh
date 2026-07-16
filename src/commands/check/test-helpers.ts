@@ -2,6 +2,8 @@ import { vi } from 'vitest'
 import type { depfreshOptions, PackageMeta, ResolvedDepChange } from '../../types'
 import { DEFAULT_OPTIONS } from '../../types'
 
+const physicalWriteMock = vi.hoisted(() => vi.fn())
+
 vi.mock('../../io/packages', () => ({
   loadPackages: vi.fn(),
 }))
@@ -21,13 +23,17 @@ vi.mock('../../io/resolve', () => ({
 }))
 
 vi.mock('../../io/write', () => ({
-  writePackage: vi.fn(),
+  writePackage: physicalWriteMock,
   backupPackageFiles: vi.fn(() => [{ filepath: '/tmp/test/package.json', content: '{}' }]),
   restorePackageFiles: vi.fn(),
 }))
 
 vi.mock('../../io/write/occurrence', () => ({
   observeFileOccurrence: vi.fn(),
+}))
+
+vi.mock('../apply/legacy', () => ({
+  applyLegacyPackageWrite: physicalWriteMock,
 }))
 
 vi.mock('../../cache/index', () => ({
@@ -193,7 +199,7 @@ export async function setupMocks(): Promise<CheckMocks> {
   const fs = await import('node:fs')
   const globalModule = await import('../../io/global')
   const occurrenceModule = await import('../../io/write/occurrence')
-  const writePackageMock = writeModule.writePackage as ReturnType<typeof vi.fn>
+  const writePackageMock = physicalWriteMock
   const writeGlobalPackageMock = globalModule.writeGlobalPackage as ReturnType<typeof vi.fn>
   const observeGlobalPackageVersionMock = globalModule.observeGlobalPackageVersion as ReturnType<
     typeof vi.fn
