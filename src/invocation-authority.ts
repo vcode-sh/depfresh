@@ -3,12 +3,17 @@ import type { depfreshOptions, InvocationAuthority } from './types'
 
 export function createInvocationAuthority(options: Partial<depfreshOptions>): InvocationAuthority {
   const write = options.write === true
+  const managerPhase = options.syncLockfile === true || options.install === true
   return Object.freeze({
     write,
     install: options.install === true,
     update: options.update === true,
     execute: typeof options.execute === 'string' && options.execute.length > 0,
-    verifyCommand: typeof options.verifyCommand === 'string' && options.verifyCommand.length > 0,
+    processExecute: managerPhase,
+    lockfileWrite: managerPhase,
+    verifyCommand:
+      options.verify === true ||
+      (typeof options.verifyCommand === 'string' && options.verifyCommand.length > 0),
     globalWrite: write && (options.global === true || options.globalAll === true),
   })
 }
@@ -19,6 +24,8 @@ export function snapshotInvocationAuthority(authority: InvocationAuthority): Inv
     install: authority.install === true,
     update: authority.update === true,
     execute: authority.execute === true,
+    processExecute: authority.processExecute === true,
+    lockfileWrite: authority.lockfileWrite === true,
     verifyCommand: authority.verifyCommand === true,
     globalWrite: authority.globalWrite === true,
   })
@@ -33,6 +40,8 @@ export function validateInvocationAuthority(
     [options.install, authority.install, 'install'],
     [options.update, authority.update, 'update'],
     [Boolean(options.execute), authority.execute, 'execute'],
+    [Boolean(options.syncLockfile || options.install), authority.processExecute, 'process-execute'],
+    [Boolean(options.syncLockfile || options.install), authority.lockfileWrite, 'lockfile-write'],
     [Boolean(options.verifyCommand), authority.verifyCommand, 'verify-command'],
     [
       options.write && (options.global || options.globalAll === true),

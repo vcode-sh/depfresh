@@ -13,7 +13,7 @@ We rewrote everything from scratch because we wanted stronger CI ergonomics, mac
 | **Registry resilience** | Exponential backoff, partial-failure isolation, typed error hierarchy |
 | **Cache** | SQLite with WAL mode and memory fallback (no JSON file race conditions) |
 | **Private registries** | Full `.npmrc` support including scoped registries, auth tokens, and proxy/TLS transport |
-| **Safe writes** | `--verify-command` tests each dependency individually and reverts on failure |
+| **Safe writes** | Immutable stale-safe apply, optional exact manager/verification phases, and observed recovery results |
 | **Bun catalogs** | Single-writer architecture to prevent catalog clobbering |
 
 For migration details, see [Migrating from taze](./from-taze.md).

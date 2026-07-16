@@ -56,6 +56,271 @@ describe('plan contract', () => {
     expect(existsSync(join(home, '.depfresh'))).toBe(false)
   })
 
+  it('fingerprints exact manager, lockfile, adapter, and verification phase intent', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'depfresh-plan-phases-'))
+    writeFileSync(
+      join(root, 'package.json'),
+      `${JSON.stringify(
+        {
+          name: 'fixture',
+          packageManager: 'npm@11.0.0',
+          dependencies: { alpha: '^1.0.0' },
+        },
+        null,
+        2,
+      )}\n`,
+    )
+    writeFileSync(
+      join(root, 'package-lock.json'),
+      `${JSON.stringify({ name: 'fixture', lockfileVersion: 3, packages: {} }, null, 2)}\n`,
+    )
+
+    const result = await plan({
+      cwd: root,
+      mode: 'latest',
+      syncLockfile: true,
+      verifyArgv: ['node', '--test', 'literal;not-a-shell'],
+      phaseTimeout: 30_000,
+    })
+
+    expect(result.execution).toEqual({
+      mode: 'sync-lockfile',
+      status: 'ready',
+      timeoutMs: 30_000,
+      targets: [
+        expect.objectContaining({
+          boundaryPath: '.',
+          manager: { name: 'npm', version: '11.0.0' },
+          lockfile: expect.objectContaining({ path: 'package-lock.json' }),
+          adapter: {
+            executable: 'npm',
+            args: ['install', '--package-lock-only', '--ignore-scripts', '--no-audit', '--no-fund'],
+            lifecycle: 'disabled-by-flag',
+            permittedPaths: ['package-lock.json'],
+            externalEffects: ['package-manager-cache'],
+          },
+        }),
+      ],
+      verification: {
+        executable: 'node',
+        args: ['--test', 'literal;not-a-shell'],
+        cwd: '.',
+        timeoutMs: 30_000,
+        permittedPaths: [],
+      },
+    })
+    expect(result.requiredCapabilities).toEqual([
+      'filesystem-read',
+      'registry-read',
+      'file-write',
+      'process-execute',
+      'lockfile-write',
+      'verify-command',
+    ])
+    expect(result.planFingerprint).toMatch(/^[a-f0-9]{64}$/u)
+  })
+
+  it('changes the fingerprint when the requested manager phase changes', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'depfresh-plan-phase-fingerprint-'))
+    writeFileSync(
+      join(root, 'package.json'),
+      JSON.stringify({
+        name: 'fixture',
+        packageManager: 'pnpm@10.33.0',
+        dependencies: { alpha: '^1.0.0' },
+      }),
+    )
+    writeFileSync(join(root, 'pnpm-lock.yaml'), "lockfileVersion: '9.0'\n")
+
+    const sync = await plan({ cwd: root, mode: 'latest', syncLockfile: true })
+    const install = await plan({ cwd: root, mode: 'latest', install: true })
+
+    expect(sync.execution.mode).toBe('sync-lockfile')
+    expect(install.execution.mode).toBe('install')
+    expect(sync.planFingerprint).not.toBe(install.planFingerprint)
+  })
+
+  it('keeps unsupported manager execution blocked without weakening file operations', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'depfresh-plan-phase-blocked-'))
+    writeFileSync(
+      join(root, 'package.json'),
+      JSON.stringify({
+        name: 'fixture',
+        packageManager: 'yarn@4.7.0',
+        dependencies: { alpha: '^1.0.0' },
+      }),
+    )
+    writeFileSync(join(root, 'yarn.lock'), '__metadata:\n  version: 8\n')
+
+    const result = await plan({
+      cwd: root,
+      mode: 'latest',
+      syncLockfile: true,
+    })
+
+    expect(result.operations).toHaveLength(1)
+    expect(result.execution).toMatchObject({
+      mode: 'sync-lockfile',
+      status: 'blocked',
+      reason: 'MANAGER_UNSUPPORTED',
+    })
+    expect(result.requiredCapabilities).toEqual(['filesystem-read', 'registry-read', 'file-write'])
+    expect(result.risks).toContainEqual(
+      expect.objectContaining({ code: 'MANAGER_UNSUPPORTED', severity: 'blocking' }),
+    )
+  })
+
+  it('blocks manager execution when an operation kind lacks exact lockfile reconciliation', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'depfresh-plan-phase-occurrence-blocked-'))
+    writeFileSync(
+      join(root, 'package.json'),
+      JSON.stringify({
+        name: 'fixture',
+        packageManager: 'npm@11.0.0',
+        overrides: { alpha: '1.0.0' },
+      }),
+    )
+    writeFileSync(
+      join(root, 'package-lock.json'),
+      JSON.stringify({ name: 'fixture', lockfileVersion: 3, packages: {} }),
+    )
+
+    const result = await plan({
+      cwd: root,
+      mode: 'latest',
+      includeLocked: true,
+      syncLockfile: true,
+    })
+
+    expect(result.operations).toHaveLength(1)
+    expect(result.operations[0]?.path[0]).toBe('overrides')
+    expect(result.execution).toMatchObject({
+      mode: 'sync-lockfile',
+      status: 'blocked',
+      reason: 'LOCKFILE_OCCURRENCE_UNSUPPORTED',
+    })
+    expect(result.requiredCapabilities).toEqual(['filesystem-read', 'registry-read', 'file-write'])
+  })
+
+  it('blocks manager execution for dependency protocols without exact lockfile proof', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'depfresh-plan-phase-protocol-blocked-'))
+    writeFileSync(
+      join(root, 'package.json'),
+      JSON.stringify({
+        name: 'fixture',
+        packageManager: 'pnpm@10.33.0',
+        dependencies: {
+          workspaceAlpha: 'workspace:^1.0.0',
+          jsrAlias: 'jsr:@scope/alpha@^1.0.0',
+        },
+      }),
+    )
+    writeFileSync(join(root, 'pnpm-lock.yaml'), "lockfileVersion: '9.0'\n")
+
+    const result = await plan({ cwd: root, mode: 'latest', syncLockfile: true })
+
+    expect(result.operations).toHaveLength(2)
+    expect(
+      result.occurrences
+        .filter((occurrence) =>
+          result.operations.some((operation) => operation.occurrenceId === occurrence.id),
+        )
+        .map((occurrence) => occurrence.protocol),
+    ).toEqual(expect.arrayContaining(['workspace', 'jsr']))
+    expect(result.execution).toMatchObject({
+      mode: 'sync-lockfile',
+      status: 'blocked',
+      reason: 'LOCKFILE_PROTOCOL_UNSUPPORTED',
+    })
+    expect(result.requiredCapabilities).toEqual(['filesystem-read', 'registry-read', 'file-write'])
+  })
+
+  it('never runs or requires manager phases for an operation-free plan', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'depfresh-plan-phase-noop-'))
+    writeFileSync(
+      join(root, 'package.json'),
+      JSON.stringify({
+        name: 'fixture',
+        packageManager: 'npm@11.0.0',
+        dependencies: { alpha: '^2.0.0' },
+      }),
+    )
+    writeFileSync(
+      join(root, 'package-lock.json'),
+      JSON.stringify({ name: 'fixture', lockfileVersion: 3, packages: {} }),
+    )
+
+    const result = await plan({ cwd: root, syncLockfile: true })
+
+    expect(result.operations).toHaveLength(0)
+    expect(result.execution).toEqual({
+      mode: 'sync-lockfile',
+      status: 'not-needed',
+      timeoutMs: 120_000,
+      targets: [],
+    })
+    expect(result.requiredCapabilities).toEqual(['filesystem-read', 'registry-read'])
+  })
+
+  it('rejects ambiguous manager-phase requests and malformed verification argv', async () => {
+    await expect(plan({ cwd: '.', syncLockfile: true, install: true })).rejects.toMatchObject({
+      reason: 'INVALID_OPTION_VALUE',
+    })
+    await expect(plan({ cwd: '.', syncLockfile: true, verifyArgv: [] })).rejects.toMatchObject({
+      reason: 'INVALID_OPTION_VALUE',
+    })
+    await expect(plan({ cwd: '.', verifyArgv: ['node', '--test'] })).rejects.toMatchObject({
+      reason: 'INVALID_OPTION_VALUE',
+    })
+    await expect(
+      plan({ cwd: '.', syncLockfile: true, verifyArgv: ['curl', '--token', 'super-secret-value'] }),
+    ).rejects.toMatchObject({ reason: 'INVALID_OPTION_VALUE' })
+    await expect(
+      plan({
+        cwd: '.',
+        syncLockfile: true,
+        verifyArgv: ['curl', '-H', 'Authorization:', 'Bearer', 'super-secret-value'],
+      }),
+    ).rejects.toMatchObject({ reason: 'INVALID_OPTION_VALUE' })
+    for (const verifyArgv of [
+      ['curl', '--client-secret', 'super-secret-value'],
+      ['tool', '--password-file', 'credentials.txt'],
+      ['tool', '--aws-secret-access-key', 'super-secret-value'],
+      ['curl', '-u', 'alice:supersecret'],
+      ['curl', '--user', 'alice:supersecret'],
+      ['curl', '-ualice:pw'],
+      ['curl', '-Uproxy:pw'],
+      ['curl', 'ftp://alice:pw@example.test/file'],
+      ['curl', 'sftp://alice:pw@example.test/file'],
+      ['curl', 'alice:pw@example.test/file'],
+      ['curl', '-H', 'X-Api-Key: literal-secret'],
+      ['curl', '--header=X-Api-Key:literal-secret'],
+      ['tool', '--passphrase=literal-secret'],
+      ['curl', 'ftp://alice:pw@[::1]/file'],
+      ['curl', 'ftp://alice:pw@例子.test/file'],
+      ['curl', '-H', 'Cookie: session=literal-secret'],
+      ['curl', '--cookie', 'session=literal-secret'],
+      ['curl', '-bsession=literal-secret'],
+      ['curl', '--proxy-header', 'X-Api-Key: abc123'],
+      ['curl', '--proxy-header=X-Api-Key:abc123'],
+      ['openssl', 'enc', '-pass', 'pass:abc123'],
+      ['openssl', 'enc', '-passin', 'pass:abc123'],
+      ['openssl', 'enc', '-passout', 'pass:abc123'],
+      ['curl', 'ftp://:pw@example.test/file'],
+      ['curl', 'ftp://alice:p@ss@example.test/file'],
+      ['curl', '--cert', 'cert.pem:pw'],
+      ['curl', '-sHX-Session:zzz'],
+      ['curl', '-sHCookie:zzz'],
+      ['http', 'GET', 'example.test', 'X-Api-Key:zzz'],
+      ['http', 'GET', 'example.test', 'Cookie:session=zzz'],
+      ['tool', 'X-Api-Key=zzz'],
+    ]) {
+      await expect(plan({ cwd: '.', syncLockfile: true, verifyArgv })).rejects.toMatchObject({
+        reason: 'INVALID_OPTION_VALUE',
+      })
+    }
+  })
+
   it('blocks credential-bearing values instead of leaking or weakening exact preconditions', async () => {
     const root = mkdtempSync(join(tmpdir(), 'depfresh-plan-secret-'))
     writeFileSync(

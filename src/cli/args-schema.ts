@@ -180,29 +180,48 @@ export const args: ArgsDef = {
   install: {
     type: 'boolean',
     alias: 'i',
-    description: 'Run package manager install after writing',
+    description: 'Plan or grant an explicit lifecycle-disabled package-manager install phase',
     default: false,
+  },
+  'sync-lockfile': {
+    type: 'boolean',
+    description: 'Plan or grant a lifecycle-disabled lockfile synchronization phase',
+    default: false,
+  },
+  verify: {
+    type: 'boolean',
+    description: 'Grant the exact verification argv embedded in an apply plan',
+    default: false,
+  },
+  'verify-argv': {
+    type: 'string',
+    description: 'JSON string array for an exact post-manager verification command in a plan',
+  },
+  'phase-timeout': {
+    type: 'string',
+    description: 'Timeout in milliseconds for the planned verification phase',
+    default: '120000',
   },
   update: {
     type: 'boolean',
     alias: 'u',
-    description: 'Run package manager update instead of install after writing',
+    description: 'Deprecated legacy option; rejected in favor of plan/apply phases',
     default: false,
   },
   'strict-post-write': {
     type: 'boolean',
-    description: 'Exit with code 2 when execute/install/update post-write steps fail',
+    description: 'Deprecated legacy option; rejected in favor of plan/apply phase results',
     default: false,
   },
   execute: {
     type: 'string',
     alias: 'e',
-    description: 'Run command after writing updates (e.g. "pnpm test")',
+    description: 'Deprecated shell-string option; rejected in favor of --verify-argv',
   },
   'verify-command': {
     type: 'string',
     alias: 'V',
-    description: 'Run command after each dep update, revert on failure',
+    description: 'Deprecated shell-string option; rejected in favor of --verify-argv',
   },
   'fail-on-outdated': {
     type: 'boolean',

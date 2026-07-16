@@ -240,6 +240,12 @@ function createLegacyPlan(root: string, inputs: LegacyOperationInput[]): PlanRes
     occurrences,
     decisions,
     operations,
+    execution: {
+      mode: 'file-only' as const,
+      status: 'ready' as const,
+      timeoutMs: 120_000,
+      targets: [],
+    },
     evidence: [],
     lockfiles: [],
     vcs,

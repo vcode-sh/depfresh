@@ -8,6 +8,8 @@ export interface InvocationAuthority {
   readonly install: boolean
   readonly update: boolean
   readonly execute: boolean
+  readonly processExecute: boolean
+  readonly lockfileWrite: boolean
   readonly verifyCommand: boolean
   readonly globalWrite: boolean
 }
@@ -72,10 +74,14 @@ export interface depfreshOptions {
 
   // Post-write
   install: boolean
+  syncLockfile?: boolean
   update: boolean
   strictPostWrite?: boolean
   execute?: string
   verifyCommand?: string
+  verify?: boolean
+  verifyArgv?: string[]
+  phaseTimeout?: number
 
   // Addons
   addons?: depfreshAddon[]

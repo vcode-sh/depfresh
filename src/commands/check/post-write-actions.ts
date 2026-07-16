@@ -1,17 +1,15 @@
-import { execSync } from 'node:child_process'
 import c from 'ansis'
+import { ConfigError } from '../../errors'
 import type { ResolvedDepChange } from '../../types'
 import type { Logger } from '../../utils/logger'
 
 export async function runExecute(command: string, cwd: string, logger: Logger): Promise<boolean> {
-  try {
-    logger.info('Running configured post-write command...')
-    execSync(command, { cwd, stdio: 'inherit' })
-    return true
-  } catch {
-    logger.error('Configured post-write command failed')
-    return false
-  }
+  void command
+  void cwd
+  void logger
+  throw new ConfigError('--execute requires the explicit plan/apply phase workflow.', {
+    reason: 'UNSUPPORTED_COMBINATION',
+  })
 }
 
 export function renderUpToDate(packageName: string): void {

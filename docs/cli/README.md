@@ -4,7 +4,7 @@ The complete field manual for `depfresh`. Every flag, every trick, every questio
 
 ## Pages
 
-- **[Flags](./flags.md)** -- All CLI flags, sorted by category: core, filtering, display, post-write, and behavior. The reference you'll actually bookmark.
+- **[Flags](./flags.md)** -- All CLI flags, sorted by category: core, filtering, display, planned manager phases, and behavior. The reference you'll actually bookmark.
 
 - **[Modes](./modes.md)** -- Version range modes explained: `default`, `major`, `minor`, `patch`, `latest`, `newest`, and `next`, plus the legacy `packageMode` ignore translation.
 
@@ -39,7 +39,7 @@ depfresh apply --json --write --plan-file depfresh-plan.json
 
 `inspect`, `plan`, and `apply` are commands, not range modes. They require `--json` or
 `--output json` and write one versioned schema-valid document to stdout. Inspect and plan reject
-write, interactive, post-write, and global flags before discovery. Apply requires explicit
+write, interactive, legacy post-write, and global flags before discovery. Apply requires explicit
 `--write` plus one `--plan-file`, and rejects unrelated command flags. See
 [Inspect and Plan Contracts](../output-formats/inspect-plan.md) and
 [Apply Contract](../output-formats/apply.md) for schemas, fingerprints, side-effect boundaries,

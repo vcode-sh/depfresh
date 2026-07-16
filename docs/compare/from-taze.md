@@ -56,7 +56,7 @@ These are the areas where depfresh works differently from taze. None of them sho
 | Machine discoverability | Not available | `--help-json` |
 | Retry behavior | Limited retry paths | Exponential backoff with typed errors |
 | Cache | JSON file | SQLite with WAL mode, memory fallback |
-| Per-dependency rollback | Not available | `--verify-command` |
+| Reviewed verification | Not available | Exact fingerprinted argv after manager success |
 | GitHub deps (`github:`) | Incomplete support | Supported for semver tags |
 | Peer-scoped catalogs | Inconsistent behavior | Skipped unless `--peer` is passed |
 
@@ -66,8 +66,8 @@ These are the areas where depfresh works differently from taze. None of them sho
 |------|----------|
 | `--output json` | CI pipelines, scripts, AI agents |
 | `--help-json` | Machine-readable CLI contract |
-| `--verify-command` | Safe incremental updates with per-dep rollback |
-| `--execute` | Run a command once after writes |
+| `plan --verify-argv` plus `apply --verify` | Run one exact reviewed argv after manager success |
+| `plan --sync-lockfile` plus matching apply grant | Lifecycle-disabled lockfile synchronization |
 | `--global-all` | Scan npm + pnpm + bun globals in one run |
 | `--refresh-cache` / `--no-cache` | Force fresh metadata for one run |
 
@@ -79,7 +79,7 @@ These are the areas where depfresh works differently from taze. None of them sho
 4. Update `defineConfig` import path.
 5. Run `depfresh --help-json` once to validate automation assumptions.
 6. Run `depfresh --output json` in CI dry-run and confirm parsers.
-7. Run `depfresh -w --verify-command "<your tests>"` before your first large update.
+7. Review a machine plan with exact verification argv before your first large update.
 
 ## Validation Commands
 
@@ -90,8 +90,9 @@ depfresh
 # CI-safe structured output
 depfresh --output json --fail-on-outdated
 
-# Safe write with per-dep rollback
-depfresh -w --verify-command "pnpm test"
+# Reviewed aggregate verification with recovery
+depfresh plan --json --sync-lockfile --verify-argv '["pnpm","test"]' > depfresh-plan.json
+depfresh apply --json --write --sync-lockfile --verify --plan-file depfresh-plan.json
 ```
 
 ## Related

@@ -60,6 +60,22 @@ export function validateOptions(
   validateEnumOption(options.sort, '--sort', VALID_SORT_OPTIONS)
   validateEnumOption(options.loglevel, '--loglevel', VALID_LOG_LEVELS)
 
+  const retiredPhaseOptions: Array<[unknown, string]> = [
+    [options.install, '--install'],
+    [options.update, '--update'],
+    [options.execute, '--execute'],
+    [options.verifyCommand, '--verify-command'],
+    [options.strictPostWrite, '--strict-post-write'],
+  ]
+  for (const [enabled, flag] of retiredPhaseOptions) {
+    if (enabled) {
+      throw new ConfigError(
+        `${flag} is only supported by the explicit plan/apply phase workflow.`,
+        { reason: 'UNSUPPORTED_COMBINATION' },
+      )
+    }
+  }
+
   if (options.interactive && !options.write) {
     throw new ConfigError(
       'Interactive mode requires write mode. Pass `--write` with `--interactive`.',
@@ -70,38 +86,6 @@ export function validateOptions(
   if (options.interactive && options.output === 'json') {
     throw new ConfigError(
       'Interactive mode cannot be used with JSON output. Pass `--output table` or disable `--interactive`.',
-      { reason: 'UNSUPPORTED_COMBINATION' },
-    )
-  }
-
-  const writeRequirements: Array<[unknown, string]> = [
-    [options.install, '--install'],
-    [options.update, '--update'],
-    [options.execute, '--execute'],
-    [options.verifyCommand, '--verify-command'],
-    [options.strictPostWrite, '--strict-post-write'],
-  ]
-  for (const [enabled, flag] of writeRequirements) {
-    if (enabled && !options.write) {
-      throw new ConfigError(`${flag} requires --write.`, {
-        reason: 'UNSUPPORTED_COMBINATION',
-      })
-    }
-  }
-
-  if (options.install && options.update) {
-    throw new ConfigError('--install cannot be combined with --update.', {
-      reason: 'UNSUPPORTED_COMBINATION',
-    })
-  }
-
-  if (
-    options.output === 'json' &&
-    options.write &&
-    (options.execute || options.install || options.update)
-  ) {
-    throw new ConfigError(
-      'JSON output cannot be used with --execute, --install, or --update. Pass `--output table` or disable post-write commands.',
       { reason: 'UNSUPPORTED_COMBINATION' },
     )
   }

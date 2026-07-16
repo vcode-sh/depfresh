@@ -14,11 +14,9 @@ depfresh help
 # Safe minor/patch updates, written to disk
 depfresh minor -w
 
-# Full update with tests
-depfresh latest -w --execute "pnpm test"
-
-# Paranoid mode: verify each dep individually
-depfresh -w --verify-command "pnpm test && pnpm typecheck"
+# Review a lockfile sync and exact verification command
+depfresh plan --json --sync-lockfile --verify-argv '["pnpm","test"]' > depfresh-plan.json
+depfresh apply --json --write --sync-lockfile --verify --plan-file depfresh-plan.json
 ```
 
 ## Filtering
@@ -115,33 +113,32 @@ depfresh -r --all
 
 ---
 
-## Post-Write Hooks
+## Planned Manager and Verification Phases
 
-### Execute
-
-`--execute` runs a shell command once after all package files have been written. Only fires if `--write` is set and at least one file was actually modified.
-
-```bash
-# Run tests after updating
-depfresh -w --execute "pnpm test"
-
-# Run a custom script
-depfresh -w -e "node scripts/post-update.js"
-```
-
-### Install / Update
-
-`--install` and `--update` auto-detect your package manager (via `packageManager` field in `package.json`, then lockfile detection) and run `install` or `update` after writing.
+Manager work is part of an immutable plan, never an inferred post-write hook. Planning fingerprints
+the exact declared manager/version, selected parsed lockfile hash, fixed lifecycle-disabled argv,
+permitted paths, timeout, and optional verification argv. Apply requires matching fresh grants.
 
 ```bash
-# Write changes and reinstall
-depfresh -wi
+# Lockfile-only synchronization
+depfresh plan --json --sync-lockfile > depfresh-plan.json
+depfresh apply --json --write --sync-lockfile --plan-file depfresh-plan.json
 
-# Write changes and run update instead
-depfresh -wu
+# Stronger, explicitly non-transactional dependency install
+depfresh plan --json --install > depfresh-plan.json
+depfresh apply --json --write --install --plan-file depfresh-plan.json
+
+# Exact verification argv after successful lockfile synchronization
+depfresh plan --json --sync-lockfile --verify-argv '["pnpm","test"]' > depfresh-plan.json
+depfresh apply --json --write --sync-lockfile --verify --plan-file depfresh-plan.json
 ```
 
-If both are set, `--update` takes priority. Package manager detection order: `packageManager` field > lockfile (`bun.lock`/`bun.lockb` > `pnpm-lock.yaml` > `yarn.lock` > fallback to `npm`).
+Supported execution is limited to npm 10/11 with `package-lock.json` or `npm-shrinkwrap.json`, pnpm
+10/11 with `pnpm-lock.yaml`, and Bun 1.2 through 1.x with text `bun.lock` on Linux and macOS. Yarn,
+`bun.lockb`, Windows manager execution, manager fallback, shell strings, and legacy `--execute`,
+`--update`, or `--verify-command` flows are rejected. Manager phases accept only registry-backed
+`semver` and `npm:` alias occurrences; unsupported dependency protocols remain available to the
+file-only plan and block manager execution before apply.
 
 ---
 

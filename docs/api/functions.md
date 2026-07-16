@@ -16,7 +16,7 @@ function check(options: depfreshOptions, authority?: InvocationAuthority): Promi
 **Returns** an exit code:
 - `0` -- no updates found, or updates were written successfully
 - `1` -- updates available (only when `failOnOutdated: true` and `write: false`)
-- `2` -- something went wrong, or strict failure flags tripped (`failOnResolutionErrors`, `failOnNoPackages`, `strictPostWrite`)
+- `2` -- something went wrong, strict resolution/discovery failed, or a retired post-write option was requested
 
 ```ts
 import { check, resolveConfig } from 'depfresh'
@@ -180,12 +180,21 @@ if (!validateApplyResult(applied)) throw new Error('Unsupported apply contract')
 ```
 
 `plan()` reads only declarative JSON configuration. Set `asOf` to a canonical UTC timestamp when
-cooldown is positive. See [Inspect and Plan Contracts](../output-formats/inspect-plan.md) for the
-schemas, fingerprints, terminal vocabulary, and compatibility boundary.
+cooldown is positive. `syncLockfile` or `install` fingerprints one supported manager phase;
+`verifyArgv` fingerprints one exact non-empty argv array, and `phaseTimeout` bounds every planned
+process. These values express future intent and grant no authority. See
+[Inspect and Plan Contracts](../output-formats/inspect-plan.md) for the schemas, fingerprints,
+terminal vocabulary, and compatibility boundary.
+
+Manager phase planning currently accepts only registry-backed `semver` and `npm:` alias occurrence
+protocols. Other protocols retain exact file operations but make requested manager execution
+blocked before apply.
 
 `apply()` accepts plain schema-v1 plan data, never re-resolves it, and throws before lock acquisition
-for a forged contract or missing authority. Operational stale, dirty, lock, staging, commit,
-recovery, and observation states return a schema-valid result. See the
+for a forged contract or missing/mismatched authority. A manager plan requires independent
+`processExecute` and `lockfileWrite` grants; install and verification additionally require `install`
+and `verifyCommand`. Operational stale, dirty, lock, staging, manager, verification, recovery, and
+observation states return a schema-valid result. See the
 [Apply Contract](../output-formats/apply.md) for exact phases and recovery limits.
 
 The module also exports authoritative inspect, plan, apply, and error schema descriptors, runtime assertion/type-guard helpers,

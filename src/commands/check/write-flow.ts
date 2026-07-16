@@ -1,21 +1,5 @@
-import { execSync } from 'node:child_process'
-import { posix, win32 } from 'node:path'
 import * as semver from 'semver'
 import { ConfigError } from '../../errors'
-import {
-  backupPackageFiles,
-  type FileBackup,
-  restorePackageFiles,
-  writePackage,
-} from '../../io/write'
-import {
-  canonicalizeFilepath,
-  createCatalogWriteRequest,
-  createPackageWriteRequest,
-  createWriteOutcome,
-  observeFileOccurrence,
-  resolvePhysicalValues,
-} from '../../io/write/occurrence'
 import type {
   depfreshOptions,
   InvocationAuthority,
@@ -34,10 +18,6 @@ export interface PackageWriteResult extends WriteOutcomeSummary {
   didWrite: boolean
 }
 
-function getPackageDirectory(filepath: string): string {
-  return filepath.includes('\\') ? win32.dirname(filepath) : posix.dirname(filepath)
-}
-
 function resultFromOutcomes(outcomes: WriteOutcome[]): PackageWriteResult {
   const summary = summarizeWriteOutcomes(outcomes)
   return { ...summary, outcomes, didWrite: summary.applied > 0 }
@@ -49,99 +29,13 @@ export async function verifyAndWrite(
   verifyCommand: string,
   logger: Logger,
 ): Promise<PackageWriteResult> {
-  const outcomes: WriteOutcome[] = []
-
-  for (const change of changes) {
-    let backups: FileBackup[]
-    try {
-      backups = backupPackageFiles(pkg)
-    } catch {
-      outcomes.push(createBackupFailureOutcome(pkg, change))
-      continue
-    }
-
-    let written: WriteOutcome[]
-    try {
-      written = writePackage(pkg, [change], 'silent')
-    } catch (error) {
-      restorePackageFiles(backups)
-      throw error
-    }
-    const [outcome] = written
-    if (!outcome) continue
-    if (outcome.status !== 'applied') {
-      outcomes.push(outcome)
-      continue
-    }
-
-    try {
-      execSync(verifyCommand, { cwd: getPackageDirectory(pkg.filepath), stdio: 'pipe' })
-      outcomes.push(outcome)
-      logger.success(`  ${change.name} ${change.currentVersion} → ${change.targetVersion} ✓`)
-    } catch {
-      try {
-        restorePackageFiles(backups)
-      } catch {
-        outcomes.push({ ...outcome, status: 'unknown', reason: 'RESTORE_FAILED' })
-        logger.warn(`  ${change.name} ${change.currentVersion} → ${change.targetVersion} ✗`)
-        continue
-      }
-
-      const observation = observeFileOccurrence(outcome.occurrence)
-      if (observation.known && observation.value === outcome.expectedValue) {
-        outcomes.push({
-          ...outcome,
-          status: 'reverted',
-          reason: 'VERIFICATION_FAILED',
-          observedValue: observation.value,
-        })
-        logger.warn(
-          `  ${change.name} ${change.currentVersion} → ${change.targetVersion} ✗ (reverted)`,
-        )
-      } else {
-        outcomes.push({
-          ...outcome,
-          status: 'unknown',
-          reason: 'RESTORE_FAILED',
-          ...(observation.value === undefined ? {} : { observedValue: observation.value }),
-        })
-      }
-    }
-  }
-
-  return resultFromOutcomes(outcomes)
-}
-
-function createBackupFailureOutcome(pkg: PackageMeta, change: ResolvedDepChange): WriteOutcome {
-  const matchingCatalogs = (pkg.catalogs ?? []).filter((catalog) =>
-    catalog.deps.some(
-      (dependency) =>
-        dependency.name === change.name &&
-        dependency.parents.length === change.parents.length &&
-        dependency.parents.every((parent, index) => parent === change.parents[index]),
-    ),
-  )
-  const catalog = matchingCatalogs.length === 1 ? matchingCatalogs[0] : undefined
-  const request = catalog
-    ? createCatalogWriteRequest(catalog, change)
-    : pkg.type === 'package.json' || pkg.type === 'package.yaml'
-      ? createPackageWriteRequest(pkg, change)
-      : {
-          change,
-          occurrence: {
-            file: canonicalizeFilepath(pkg.filepath),
-            path: [change.source, ...change.parents, change.name],
-          },
-          exactExpectedValue: change.rawVersion,
-        }
-  const values = resolvePhysicalValues(request, undefined)
-  return createWriteOutcome(
-    request,
-    'failed',
-    'READ_FAILED',
-    values.expectedValue,
-    values.requestedValue,
-  )
+  void pkg
+  void changes
+  void verifyCommand
+  void logger
+  throw new ConfigError('--verify-command requires the explicit plan/apply phase workflow.', {
+    reason: 'UNSUPPORTED_COMBINATION',
+  })
 }
 
 export async function applyPackageWrite(

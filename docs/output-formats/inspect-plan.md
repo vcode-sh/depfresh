@@ -73,8 +73,22 @@ by a material risk; unsafe identity paths fail the contract instead of producing
 
 `requiredCapabilities` describes what a downstream consumer needs to review or apply the result.
 `inspect` requires only `filesystem-read`; `plan` adds `registry-read`, and includes `file-write`
-only when its operations would require that separate apply authority. Planning itself never uses
-the advertised `file-write` capability.
+only when its operations would require that separate apply authority. A requested manager phase
+that resolves to `ready` adds `process-execute` and `lockfile-write`; ready full install adds
+`install`, and ready reviewed verification adds `verify-command`. Blocked and operation-free phase
+requests add no process capability. Planning itself uses none of those side-effect capabilities.
+
+The `execution` object fingerprints `file-only`, `sync-lockfile`, or `install` intent, the phase
+timeout, and each affected boundary's confirmed manager name/version, parsed lockfile ID/path/hash,
+fixed adapter argv, lifecycle suppression, permitted paths, and external-effect class. Optional
+verification is an exact executable/argv, contained cwd, timeout, and empty write allowlist.
+Unsupported or ambiguous evidence leaves execution `blocked`; it never invents an npm fallback.
+Operations outside standard dependency fields are blocked because their lockfile occurrences cannot
+yet be reconciled exactly. Only registry-backed `semver` and `npm:` alias protocols have exact
+cross-manager lockfile proof; other protocols block manager execution before apply. Manager
+execution is also blocked on Windows until equivalent inherited-descendant process observation
+exists. For an `npm:` alias, proof binds both the manifest alias key and the exact aliased registry
+package identity; matching only the version is insufficient.
 
 Cooldown is time-dependent. When `--cooldown` is positive, supply a canonical UTC instant such as
 `--as-of 2026-07-16T10:00:00.000Z`. The instant is semantic plan input and participates in the plan

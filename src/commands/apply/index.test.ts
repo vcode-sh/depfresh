@@ -18,6 +18,7 @@ import {
 import { hostname, tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
+import semver from 'semver'
 import { afterEach, describe, expect, it } from 'vitest'
 import { canonicalJson } from '../../contracts/canonical-json'
 import {
@@ -26,11 +27,12 @@ import {
   hashExactBytes,
 } from '../../contracts/fingerprint'
 import type { PlanResult } from '../../contracts/schemas'
-import { validateApplyResult } from '../../contracts/validate'
+import { validateApplyResult, validatePlanResult } from '../../contracts/validate'
 import { createRepositoryId } from '../../repository/identity'
 import type { InvocationAuthority } from '../../types'
 import { applyPlanWithRuntime } from './engine'
 import { apply } from './index'
+import { acquireApplyLock, defaultApplyRuntime, releaseApplyLock } from './lock'
 import type { ApplyCheckpoint } from './types'
 
 const roots: string[] = []
@@ -40,6 +42,8 @@ const authority: InvocationAuthority = {
   install: false,
   update: false,
   execute: false,
+  processExecute: false,
+  lockfileWrite: false,
   verifyCommand: false,
   globalWrite: false,
 }
@@ -185,6 +189,12 @@ function makePlan(
     occurrences,
     decisions,
     operations,
+    execution: {
+      mode: 'file-only' as const,
+      status: 'ready' as const,
+      timeoutMs: 120_000,
+      targets: [],
+    },
     evidence: [],
     lockfiles: [],
     vcs,
@@ -207,6 +217,162 @@ function makePlan(
     },
   }
   return { ...semantic, planFingerprint: createPlanFingerprint(semantic) }
+}
+
+function withManagerExecution(
+  plan: PlanResult,
+  root: string,
+  options: {
+    mode?: 'sync-lockfile' | 'install'
+    timeoutMs?: number
+    verification?: { executable: string; args?: string[]; cwd?: string; timeoutMs?: number }
+  } = {},
+): PlanResult {
+  const mode = options.mode ?? 'sync-lockfile'
+  const boundaryId = 'boundary-root'
+  const lockfileId = 'lockfile-root'
+  const lockfilePath = 'package-lock.json'
+  const lockfileHash = hashExactBytes(readFileSync(join(root, lockfilePath)))
+  const adapter = {
+    executable: 'npm' as const,
+    args:
+      mode === 'sync-lockfile'
+        ? ['install', '--package-lock-only', '--ignore-scripts', '--no-audit', '--no-fund']
+        : ['install', '--ignore-scripts', '--no-audit', '--no-fund'],
+    lifecycle: 'disabled-by-flag' as const,
+    permittedPaths: mode === 'sync-lockfile' ? [lockfilePath] : [lockfilePath, 'node_modules'],
+    externalEffects:
+      mode === 'sync-lockfile'
+        ? (['package-manager-cache'] as const)
+        : (['dependency-install-state', 'package-manager-cache'] as const),
+  }
+  const execution = {
+    mode,
+    status: 'ready' as const,
+    timeoutMs: options.timeoutMs ?? 2_000,
+    targets: [
+      {
+        boundaryId,
+        boundaryPath: '.',
+        manager: { name: 'npm' as const, version: '11.0.0' },
+        lockfile: { id: lockfileId, path: lockfilePath, byteHash: lockfileHash },
+        adapter: {
+          ...adapter,
+          externalEffects: [...adapter.externalEffects],
+        },
+      },
+    ],
+    ...(options.verification
+      ? {
+          verification: {
+            executable: options.verification.executable,
+            args: options.verification.args ?? [],
+            cwd: options.verification.cwd ?? '.',
+            timeoutMs: options.verification.timeoutMs ?? 2_000,
+            permittedPaths: [],
+          },
+        }
+      : {}),
+  }
+  const semantic = {
+    ...plan,
+    decisions: plan.decisions.map((decision) => {
+      const operation = plan.operations.find((entry) => entry.id === decision.operationId)
+      const targetVersion = operation ? semver.coerce(operation.requestedValue)?.version : undefined
+      return targetVersion
+        ? {
+            ...decision,
+            candidate: {
+              reason: 'TARGET_SELECTED',
+              eligibleVersions: [targetVersion],
+              targetVersion,
+            },
+          }
+        : decision
+    }),
+    repository: {
+      ...plan.repository,
+      boundaries: [
+        { id: boundaryId, path: '.', classification: 'effective-root' as const, markers: [] },
+      ],
+    },
+    execution,
+    evidence: [
+      {
+        id: 'evidence-manager',
+        kind: 'package-manager' as const,
+        boundaryId,
+        status: 'confirmed' as const,
+        values: [{ name: 'npm', version: '11.0.0' }],
+        sources: [],
+        diagnostics: [],
+      },
+      {
+        id: 'evidence-lockfile',
+        kind: 'lockfile-selection' as const,
+        boundaryId,
+        status: 'confirmed' as const,
+        values: [lockfileId],
+        sources: [],
+        diagnostics: [],
+      },
+    ],
+    lockfiles: [
+      {
+        id: lockfileId,
+        boundaryId,
+        manager: 'npm' as const,
+        path: lockfilePath,
+        byteHash: lockfileHash,
+        parseState: 'parsed' as const,
+        formatVersion: '3',
+      },
+    ],
+    requiredCapabilities: [
+      'filesystem-read' as const,
+      'registry-read' as const,
+      'file-write' as const,
+      'process-execute' as const,
+      'lockfile-write' as const,
+      ...(mode === 'install' ? (['install' as const] as const) : []),
+      ...(options.verification ? (['verify-command' as const] as const) : []),
+    ],
+  }
+  return { ...semantic, planFingerprint: createPlanFingerprint(semantic) }
+}
+
+function withForgedRequestedValue(plan: PlanResult, requestedValue: string): PlanResult {
+  const operation = plan.operations[0]!
+  const { id: _id, ...base } = operation
+  const operationBase = { ...base, requestedValue }
+  const forgedOperation = {
+    id: `operation-${hashExactBytes(canonicalJson(operationBase)).slice(0, 24)}`,
+    ...operationBase,
+  }
+  const semantic = {
+    ...plan,
+    operations: [forgedOperation],
+    decisions: plan.decisions.map((decision) =>
+      decision.operationId === operation.id
+        ? { ...decision, operationId: forgedOperation.id }
+        : decision,
+    ),
+  }
+  return { ...semantic, planFingerprint: createPlanFingerprint(semantic) }
+}
+
+function writeExecutable(path: string, source: string): void {
+  writeFileSync(path, `#!/bin/sh\nset -eu\n${source}\n`)
+  chmodSync(path, 0o755)
+}
+
+function managerAuthority(overrides: Partial<InvocationAuthority> = {}): InvocationAuthority {
+  return {
+    ...authority,
+    processExecute: true,
+    lockfileWrite: true,
+    ...overrides,
+  }
 }
 
 function withoutOperations(plan: PlanResult): PlanResult {
@@ -233,6 +399,1099 @@ afterEach(() => {
 })
 
 describe('apply', () => {
+  it('requires fresh matching manager-phase authority before touching files', async () => {
+    const root = temporaryRoot('depfresh-apply-manager-authority-')
+    const content = '{"name":"fixture","dependencies":{"alpha":"1.0.0"}}\n'
+    const lockfile = '{"name":"fixture","lockfileVersion":3}\n'
+    writeFileSync(join(root, 'package.json'), content)
+    writeFileSync(join(root, 'package-lock.json'), lockfile)
+    const plan = withManagerExecution(
+      makePlan([
+        {
+          file: 'package.json',
+          content,
+          path: ['dependencies', 'alpha'],
+          name: 'alpha',
+          expectedValue: '1.0.0',
+          requestedValue: '2.0.0',
+        },
+      ]),
+      root,
+    )
+
+    await expect(apply(plan, { cwd: root }, authority)).rejects.toMatchObject({
+      reason: 'AUTHORITY_REQUIRED',
+    })
+    await expect(
+      apply(plan, { cwd: root }, managerAuthority({ install: true })),
+    ).rejects.toMatchObject({ reason: 'AUTHORITY_MISMATCH' })
+    expect(readFileSync(join(root, 'package.json'), 'utf8')).toBe(content)
+    expect(readFileSync(join(root, 'package-lock.json'), 'utf8')).toBe(lockfile)
+  })
+
+  it('rejects a self-fingerprinted manager plan for an unsupported occurrence protocol', async () => {
+    const root = temporaryRoot('depfresh-apply-manager-protocol-forged-')
+    const content = '{"name":"fixture","dependencies":{"alpha":"1.0.0"}}\n'
+    const lockfile = '{"name":"fixture","lockfileVersion":3}\n'
+    writeFileSync(join(root, 'package.json'), content)
+    writeFileSync(join(root, 'package-lock.json'), lockfile)
+    const ready = withManagerExecution(
+      makePlan([
+        {
+          file: 'package.json',
+          content,
+          path: ['dependencies', 'alpha'],
+          name: 'alpha',
+          expectedValue: '1.0.0',
+          requestedValue: '2.0.0',
+        },
+      ]),
+      root,
+    )
+    const semantic = {
+      ...ready,
+      occurrences: ready.occurrences.map((occurrence) => ({
+        ...occurrence,
+        protocol: 'jsr' as const,
+      })),
+    }
+    const forged = { ...semantic, planFingerprint: createPlanFingerprint(semantic) }
+
+    await expect(apply(forged, { cwd: root }, managerAuthority())).rejects.toMatchObject({
+      code: 'ERR_CONTRACT_VALIDATION',
+    })
+    expect(existsSync(join(root, '.depfresh')) ? readdirSync(join(root, '.depfresh')) : []).toEqual(
+      [],
+    )
+    expect(readFileSync(join(root, 'package.json'), 'utf8')).toBe(content)
+    expect(readFileSync(join(root, 'package-lock.json'), 'utf8')).toBe(lockfile)
+  })
+
+  it('rejects self-fingerprinted protocol text and npm alias identity swaps', async () => {
+    const root = temporaryRoot('depfresh-apply-manager-protocol-text-forged-')
+    const content = '{"name":"fixture","dependencies":{"alpha":"1.0.0"}}\n'
+    const lockfile = '{"name":"fixture","lockfileVersion":3}\n'
+    writeFileSync(join(root, 'package.json'), content)
+    writeFileSync(join(root, 'package-lock.json'), lockfile)
+    const ready = withManagerExecution(
+      makePlan([
+        {
+          file: 'package.json',
+          content,
+          path: ['dependencies', 'alpha'],
+          name: 'alpha',
+          expectedValue: '1.0.0',
+          requestedValue: '2.0.0',
+        },
+      ]),
+      root,
+    )
+
+    for (const requestedValue of [
+      'file:../outside',
+      'workspace:^2.0.0',
+      'jsr:@scope/alpha@^2.0.0',
+    ]) {
+      const forged = withForgedRequestedValue(ready, requestedValue)
+      await expect(apply(forged, { cwd: root }, managerAuthority())).rejects.toMatchObject({
+        code: 'ERR_CONTRACT_VALIDATION',
+      })
+    }
+
+    const aliasContent = '{"name":"fixture","dependencies":{"alias":"npm:semver@7.6.0"}}\n'
+    writeFileSync(join(root, 'package.json'), aliasContent)
+    const aliasBase = withManagerExecution(
+      makePlan([
+        {
+          file: 'package.json',
+          content: aliasContent,
+          path: ['dependencies', 'alias'],
+          name: 'alias',
+          expectedValue: 'npm:semver@7.6.0',
+          requestedValue: 'npm:semver@7.7.2',
+        },
+      ]),
+      root,
+    )
+    const aliasSemantic = {
+      ...aliasBase,
+      occurrences: aliasBase.occurrences.map((occurrence) => ({
+        ...occurrence,
+        protocol: 'npm' as const,
+      })),
+    }
+    const aliasReady = {
+      ...aliasSemantic,
+      planFingerprint: createPlanFingerprint(aliasSemantic),
+    }
+    expect(validatePlanResult(aliasReady)).toBe(true)
+
+    const aliasSwap = withForgedRequestedValue(aliasReady, 'npm:evil@7.7.2')
+    await expect(apply(aliasSwap, { cwd: root }, managerAuthority())).rejects.toMatchObject({
+      code: 'ERR_CONTRACT_VALIDATION',
+    })
+    expect(existsSync(join(root, '.depfresh')) ? readdirSync(join(root, '.depfresh')) : []).toEqual(
+      [],
+    )
+  })
+
+  it('returns schema-valid manager phase evidence when an early stale source blocks apply', async () => {
+    const root = temporaryRoot('depfresh-apply-manager-stale-source-')
+    const content = '{"name":"fixture","dependencies":{"alpha":"1.0.0"}}\n'
+    writeFileSync(join(root, 'package.json'), content)
+    writeFileSync(join(root, 'package-lock.json'), '{"name":"fixture","lockfileVersion":3}\n')
+    const plan = withManagerExecution(
+      makePlan([
+        {
+          file: 'package.json',
+          content,
+          path: ['dependencies', 'alpha'],
+          name: 'alpha',
+          expectedValue: '1.0.0',
+          requestedValue: '2.0.0',
+        },
+      ]),
+      root,
+    )
+    writeFileSync(join(root, 'package.json'), '{"name":"changed"}\n')
+
+    const result = await apply(plan, { cwd: root }, managerAuthority())
+
+    expect(validateApplyResult(result)).toBe(true)
+    expect(result.status).toBe('conflicted')
+    expect(result.phases).toContainEqual(
+      expect.objectContaining({ name: 'sync-lockfile', status: 'skipped' }),
+    )
+  })
+
+  it('returns schema-valid manager phase evidence when the apply lock is held', async () => {
+    const root = temporaryRoot('depfresh-apply-manager-held-lock-')
+    const content = '{"name":"fixture","dependencies":{"alpha":"1.0.0"}}\n'
+    writeFileSync(join(root, 'package.json'), content)
+    writeFileSync(join(root, 'package-lock.json'), '{"name":"fixture","lockfileVersion":3}\n')
+    const plan = withManagerExecution(
+      makePlan([
+        {
+          file: 'package.json',
+          content,
+          path: ['dependencies', 'alpha'],
+          name: 'alpha',
+          expectedValue: '1.0.0',
+          requestedValue: '2.0.0',
+        },
+      ]),
+      root,
+    )
+    const lock = acquireApplyLock(root, realpathSync.native(root), plan.planFingerprint, {
+      ...defaultApplyRuntime,
+      pid: process.pid,
+    })
+    expect('reason' in lock).toBe(false)
+    if ('reason' in lock) return
+    try {
+      const result = await apply(plan, { cwd: root }, managerAuthority())
+
+      expect(validateApplyResult(result)).toBe(true)
+      expect(result.status).toBe('conflicted')
+      expect(result.phases).toContainEqual(
+        expect.objectContaining({ name: 'sync-lockfile', status: 'skipped' }),
+      )
+    } finally {
+      releaseApplyLock(lock)
+    }
+  })
+
+  it('blocks a wrong manager version before source replacement or lock creation', async () => {
+    const root = temporaryRoot('depfresh-apply-manager-version-')
+    const bin = join(root, 'bin')
+    mkdirSync(bin)
+    const content = '{"name":"fixture","dependencies":{"alpha":"1.0.0"}}\n'
+    writeFileSync(join(root, 'package.json'), content)
+    writeFileSync(join(root, 'package-lock.json'), '{"name":"fixture","lockfileVersion":3}\n')
+    writeExecutable(join(bin, 'npm'), `printf '10.9.0'`)
+    const plan = withManagerExecution(
+      makePlan([
+        {
+          file: 'package.json',
+          content,
+          path: ['dependencies', 'alpha'],
+          name: 'alpha',
+          expectedValue: '1.0.0',
+          requestedValue: '2.0.0',
+        },
+      ]),
+      root,
+    )
+    const originalPath = process.env.PATH
+    process.env.PATH = `${bin}:${originalPath ?? ''}`
+    try {
+      const result = await apply(plan, { cwd: root }, managerAuthority())
+
+      expect(result.status).toBe('conflicted')
+      expect(result.phases).toContainEqual(
+        expect.objectContaining({
+          name: 'manager-preflight',
+          status: 'failed',
+          reason: 'MANAGER_VERSION_MISMATCH',
+        }),
+      )
+      expect(readFileSync(join(root, 'package.json'), 'utf8')).toBe(content)
+      expect(existsSync(join(root, '.depfresh'))).toBe(false)
+    } finally {
+      process.env.PATH = originalPath
+    }
+  })
+
+  it('blocks lockfile drift before source replacement', async () => {
+    const root = temporaryRoot('depfresh-apply-lockfile-drift-')
+    const bin = join(root, 'bin')
+    mkdirSync(bin)
+    const content = '{"name":"fixture","dependencies":{"alpha":"1.0.0"}}\n'
+    writeFileSync(join(root, 'package.json'), content)
+    writeFileSync(join(root, 'package-lock.json'), '{"name":"fixture","lockfileVersion":3}\n')
+    writeExecutable(join(bin, 'npm'), `printf '11.0.0'`)
+    const plan = withManagerExecution(
+      makePlan([
+        {
+          file: 'package.json',
+          content,
+          path: ['dependencies', 'alpha'],
+          name: 'alpha',
+          expectedValue: '1.0.0',
+          requestedValue: '2.0.0',
+        },
+      ]),
+      root,
+    )
+    writeFileSync(join(root, 'package-lock.json'), '{"changed":true}\n')
+    const originalPath = process.env.PATH
+    process.env.PATH = `${bin}:${originalPath ?? ''}`
+    try {
+      const result = await apply(plan, { cwd: root }, managerAuthority())
+
+      expect(result.status).toBe('conflicted')
+      expect(result.phases).toContainEqual(
+        expect.objectContaining({ reason: 'LOCKFILE_PRECONDITION_MISMATCH' }),
+      )
+      expect(readFileSync(join(root, 'package.json'), 'utf8')).toBe(content)
+      expect(existsSync(join(root, '.depfresh'))).toBe(false)
+    } finally {
+      process.env.PATH = originalPath
+    }
+  })
+
+  it('fails before source replacement when the manager version probe mutates the repository', async () => {
+    const root = temporaryRoot('depfresh-apply-manager-version-mutation-')
+    const bin = join(root, 'bin')
+    mkdirSync(bin)
+    const content = '{"name":"fixture","dependencies":{"alpha":"1.0.0"}}\n'
+    writeFileSync(join(root, 'package.json'), content)
+    writeFileSync(join(root, 'package-lock.json'), '{"name":"fixture","lockfileVersion":3}\n')
+    writeExecutable(join(bin, 'npm'), `printf 'mutated' > preflight-marker\nprintf '11.0.0'`)
+    const plan = withManagerExecution(
+      makePlan([
+        {
+          file: 'package.json',
+          content,
+          path: ['dependencies', 'alpha'],
+          name: 'alpha',
+          expectedValue: '1.0.0',
+          requestedValue: '2.0.0',
+        },
+      ]),
+      root,
+    )
+    const originalPath = process.env.PATH
+    process.env.PATH = `${bin}:${originalPath ?? ''}`
+    try {
+      const result = await apply(plan, { cwd: root }, managerAuthority())
+
+      expect(result.status).not.toBe('applied')
+      expect(result.phases).toContainEqual(
+        expect.objectContaining({
+          name: 'manager-preflight',
+          status: 'failed',
+          reason: 'MANAGER_PREFLIGHT_MUTATED_REPOSITORY',
+        }),
+      )
+      expect(result.recovery.unrecoveredPaths).toContain('preflight-marker')
+      expect(readFileSync(join(root, 'package.json'), 'utf8')).toBe(content)
+    } finally {
+      process.env.PATH = originalPath
+    }
+  })
+
+  it('runs an exact lifecycle-disabled manager adapter while holding the apply transaction', async () => {
+    const root = temporaryRoot('depfresh-apply-manager-success-')
+    const bin = join(root, 'bin')
+    mkdirSync(bin)
+    const content = '{"name":"fixture","dependencies":{"alpha":"1.0.0"}}\n'
+    const lockfile = '{"name":"fixture","lockfileVersion":3}\n'
+    writeFileSync(join(root, 'package.json'), content)
+    writeFileSync(join(root, 'package-lock.json'), lockfile)
+    writeExecutable(
+      join(bin, 'npm'),
+      `if [ "\${1:-}" = '--version' ]; then printf '11.0.0'; exit 0; fi
+printf '%s\\n' '{"name":"fixture","lockfileVersion":3,"packages":{"":{"dependencies":{"alpha":"2.0.0"}},"node_modules/alpha":{"version":"2.0.0"}},"synced":true}' > package-lock.json`,
+    )
+    const plan = withManagerExecution(
+      makePlan([
+        {
+          file: 'package.json',
+          content,
+          path: ['dependencies', 'alpha'],
+          name: 'alpha',
+          expectedValue: '1.0.0',
+          requestedValue: '2.0.0',
+        },
+      ]),
+      root,
+    )
+    const originalPath = process.env.PATH
+    process.env.PATH = `${bin}:${originalPath ?? ''}`
+    try {
+      const result = await apply(plan, { cwd: root }, managerAuthority())
+
+      expect(validateApplyResult(result)).toBe(true)
+      expect(result.status).toBe('applied')
+      expect(result.phases).toContainEqual(
+        expect.objectContaining({ name: 'sync-lockfile', status: 'passed' }),
+      )
+      expect(result.requiredCapabilities).toEqual([
+        'filesystem-read',
+        'file-write',
+        'process-execute',
+        'lockfile-write',
+      ])
+      expect(JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))).toMatchObject({
+        dependencies: { alpha: '2.0.0' },
+      })
+      expect(JSON.parse(readFileSync(join(root, 'package-lock.json'), 'utf8'))).toMatchObject({
+        synced: true,
+      })
+      expect(existsSync(join(root, '.depfresh'))).toBe(false)
+    } finally {
+      process.env.PATH = originalPath
+    }
+  })
+
+  it('restores source and lockfile bytes when the manager exits nonzero', async () => {
+    const root = temporaryRoot('depfresh-apply-manager-failure-')
+    const bin = join(root, 'bin')
+    mkdirSync(bin)
+    const content = '{"name":"fixture","dependencies":{"alpha":"1.0.0"}}\n'
+    const lockfile = '{"name":"fixture","lockfileVersion":3}\n'
+    writeFileSync(join(root, 'package.json'), content)
+    writeFileSync(join(root, 'package-lock.json'), lockfile)
+    writeExecutable(
+      join(bin, 'npm'),
+      `if [ "\${1:-}" = '--version' ]; then printf '11.0.0'; exit 0; fi
+printf 'partial' > package-lock.json
+exit 19`,
+    )
+    const plan = withManagerExecution(
+      makePlan([
+        {
+          file: 'package.json',
+          content,
+          path: ['dependencies', 'alpha'],
+          name: 'alpha',
+          expectedValue: '1.0.0',
+          requestedValue: '2.0.0',
+        },
+      ]),
+      root,
+    )
+    const originalPath = process.env.PATH
+    process.env.PATH = `${bin}:${originalPath ?? ''}`
+    try {
+      const result = await apply(plan, { cwd: root }, managerAuthority())
+
+      expect(validateApplyResult(result)).toBe(true)
+      expect(result.status).toBe('unknown')
+      expect(result.recovery).toMatchObject({
+        status: 'unknown',
+        restoredPaths: ['package-lock.json'],
+        externalEffects: ['package-manager-cache'],
+      })
+      const phaseNames = result.phases.map((entry) => entry.name)
+      expect(phaseNames.indexOf('sync-lockfile')).toBeLessThan(phaseNames.indexOf('recovery'))
+      expect(phaseNames.indexOf('recovery')).toBeLessThan(phaseNames.indexOf('inspect'))
+      expect(phaseNames.indexOf('inspect')).toBeLessThan(phaseNames.indexOf('cleanup'))
+      expect(readFileSync(join(root, 'package.json'), 'utf8')).toBe(content)
+      expect(readFileSync(join(root, 'package-lock.json'), 'utf8')).toBe(lockfile)
+      expect(existsSync(join(root, '.depfresh'))).toBe(true)
+    } finally {
+      process.env.PATH = originalPath
+    }
+  })
+
+  it('bounds the manager phase timeout and confirms process-group termination before recovery', async () => {
+    const root = temporaryRoot('depfresh-apply-manager-timeout-')
+    const bin = join(root, 'bin')
+    mkdirSync(bin)
+    const content = '{"name":"fixture","dependencies":{"alpha":"1.0.0"}}\n'
+    const lockfile = '{"name":"fixture","lockfileVersion":3}\n'
+    writeFileSync(join(root, 'package.json'), content)
+    writeFileSync(join(root, 'package-lock.json'), lockfile)
+    writeExecutable(
+      join(bin, 'npm'),
+      `if [ "\${1:-}" = '--version' ]; then printf '11.0.0'; exit 0; fi
+while :; do sleep 1; done`,
+    )
+    const plan = withManagerExecution(
+      makePlan([
+        {
+          file: 'package.json',
+          content,
+          path: ['dependencies', 'alpha'],
+          name: 'alpha',
+          expectedValue: '1.0.0',
+          requestedValue: '2.0.0',
+        },
+      ]),
+      root,
+      { timeoutMs: 200 },
+    )
+    const originalPath = process.env.PATH
+    process.env.PATH = `${bin}:${originalPath ?? ''}`
+    try {
+      const result = await apply(plan, { cwd: root }, managerAuthority())
+
+      expect(result.status).toBe('unknown')
+      expect(result.phases).toContainEqual(
+        expect.objectContaining({
+          name: 'sync-lockfile',
+          status: 'failed',
+          commands: [
+            expect.objectContaining({
+              termination: 'timeout',
+              terminationConfirmed: true,
+            }),
+          ],
+        }),
+      )
+      expect(readFileSync(join(root, 'package.json'), 'utf8')).toBe(content)
+      expect(readFileSync(join(root, 'package-lock.json'), 'utf8')).toBe(lockfile)
+    } finally {
+      process.env.PATH = originalPath
+    }
+  })
+
+  it('runs only the fingerprinted verification argv and recovers when it fails', async () => {
+    const root = temporaryRoot('depfresh-apply-verification-failure-')
+    const bin = join(root, 'bin')
+    mkdirSync(bin)
+    const content = '{"name":"fixture","dependencies":{"alpha":"1.0.0"}}\n'
+    const lockfile = '{"name":"fixture","lockfileVersion":3}\n'
+    writeFileSync(join(root, 'package.json'), content)
+    writeFileSync(join(root, 'package-lock.json'), lockfile)
+    writeExecutable(
+      join(bin, 'npm'),
+      `if [ "\${1:-}" = '--version' ]; then printf '11.0.0'; exit 0; fi
+printf '%s\\n' '{"name":"fixture","lockfileVersion":3,"packages":{"":{"dependencies":{"alpha":"2.0.0"}},"node_modules/alpha":{"version":"2.0.0"}},"synced":true}' > package-lock.json`,
+    )
+    writeExecutable(
+      join(bin, 'verify-tool'),
+      `[ "\${1:-}" = 'literal;not-a-shell' ] || exit 91
+exit 7`,
+    )
+    const plan = withManagerExecution(
+      makePlan([
+        {
+          file: 'package.json',
+          content,
+          path: ['dependencies', 'alpha'],
+          name: 'alpha',
+          expectedValue: '1.0.0',
+          requestedValue: '2.0.0',
+        },
+      ]),
+      root,
+      { verification: { executable: 'verify-tool', args: ['literal;not-a-shell'] } },
+    )
+    const originalPath = process.env.PATH
+    process.env.PATH = `${bin}:${originalPath ?? ''}`
+    try {
+      const result = await apply(plan, { cwd: root }, managerAuthority({ verifyCommand: true }))
+
+      expect(validateApplyResult(result)).toBe(true)
+      expect(result.status).toBe('unknown')
+      expect(result.phases).toContainEqual(
+        expect.objectContaining({
+          name: 'verify',
+          status: 'failed',
+          commands: [
+            expect.objectContaining({
+              executable: 'verify-tool',
+              args: ['literal;not-a-shell'],
+              termination: 'exit',
+              exitCode: 7,
+            }),
+          ],
+        }),
+      )
+      expect(readFileSync(join(root, 'package.json'), 'utf8')).toBe(content)
+      expect(readFileSync(join(root, 'package-lock.json'), 'utf8')).toBe(lockfile)
+    } finally {
+      process.env.PATH = originalPath
+    }
+  })
+
+  it('never reports success when a manager mutates an unplanned repository path', async () => {
+    const root = temporaryRoot('depfresh-apply-manager-hostile-')
+    const bin = join(root, 'bin')
+    mkdirSync(bin)
+    const content = '{"name":"fixture","dependencies":{"alpha":"1.0.0"}}\n'
+    writeFileSync(join(root, 'package.json'), content)
+    writeFileSync(join(root, 'package-lock.json'), '{"name":"fixture","lockfileVersion":3}\n')
+    writeExecutable(
+      join(bin, 'npm'),
+      `if [ "\${1:-}" = '--version' ]; then printf '11.0.0'; exit 0; fi
+printf '%s\\n' '{"name":"fixture","dependencies":{"alpha":"2.0.0"},"hostileMutation":true}' > package.json`,
+    )
+    const plan = withManagerExecution(
+      makePlan([
+        {
+          file: 'package.json',
+          content,
+          path: ['dependencies', 'alpha'],
+          name: 'alpha',
+          expectedValue: '1.0.0',
+          requestedValue: '2.0.0',
+        },
+      ]),
+      root,
+    )
+    const originalPath = process.env.PATH
+    process.env.PATH = `${bin}:${originalPath ?? ''}`
+    try {
+      const result = await apply(plan, { cwd: root }, managerAuthority())
+
+      expect(validateApplyResult(result)).toBe(true)
+      expect(result.status).toBe('failed')
+      expect(result.recovery.status).toBe('partial')
+      expect(result.phases).toContainEqual(
+        expect.objectContaining({
+          name: 'sync-lockfile',
+          status: 'failed',
+          reason: 'UNEXPECTED_REPOSITORY_MUTATION',
+        }),
+      )
+      expect(result.recovery.unrecoveredPaths).toContain('package.json')
+      expect(existsSync(join(root, '.depfresh'))).toBe(true)
+    } finally {
+      process.env.PATH = originalPath
+    }
+  })
+
+  it('never reports success when a manager mutates Git metadata', async () => {
+    const root = temporaryRoot('depfresh-apply-manager-git-mutation-')
+    const bin = join(root, 'bin')
+    mkdirSync(bin)
+    const content = '{"name":"fixture","dependencies":{"alpha":"1.0.0"}}\n'
+    writeFileSync(join(root, 'package.json'), content)
+    writeFileSync(join(root, 'package-lock.json'), '{"name":"fixture","lockfileVersion":3}\n')
+    writeExecutable(
+      join(bin, 'npm'),
+      `if [ "\${1:-}" = '--version' ]; then printf '11.0.0'; exit 0; fi
+mkdir .git
+printf 'hostile' > .git/depfresh-hostile`,
+    )
+    const plan = withManagerExecution(
+      makePlan([
+        {
+          file: 'package.json',
+          content,
+          path: ['dependencies', 'alpha'],
+          name: 'alpha',
+          expectedValue: '1.0.0',
+          requestedValue: '2.0.0',
+        },
+      ]),
+      root,
+    )
+    const originalPath = process.env.PATH
+    process.env.PATH = `${bin}:${originalPath ?? ''}`
+    try {
+      const result = await apply(plan, { cwd: root }, managerAuthority())
+
+      expect(result.status).not.toBe('applied')
+      expect(result.recovery.unrecoveredPaths).toContain('.git/depfresh-hostile')
+    } finally {
+      process.env.PATH = originalPath
+    }
+  })
+
+  it('rejects a malformed final lockfile even when the manager exits zero', async () => {
+    const root = temporaryRoot('depfresh-apply-manager-malformed-lockfile-')
+    const bin = join(root, 'bin')
+    mkdirSync(bin)
+    const content = '{"name":"fixture","dependencies":{"alpha":"1.0.0"}}\n'
+    writeFileSync(join(root, 'package.json'), content)
+    writeFileSync(join(root, 'package-lock.json'), '{"name":"fixture","lockfileVersion":3}\n')
+    writeExecutable(
+      join(bin, 'npm'),
+      `if [ "\${1:-}" = '--version' ]; then printf '11.0.0'; exit 0; fi
+printf 'not a lockfile' > package-lock.json`,
+    )
+    const plan = withManagerExecution(
+      makePlan([
+        {
+          file: 'package.json',
+          content,
+          path: ['dependencies', 'alpha'],
+          name: 'alpha',
+          expectedValue: '1.0.0',
+          requestedValue: '2.0.0',
+        },
+      ]),
+      root,
+    )
+    const originalPath = process.env.PATH
+    process.env.PATH = `${bin}:${originalPath ?? ''}`
+    try {
+      const result = await apply(plan, { cwd: root }, managerAuthority())
+
+      expect(result.status).not.toBe('applied')
+      expect(result.phases).toContainEqual(
+        expect.objectContaining({ reason: 'LOCKFILE_FINAL_STATE_INVALID' }),
+      )
+    } finally {
+      process.env.PATH = originalPath
+    }
+  })
+
+  it('rejects a parsed but unsynchronized lockfile when the manager exits zero', async () => {
+    const root = temporaryRoot('depfresh-apply-manager-stale-lockfile-')
+    const bin = join(root, 'bin')
+    mkdirSync(bin)
+    const content = '{"name":"fixture","dependencies":{"alpha":"1.0.0"}}\n'
+    const lockfile =
+      '{"name":"fixture","lockfileVersion":3,"packages":{"":{"dependencies":{"alpha":"1.0.0"}}}}\n'
+    writeFileSync(join(root, 'package.json'), content)
+    writeFileSync(join(root, 'package-lock.json'), lockfile)
+    writeExecutable(
+      join(bin, 'npm'),
+      `if [ "\${1:-}" = '--version' ]; then printf '11.0.0'; exit 0; fi
+exit 0`,
+    )
+    const plan = withManagerExecution(
+      makePlan([
+        {
+          file: 'package.json',
+          content,
+          path: ['dependencies', 'alpha'],
+          name: 'alpha',
+          expectedValue: '1.0.0',
+          requestedValue: '2.0.0',
+        },
+      ]),
+      root,
+    )
+    const originalPath = process.env.PATH
+    process.env.PATH = `${bin}:${originalPath ?? ''}`
+    try {
+      const result = await apply(plan, { cwd: root }, managerAuthority())
+
+      expect(result.status).not.toBe('applied')
+      expect(result.phases).toContainEqual(
+        expect.objectContaining({ reason: 'LOCKFILE_FINAL_STATE_INVALID' }),
+      )
+      expect(readFileSync(join(root, 'package-lock.json'), 'utf8')).toBe(lockfile)
+    } finally {
+      process.env.PATH = originalPath
+    }
+  })
+
+  it('restores an atomically replaced lockfile when its observed identity remains unchanged', async () => {
+    const root = temporaryRoot('depfresh-apply-lockfile-identity-recovery-')
+    const bin = join(root, 'bin')
+    mkdirSync(bin)
+    const content = '{"name":"fixture","dependencies":{"alpha":"1.0.0"}}\n'
+    writeFileSync(join(root, 'package.json'), content)
+    writeFileSync(join(root, 'package-lock.json'), '{"name":"fixture","lockfileVersion":3}\n')
+    writeExecutable(
+      join(bin, 'npm'),
+      `if [ "\${1:-}" = '--version' ]; then printf '11.0.0'; exit 0; fi
+rm package-lock.json
+printf 'foreign replacement' > package-lock.json
+exit 17`,
+    )
+    const plan = withManagerExecution(
+      makePlan([
+        {
+          file: 'package.json',
+          content,
+          path: ['dependencies', 'alpha'],
+          name: 'alpha',
+          expectedValue: '1.0.0',
+          requestedValue: '2.0.0',
+        },
+      ]),
+      root,
+    )
+    const originalPath = process.env.PATH
+    process.env.PATH = `${bin}:${originalPath ?? ''}`
+    try {
+      const result = await apply(plan, { cwd: root }, managerAuthority())
+
+      expect(result.status).toBe('unknown')
+      expect(result.recovery.restoredPaths).toContain('package-lock.json')
+      expect(readFileSync(join(root, 'package-lock.json'), 'utf8')).toContain('lockfileVersion')
+    } finally {
+      process.env.PATH = originalPath
+    }
+  })
+
+  it('fails unknown and retains evidence when a manager removes apply ownership', async () => {
+    const root = temporaryRoot('depfresh-apply-manager-lock-loss-')
+    const bin = join(root, 'bin')
+    mkdirSync(bin)
+    const content = '{"name":"fixture","dependencies":{"alpha":"1.0.0"}}\n'
+    writeFileSync(join(root, 'package.json'), content)
+    writeFileSync(join(root, 'package-lock.json'), '{"name":"fixture","lockfileVersion":3}\n')
+    writeExecutable(
+      join(bin, 'npm'),
+      `if [ "\${1:-}" = '--version' ]; then printf '11.0.0'; exit 0; fi
+rm -rf .depfresh/apply.lock`,
+    )
+    const plan = withManagerExecution(
+      makePlan([
+        {
+          file: 'package.json',
+          content,
+          path: ['dependencies', 'alpha'],
+          name: 'alpha',
+          expectedValue: '1.0.0',
+          requestedValue: '2.0.0',
+        },
+      ]),
+      root,
+    )
+    const originalPath = process.env.PATH
+    process.env.PATH = `${bin}:${originalPath ?? ''}`
+    try {
+      const result = await apply(plan, { cwd: root }, managerAuthority())
+
+      expect(result.status).toBe('unknown')
+      expect(result.phases).toContainEqual(
+        expect.objectContaining({ reason: 'APPLY_OWNERSHIP_LOST', status: 'unknown' }),
+      )
+      expect(existsSync(join(root, '.depfresh', 'runs'))).toBe(true)
+    } finally {
+      process.env.PATH = originalPath
+    }
+  })
+
+  it('blocks install when the dependency tree root escapes through a symlink', async () => {
+    const root = temporaryRoot('depfresh-apply-install-symlink-')
+    const outside = temporaryRoot('depfresh-apply-install-outside-')
+    const bin = join(root, 'bin')
+    mkdirSync(bin)
+    const content = '{"name":"fixture","dependencies":{"alpha":"1.0.0"}}\n'
+    writeFileSync(join(root, 'package.json'), content)
+    writeFileSync(join(root, 'package-lock.json'), '{"name":"fixture","lockfileVersion":3}\n')
+    symlinkSync(outside, join(root, 'node_modules'))
+    writeExecutable(join(bin, 'npm'), `printf '11.0.0'`)
+    const plan = withManagerExecution(
+      makePlan([
+        {
+          file: 'package.json',
+          content,
+          path: ['dependencies', 'alpha'],
+          name: 'alpha',
+          expectedValue: '1.0.0',
+          requestedValue: '2.0.0',
+        },
+      ]),
+      root,
+      { mode: 'install' },
+    )
+    const originalPath = process.env.PATH
+    process.env.PATH = `${bin}:${originalPath ?? ''}`
+    try {
+      const result = await apply(plan, { cwd: root }, managerAuthority({ install: true }))
+
+      expect(result.status).toBe('unknown')
+      expect(result.phases).toContainEqual(
+        expect.objectContaining({ reason: 'INSTALL_STATE_UNSAFE' }),
+      )
+      expect(readdirSync(outside)).toEqual([])
+    } finally {
+      process.env.PATH = originalPath
+    }
+  })
+
+  it('fails unknown when install creates an escaping dependency-tree symlink', async () => {
+    const root = temporaryRoot('depfresh-apply-install-created-symlink-')
+    const outside = temporaryRoot('depfresh-apply-install-created-outside-')
+    const bin = join(root, 'bin')
+    mkdirSync(bin)
+    const content = '{"name":"fixture","dependencies":{"alpha":"1.0.0"}}\n'
+    writeFileSync(join(root, 'package.json'), content)
+    writeFileSync(join(root, 'package-lock.json'), '{"name":"fixture","lockfileVersion":3}\n')
+    writeExecutable(
+      join(bin, 'npm'),
+      `if [ "\${1:-}" = '--version' ]; then printf '11.0.0'; exit 0; fi
+ln -s ${JSON.stringify(outside)} node_modules
+printf 'escaped' > node_modules/marker
+printf '%s\\n' '{"name":"fixture","lockfileVersion":3,"packages":{"":{"dependencies":{"alpha":"2.0.0"}},"node_modules/alpha":{"version":"2.0.0"}}}' > package-lock.json`,
+    )
+    const plan = withManagerExecution(
+      makePlan([
+        {
+          file: 'package.json',
+          content,
+          path: ['dependencies', 'alpha'],
+          name: 'alpha',
+          expectedValue: '1.0.0',
+          requestedValue: '2.0.0',
+        },
+      ]),
+      root,
+      { mode: 'install' },
+    )
+    const originalPath = process.env.PATH
+    process.env.PATH = `${bin}:${originalPath ?? ''}`
+    try {
+      const result = await apply(plan, { cwd: root }, managerAuthority({ install: true }))
+
+      expect(result.status).toBe('unknown')
+      expect(result.phases).toContainEqual(
+        expect.objectContaining({ reason: 'INSTALL_STATE_UNSAFE', status: 'unknown' }),
+      )
+      expect(readFileSync(join(outside, 'marker'), 'utf8')).toBe('escaped')
+    } finally {
+      process.env.PATH = originalPath
+    }
+  })
+
+  it('observes late repository mutation from a detached manager descendant', async () => {
+    const root = temporaryRoot('depfresh-apply-manager-detached-')
+    const bin = join(root, 'bin')
+    mkdirSync(bin)
+    const content = '{"name":"fixture","dependencies":{"alpha":"1.0.0"}}\n'
+    writeFileSync(join(root, 'package.json'), content)
+    writeFileSync(join(root, 'package-lock.json'), '{"name":"fixture","lockfileVersion":3}\n')
+    const lateScript = `setTimeout(() => require('node:fs').writeFileSync('late-marker', 'late'), 1500)`
+    const detachScript = [
+      "const { spawn } = require('node:child_process')",
+      `spawn(process.execPath, ['-e', ${JSON.stringify(lateScript)}], { detached: true, stdio: 'ignore' }).unref()`,
+    ].join(';')
+    writeExecutable(
+      join(bin, 'npm'),
+      `if [ "\${1:-}" = '--version' ]; then printf '11.0.0'; exit 0; fi
+node -e ${JSON.stringify(detachScript)}
+printf '%s\\n' '{"name":"fixture","lockfileVersion":3,"packages":{"":{"dependencies":{"alpha":"2.0.0"}},"node_modules/alpha":{"version":"2.0.0"}}}' > package-lock.json`,
+    )
+    const plan = withManagerExecution(
+      makePlan([
+        {
+          file: 'package.json',
+          content,
+          path: ['dependencies', 'alpha'],
+          name: 'alpha',
+          expectedValue: '1.0.0',
+          requestedValue: '2.0.0',
+        },
+      ]),
+      root,
+    )
+    const originalPath = process.env.PATH
+    process.env.PATH = `${bin}:${originalPath ?? ''}`
+    try {
+      const result = await apply(plan, { cwd: root }, managerAuthority())
+      await new Promise((resolvePromise) => setTimeout(resolvePromise, 1_700))
+
+      expect(result.status).not.toBe('applied')
+      expect(result.phases).toContainEqual(
+        expect.objectContaining({ reason: 'MANAGER_PHASE_PROCESS_DESCENDANTS_SURVIVED' }),
+      )
+      expect(existsSync(join(root, 'late-marker'))).toBe(false)
+    } finally {
+      process.env.PATH = originalPath
+    }
+  })
+
+  it('recovers an atomic lockfile update after exact verification fails', async () => {
+    const root = temporaryRoot('depfresh-apply-atomic-lockfile-recovery-')
+    const bin = join(root, 'bin')
+    mkdirSync(bin)
+    const content = '{"name":"fixture","dependencies":{"alpha":"1.0.0"}}\n'
+    const lockfile = '{"name":"fixture","lockfileVersion":3}\n'
+    writeFileSync(join(root, 'package.json'), content)
+    writeFileSync(join(root, 'package-lock.json'), lockfile)
+    writeExecutable(
+      join(bin, 'npm'),
+      `if [ "\${1:-}" = '--version' ]; then printf '11.0.0'; exit 0; fi
+printf '%s\\n' '{"name":"fixture","lockfileVersion":3,"packages":{"":{"dependencies":{"alpha":"2.0.0"}},"node_modules/alpha":{"version":"2.0.0"}}}' > next-lock
+mv next-lock package-lock.json`,
+    )
+    writeExecutable(join(bin, 'verify-tool'), `exit 7`)
+    const plan = withManagerExecution(
+      makePlan([
+        {
+          file: 'package.json',
+          content,
+          path: ['dependencies', 'alpha'],
+          name: 'alpha',
+          expectedValue: '1.0.0',
+          requestedValue: '2.0.0',
+        },
+      ]),
+      root,
+      { verification: { executable: 'verify-tool' } },
+    )
+    const originalPath = process.env.PATH
+    process.env.PATH = `${bin}:${originalPath ?? ''}`
+    try {
+      const result = await apply(plan, { cwd: root }, managerAuthority({ verifyCommand: true }))
+
+      expect(result.status).toBe('unknown')
+      expect(result.recovery.restoredPaths).toContain('package-lock.json')
+      expect(readFileSync(join(root, 'package-lock.json'), 'utf8')).toBe(lockfile)
+    } finally {
+      process.env.PATH = originalPath
+    }
+  })
+
+  it('recovers the exact lockfile identity written by a failing verification command', async () => {
+    const root = temporaryRoot('depfresh-apply-verification-lockfile-recovery-')
+    const bin = join(root, 'bin')
+    mkdirSync(bin)
+    const content = '{"name":"fixture","dependencies":{"alpha":"1.0.0"}}\n'
+    const lockfile = '{"name":"fixture","lockfileVersion":3}\n'
+    writeFileSync(join(root, 'package.json'), content)
+    writeFileSync(join(root, 'package-lock.json'), lockfile)
+    writeExecutable(
+      join(bin, 'npm'),
+      `if [ "\${1:-}" = '--version' ]; then printf '11.0.0'; exit 0; fi
+printf '%s\\n' '{"name":"fixture","lockfileVersion":3,"packages":{"":{"dependencies":{"alpha":"2.0.0"}},"node_modules/alpha":{"version":"2.0.0"}}}' > package-lock.json`,
+    )
+    writeExecutable(
+      join(bin, 'verify-tool'),
+      `printf '%s\\n' '{"name":"foreign","lockfileVersion":3}' > verification-lock
+mv verification-lock package-lock.json
+exit 7`,
+    )
+    const plan = withManagerExecution(
+      makePlan([
+        {
+          file: 'package.json',
+          content,
+          path: ['dependencies', 'alpha'],
+          name: 'alpha',
+          expectedValue: '1.0.0',
+          requestedValue: '2.0.0',
+        },
+      ]),
+      root,
+      { verification: { executable: 'verify-tool' } },
+    )
+    const originalPath = process.env.PATH
+    process.env.PATH = `${bin}:${originalPath ?? ''}`
+    try {
+      const result = await apply(plan, { cwd: root }, managerAuthority({ verifyCommand: true }))
+
+      expect(result.status).toBe('unknown')
+      expect(result.recovery.restoredPaths).toContain('package-lock.json')
+      expect(readFileSync(join(root, 'package-lock.json'), 'utf8')).toBe(lockfile)
+    } finally {
+      process.env.PATH = originalPath
+    }
+  })
+
+  it('never executes verification from a symlinked working directory outside the repository', async () => {
+    const root = temporaryRoot('depfresh-apply-verification-cwd-')
+    const outside = temporaryRoot('depfresh-apply-verification-outside-')
+    const bin = join(root, 'bin')
+    mkdirSync(bin)
+    symlinkSync(outside, join(root, 'outside-link'))
+    const content = '{"name":"fixture","dependencies":{"alpha":"1.0.0"}}\n'
+    writeFileSync(join(root, 'package.json'), content)
+    writeFileSync(join(root, 'package-lock.json'), '{"name":"fixture","lockfileVersion":3}\n')
+    writeExecutable(
+      join(bin, 'npm'),
+      `if [ "\${1:-}" = '--version' ]; then printf '11.0.0'; exit 0; fi
+printf '%s\\n' '{"name":"fixture","lockfileVersion":3,"packages":{"":{"dependencies":{"alpha":"2.0.0"}},"node_modules/alpha":{"version":"2.0.0"}},"synced":true}' > package-lock.json`,
+    )
+    writeExecutable(join(bin, 'verify-tool'), `printf 'escaped' > marker`)
+    const plan = withManagerExecution(
+      makePlan([
+        {
+          file: 'package.json',
+          content,
+          path: ['dependencies', 'alpha'],
+          name: 'alpha',
+          expectedValue: '1.0.0',
+          requestedValue: '2.0.0',
+        },
+      ]),
+      root,
+      { verification: { executable: 'verify-tool', cwd: 'outside-link' } },
+    )
+    const originalPath = process.env.PATH
+    process.env.PATH = `${bin}:${originalPath ?? ''}`
+    try {
+      const result = await apply(plan, { cwd: root }, managerAuthority({ verifyCommand: true }))
+
+      expect(result.status).not.toBe('applied')
+      expect(existsSync(join(outside, 'marker'))).toBe(false)
+    } finally {
+      process.env.PATH = originalPath
+    }
+  })
+
+  it('retains recovery evidence when a hostile lockfile replacement cannot be restored safely', async () => {
+    const root = temporaryRoot('depfresh-apply-lockfile-recovery-')
+    const bin = join(root, 'bin')
+    mkdirSync(bin)
+    const outside = join(tmpdir(), `depfresh-lockfile-outside-${process.pid}-${Date.now()}`)
+    writeFileSync(outside, 'outside')
+    const content = '{"name":"fixture","dependencies":{"alpha":"1.0.0"}}\n'
+    writeFileSync(join(root, 'package.json'), content)
+    writeFileSync(join(root, 'package-lock.json'), '{"name":"fixture","lockfileVersion":3}\n')
+    writeExecutable(
+      join(bin, 'npm'),
+      `if [ "\${1:-}" = '--version' ]; then printf '11.0.0'; exit 0; fi
+rm package-lock.json
+ln -s ${JSON.stringify(outside)} package-lock.json
+exit 17`,
+    )
+    const plan = withManagerExecution(
+      makePlan([
+        {
+          file: 'package.json',
+          content,
+          path: ['dependencies', 'alpha'],
+          name: 'alpha',
+          expectedValue: '1.0.0',
+          requestedValue: '2.0.0',
+        },
+      ]),
+      root,
+    )
+    const originalPath = process.env.PATH
+    process.env.PATH = `${bin}:${originalPath ?? ''}`
+    try {
+      const result = await apply(plan, { cwd: root }, managerAuthority())
+
+      expect(validateApplyResult(result)).toBe(true)
+      expect(result.status).toBe('unknown')
+      expect(result.recovery.unrecoveredPaths).toContain('package-lock.json')
+      expect(result.phases).toContainEqual(
+        expect.objectContaining({ name: 'recovery', status: 'unknown' }),
+      )
+      expect(lstatSync(join(root, 'package-lock.json')).isSymbolicLink()).toBe(true)
+      expect(readFileSync(outside, 'utf8')).toBe('outside')
+      expect(existsSync(join(root, '.depfresh'))).toBe(true)
+    } finally {
+      process.env.PATH = originalPath
+      rmSync(outside, { force: true })
+    }
+  })
+
   it('applies an immutable plan and reports only observed final values', async () => {
     const root = temporaryRoot()
     const content =

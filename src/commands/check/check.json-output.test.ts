@@ -217,29 +217,21 @@ describe('JSON output', () => {
     consoleSpy.mockRestore()
   })
 
-  it('reports planned/applied/reverted counters for verify-command writes', async () => {
-    const pkg = makePkg('my-app')
-    const dep = makeResolved({
-      name: 'lodash',
-      diff: 'major',
-      currentVersion: '^4.0.0',
-      targetVersion: '^5.0.0',
-    })
-    mocks.loadPackagesMock.mockResolvedValue([pkg])
-    mocks.resolvePackageMock.mockResolvedValue([dep])
-    mocks.execSyncMock.mockImplementation(() => {
-      throw new Error('verify failed')
-    })
-
+  it('reports retired verify-command input as a machine-readable error', async () => {
     const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
 
     const { check } = await import('./index')
-    await check({ ...baseOptions, output: 'json', write: true, verifyCommand: 'npm test' })
+    const result = await check({
+      ...baseOptions,
+      output: 'json',
+      write: true,
+      verifyCommand: 'npm test',
+    })
 
     const jsonCall = consoleSpy.mock.calls.find((call) => {
       try {
         const parsed = JSON.parse(call[0] as string)
-        return parsed.packages !== undefined
+        return parsed.error !== undefined
       } catch {
         return false
       }
@@ -247,16 +239,9 @@ describe('JSON output', () => {
 
     expect(jsonCall).toBeDefined()
     const output = JSON.parse(jsonCall![0] as string)
-    expect(output.summary.total).toBe(1)
-    expect(output.summary.scannedPackages).toBe(1)
-    expect(output.summary.packagesWithUpdates).toBe(1)
-    expect(output.summary.plannedUpdates).toBe(1)
-    expect(output.summary.appliedUpdates).toBe(0)
-    expect(output.summary.revertedUpdates).toBe(1)
-    expect(output.summary.failedResolutions).toBe(0)
-    expect(output.meta.noPackagesFound).toBe(false)
-    expect(output.meta.hadResolutionErrors).toBe(false)
-    expect(output.meta.didWrite).toBe(false)
+    expect(result).toBe(2)
+    expect(output.error).toMatchObject({ reason: 'UNSUPPORTED_COMBINATION' })
+    expect(mocks.execSyncMock).not.toHaveBeenCalled()
 
     consoleSpy.mockRestore()
   })

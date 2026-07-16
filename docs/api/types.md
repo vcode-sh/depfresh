@@ -11,10 +11,10 @@ The full type catalogue. Every interface, union, and enum that depfresh exports.
 | `CatalogSource` | A workspace catalog entry (pnpm/bun/yarn) with its deps and file path |
 | `DepFieldType` | Union of dependency field names: `'dependencies'`, `'devDependencies'`, `'overrides'`, etc. |
 | `DiffType` | Version diff classification: `'major'` \| `'minor'` \| `'patch'` \| `'none'` \| `'error'` |
-| `InvocationAuthority` | Immutable grants for write, install, update, execute, verification-command, and global-write side effects |
+| `InvocationAuthority` | Immutable grants for file write, process execution, lockfile write, install, exact verification, legacy compatibility, and global-write side effects |
 | `InspectOptions` / `InspectResult` | Process-free schema-v1 repository evidence input and schema-derived result |
-| `PlanOptions` / `PlanResult` | Registry-aware non-mutating planner input and schema-derived semantic plan result |
-| `ApplyOptions` / `ApplyResult` | Explicit root selection and schema-derived observed result for one authorized immutable-plan file phase |
+| `PlanOptions` / `PlanResult` | Registry-aware non-mutating planner input, including optional manager/verification intent, and schema-derived semantic plan result |
+| `ApplyOptions` / `ApplyResult` | Explicit root selection and schema-derived observed file, manager, verification, and recovery result for one authorized immutable plan |
 | `MachineCommandError` | Schema-derived fatal `inspect`/`plan`/`apply` CLI error document |
 | `LegacyCheckJsonResult` / `LegacyCheckJsonError` | Compatibility schema-v1 check report and fatal error shapes; not immutable plans |
 | `InspectRepositoryOptions` | Read-only repository inspection options; contains no side-effect grants |

@@ -165,34 +165,43 @@ stty sane
 
 **Keys not responding?** The TUI uses `readline.emitKeypressEvents()` in raw mode. Some terminal multiplexers (tmux, screen) intercept certain key sequences. If `Ctrl+C` works but vim keys don't, check your multiplexer's key pass-through settings. Or just use arrow keys like a normal person.
 
-## Post-write issues
+## Manager phase issues
 
-### `--execute` not running
+Legacy `--execute`, check-mode `--install`, `--update`, `--verify-command`, and
+`--strict-post-write` are rejected. Use a reviewed `plan` plus matching `apply` grants.
 
-Three conditions must ALL be true:
+### Manager or lockfile preflight is blocked
 
-1. `--write` is set
-2. `--execute` has a command
-3. At least one file was **actually modified** (the `didWrite` flag)
+The plan must contain one confirmed supported manager/version and one selected parsed lockfile for
+each affected boundary. Apply checks the exact executable version and planned lockfile bytes while
+holding its lock. Missing, ambiguous, unsupported, unavailable, stale, or mismatched evidence is
+not guessed and never falls back to npm. Re-inspect and re-plan after correcting the declaration.
 
-If depfresh found updates but nothing changed on disk — maybe `beforePackageWrite` returned false, maybe interactive mode selected nothing — the execute command won't fire. This is deliberate. I'm not running your `npm test` for zero changes.
+### A manager or verification phase failed
 
-### `--verify-command` reverting everything
+The apply result records exact argv, cwd, termination, final lockfile hash/parse/resolved-target
+state, changed and unexpected paths, and external effects without stdout, stderr, secrets, or
+stacks. Nonzero exit, signal, timeout, inherited surviving descendants, a new unattributed same-user
+process, malformed or stale lockfile output, source drift, lock loss, or any unexpected repository
+mutation prevents success. If the baseline process census is unavailable, the command is not
+spawned. After spawn, an unavailable final census or an unattributed new process group is unknown.
+Because the census is conservative, an unrelated process that starts in a new process group
+concurrently can also make the phase unknown.
+Verification uses only the fingerprinted JSON argv and may not mutate repository paths. Manager
+execution currently fails closed on Windows because equivalent process-tree observation is not
+available.
 
-`--verify-command` tests each dependency update individually. It writes one change, runs your command, and if the command fails, it reverts that specific change. If your command fails for EVERY dependency, everything gets reverted.
+### Recovery is partial or unknown
 
-Before blaming depfresh, check that your verify command works standalone:
+Lockfile recovery occurs only when the current physical identity still matches evidence observed
+for the owned command. An atomic replacement, symlink, concurrent change, lost lock/journal,
+unexpected path, install tree, or manager cache can remain unrecovered. Preserve `.depfresh` run
+evidence, stop competing apply processes, and follow the recovery procedure above. Never delete
+retained evidence merely to make the next run proceed.
 
-```bash
-# Does this actually work?
-cd /your/project && your-verify-command
-```
-
-If the command itself is broken, every single dep will get reverted. That's not a bug, that's your test suite.
-
-### `--install` / `--update` not running
-
-Same conditions as `--execute`: `--write` must be set AND changes must have been written to disk. depfresh auto-detects your package manager from the `packageManager` field or lockfile presence (checks for `bun.lock`, `pnpm-lock.yaml`, `yarn.lock`, in that order, falling back to `npm`).
+After any manager command starts, a later manager or verification failure is conservatively
+top-level `unknown` because the declared package-manager-cache effect cannot be rolled back, even if
+the planned source and lockfile bytes were restored exactly.
 
 ## Performance
 

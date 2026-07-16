@@ -6,6 +6,22 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Semver
 
 ### Added
 
+- **Reviewed lockfile synchronization and verification phases** -- immutable plans can fingerprint
+  supported npm 10/11, pnpm 10/11, or Bun 1.x manager/version evidence, one selected parsed
+  lockfile per affected boundary, fixed lifecycle-disabled argv, permitted paths, timeout, and one
+  optional exact verification argv. Apply requires matching process, lockfile-write, install, and
+  verification grants that configuration cannot supply. Commands run without a shell inside the
+  stale-safe lock/journal lifecycle; final lockfiles must change, parse, and match affected manifest
+  specifiers plus resolved target versions. Only registry-backed `semver` and `npm:` alias
+  occurrence protocols can request manager execution; unsupported protocols block before apply.
+  Pnpm output-path configuration is pinned to contained values, and detached descendants are
+  observed with marker plus same-user PID/start/process-group evidence on Linux/macOS before
+  success. Alias proof binds the manifest key, registry package identity, specifier, and version.
+  Results
+  record termination, final lockfile hash/parse/occurrence evidence, repository and linked Git
+  metadata mutations, recovery paths, and non-transactional install/cache effects. Legacy
+  shell-string post-write flags are rejected instead of retaining a second writer.
+
 - **Stale-safe file apply contract** -- `depfresh apply --json --write --plan-file <path>` and the
   public `apply()` API validate a strict immutable plan, explicit invocation authority, contained
   unique physical targets, exact source hashes and occurrence values, and fresh target Git state.

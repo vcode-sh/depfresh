@@ -87,6 +87,7 @@ describe('shipped contract schemas', () => {
       occurrences: [],
       decisions: [],
       operations: [{ occurrenceId: 'missing-preconditions' }],
+      execution: { mode: 'file-only', status: 'ready', timeoutMs: 120_000, targets: [] },
       evidence: [],
       lockfiles: [],
       vcs: { status: 'unavailable', targetFiles: [], unrelatedDirtyPaths: [], diagnostics: [] },
@@ -156,6 +157,35 @@ describe('shipped contract schemas', () => {
       }),
     ).toBe(false)
     expect(validateApplyResult({ ...base, requiredCapabilities: ['file-write'] })).toBe(false)
+    expect(
+      validateApplyResult({
+        ...base,
+        phases: [
+          {
+            name: 'sync-lockfile',
+            status: 'passed',
+            reason: 'MANAGER_PHASE_COMPLETED',
+            commands: [
+              {
+                boundaryId: 'boundary-root',
+                manager: 'npm',
+                managerVersion: '11.0.0',
+                lifecycle: 'disabled-by-flag',
+                cwd: '.',
+                executable: 'npm',
+                args: ['install', '--package-lock-only', '--ignore-scripts'],
+                termination: 'exit',
+                terminationConfirmed: true,
+                exitCode: 0,
+                changedPaths: ['package-lock.json'],
+                unexpectedPaths: [],
+                externalEffects: ['package-manager-cache'],
+              },
+            ],
+          },
+        ],
+      }),
+    ).toBe(false)
     const {
       observedValue: _observedValue,
       observedByteHash: _observedByteHash,
@@ -265,6 +295,7 @@ describe('shipped contract schemas', () => {
         },
       ],
       operations: [],
+      execution: { mode: 'file-only', status: 'ready', timeoutMs: 120_000, targets: [] },
       evidence: [],
       lockfiles: [],
       vcs: { status: 'unavailable', targetFiles: [], unrelatedDirtyPaths: [], diagnostics: [] },

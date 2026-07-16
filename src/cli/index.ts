@@ -147,7 +147,12 @@ const main = defineCommand({
           const result = await apply(
             planInput as import('../contracts/schemas').PlanResult,
             { cwd: typeof commandArgs.cwd === 'string' ? commandArgs.cwd : process.cwd() },
-            createInvocationAuthority({ write: commandArgs.write === true }),
+            createInvocationAuthority({
+              write: commandArgs.write === true,
+              syncLockfile: commandArgs['sync-lockfile'] === true,
+              install: commandArgs.install === true,
+              verify: commandArgs.verify === true,
+            }),
           )
           // biome-ignore lint/suspicious/noConsole: intentional stable machine output
           console.log(JSON.stringify(result, null, 2))

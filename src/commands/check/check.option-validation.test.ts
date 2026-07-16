@@ -39,42 +39,8 @@ describe('check option validation', () => {
         install: false,
         update: false,
         execute: false,
-        verifyCommand: false,
-        globalWrite: false,
-      },
-    ],
-    [
-      'install',
-      { write: true, install: true },
-      {
-        write: true,
-        install: false,
-        update: false,
-        execute: false,
-        verifyCommand: false,
-        globalWrite: false,
-      },
-    ],
-    [
-      'execute',
-      { write: true, execute: 'touch forbidden' },
-      {
-        write: true,
-        install: false,
-        update: false,
-        execute: false,
-        verifyCommand: false,
-        globalWrite: false,
-      },
-    ],
-    [
-      'verify-command',
-      { write: true, verifyCommand: 'touch forbidden' },
-      {
-        write: true,
-        install: false,
-        update: false,
-        execute: false,
+        processExecute: false,
+        lockfileWrite: false,
         verifyCommand: false,
         globalWrite: false,
       },
@@ -87,6 +53,8 @@ describe('check option validation', () => {
         install: false,
         update: false,
         execute: false,
+        processExecute: false,
+        lockfileWrite: false,
         verifyCommand: false,
         globalWrite: false,
       },
@@ -115,11 +83,11 @@ describe('check option validation', () => {
   )
 
   it.each([
-    [{ install: true }, '--install requires --write'],
-    [{ update: true }, '--update requires --write'],
-    [{ execute: 'echo done' }, '--execute requires --write'],
-    [{ verifyCommand: 'pnpm test' }, '--verify-command requires --write'],
-    [{ write: true, install: true, update: true }, '--install cannot be combined with --update'],
+    [{ install: true }, '--install is only supported'],
+    [{ update: true }, '--update is only supported'],
+    [{ execute: 'echo done' }, '--execute is only supported'],
+    [{ verifyCommand: 'pnpm test' }, '--verify-command is only supported'],
+    [{ write: true, install: true, update: true }, '--install is only supported'],
   ])('rejects unsupported option combination %j before discovery', async (options, message) => {
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
     const { check } = await import('./index')
@@ -145,6 +113,8 @@ describe('check option validation', () => {
       install: false,
       update: false,
       execute: false,
+      processExecute: false,
+      lockfileWrite: false,
       verifyCommand: false,
       globalWrite: false,
     }
@@ -172,6 +142,8 @@ describe('check option validation', () => {
         install: true,
         update: true,
         execute: true,
+        processExecute: true,
+        lockfileWrite: true,
         verifyCommand: true,
         globalWrite: true,
       },

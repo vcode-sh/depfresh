@@ -1,7 +1,9 @@
 import Ajv, { type ErrorObject, type ValidateFunction } from 'ajv'
+import { resolveManagerAdapter } from '../commands/apply/manager-adapters'
 import { canonicalJson } from './canonical-json'
 import { createPlanFingerprint, createRepositoryFingerprint, hashExactBytes } from './fingerprint'
-import { isContractSafeText } from './sanitize'
+import { isSupportedManagerOccurrence } from './manager-occurrence'
+import { isContractSafeArgv, isContractSafeText } from './sanitize'
 import type { ApplyResult, InspectResult, MachineCommandError, PlanResult } from './schemas'
 import {
   applyResultSchema,
@@ -97,6 +99,32 @@ function hasValidApplySemantics(result: ApplyResult): boolean {
     return false
   }
   if (new Set(result.phases.map((entry) => entry.name)).size !== result.phases.length) return false
+  const phaseOrder = new Map(
+    [
+      'preflight',
+      'lock',
+      'manager-preflight',
+      'stage',
+      'precommit',
+      'commit',
+      'sync-lockfile',
+      'install',
+      'verify',
+      'recovery',
+      'inspect',
+      'cleanup',
+    ].map((name, index) => [name, index]),
+  )
+  if (
+    result.phases.some(
+      (entry, index) =>
+        index > 0 &&
+        (phaseOrder.get(entry.name) ?? -1) <
+          (phaseOrder.get(result.phases[index - 1]?.name ?? '') ?? -1),
+    )
+  ) {
+    return false
+  }
   if (
     !isContractSafeText(result.repositoryIdentity) ||
     result.phases.some((entry) => !isContractSafeText(entry.reason)) ||
@@ -190,15 +218,94 @@ function hasValidApplySemantics(result: ApplyResult): boolean {
   ) {
     return false
   }
+  const recoveryPhase = result.phases.find((entry) => entry.name === 'recovery')
   if (
-    result.requiredCapabilities.length !== 2 ||
-    result.requiredCapabilities[0] !== 'filesystem-read' ||
-    result.requiredCapabilities[1] !== 'file-write'
+    recoveryPhase &&
+    ((result.recovery.status === 'completed' && recoveryPhase.status !== 'passed') ||
+      (result.recovery.status === 'unknown' && recoveryPhase.status !== 'unknown') ||
+      (result.recovery.status === 'partial' && recoveryPhase.status !== 'failed'))
+  ) {
+    return false
+  }
+  const hasManagerPhase = result.phases.some(
+    (entry) =>
+      entry.name === 'manager-preflight' ||
+      entry.name === 'sync-lockfile' ||
+      entry.name === 'install',
+  )
+  const hasInstallPhase = result.phases.some((entry) => entry.name === 'install')
+  const hasVerifyPhase = result.phases.some((entry) => entry.name === 'verify')
+  const expectedCapabilities: ApplyResult['requiredCapabilities'] = [
+    'filesystem-read',
+    'file-write',
+  ]
+  if (hasManagerPhase) expectedCapabilities.push('process-execute', 'lockfile-write')
+  if (hasInstallPhase) expectedCapabilities.push('install')
+  if (hasVerifyPhase) expectedCapabilities.push('verify-command')
+  if (canonicalJson(expectedCapabilities) !== canonicalJson(result.requiredCapabilities)) {
+    return false
+  }
+  for (const entry of result.phases) {
+    if (
+      entry.commands?.some((command) => {
+        if (
+          ![
+            command.boundaryId,
+            command.manager,
+            command.managerVersion,
+            command.cwd,
+            command.executable,
+            ...command.args,
+            command.signal,
+            command.lockfile?.path,
+            command.lockfile?.byteHash,
+            command.lockfile?.occurrences,
+            ...command.changedPaths,
+            ...command.unexpectedPaths,
+            ...command.externalEffects,
+          ]
+            .filter((value): value is string => value !== undefined)
+            .every(isContractSafeText)
+        ) {
+          return true
+        }
+        if (
+          (command.termination === 'exit') !== (command.exitCode !== undefined) ||
+          (command.termination === 'signal') !== (command.signal !== undefined)
+        ) {
+          return true
+        }
+        if (command.manager && !command.lockfile) return true
+        if (command.lockfile?.parseState === 'parsed' && command.lockfile.byteHash === undefined) {
+          return true
+        }
+        return (
+          entry.status === 'passed' &&
+          (command.termination !== 'exit' ||
+            command.exitCode !== 0 ||
+            !command.terminationConfirmed ||
+            (command.manager !== undefined && command.lockfile?.parseState !== 'parsed') ||
+            ((entry.name === 'sync-lockfile' || entry.name === 'install') &&
+              command.lockfile?.occurrences !== 'matched') ||
+            command.unexpectedPaths.length > 0)
+        )
+      })
+    ) {
+      return false
+    }
+  }
+  if (
+    ![
+      ...(result.recovery.journalId ? [result.recovery.journalId] : []),
+      ...(result.recovery.restoredPaths ?? []),
+      ...(result.recovery.unrecoveredPaths ?? []),
+      ...(result.recovery.externalEffects ?? []),
+    ].every(isContractSafeText)
   ) {
     return false
   }
   const expectedStatus =
-    result.operations.length === 0 && result.recovery.status === 'unknown'
+    result.recovery.status === 'unknown'
       ? 'unknown'
       : counts.unknown > 0
         ? 'unknown'
@@ -311,14 +418,7 @@ function hasValidPlanSemantics(plan: PlanResult): boolean {
     ) {
       return false
     }
-    const capabilities = new Set(plan.requiredCapabilities)
-    if (
-      !(capabilities.has('filesystem-read') && capabilities.has('registry-read')) ||
-      capabilities.has('file-write') !== plan.operations.length > 0 ||
-      capabilities.size !== (plan.operations.length > 0 ? 3 : 2)
-    ) {
-      return false
-    }
+    if (!hasValidPlanExecution(plan)) return false
     return (
       counts.operations === plan.operations.length &&
       (Object.keys(counts) as Array<keyof typeof counts>).every(
@@ -440,6 +540,7 @@ function hasValidReferences(result: InspectResult | PlanResult): boolean {
         return false
       }
     }
+    if (!hasValidExecutionReferences(result, boundaries, lockfiles, evidence)) return false
   } else if (
     result.requiredCapabilities.length !== 1 ||
     result.requiredCapabilities[0] !== 'filesystem-read'
@@ -469,6 +570,194 @@ function hasValidReferences(result: InspectResult | PlanResult): boolean {
     return false
   }
   return true
+}
+
+function hasValidPlanExecution(plan: PlanResult): boolean {
+  const { execution } = plan
+  const expectedCapabilities: PlanResult['requiredCapabilities'] = [
+    'filesystem-read',
+    'registry-read',
+  ]
+  if (plan.operations.length > 0) {
+    expectedCapabilities.push('file-write')
+    if (execution.mode !== 'file-only' && execution.status === 'ready') {
+      expectedCapabilities.push('process-execute', 'lockfile-write')
+      if (execution.mode === 'install') expectedCapabilities.push('install')
+      if (execution.verification) expectedCapabilities.push('verify-command')
+    }
+  }
+  if (canonicalJson(plan.requiredCapabilities) !== canonicalJson(expectedCapabilities)) return false
+
+  if (execution.mode === 'file-only') {
+    return (
+      execution.status === 'ready' &&
+      execution.targets.length === 0 &&
+      execution.reason === undefined &&
+      execution.verification === undefined
+    )
+  }
+  if (plan.operations.length === 0) {
+    return (
+      execution.status === 'not-needed' &&
+      execution.targets.length === 0 &&
+      execution.reason === undefined &&
+      execution.verification === undefined
+    )
+  }
+  if (execution.status === 'blocked') {
+    return (
+      execution.targets.length === 0 &&
+      execution.reason !== undefined &&
+      isContractSafeText(execution.reason) &&
+      execution.verification === undefined
+    )
+  }
+  if (execution.status !== 'ready' || execution.targets.length === 0) return false
+  if (execution.reason !== undefined) return false
+  const decisionsByOperation = new Map(
+    plan.decisions.map((decision) => [decision.operationId, decision]),
+  )
+  const occurrencesById = new Map(plan.occurrences.map((occurrence) => [occurrence.id, occurrence]))
+  const lockfileFields = new Set([
+    'dependencies',
+    'devDependencies',
+    'optionalDependencies',
+    'peerDependencies',
+  ])
+  if (
+    plan.operations.some((operation) => {
+      const occurrence = occurrencesById.get(operation.occurrenceId)
+      const targetVersion = decisionsByOperation.get(operation.id)?.candidate?.targetVersion
+      return (
+        operation.path.length !== 2 ||
+        operation.path[1] !== operation.name ||
+        !lockfileFields.has(operation.path[0] ?? '') ||
+        !isSupportedManagerOccurrence(occurrence, operation, targetVersion)
+      )
+    })
+  ) {
+    return false
+  }
+
+  const expectedBoundaryIds = new Set(affectedBoundaryIds(plan))
+  const targetBoundaryIds = new Set(execution.targets.map((target) => target.boundaryId))
+  if (
+    targetBoundaryIds.size !== execution.targets.length ||
+    targetBoundaryIds.size !== expectedBoundaryIds.size ||
+    [...expectedBoundaryIds].some((id) => !targetBoundaryIds.has(id))
+  ) {
+    return false
+  }
+  if (execution.verification) {
+    const verificationPublic =
+      isContractSafeArgv([execution.verification.executable, ...execution.verification.args]) &&
+      [execution.verification.cwd, ...execution.verification.permittedPaths].every(
+        isContractSafeText,
+      )
+    if (!verificationPublic || execution.verification.permittedPaths.length !== 0) {
+      return false
+    }
+  }
+  return true
+}
+
+function hasValidExecutionReferences(
+  plan: PlanResult,
+  boundaries: Map<string, PlanResult['repository']['boundaries'][number]>,
+  lockfiles: Map<string, PlanResult['lockfiles'][number]>,
+  evidence: Map<string, PlanResult['evidence'][number]>,
+): boolean {
+  const lockfilePaths = new Set<string>()
+  for (const target of plan.execution.targets) {
+    const boundary = boundaries.get(target.boundaryId)
+    const lockfile = lockfiles.get(target.lockfile.id)
+    if (
+      !boundary ||
+      boundary.path !== target.boundaryPath ||
+      !lockfile ||
+      lockfile.boundaryId !== target.boundaryId ||
+      lockfile.path !== target.lockfile.path ||
+      lockfile.byteHash !== target.lockfile.byteHash ||
+      lockfile.manager !== target.manager.name ||
+      lockfile.parseState !== 'parsed' ||
+      lockfilePaths.has(target.lockfile.path)
+    ) {
+      return false
+    }
+    lockfilePaths.add(target.lockfile.path)
+
+    const managerEvidence = [...evidence.values()].filter(
+      (entry) => entry.kind === 'package-manager' && entry.boundaryId === target.boundaryId,
+    )
+    const lockfileEvidence = [...evidence.values()].filter(
+      (entry) => entry.kind === 'lockfile-selection' && entry.boundaryId === target.boundaryId,
+    )
+    if (
+      managerEvidence.length !== 1 ||
+      managerEvidence[0]?.status !== 'confirmed' ||
+      managerEvidence[0].values.length !== 1 ||
+      lockfileEvidence.length !== 1 ||
+      lockfileEvidence[0]?.status !== 'confirmed' ||
+      lockfileEvidence[0].values.length !== 1 ||
+      lockfileEvidence[0].values[0] !== target.lockfile.id
+    ) {
+      return false
+    }
+    const manager = managerEvidence[0].values[0]
+    if (
+      !manager ||
+      typeof manager !== 'object' ||
+      Array.isArray(manager) ||
+      manager.name !== target.manager.name ||
+      manager.version !== target.manager.version
+    ) {
+      return false
+    }
+    const adapter = resolveManagerAdapter({
+      manager: target.manager.name,
+      version: target.manager.version,
+      lockfilePath: target.lockfile.path,
+      mode: plan.execution.mode === 'install' ? 'install' : 'sync-lockfile',
+      boundaryPath: target.boundaryPath,
+    })
+    if ('unsupported' in adapter || canonicalJson(adapter) !== canonicalJson(target.adapter)) {
+      return false
+    }
+    if (
+      ![
+        target.boundaryId,
+        target.boundaryPath,
+        target.manager.name,
+        target.manager.version,
+        target.lockfile.id,
+        target.lockfile.path,
+        target.adapter.executable,
+        ...target.adapter.args,
+        ...target.adapter.permittedPaths,
+        ...target.adapter.externalEffects,
+      ].every(isContractSafeText)
+    ) {
+      return false
+    }
+  }
+  return true
+}
+
+function affectedBoundaryIds(plan: PlanResult): string[] {
+  const deepest = [...plan.repository.boundaries].sort(
+    (left, right) => right.path.length - left.path.length || left.path.localeCompare(right.path),
+  )
+  const ids = new Set<string>()
+  for (const operation of plan.operations) {
+    const boundary = deepest.find(
+      (entry) =>
+        entry.path === '.' ||
+        operation.file === entry.path ||
+        operation.file.startsWith(`${entry.path}/`),
+    )
+    if (boundary) ids.add(boundary.id)
+  }
+  return [...ids]
 }
 
 function uniqueMap<T>(

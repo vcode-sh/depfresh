@@ -106,9 +106,11 @@ legacy translation.
 ### Invocation-only options
 
 Config files can shape checks, but they cannot authorize side effects. depfresh ignores `write`,
-`install`, `update`, `execute`, `verifyCommand`, `global`, and `globalAll` when those values come
-from any config file or from `package.json#depfresh`. Grant them explicitly for the active CLI run,
-for example `depfresh --write --install`, or as direct overrides in a programmatic invocation.
+`syncLockfile`, `install`, `verify`, `verifyArgv`, `phaseTimeout`, legacy `update`, `execute`,
+`verifyCommand`, and `global`/`globalAll` when those values come from any config file or from
+`package.json#depfresh`. Use `depfresh plan` to fingerprint manager intent and exact verification
+argv, then grant only the matching phase on `depfresh apply`; direct library callers pass an
+explicit immutable `InvocationAuthority`.
 
 ## Private Registries
 

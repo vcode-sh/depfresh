@@ -103,22 +103,25 @@ const WORKFLOWS: Record<string, Workflow> = {
 }
 
 const FLAG_RELATIONSHIPS: Record<string, FlagRelationship> = {
-  install: { requires: ['write'] },
-  update: { requires: ['write'] },
-  execute: { requires: ['write'] },
-  'verify-command': { requires: ['write'] },
+  install: { conflicts: ['sync-lockfile'] },
+  'sync-lockfile': { conflicts: ['install'] },
+  verify: { requires: ['write', 'plan-file'] },
   interactive: { requires: ['write'] },
-  'strict-post-write': { requires: ['write'] },
   'deps-only': { conflicts: ['dev-only'] },
   'dev-only': { conflicts: ['deps-only'] },
 }
 
 const INVOCATION_AUTHORITY: Record<string, InvocationGrant> = {
   write: { grants: ['write'] },
-  install: { requires: ['write'], grants: ['install'] },
-  update: { requires: ['write'], grants: ['update'] },
-  execute: { requires: ['write'], grants: ['execute'] },
-  'verify-command': { requires: ['write'], grants: ['verifyCommand'] },
+  'sync-lockfile': {
+    requires: ['write', 'plan-file'],
+    grants: ['processExecute', 'lockfileWrite'],
+  },
+  install: {
+    requires: ['write', 'plan-file'],
+    grants: ['processExecute', 'lockfileWrite', 'install'],
+  },
+  verify: { requires: ['write', 'plan-file'], grants: ['verifyCommand'] },
   global: { requires: ['write'], grants: ['globalWrite'] },
   'global-all': { requires: ['write'], grants: ['globalWrite'] },
 }
@@ -228,7 +231,8 @@ export function getCliCapabilities(): CliCapabilities {
         schema: 'depfresh/schemas/plan-v1.json',
       },
       apply: {
-        description: 'Stale-safe file application from one immutable plan.',
+        description:
+          'Stale-safe file and explicitly granted manager phases from one immutable plan.',
         schema: 'depfresh/schemas/apply-v1.json',
       },
     },

@@ -18,7 +18,7 @@ depfresh --write --mode minor
 depfresh -wI
 
 # The full chaos
-depfresh latest -wI --explain --long --verify-command "pnpm test"
+depfresh plan --json --mode latest --sync-lockfile --verify-argv '["pnpm","test"]'
 ```
 
 ## Help
@@ -70,9 +70,11 @@ stable reason code. Enum values are also strict:
 
 This applies to both normal flag usage and positional mode shorthand (`depfresh <mode>`).
 
-`--deps-only` conflicts with `--dev-only`. `--install` conflicts with `--update`. Every post-write
-flag requires `--write`. `--version` must be used alone. Use `--name=value` when a string value
-intentionally starts with `-`, such as `--include=--write`.
+`--deps-only` conflicts with `--dev-only`. In the machine workflow, `--sync-lockfile` conflicts with
+`--install`, and `--verify-argv` requires one of those planned phases. Legacy `--update`,
+`--execute`, `--verify-command`, and `--strict-post-write` are rejected; legacy check-mode
+`--install` is redirected to plan/apply. `--version` must be used alone. Use `--name=value` when a
+string value intentionally starts with `-`, such as `--include=--write`.
 
 ## Machine Discoverability
 
@@ -92,21 +94,26 @@ and the separate legacy-check, inspect/plan, and apply exit semantics.
 Both machine commands accept `--cwd`, `--recursive`, `--ignore-paths`,
 `--ignore-other-workspaces`, and either `--json` or `--output json`. `plan` additionally accepts
 selection and registry flags including `--mode`, `--include`, `--exclude`, `--force`, `--peer`,
-`--include-locked`, `--deps-only`, `--dev-only`, `--concurrency`, and `--cooldown`.
+`--include-locked`, `--deps-only`, `--dev-only`, `--concurrency`, and `--cooldown`. It may also
+fingerprint `--sync-lockfile` or `--install`, optional `--verify-argv '<JSON string array>'`, and
+`--phase-timeout <milliseconds>`.
 
 | Flag | Command | Description |
 | --- | --- | --- |
 | `--as-of <timestamp>` | `plan` | Canonical UTC semantic time required when cooldown is positive, for example `2026-07-16T10:00:00.000Z` |
 
-Inspect and plan reject `--write`, `--interactive`, `--install`, `--update`, `--execute`,
-`--verify-command`, `--strict-post-write`, `--global`, and `--global-all` before discovery.
+Inspect rejects all phase flags. Plan rejects `--write`, `--interactive`, `--update`, `--execute`,
+`--verify`, `--verify-command`, `--strict-post-write`, `--global`, and `--global-all` before
+discovery. Planning phase intent grants no authority and runs no process.
 
 ### Apply flags
 
-Apply accepts `--cwd`, JSON output selection, explicit `--write`, and exactly one
-`--plan-file <path>`. It validates the immutable plan and current target evidence before mutation.
-The `--plan-file` flag is rejected by every other command. Apply rejects the inspect/plan selection,
-registry, interactive, post-write, and global flags.
+Apply accepts `--cwd`, JSON output selection, explicit `--write`, exactly one `--plan-file <path>`,
+and only the matching `--sync-lockfile` or `--install` grant. `--verify` grants only verification
+argv already fingerprinted in the plan. Apply flags cannot add, replace, or weaken a phase. It
+validates the immutable plan and current target evidence before mutation. The `--plan-file` flag is
+rejected by every other command. Apply rejects selection, registry, interactive, legacy post-write,
+and global flags.
 
 Apply exits `0` only for `applied` or `noop`, `1` for a schema-valid `conflicted`, `reverted`,
 `failed`, or `unknown` result, and `2` for a fatal command-error document.
@@ -164,18 +171,19 @@ Apply exits `0` only for `applied` or `noop`, `1` for a schema-valid `conflicted
 named policy profiles are not part of the current policy contract. Policy rules are configured in a
 config file or through the library API, not through a JSON CLI flag.
 
-## Post-Write
+## Planned Manager and Verification Phases
 
-These flags require `--write` in the same invocation. Without it, depfresh exits `2` before
-discovery or side effects.
+These flags are command-specific. Plan flags describe immutable future intent without authority;
+apply flags grant only that reviewed intent.
 
 | Flag | Alias | Type | Default | Description |
 |------|-------|------|---------|-------------|
-| `--execute <command>` | `-e` | string | -- | Run a shell command after all updates are written. Runs once, after everything. E.g. `--execute "pnpm test"`. |
-| `--install` | `-i` | boolean | `false` | Auto-detect your package manager and run `install` after writing. Mutually exclusive with `--update`. |
-| `--update` | `-u` | boolean | `false` | Auto-detect your package manager and run `update` after writing. Mutually exclusive with `--install`. |
-| `--strict-post-write` | -- | boolean | `false` | Exit with code `2` when post-write `execute`, `install`, or `update` steps fail. Without this flag, depfresh logs the failure and continues. |
-| `--verify-command <cmd>` | `-V` | string | -- | Run a command after *each individual* dependency update. If the command fails, that update is reverted. The nuclear option for cautious people. See [Verify Command](#verify-command). |
+| `--sync-lockfile` | -- | boolean | `false` | On `plan`, fingerprint a supported lifecycle-disabled lockfile-only adapter; on `apply`, grant its process and lockfile writes. |
+| `--install` | `-i` | boolean | `false` | On `plan`, fingerprint the stronger full-install adapter; on `apply`, grant process, lockfile, install-tree, and cache effects. |
+| `--verify-argv <json>` | -- | string | -- | On `plan`, fingerprint one non-empty public JSON string array such as `'["pnpm","test"]'`; absolute paths and credential/auth-shaped flags, headers, or values are rejected with `INVALID_OPTION_VALUE`. Never inferred from scripts. |
+| `--verify` | -- | boolean | `false` | On `apply`, grant only the exact verification argv already in the plan. |
+| `--phase-timeout <ms>` | -- | integer | `120000` | Fingerprinted timeout for manager version, manager execution, and verification; maximum `600000`. |
+| `--execute`, `--update`, `--verify-command`, `--strict-post-write` | legacy | -- | -- | Rejected before discovery. Use plan/apply exact argv and phase results. |
 
 ## Behavior
 
@@ -251,26 +259,19 @@ When writing global updates (`-gw`), depfresh runs the corresponding install com
 
 ---
 
-## Verify Command
+## Verification Phase
 
-`--verify-command` is the careful version of `--execute`. Instead of running once at the end, it runs after *each individual dependency update*. If the command fails, that specific update is reverted from the package file.
+Verification runs once after every planned source replacement and successful manager phase. It is
+an inert argv array, not shell text, and has an empty repository-write allowlist.
 
 ```bash
-# Update each dep one at a time, run tests, revert failures
-depfresh -w --verify-command "pnpm test"
-
-# Type-check after each update
-depfresh -w -V "pnpm typecheck"
+depfresh plan --json --sync-lockfile --verify-argv '["pnpm","test"]' > depfresh-plan.json
+depfresh apply --json --write --sync-lockfile --verify --plan-file depfresh-plan.json
 ```
 
-The flow for each dependency:
-1. Back up the package file
-2. Write the single dependency update
-3. Run the verify command
-4. If the command exits `0` -- keep it
-5. If the command fails -- restore from backup
-
-This is slower (one command per dep), but it means you end up with only the updates that actually work. A summary of applied vs. reverted is printed at the end.
+Nonzero exit, signal, timeout, excessive output, repository mutation, or unconfirmed termination is
+not success. Apply restores planned source/lockfile bytes where safe and reports partial or unknown
+effects that cannot be rolled back.
 
 ---
 
@@ -302,8 +303,8 @@ depfresh --fail-on-resolution-errors
 # CI: fail if discovery found no packages at all
 depfresh --fail-on-no-packages
 
-# CI: fail if post-write commands fail
-depfresh --write --install --strict-post-write
+# CI: sync and verify one reviewed plan; any phase failure exits 1
+depfresh apply --json --write --sync-lockfile --verify --plan-file depfresh-plan.json
 ```
 
 ### Exit Codes
@@ -312,7 +313,7 @@ depfresh --write --install --strict-post-write
 |------|---------|
 | `0` | Everything is up to date, or updates were written successfully. |
 | `1` | Outdated dependencies found (only with `--fail-on-outdated` and without `--write`). |
-| `2` | Fatal error, strict resolution failure, strict discovery failure, or strict post-write failure. |
+| `2` | Fatal error, strict resolution/discovery failure, invalid authority, or rejected legacy post-write option. |
 
 ### Machine-Readable Output
 

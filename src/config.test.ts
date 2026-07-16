@@ -243,9 +243,14 @@ describe('invalid option combinations from config', () => {
           depfresh: {
             write: true,
             install: true,
+            syncLockfile: true,
             update: true,
             execute: 'touch should-not-run',
+            verify: true,
+            verifyArgv: ['touch', 'should-not-run'],
+            phaseTimeout: 1,
             verifyCommand: 'touch should-not-run',
+            strictPostWrite: true,
           },
         },
         null,
@@ -256,8 +261,13 @@ describe('invalid option combinations from config', () => {
     const config = await resolveConfig({ cwd: tmpDir, loglevel: 'silent' })
 
     expect(config).toMatchObject({ write: false, install: false, update: false })
+    expect(config.syncLockfile).toBeUndefined()
     expect(config.execute).toBeUndefined()
+    expect(config.verify).toBeUndefined()
+    expect(config.verifyArgv).toBeUndefined()
+    expect(config.phaseTimeout).toBeUndefined()
     expect(config.verifyCommand).toBeUndefined()
+    expect(config.strictPostWrite).toBe(false)
   })
 
   it('does not let config select a global write target', async () => {
@@ -274,27 +284,21 @@ describe('invalid option combinations from config', () => {
     expect(config.globalAll).toBe(false)
   })
 
-  it('preserves side-effect values supplied explicitly by the library caller', async () => {
+  it('rejects retired side-effect values supplied explicitly by the library caller', async () => {
     tmpDir = mkdtempSync(join(tmpdir(), 'depfresh-config-explicit-authority-'))
     writeFileSync(join(tmpDir, 'package.json'), JSON.stringify({ name: 'root' }))
 
-    const config = await resolveConfig({
-      cwd: tmpDir,
-      loglevel: 'silent',
-      write: true,
-      install: true,
-      execute: 'pnpm test',
-      verifyCommand: 'pnpm typecheck',
-      global: true,
-    })
-
-    expect(config).toMatchObject({
-      write: true,
-      install: true,
-      execute: 'pnpm test',
-      verifyCommand: 'pnpm typecheck',
-      global: true,
-    })
+    await expect(
+      resolveConfig({
+        cwd: tmpDir,
+        loglevel: 'silent',
+        write: true,
+        install: true,
+        execute: 'pnpm test',
+        verifyCommand: 'pnpm typecheck',
+        global: true,
+      }),
+    ).rejects.toMatchObject({ reason: 'UNSUPPORTED_COMBINATION' })
   })
 })
 

@@ -51,6 +51,8 @@ const authority: InvocationAuthority = {
   install: false,
   update: false,
   execute: false,
+  processExecute: false,
+  lockfileWrite: false,
   verifyCommand: false,
   globalWrite: true,
 }

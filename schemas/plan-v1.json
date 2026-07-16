@@ -13,6 +13,7 @@
     "occurrences",
     "decisions",
     "operations",
+    "execution",
     "evidence",
     "lockfiles",
     "vcs",
@@ -234,6 +235,204 @@
         }
       }
     },
+    "execution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mode",
+        "status",
+        "timeoutMs",
+        "targets"
+      ],
+      "properties": {
+        "mode": {
+          "enum": [
+            "file-only",
+            "sync-lockfile",
+            "install"
+          ]
+        },
+        "status": {
+          "enum": [
+            "ready",
+            "blocked",
+            "not-needed"
+          ]
+        },
+        "timeoutMs": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 600000
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1
+        },
+        "targets": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "boundaryId",
+              "boundaryPath",
+              "manager",
+              "lockfile",
+              "adapter"
+            ],
+            "properties": {
+              "boundaryId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "boundaryPath": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^(?!/)(?![A-Za-z]:/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*\\\\).+$"
+              },
+              "manager": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "name",
+                  "version"
+                ],
+                "properties": {
+                  "name": {
+                    "enum": [
+                      "npm",
+                      "pnpm",
+                      "bun"
+                    ]
+                  },
+                  "version": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              },
+              "lockfile": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "id",
+                  "path",
+                  "byteHash"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "path": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "^(?!/)(?![A-Za-z]:/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*\\\\).+$"
+                  },
+                  "byteHash": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  }
+                }
+              },
+              "adapter": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "executable",
+                  "args",
+                  "lifecycle",
+                  "permittedPaths",
+                  "externalEffects"
+                ],
+                "properties": {
+                  "executable": {
+                    "enum": [
+                      "npm",
+                      "pnpm",
+                      "bun"
+                    ]
+                  },
+                  "args": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "lifecycle": {
+                    "enum": [
+                      "disabled-by-flag",
+                      "disabled-by-flag-and-pnpmfile-bypass"
+                    ]
+                  },
+                  "permittedPaths": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "pattern": "^(?!/)(?![A-Za-z]:/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*\\\\).+$"
+                    }
+                  },
+                  "externalEffects": {
+                    "type": "array",
+                    "items": {
+                      "enum": [
+                        "package-manager-cache",
+                        "dependency-install-state"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "verification": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "executable",
+            "args",
+            "cwd",
+            "timeoutMs",
+            "permittedPaths"
+          ],
+          "properties": {
+            "executable": {
+              "type": "string",
+              "minLength": 1
+            },
+            "args": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "cwd": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "^(?!/)(?![A-Za-z]:/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*\\\\).+$"
+            },
+            "timeoutMs": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 600000
+            },
+            "permittedPaths": {
+              "type": "array",
+              "maxItems": 0,
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^(?!/)(?![A-Za-z]:/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*\\\\).+$"
+              }
+            }
+          }
+        }
+      }
+    },
     "evidence": {
       "type": "array",
       "items": {
@@ -273,7 +472,11 @@
         "enum": [
           "filesystem-read",
           "registry-read",
-          "file-write"
+          "file-write",
+          "process-execute",
+          "lockfile-write",
+          "install",
+          "verify-command"
         ]
       }
     },

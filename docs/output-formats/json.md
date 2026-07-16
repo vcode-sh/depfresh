@@ -132,7 +132,7 @@ Spits out a single JSON envelope to stdout. All log output is automatically supp
 | `packagesWithUpdates` | `number` | Number of scanned packages that had at least one available update |
 | `plannedUpdates` | `number` | Number of dependency updates planned for write attempts (`--write`) |
 | `appliedUpdates` | `number` | Number of planned updates successfully applied |
-| `revertedUpdates` | `number` | Number of planned updates reverted by `--verify-command` |
+| `revertedUpdates` | `number` | Compatibility counter for observed reverted writes; exact machine apply outcomes live in `depfresh.apply` |
 | `skippedUpdates` | `number` | Number of physical occurrences intentionally left unchanged |
 | `conflictedUpdates` | `number` | Number of occurrences whose observed pre-write value differed from the expected value |
 | `failedWrites` | `number` | Number of occurrences with a definite read, parse, write, or observation failure |
@@ -229,7 +229,7 @@ Present only when `--profile` is enabled.
 |-------|------|-------------|
 | `discoveryMs` | `number` | Time spent discovering packages and catalogs |
 | `resolutionMs` | `number` | Time spent resolving dependencies |
-| `postWriteMs` | `number` | Time spent in execute/install/update post-write steps |
+| `postWriteMs` | `number` | Compatibility timing field; legacy shell post-write paths are rejected |
 | `totalMs` | `number` | Total wall-clock time for the run |
 | `cacheHits` | `number` | Cache hits during the run |
 | `cacheMisses` | `number` | Cache misses during the run |
@@ -249,8 +249,8 @@ Present only when `--profile` is enabled.
   - `meta.noPackagesFound: true` means no package files were found.
   - `meta.noPackagesFound: false` and `summary.total: 0` means packages were found but already up to date.
   - `meta.hadResolutionErrors: true` means the run had registry resolution failures even if `summary.total` is `0`.
-  - `summary.plannedUpdates > 0` and `summary.appliedUpdates: 0` with `summary.revertedUpdates > 0` means verify-command reverted everything.
-  - Any conflicted, failed, or unknown write exits with code `2`; post-write commands do not run
+  - `summary.plannedUpdates > 0` and `summary.appliedUpdates: 0` with `summary.revertedUpdates > 0` means the compatibility write flow observed recovery to the original values.
+  - Any conflicted, failed, or unknown compatibility write exits with code `2`; retired post-write options are rejected
     after such an outcome.
 
 ## AI Agent Integration

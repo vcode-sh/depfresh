@@ -45,6 +45,12 @@ import {
   ownsApplyLock,
   releaseApplyLock,
 } from './lock'
+import {
+  executeManagerPhases,
+  type ManagerPhaseExecution,
+  type PreparedManagerPhases,
+  prepareManagerPhases,
+} from './manager-phase'
 import { type ApplySourceFormat, observeValues, renderFile } from './render'
 import type {
   ApplyOperation,
@@ -110,6 +116,7 @@ export async function applyPlanWithRuntime(
       reason: 'AUTHORITY_REQUIRED',
     })
   }
+  validateExecutionAuthority(plan, authority)
   const runtime: ApplyRuntime = { ...defaultApplyRuntime, ...runtimeOverrides }
   const phases: ApplyPhase[] = []
   const root = canonicalRoot(options.cwd)
@@ -131,6 +138,9 @@ export async function applyPlanWithRuntime(
   }
   if (hasApplyRecoveryEvidence(root)) {
     return blockedResult(plan, phases, 'RECOVERY_REQUIRED', true)
+  }
+  if (plan.operations.length > 0 && plan.execution.status === 'blocked') {
+    return blockedResult(plan, phases, plan.execution.reason ?? 'EXECUTION_BLOCKED', false)
   }
   if (plan.operations.length === 0) {
     phases.push(phase('preflight', 'passed', 'NO_OPERATIONS'))
@@ -178,6 +188,48 @@ export async function applyPlanWithRuntime(
   const lock = lockResult
   phases.push(phase('lock', 'passed', 'LOCK_ACQUIRED'))
   runtime.checkpoint('after-lock', {})
+
+  let preparedManagerPhases: PreparedManagerPhases | undefined
+  if (plan.execution.mode !== 'file-only') {
+    const prepared = await prepareManagerPhases(root, plan, lock)
+    if ('reason' in prepared) {
+      phases.push(prepared.phase)
+      phases.push(
+        phase(
+          plan.execution.mode === 'install' ? 'install' : 'sync-lockfile',
+          'skipped',
+          'MANAGER_PREFLIGHT_FAILED',
+        ),
+      )
+      if (plan.execution.verification) {
+        phases.push(phase('verify', 'skipped', 'MANAGER_PREFLIGHT_FAILED'))
+      }
+      const cleaned = cleanupBeforeJournal(lock, [])
+      phases.push(
+        phase('cleanup', cleaned ? 'passed' : 'unknown', cleaned ? 'CLEAN' : 'CLEANUP_INCOMPLETE'),
+      )
+      const hasMutation = prepared.unrecoveredPaths.length > 0
+      return createResult(
+        plan,
+        plan.operations.map((operation) =>
+          operationResult(
+            operation,
+            prepared.unknown || !cleaned ? 'unknown' : hasMutation ? 'failed' : 'conflicted',
+            prepared.reason,
+          ),
+        ),
+        phases,
+        hasMutation
+          ? {
+              status: prepared.unknown || !cleaned ? 'unknown' : 'partial',
+              unrecoveredPaths: prepared.unrecoveredPaths,
+            }
+          : recoveryAfterCleanup(lock, cleaned),
+      )
+    }
+    preparedManagerPhases = prepared
+    phases.push(prepared.preflight)
+  }
 
   let journal: JournalHandle | undefined
   try {
@@ -246,6 +298,7 @@ export async function applyPlanWithRuntime(
   }
 
   let commitError: ApplyRunError | undefined
+  let managerPhaseExecution: ManagerPhaseExecution | undefined
   try {
     journal.value.state = 'committing'
     persistJournal(journal)
@@ -339,6 +392,46 @@ export async function applyPlanWithRuntime(
 
   if (!commitError) {
     phases.push(phase('commit', 'passed', 'ALL_FILES_REPLACED'))
+    if (preparedManagerPhases) {
+      try {
+        managerPhaseExecution = await executeManagerPhases(
+          root,
+          plan,
+          preparedManagerPhases,
+          lock,
+          journal,
+        )
+      } catch {
+        managerPhaseExecution = {
+          success: false,
+          unknown: true,
+          reason: 'PHASE_OBSERVATION_FAILED',
+          phases: [
+            phase(
+              plan.execution.mode === 'install' ? 'install' : 'sync-lockfile',
+              'unknown',
+              'PHASE_OBSERVATION_FAILED',
+            ),
+            ...(plan.execution.verification
+              ? [phase('verify', 'skipped', 'PHASE_OBSERVATION_FAILED')]
+              : []),
+          ],
+          restoredPaths: [],
+          unrecoveredPaths: plan.execution.targets.map((target) => target.lockfile.path),
+          externalEffects: [
+            ...new Set(plan.execution.targets.flatMap((target) => target.adapter.externalEffects)),
+          ],
+          artifactsClean: false,
+        }
+      }
+      phases.push(...managerPhaseExecution.phases)
+      if (!managerPhaseExecution.success) {
+        commitError = new ApplyRunError(managerPhaseExecution.reason, managerPhaseExecution.unknown)
+      }
+    }
+  }
+
+  if (!commitError) {
     runtime.checkpoint('before-final-observation', {})
     const outcomes = observeSuccessfulOutcomes(root, groups, false)
     const observedFailure = outcomes.some(
@@ -363,7 +456,7 @@ export async function applyPlanWithRuntime(
             reason: 'CLEANUP_INCOMPLETE',
           })),
           phases,
-          recoveryAfterCleanup(lock, false, journal),
+          withManagerRecovery(recoveryAfterCleanup(lock, false, journal), managerPhaseExecution),
         )
       }
       return createResult(plan, outcomes, phases, { status: 'not-needed' })
@@ -383,7 +476,14 @@ export async function applyPlanWithRuntime(
     ),
   )
   runtime.checkpoint('before-final-observation', {})
-  const outcomes = observeFailedRun(root, groups)
+  let outcomes = observeFailedRun(root, groups)
+  if (recovery === 'unknown') {
+    outcomes = outcomes.map((outcome) => ({
+      ...outcome,
+      status: 'unknown',
+      reason: commitError.reason,
+    }))
+  }
   phases.push(
     phase(
       'inspect',
@@ -408,10 +508,15 @@ export async function applyPlanWithRuntime(
           reason: 'CLEANUP_INCOMPLETE',
         })),
         phases,
-        recoveryAfterCleanup(lock, false, journal),
+        withManagerRecovery(recoveryAfterCleanup(lock, false, journal), managerPhaseExecution),
       )
     }
-    return createResult(plan, outcomes, phases, { status: 'completed' })
+    return createResult(
+      plan,
+      outcomes,
+      phases,
+      withManagerRecovery({ status: 'completed' }, managerPhaseExecution),
+    )
   }
 
   if (recovery === 'completed') {
@@ -423,10 +528,69 @@ export async function applyPlanWithRuntime(
     persistJournal(journal)
   } catch {}
   phases.push(phase('cleanup', 'unknown', 'RECOVERY_EVIDENCE_RETAINED'))
-  return createResult(plan, outcomes, phases, {
-    status: recovery,
-    journalId: lock.owner.runId,
-  })
+  return createResult(
+    plan,
+    outcomes,
+    phases,
+    withManagerRecovery(
+      {
+        status: recovery,
+        journalId: lock.owner.runId,
+      },
+      managerPhaseExecution,
+    ),
+  )
+}
+
+function validateExecutionAuthority(plan: PlanResult, authority: InvocationAuthority): void {
+  const phaseRequired =
+    plan.operations.length > 0 &&
+    plan.execution.status === 'ready' &&
+    plan.execution.mode !== 'file-only'
+  const installRequired = phaseRequired && plan.execution.mode === 'install'
+  const verifyRequired = phaseRequired && plan.execution.verification !== undefined
+  const grants: Array<[boolean, boolean, string]> = [
+    [phaseRequired, authority.processExecute, 'process-execute'],
+    [phaseRequired, authority.lockfileWrite, 'lockfile-write'],
+    [installRequired, authority.install, 'install'],
+    [verifyRequired, authority.verifyCommand, 'verify-command'],
+  ]
+  for (const [required, granted, capability] of grants) {
+    if (required && !granted) {
+      throw new ConfigError(`Applying this plan requires explicit ${capability} authority.`, {
+        reason: 'AUTHORITY_REQUIRED',
+      })
+    }
+    if (!required && granted) {
+      throw new ConfigError(`${capability} authority does not match this plan.`, {
+        reason: 'AUTHORITY_MISMATCH',
+      })
+    }
+  }
+}
+
+function withManagerRecovery(
+  recovery: ApplyResult['recovery'],
+  execution: ManagerPhaseExecution | undefined,
+): ApplyResult['recovery'] {
+  if (!execution || execution.success) return recovery
+  const status =
+    recovery.status === 'completed' && execution.unknown
+      ? 'unknown'
+      : recovery.status === 'completed' && execution.unrecoveredPaths.length > 0
+        ? 'partial'
+        : recovery.status
+  return {
+    ...recovery,
+    status,
+    ...(execution.restoredPaths.length === 0 ? {} : { restoredPaths: execution.restoredPaths }),
+    ...(execution.unrecoveredPaths.length === 0
+      ? {}
+      : { unrecoveredPaths: execution.unrecoveredPaths }),
+    ...(execution.externalEffects.length === 0
+      ? {}
+      : { externalEffects: execution.externalEffects }),
+  }
 }
 
 function validateInputs(plan: unknown, options: ApplyOptions): void {
@@ -1036,6 +1200,19 @@ function blockedResult(
   unknown: boolean,
 ): ApplyResult {
   phases.push(phase('preflight', unknown ? 'unknown' : 'failed', reason))
+  if (
+    plan.operations.length > 0 &&
+    plan.execution.status === 'ready' &&
+    plan.execution.mode !== 'file-only'
+  ) {
+    const managerPhaseName = plan.execution.mode === 'install' ? 'install' : 'sync-lockfile'
+    if (!phases.some((entry) => entry.name === managerPhaseName)) {
+      phases.push(phase(managerPhaseName, 'skipped', 'PRECONDITION_FAILED'))
+    }
+    if (plan.execution.verification && !phases.some((entry) => entry.name === 'verify')) {
+      phases.push(phase('verify', 'skipped', 'PRECONDITION_FAILED'))
+    }
+  }
   return createResult(
     plan,
     plan.operations.map((operation) =>
@@ -1075,6 +1252,33 @@ function createResult(
   phases: ApplyPhase[],
   recovery: ApplyResult['recovery'],
 ): ApplyResult {
+  const completePhases = [...phases]
+  if (
+    plan.operations.length > 0 &&
+    plan.execution.status === 'ready' &&
+    plan.execution.mode !== 'file-only'
+  ) {
+    const managerPhaseName = plan.execution.mode === 'install' ? 'install' : 'sync-lockfile'
+    const missing: ApplyPhase[] = []
+    if (!completePhases.some((entry) => entry.name === managerPhaseName)) {
+      missing.push(phase(managerPhaseName, 'skipped', 'PHASE_NOT_EXECUTED'))
+    }
+    if (plan.execution.verification && !completePhases.some((entry) => entry.name === 'verify')) {
+      missing.push(phase('verify', 'skipped', 'PHASE_NOT_EXECUTED'))
+    }
+    const laterPhase = completePhases.findIndex((entry) =>
+      ['recovery', 'inspect', 'cleanup'].includes(entry.name),
+    )
+    completePhases.splice(laterPhase < 0 ? completePhases.length : laterPhase, 0, ...missing)
+  }
+  const recoveryPhase = completePhases.findIndex((entry) => entry.name === 'recovery')
+  if (recoveryPhase >= 0 && recovery.status !== 'completed' && recovery.status !== 'not-needed') {
+    completePhases[recoveryPhase] = phase(
+      'recovery',
+      recovery.status === 'unknown' ? 'unknown' : 'failed',
+      'RECOVERY_INCOMPLETE',
+    )
+  }
   const summary = summarizeWriteOutcomes(
     operations.map((operation) => ({
       name: operation.name,
@@ -1087,7 +1291,7 @@ function createResult(
     })),
   )
   const status =
-    operations.length === 0 && recovery.status === 'unknown'
+    recovery.status === 'unknown'
       ? 'unknown'
       : summary.unknown > 0
         ? 'unknown'
@@ -1108,13 +1312,28 @@ function createResult(
     repositoryIdentity: plan.repository.identity,
     status,
     operations,
-    phases,
+    phases: completePhases,
     summary,
     recovery,
-    requiredCapabilities: ['filesystem-read', 'file-write'],
+    requiredCapabilities: applyCapabilities(plan),
   }
   assertApplyResult(result)
   return result
+}
+
+function applyCapabilities(plan: PlanResult): ApplyResult['requiredCapabilities'] {
+  const capabilities: ApplyResult['requiredCapabilities'] = ['filesystem-read', 'file-write']
+  if (
+    plan.operations.length === 0 ||
+    plan.execution.mode === 'file-only' ||
+    plan.execution.status !== 'ready'
+  ) {
+    return capabilities
+  }
+  capabilities.push('process-execute', 'lockfile-write')
+  if (plan.execution.mode === 'install') capabilities.push('install')
+  if (plan.execution.verification) capabilities.push('verify-command')
+  return capabilities
 }
 
 function phase(name: ApplyPhase['name'], status: ApplyPhase['status'], reason: string): ApplyPhase {

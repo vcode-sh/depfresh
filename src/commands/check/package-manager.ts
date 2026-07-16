@@ -1,7 +1,7 @@
-import { execSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { findUpSync } from 'find-up-simple'
+import { ConfigError } from '../../errors'
 import { resolveContainedPath } from '../../io/packages/containment'
 import { parsePackageManagerField } from '../../io/packages/package-manager-field'
 import type { PackageManagerName, PackageMeta } from '../../types'
@@ -46,15 +46,10 @@ export async function runInstall(
   packages: PackageMeta[],
   logger: Logger,
 ): Promise<boolean> {
-  const pm = detectPackageManager(cwd, packages, cwd)
-  try {
-    logger.info(`Running ${pm} install...`)
-    execSync(`${pm} install`, { cwd, stdio: 'inherit' })
-    return true
-  } catch {
-    logger.error(`${pm} install failed`)
-    return false
-  }
+  void cwd
+  void packages
+  void logger
+  throw retiredManagerPhaseError('--install')
 }
 
 export async function runUpdate(
@@ -62,15 +57,16 @@ export async function runUpdate(
   packages: PackageMeta[],
   logger: Logger,
 ): Promise<boolean> {
-  const pm = detectPackageManager(cwd, packages, cwd)
-  try {
-    logger.info(`Running ${pm} update...`)
-    execSync(`${pm} update`, { cwd, stdio: 'inherit' })
-    return true
-  } catch {
-    logger.error(`${pm} update failed`)
-    return false
-  }
+  void cwd
+  void packages
+  void logger
+  throw retiredManagerPhaseError('--update')
+}
+
+function retiredManagerPhaseError(flag: string): ConfigError {
+  return new ConfigError(`${flag} requires the explicit plan/apply phase workflow.`, {
+    reason: 'UNSUPPORTED_COMBINATION',
+  })
 }
 
 interface SearchBoundary {

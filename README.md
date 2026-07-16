@@ -88,15 +88,18 @@ depfresh --fail-on-outdated
   target Git state, and explicit write authority before same-filesystem staging. Every target is
   reparsed and rechecked before atomic per-file replacement; byte-exact backups and a durable
   journal support observed recovery without claiming a repository-wide transaction.
+- **Explicit lockfile phases** -- a plan may fingerprint each affected boundary's supported
+  manager/version, selected lockfile hash, fixed lifecycle-disabled argv, allowed paths, and optional exact verification
+  argv. Apply runs those phases only with separate sync/install/verify grants and reports every
+  observed mutation and non-transactional effect.
 - **7 range modes** -- `default`, `major`, `minor`, `patch`, `latest`, `newest`, `next`
 - **Interactive cherry-picking** -- grouped multiselect with colour-coded severity
 - **Occurrence policy** -- validated ordered rules select by dependency, workspace, catalog,
   field, role, manager, protocol, and current specifier context, with independent action and mode
   winners and complete decision traces.
 - **Write safely** -- exact manifest/catalog occurrences are preconditioned and re-read after writes.
-  Legacy `--write` file changes delegate to the same stale-safe file engine; process verification
-  remains a separate post-write compatibility flow.
-- **Post-write hooks** -- `--execute`, `--install`, `--update`. Chain commands after writing.
+  Legacy `--write` file changes delegate to the same stale-safe file engine. Legacy shell-string
+  post-write flags are rejected; manager and verification work uses the reviewed plan/apply flow.
 - **Global packages** -- `--global` for one manager, `--global-all` scans npm + pnpm + bun (deduped)
 - **Private registries** -- full `.npmrc` support. Scoped registries, auth tokens, env vars.
 - **GitHub dependencies** -- `github:owner/repo#tag` with protocol-preserving writes
@@ -155,11 +158,23 @@ actionable or incomplete findings and `1` for a valid finding-bearing document. 
 `applied` or `noop` and `1` for a valid `conflicted`, `reverted`, `failed`, or `unknown` result. Exit
 `2` is a fatal machine-command error. Non-TTY environments suppress spinners and interactive prompts.
 
+To synchronize a supported lockfile and run an exact verification command, plan the phase first,
+review the JSON, then repeat only the matching grants at apply time:
+
+```bash
+depfresh plan --json --sync-lockfile --verify-argv '["pnpm","test"]' > depfresh-plan.json
+depfresh apply --json --write --sync-lockfile --verify --plan-file depfresh-plan.json
+```
+
+Manager execution currently supports Linux and macOS. It fails closed on Windows until equivalent
+inherited-descendant process observation is available. Final lockfile proof includes both the
+requested manifest specifier and the exact resolved target version.
+
 Details: **[docs/agents/README.md](docs/agents/README.md)**
 
 ## Coming from taze?
 
-depfresh is a spiritual successor to [taze](https://github.com/antfu/taze) by Anthony Fu -- a tool that did the job well until maintenance slowed and issues piled up. depfresh rewrites everything from scratch, fixes long-standing bugs (private registries, bun catalogs, packageMode precedence), and adds structured JSON output, verify-and-rollback, SQLite caching, and proper AI agent support.
+depfresh is a spiritual successor to [taze](https://github.com/antfu/taze) by Anthony Fu -- a tool that did the job well until maintenance slowed and issues piled up. depfresh rewrites everything from scratch, fixes long-standing bugs (private registries, bun catalogs, packageMode precedence), and adds structured JSON output, reviewed aggregate verification with recovery, SQLite caching, and proper AI agent support.
 
 Migration guide: **[docs/compare/from-taze.md](docs/compare/from-taze.md)** | Full comparison: **[docs/compare/](docs/compare/)**
 

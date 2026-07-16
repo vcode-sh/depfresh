@@ -136,10 +136,14 @@
           "name": {
             "enum": [
               "preflight",
+              "manager-preflight",
               "lock",
               "stage",
               "precommit",
               "commit",
+              "sync-lockfile",
+              "install",
+              "verify",
               "recovery",
               "inspect",
               "cleanup"
@@ -156,6 +160,140 @@
           "reason": {
             "type": "string",
             "minLength": 1
+          },
+          "commands": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "cwd",
+                "executable",
+                "args",
+                "termination",
+                "terminationConfirmed",
+                "changedPaths",
+                "unexpectedPaths",
+                "externalEffects"
+              ],
+              "properties": {
+                "boundaryId": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "manager": {
+                  "enum": [
+                    "npm",
+                    "pnpm",
+                    "bun"
+                  ]
+                },
+                "managerVersion": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "lifecycle": {
+                  "enum": [
+                    "disabled-by-flag",
+                    "disabled-by-flag-and-pnpmfile-bypass"
+                  ]
+                },
+                "cwd": {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "^(?!/)(?![A-Za-z]:/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*\\\\).+$"
+                },
+                "executable": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "args": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "termination": {
+                  "enum": [
+                    "exit",
+                    "signal",
+                    "timeout",
+                    "unavailable",
+                    "unknown"
+                  ]
+                },
+                "terminationConfirmed": {
+                  "type": "boolean"
+                },
+                "exitCode": {
+                  "type": "integer"
+                },
+                "signal": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "changedPaths": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "^(?!/)(?![A-Za-z]:/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*\\\\).+$"
+                  }
+                },
+                "unexpectedPaths": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "^(?!/)(?![A-Za-z]:/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*\\\\).+$"
+                  }
+                },
+                "lockfile": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "path",
+                    "parseState",
+                    "occurrences"
+                  ],
+                  "properties": {
+                    "path": {
+                      "type": "string",
+                      "minLength": 1,
+                      "pattern": "^(?!/)(?![A-Za-z]:/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*\\\\).+$"
+                    },
+                    "byteHash": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "parseState": {
+                      "enum": [
+                        "parsed",
+                        "error",
+                        "unsupported",
+                        "unavailable"
+                      ]
+                    },
+                    "occurrences": {
+                      "enum": [
+                        "matched",
+                        "mismatched",
+                        "not-checked"
+                      ]
+                    }
+                  }
+                },
+                "externalEffects": {
+                  "type": "array",
+                  "items": {
+                    "enum": [
+                      "package-manager-cache",
+                      "dependency-install-state"
+                    ]
+                  }
+                }
+              }
+            }
           }
         }
       }
@@ -221,6 +359,31 @@
         "journalId": {
           "type": "string",
           "minLength": 1
+        },
+        "restoredPaths": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^(?!/)(?![A-Za-z]:/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*\\\\).+$"
+          }
+        },
+        "unrecoveredPaths": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^(?!/)(?![A-Za-z]:/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*\\\\).+$"
+          }
+        },
+        "externalEffects": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "package-manager-cache",
+              "dependency-install-state"
+            ]
+          }
         }
       }
     },
@@ -229,7 +392,11 @@
       "items": {
         "enum": [
           "filesystem-read",
-          "file-write"
+          "file-write",
+          "process-execute",
+          "lockfile-write",
+          "install",
+          "verify-command"
         ]
       }
     }

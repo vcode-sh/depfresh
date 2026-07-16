@@ -22,8 +22,9 @@ depfresh apply --json --write --plan-file depfresh-plan.json
 # Safe write (minor + patch)
 depfresh --write --mode minor
 
-# Verify each dependency update, revert failures
-depfresh --write --verify-command "pnpm test"
+# Plan and grant exact lockfile synchronization plus verification
+depfresh plan --json --sync-lockfile --verify-argv '["pnpm","test"]' > depfresh-plan.json
+depfresh apply --json --write --sync-lockfile --verify --plan-file depfresh-plan.json
 
 # CI gate mode (exit 1 when outdated deps exist)
 depfresh --fail-on-outdated --output json
@@ -74,12 +75,13 @@ Check outdated dependencies with depfresh JSON output, group by diff severity, a
 ```
 
 ```bash
-depfresh --write --mode minor --verify-command "pnpm test"
+depfresh plan --json --mode minor --sync-lockfile --verify-argv '["pnpm","test"]' > depfresh-plan.json
+depfresh apply --json --write --sync-lockfile --verify --plan-file depfresh-plan.json
 ```
 
-This compatibility workflow delegates normal local file mutation to the stale-safe apply engine.
-Per-dependency `--verify-command`, manager commands, and global updates remain separate workflows
-with their own authority and recovery boundaries.
+The plan fingerprints exact file operations, manager/version/lockfile evidence, fixed no-shell argv,
+and verification intent. Apply cannot add or weaken a phase. Legacy shell-string post-write flags
+are rejected; global updates remain a separate workflow and authority boundary.
 
 **CI enforcement:**
 

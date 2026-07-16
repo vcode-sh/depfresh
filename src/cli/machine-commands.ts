@@ -11,7 +11,6 @@ export type MachineCommand = 'inspect' | 'plan' | 'apply'
 const forbiddenOptions = [
   ['write', '--write'],
   ['interactive', '--interactive'],
-  ['install', '--install'],
   ['update', '--update'],
   ['execute', '--execute'],
   ['verify-command', '--verify-command'],
@@ -41,8 +40,21 @@ const planOptions = new Set([
   'concurrency',
   'cooldown',
   'as-of',
+  'sync-lockfile',
+  'install',
+  'verify-argv',
+  'phase-timeout',
 ])
-const applyOptions = new Set(['cwd', 'json', 'output', 'write', 'plan-file'])
+const applyOptions = new Set([
+  'cwd',
+  'json',
+  'output',
+  'write',
+  'plan-file',
+  'sync-lockfile',
+  'install',
+  'verify',
+])
 const aliasNames = new Map<string, { name: string; type: string }>()
 for (const [name, definition] of Object.entries(argsSchema)) {
   const rawDefinition = definition as {
@@ -150,6 +162,7 @@ export function normalizePlanCommandArgs(args: Record<string, unknown>): PlanOpt
     depFields.peerDependencies = false
     depFields.optionalDependencies = false
   }
+  const verifyArgv = parseVerifyArgv(args['verify-argv'])
   return {
     cwd: typeof args.cwd === 'string' ? args.cwd : process.cwd(),
     recursive: args.recursive as boolean,
@@ -165,5 +178,33 @@ export function normalizePlanCommandArgs(args: Record<string, unknown>): PlanOpt
     ignorePaths: parseCommaSeparatedArg(args['ignore-paths']),
     ignoreOtherWorkspaces: args['ignore-other-workspaces'] as boolean,
     ...(typeof args['as-of'] === 'string' ? { asOf: args['as-of'] } : {}),
+    syncLockfile: args['sync-lockfile'] === true,
+    install: args.install === true,
+    ...(verifyArgv ? { verifyArgv } : {}),
+    phaseTimeout: parseIntegerOption(args['phase-timeout'], '--phase-timeout', 1),
+  }
+}
+
+function parseVerifyArgv(value: unknown): string[] | undefined {
+  if (value === undefined) return undefined
+  if (typeof value !== 'string') {
+    throw new ConfigError('--verify-argv must be a JSON string array.', {
+      reason: 'INVALID_OPTION_VALUE',
+    })
+  }
+  try {
+    const parsed: unknown = JSON.parse(value)
+    if (
+      !Array.isArray(parsed) ||
+      parsed.length === 0 ||
+      parsed.some((entry) => typeof entry !== 'string')
+    ) {
+      throw new TypeError('invalid argv')
+    }
+    return parsed
+  } catch {
+    throw new ConfigError('--verify-argv must be a non-empty JSON string array.', {
+      reason: 'INVALID_OPTION_VALUE',
+    })
   }
 }

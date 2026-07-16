@@ -22,10 +22,28 @@ describe('createInvocationAuthority', () => {
       install: true,
       update: false,
       execute: true,
+      processExecute: true,
+      lockfileWrite: true,
       verifyCommand: false,
       globalWrite: true,
     })
     expect(() => Object.assign(authority, { write: false })).toThrow(TypeError)
+  })
+
+  it('keeps manager execution, lockfile mutation, install, and verification as separate grants', () => {
+    expect(
+      createInvocationAuthority({
+        write: true,
+        syncLockfile: true,
+        verify: true,
+      }),
+    ).toMatchObject({
+      write: true,
+      processExecute: true,
+      lockfileWrite: true,
+      install: false,
+      verifyCommand: true,
+    })
   })
 
   it('does not grant global write without explicit write authority', () => {

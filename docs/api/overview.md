@@ -24,6 +24,25 @@ const applied = await apply(
 console.log(applied.status, applied.summary)
 ```
 
+Manager phases are planned and granted separately:
+
+```ts
+const dependencyPlan = await plan({
+  cwd: process.cwd(),
+  mode: 'minor',
+  syncLockfile: true,
+  verifyArgv: ['pnpm', 'test'],
+})
+const applied = await apply(
+  dependencyPlan,
+  { cwd: process.cwd() },
+  createInvocationAuthority({ write: true, syncLockfile: true, verify: true }),
+)
+```
+
+The plan fixes the manager/version, parsed lockfile hash, no-shell argv, timeout, allowed paths, and
+verification argv. Configuration cannot supply those grants.
+
 These functions return data and never exit the process. `inspect()` and `plan()` are non-mutating;
 `apply()` requires a separate explicit authority snapshot and exact file preconditions. Fatal
 input/configuration/runtime failures throw structured errors for the caller to handle.
@@ -90,9 +109,9 @@ import { DEFAULT_OPTIONS } from 'depfresh'
   failOnOutdated: false,
   failOnResolutionErrors: false,
   failOnNoPackages: false,
-  install: false,
+  install: false,          // invocation-only manager phase
   update: false,
-  strictPostWrite: false,
+  strictPostWrite: false,  // legacy option; explicit use is rejected
 }
 ```
 
@@ -109,7 +128,6 @@ async function safeUpdate() {
   const options = await resolveConfig({
     mode: 'minor',
     write: true,
-    install: true,
     exclude: ['typescript', '@types/*'],
     beforePackageWrite(pkg) {
       const majors = pkg.resolved.filter(d => d.diff === 'major')

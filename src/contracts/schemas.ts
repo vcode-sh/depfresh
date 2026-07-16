@@ -458,6 +458,78 @@ const policyDecisionSchema = {
   },
 } as const
 
+const planExecutionSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['mode', 'status', 'timeoutMs', 'targets'],
+  properties: {
+    mode: { enum: ['file-only', 'sync-lockfile', 'install'] },
+    status: { enum: ['ready', 'blocked', 'not-needed'] },
+    timeoutMs: { type: 'integer', minimum: 1, maximum: 600000 },
+    reason: { type: 'string', minLength: 1 },
+    targets: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['boundaryId', 'boundaryPath', 'manager', 'lockfile', 'adapter'],
+        properties: {
+          boundaryId: { type: 'string', minLength: 1 },
+          boundaryPath: relativePathSchema,
+          manager: {
+            type: 'object',
+            additionalProperties: false,
+            required: ['name', 'version'],
+            properties: {
+              name: { enum: ['npm', 'pnpm', 'bun'] },
+              version: { type: 'string', minLength: 1 },
+            },
+          },
+          lockfile: {
+            type: 'object',
+            additionalProperties: false,
+            required: ['id', 'path', 'byteHash'],
+            properties: {
+              id: { type: 'string', minLength: 1 },
+              path: relativePathSchema,
+              byteHash: hashSchema,
+            },
+          },
+          adapter: {
+            type: 'object',
+            additionalProperties: false,
+            required: ['executable', 'args', 'lifecycle', 'permittedPaths', 'externalEffects'],
+            properties: {
+              executable: { enum: ['npm', 'pnpm', 'bun'] },
+              args: { type: 'array', minItems: 1, items: { type: 'string' } },
+              lifecycle: {
+                enum: ['disabled-by-flag', 'disabled-by-flag-and-pnpmfile-bypass'],
+              },
+              permittedPaths: { type: 'array', minItems: 1, items: relativePathSchema },
+              externalEffects: {
+                type: 'array',
+                items: { enum: ['package-manager-cache', 'dependency-install-state'] },
+              },
+            },
+          },
+        },
+      },
+    },
+    verification: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['executable', 'args', 'cwd', 'timeoutMs', 'permittedPaths'],
+      properties: {
+        executable: { type: 'string', minLength: 1 },
+        args: { type: 'array', items: { type: 'string' } },
+        cwd: relativePathSchema,
+        timeoutMs: { type: 'integer', minimum: 1, maximum: 600000 },
+        permittedPaths: { type: 'array', maxItems: 0, items: relativePathSchema },
+      },
+    },
+  },
+} as const
+
 export const planResultSchema = {
   $schema: 'http://json-schema.org/draft-07/schema#',
   $id: PLAN_SCHEMA_ID,
@@ -473,6 +545,7 @@ export const planResultSchema = {
     'occurrences',
     'decisions',
     'operations',
+    'execution',
     'evidence',
     'lockfiles',
     'vcs',
@@ -547,6 +620,7 @@ export const planResultSchema = {
         },
       },
     },
+    execution: planExecutionSchema,
     evidence: { type: 'array', items: { $ref: '#/definitions/evidence' } },
     lockfiles: { type: 'array', items: { $ref: '#/definitions/lockfile' } },
     vcs: { $ref: '#/definitions/vcs' },
@@ -555,7 +629,17 @@ export const planResultSchema = {
     errors: { type: 'array', items: { $ref: '#/definitions/error' } },
     requiredCapabilities: {
       type: 'array',
-      items: { enum: ['filesystem-read', 'registry-read', 'file-write'] },
+      items: {
+        enum: [
+          'filesystem-read',
+          'registry-read',
+          'file-write',
+          'process-execute',
+          'lockfile-write',
+          'install',
+          'verify-command',
+        ],
+      },
     },
     summary: {
       type: 'object',
@@ -662,10 +746,14 @@ export const applyResultSchema = {
           name: {
             enum: [
               'preflight',
+              'manager-preflight',
               'lock',
               'stage',
               'precommit',
               'commit',
+              'sync-lockfile',
+              'install',
+              'verify',
               'recovery',
               'inspect',
               'cleanup',
@@ -673,6 +761,57 @@ export const applyResultSchema = {
           },
           status: { enum: ['passed', 'skipped', 'failed', 'unknown'] },
           reason: { type: 'string', minLength: 1 },
+          commands: {
+            type: 'array',
+            items: {
+              type: 'object',
+              additionalProperties: false,
+              required: [
+                'cwd',
+                'executable',
+                'args',
+                'termination',
+                'terminationConfirmed',
+                'changedPaths',
+                'unexpectedPaths',
+                'externalEffects',
+              ],
+              properties: {
+                boundaryId: { type: 'string', minLength: 1 },
+                manager: { enum: ['npm', 'pnpm', 'bun'] },
+                managerVersion: { type: 'string', minLength: 1 },
+                lifecycle: {
+                  enum: ['disabled-by-flag', 'disabled-by-flag-and-pnpmfile-bypass'],
+                },
+                cwd: relativePathSchema,
+                executable: { type: 'string', minLength: 1 },
+                args: { type: 'array', items: { type: 'string' } },
+                termination: {
+                  enum: ['exit', 'signal', 'timeout', 'unavailable', 'unknown'],
+                },
+                terminationConfirmed: { type: 'boolean' },
+                exitCode: { type: 'integer' },
+                signal: { type: 'string', minLength: 1 },
+                changedPaths: { type: 'array', items: relativePathSchema },
+                unexpectedPaths: { type: 'array', items: relativePathSchema },
+                lockfile: {
+                  type: 'object',
+                  additionalProperties: false,
+                  required: ['path', 'parseState', 'occurrences'],
+                  properties: {
+                    path: relativePathSchema,
+                    byteHash: hashSchema,
+                    parseState: { enum: ['parsed', 'error', 'unsupported', 'unavailable'] },
+                    occurrences: { enum: ['matched', 'mismatched', 'not-checked'] },
+                  },
+                },
+                externalEffects: {
+                  type: 'array',
+                  items: { enum: ['package-manager-cache', 'dependency-install-state'] },
+                },
+              },
+            },
+          },
         },
       },
     },
@@ -684,11 +823,26 @@ export const applyResultSchema = {
       properties: {
         status: { enum: ['not-needed', 'completed', 'partial', 'unknown'] },
         journalId: { type: 'string', minLength: 1 },
+        restoredPaths: { type: 'array', items: relativePathSchema },
+        unrecoveredPaths: { type: 'array', items: relativePathSchema },
+        externalEffects: {
+          type: 'array',
+          items: { enum: ['package-manager-cache', 'dependency-install-state'] },
+        },
       },
     },
     requiredCapabilities: {
       type: 'array',
-      items: { enum: ['filesystem-read', 'file-write'] },
+      items: {
+        enum: [
+          'filesystem-read',
+          'file-write',
+          'process-execute',
+          'lockfile-write',
+          'install',
+          'verify-command',
+        ],
+      },
     },
   },
   definitions: commonDefinitions,

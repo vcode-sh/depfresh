@@ -111,7 +111,7 @@ describe('CLI interactive mode validation', () => {
 
     expect(output.error.code).toBe('ERR_CONFIG')
     expect(output.error.message).toBe(
-      'JSON output cannot be used with --execute, --install, or --update. Pass `--output table` or disable post-write commands.',
+      '--execute is only supported by the explicit plan/apply phase workflow.',
     )
     expect(output.error.retryable).toBe(false)
     expect(output.meta.schemaVersion).toBe(1)
@@ -193,11 +193,11 @@ describe('CLI raw argument validation', () => {
 
 describe('CLI unsupported combinations', () => {
   it.each([
-    [['--install'], '--install requires --write'],
-    [['--update'], '--update requires --write'],
-    [['--execute', 'echo done'], '--execute requires --write'],
-    [['--verify-command', 'pnpm test'], '--verify-command requires --write'],
-    [['--write', '--install', '--update'], '--install cannot be combined with --update'],
+    [['--install'], '--install is only supported'],
+    [['--update'], '--update is only supported'],
+    [['--execute', 'echo done'], '--execute is only supported'],
+    [['--verify-command', 'pnpm test'], '--verify-command is only supported'],
+    [['--write', '--install', '--update'], '--install is only supported'],
     [['--deps-only', '--dev-only'], '--deps-only cannot be combined with --dev-only'],
     [['--plan-file', 'plan.json'], '--plan-file is only valid with the apply command'],
     [['--json'], '--json is only valid with the capabilities command'],

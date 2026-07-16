@@ -16,9 +16,14 @@ const JS_RE = /\.[mc]?js$/
 export const INVOCATION_ONLY_OPTIONS = [
   'write',
   'install',
+  'syncLockfile',
   'update',
   'execute',
+  'verify',
+  'verifyArgv',
+  'phaseTimeout',
   'verifyCommand',
+  'strictPostWrite',
   'global',
   'globalAll',
 ] as const

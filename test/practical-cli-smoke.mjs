@@ -56,6 +56,10 @@ const registryData = {
     versions: ['10.33.0', '10.34.0'],
     latest: '10.34.0',
   },
+  npm: {
+    versions: ['10.9.0'],
+    latest: '10.9.0',
+  },
   'glob-a': {
     versions: ['1.2.0', '2.0.0'],
     latest: '2.0.0',
@@ -143,8 +147,9 @@ function createPmScript(name) {
   return `#!/usr/bin/env node
 const { appendFileSync, existsSync, readFileSync, writeFileSync } = require('node:fs')
 const args = process.argv.slice(2)
-appendFileSync(process.env.DEPFRESH_PM_LOG, JSON.stringify({ pm: '${name}', args }) + '\\n')
-const stateFile = process.env.DEPFRESH_PM_LOG + '.${name}.json'
+const logFile = ${JSON.stringify(logFile)}
+appendFileSync(logFile, JSON.stringify({ pm: '${name}', args }) + '\\n')
+const stateFile = logFile + '.${name}.json'
 const initialDependencies = ${JSON.stringify(initialDependencies)}
 const dependencies = existsSync(stateFile)
   ? JSON.parse(readFileSync(stateFile, 'utf8'))
@@ -152,6 +157,28 @@ const dependencies = existsSync(stateFile)
 
 if (args[0] === '--version') {
   process.stdout.write('${version}\\n')
+  process.exit(0)
+}
+
+if ('${name}' === 'npm' && args[0] === 'install' && !args.includes('-g')) {
+  const manifest = JSON.parse(readFileSync('package.json', 'utf8'))
+  const fields = ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies']
+  const root = {}
+  const packages = { '': root }
+  for (const field of fields) {
+    if (!manifest[field]) continue
+    root[field] = manifest[field]
+    for (const [packageName, specifier] of Object.entries(manifest[field])) {
+      packages['node_modules/' + packageName] = {
+        version: String(specifier).replace(/^[~^=]/, ''),
+      }
+    }
+  }
+  writeFileSync('package-lock.json', JSON.stringify({
+    name: manifest.name,
+    lockfileVersion: 3,
+    packages,
+  }, null, 2) + '\\n')
   process.exit(0)
 }
 
@@ -428,108 +455,125 @@ await record('write updates manifest', async () => {
   assert.equal(manifest.dependencies.alpha, '^1.1.0')
 })
 
-await record('verify-command success', async () => {
-  const repo = join(tmpRoot, 'verify-ok-repo')
+await record('plan and file-only apply', async () => {
+  const repo = join(tmpRoot, 'file-apply-repo')
   mkdirSync(repo, { recursive: true })
   writeJson(join(repo, 'package.json'), {
-    name: 'verify-ok-repo',
+    name: 'file-apply-repo',
     private: true,
     dependencies: { gamma: '^1.0.0' },
   })
   writeFileSync(join(repo, '.npmrc'), `registry=${registryUrl}\n`, 'utf8')
-  writeFileSync(join(repo, 'pnpm-lock.yaml'), 'lockfileVersion: 9.0\n', 'utf8')
 
-  const result = await runCli([
+  const planned = await runCli(['plan', '--json', '--cwd', repo, '--mode', 'latest'])
+  assert.equal(planned.status, 1, JSON.stringify(planned, null, 2))
+  const planFile = join(repo, 'plan.json')
+  writeFileSync(planFile, planned.stdout, 'utf8')
+  const applied = await runCli([
+    'apply',
+    '--json',
     '--cwd',
     repo,
     '--write',
-    '--mode',
-    'latest',
-    '--verify-command',
-    'ok-cmd',
-    '--output',
-    'json',
+    '--plan-file',
+    planFile,
   ])
-  assert.equal(result.status, 0, JSON.stringify(result, null, 2))
+  assert.equal(applied.status, 0, JSON.stringify(applied, null, 2))
+  assert.equal(parseJsonStdout(applied).status, 'applied')
 
   const manifest = JSON.parse(readFileSync(join(repo, 'package.json'), 'utf8'))
-  assert.equal(manifest.dependencies.gamma, '^1.0.2', JSON.stringify({ result, manifest }, null, 2))
+  assert.equal(
+    manifest.dependencies.gamma,
+    '^1.0.2',
+    JSON.stringify({ applied, manifest }, null, 2),
+  )
 })
 
-await record('verify-command failure reverts', async () => {
-  const repo = join(tmpRoot, 'verify-fail-repo')
+await record('manager sync and exact verification', async () => {
+  const repo = join(tmpRoot, 'manager-sync-repo')
   mkdirSync(repo, { recursive: true })
   writeJson(join(repo, 'package.json'), {
-    name: 'verify-fail-repo',
+    name: 'manager-sync-repo',
+    private: true,
+    packageManager: 'npm@10.9.0',
+    dependencies: { gamma: '^1.0.0' },
+  })
+  writeFileSync(join(repo, '.npmrc'), `registry=${registryUrl}\n`, 'utf8')
+  writeJson(join(repo, 'package-lock.json'), {
+    name: 'manager-sync-repo',
+    lockfileVersion: 3,
+    packages: {
+      '': { dependencies: { gamma: '^1.0.0' } },
+      'node_modules/gamma': { version: '1.0.0' },
+    },
+  })
+
+  const planned = await runCli([
+    'plan',
+    '--json',
+    '--cwd',
+    repo,
+    '--mode',
+    'latest',
+    '--sync-lockfile',
+    '--verify-argv',
+    '["ok-cmd"]',
+  ])
+  assert.equal(planned.status, 1, JSON.stringify(planned, null, 2))
+  const planFile = join(repo, 'plan.json')
+  writeFileSync(planFile, planned.stdout, 'utf8')
+  const applied = await runCli([
+    'apply',
+    '--json',
+    '--cwd',
+    repo,
+    '--write',
+    '--sync-lockfile',
+    '--verify',
+    '--plan-file',
+    planFile,
+  ])
+  assert.equal(applied.status, 0, JSON.stringify(applied, null, 2))
+  const payload = parseJsonStdout(applied)
+  assert.equal(payload.status, 'applied')
+  assert.ok(
+    payload.phases.some((phase) => phase.name === 'sync-lockfile' && phase.status === 'passed'),
+  )
+  assert.ok(payload.phases.some((phase) => phase.name === 'verify' && phase.status === 'passed'))
+
+  const manifest = JSON.parse(readFileSync(join(repo, 'package.json'), 'utf8'))
+  const lockfile = JSON.parse(readFileSync(join(repo, 'package-lock.json'), 'utf8'))
+  assert.equal(manifest.dependencies.gamma, '^1.0.2')
+  assert.equal(lockfile.packages[''].dependencies.gamma, '^1.0.2')
+  assert.equal(lockfile.packages['node_modules/gamma'].version, '1.0.2')
+})
+
+await record('legacy post-write commands rejected', async () => {
+  const repo = join(tmpRoot, 'legacy-post-write-repo')
+  mkdirSync(repo, { recursive: true })
+  writeJson(join(repo, 'package.json'), {
+    name: 'legacy-post-write-repo',
     private: true,
     dependencies: { gamma: '^1.0.0' },
   })
   writeFileSync(join(repo, '.npmrc'), `registry=${registryUrl}\n`, 'utf8')
   writeFileSync(join(repo, 'pnpm-lock.yaml'), 'lockfileVersion: 9.0\n', 'utf8')
 
-  const result = await runCli([
-    '--cwd',
-    repo,
-    '--write',
-    '--mode',
-    'latest',
-    '--verify-command',
-    'fail-cmd',
-    '--output',
-    'json',
-  ])
-  assert.equal(result.status, 0)
-
+  const beforeCount = readFileSync(logFile, 'utf8').trim().split('\n').filter(Boolean).length
+  for (const args of [
+    ['--verify-command', 'ok-cmd'],
+    ['--execute', 'ok-cmd'],
+    ['--install'],
+    ['--update'],
+  ]) {
+    const result = await runCli(['--cwd', repo, '--write', '--output', 'json', ...args])
+    assert.equal(result.status, 2, JSON.stringify({ args, result }, null, 2))
+    assert.equal(parseJsonStdout(result).error.code, 'ERR_CONFIG')
+  }
+  const afterCount = readFileSync(logFile, 'utf8').trim().split('\n').filter(Boolean).length
+  assert.equal(afterCount, beforeCount)
   const manifest = JSON.parse(readFileSync(join(repo, 'package.json'), 'utf8'))
   assert.equal(manifest.dependencies.gamma, '^1.0.0')
-})
-
-await record('execute and install', async () => {
-  const repo = join(tmpRoot, 'install-repo')
-  mkdirSync(repo, { recursive: true })
-  writeJson(join(repo, 'package.json'), {
-    name: 'install-repo',
-    private: true,
-    dependencies: { gamma: '^1.0.0' },
-  })
-  writeFileSync(join(repo, '.npmrc'), `registry=${registryUrl}\n`, 'utf8')
-  writeFileSync(join(repo, 'pnpm-lock.yaml'), 'lockfileVersion: 9.0\n', 'utf8')
-
-  const beforeCount = readFileSync(logFile, 'utf8').trim().split('\n').filter(Boolean).length
-  const result = await runCli(['--cwd', repo, '--write', '--execute', 'ok-cmd', '--install'])
-  assert.equal(result.status, 0)
-
-  const entries = readFileSync(logFile, 'utf8')
-    .trim()
-    .split('\n')
-    .filter(Boolean)
-    .slice(beforeCount)
-    .map((line) => JSON.parse(line))
-  assert.ok(entries.some((entry) => entry.pm === 'pnpm' && entry.args[0] === 'install'))
-})
-
-await record('update command', async () => {
-  const repo = join(tmpRoot, 'update-repo')
-  mkdirSync(repo, { recursive: true })
-  writeJson(join(repo, 'package.json'), {
-    name: 'update-repo',
-    private: true,
-    dependencies: { gamma: '^1.0.0' },
-  })
-  writeFileSync(join(repo, '.npmrc'), `registry=${registryUrl}\n`, 'utf8')
-  writeFileSync(join(repo, 'pnpm-lock.yaml'), 'lockfileVersion: 9.0\n', 'utf8')
-
-  const beforeCount = readFileSync(logFile, 'utf8').trim().split('\n').filter(Boolean).length
-  const result = await runCli(['--cwd', repo, '--write', '--update'])
-  assert.equal(result.status, 0)
-
-  const entries = readFileSync(logFile, 'utf8')
-    .trim()
-    .split('\n')
-    .filter(Boolean)
-    .slice(beforeCount)
-    .map((line) => JSON.parse(line))
-  assert.ok(entries.some((entry) => entry.pm === 'pnpm' && entry.args[0] === 'update'))
 })
 
 await record('global json', async () => {

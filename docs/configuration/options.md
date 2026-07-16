@@ -74,18 +74,22 @@ Every option from the `depfreshOptions` interface. I documented all of them beca
 | `failOnResolutionErrors` | `boolean` | `false` | Exit with code `2` when any dependency fails to resolve from the registry. |
 | `failOnNoPackages` | `boolean` | `false` | Exit with code `2` when no packages are discovered in the target workspace. |
 
-## Post-Write
+## Invocation-only mutation and phase options
 
-These require explicit write authority from the active CLI or API invocation. Values placed in a
-config file are ignored and cannot authorize writes or commands.
+These values are ignored in configuration files. Machine workflow intent belongs to `plan()` or
+`depfresh plan`; matching authority belongs only to the active `apply()` or `depfresh apply`
+invocation. Configuration never authorizes files, processes, lockfiles, installs, verification, or
+global writes.
 
 | Option | Type | Default | Description |
 |---|---|---|---|
-| `install` | `boolean` | `false` | Run package manager install after writing updates. |
-| `update` | `boolean` | `false` | Run package manager update after writing. Slightly different from install, depending on your package manager's mood. |
-| `strictPostWrite` | `boolean` | `false` | Exit with code `2` when post-write `execute`, `install`, or `update` steps fail. Useful when CI should treat those failures as real failures instead of warnings. |
-| `execute` | `string` | `undefined` | Shell command to run after updates are written. `'npm test'`, `'make coffee'`, whatever you need. |
-| `verifyCommand` | `string` | `undefined` | Command to run after each package update to verify nothing is broken. If it exits non-zero, the update is rolled back. Safety nets are underrated. |
+| `write` | `boolean` | `false` | Grant file mutation for the active invocation. |
+| `syncLockfile` | `boolean` | `false` | On plan, fingerprint supported lockfile-only manager work; on apply, grant its process and lockfile writes. |
+| `install` | `boolean` | `false` | On plan/apply, request or grant the stronger non-transactional install phase. |
+| `verifyArgv` | `string[]` | `undefined` | Plan one exact non-empty verification argv array after manager success. |
+| `verify` | `boolean` | `false` | Grant only the verification argv already fingerprinted in the plan. |
+| `phaseTimeout` | `number` | `120000` | Plan the per-process timeout in milliseconds. |
+| `update`, `execute`, `verifyCommand`, `strictPostWrite` | legacy | -- | Rejected shell-string/post-write compatibility paths; use plan/apply phases. |
 
 ## Addons
 

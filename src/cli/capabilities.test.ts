@@ -73,23 +73,38 @@ describe('getCliCapabilities', () => {
     const capabilities = getCliCapabilities()
 
     expect(capabilities.flagRelationships).toBeDefined()
-    expect(capabilities.flagRelationships.install?.requires).toContain('write')
-    expect(capabilities.flagRelationships.update?.requires).toContain('write')
+    expect(capabilities.flagRelationships.install?.conflicts).toContain('sync-lockfile')
+    expect(capabilities.flagRelationships['sync-lockfile']?.conflicts).toContain('install')
     expect(capabilities.flagRelationships['deps-only']?.conflicts).toContain('dev-only')
     expect(capabilities.flagRelationships['dev-only']?.conflicts).toContain('deps-only')
     expect(capabilities.invocationAuthority.write).toEqual({ grants: ['write'] })
     expect(capabilities.invocationAuthority.install).toEqual({
-      requires: ['write'],
-      grants: ['install'],
+      requires: ['write', 'plan-file'],
+      grants: ['processExecute', 'lockfileWrite', 'install'],
+    })
+    expect(capabilities.invocationAuthority['sync-lockfile']).toEqual({
+      requires: ['write', 'plan-file'],
+      grants: ['processExecute', 'lockfileWrite'],
     })
     expect(capabilities.invocationAuthority.global).toEqual({
       requires: ['write'],
       grants: ['globalWrite'],
     })
     expect(capabilities.configIgnoredOptions).toEqual(
-      expect.arrayContaining(['write', 'install', 'update', 'execute', 'verifyCommand']),
+      expect.arrayContaining([
+        'write',
+        'install',
+        'syncLockfile',
+        'update',
+        'execute',
+        'verify',
+        'verifyArgv',
+        'phaseTimeout',
+        'verifyCommand',
+      ]),
     )
     expect(capabilities.errorReasons).toContain('AUTHORITY_REQUIRED')
+    expect(capabilities.errorReasons).toContain('AUTHORITY_MISMATCH')
     expect(capabilities.errorReasons).toContain('UNKNOWN_OPTION')
   })
 
