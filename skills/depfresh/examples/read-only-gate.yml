@@ -12,7 +12,7 @@ jobs:
     outputs:
       plan-sha256: ${{ steps.digest.outputs.plan-sha256 }}
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009b4744f4bb1efb9dd2dec
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
       - uses: vcode-sh/depfresh@d90574717322ac71dfd615fec81e2b2100a8844b
         id: depfresh
         continue-on-error: true

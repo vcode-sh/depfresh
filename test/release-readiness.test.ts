@@ -37,6 +37,18 @@ const workflowPaths = [
   '.github/workflows/release.yml',
 ] as const
 
+const checkoutV7Commit = '9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0'
+const checkoutConsumerPaths = [
+  '.github/workflows/ci.yml',
+  '.github/workflows/pr-validation.yml',
+  '.github/workflows/dependency-freshness.yml',
+  '.github/workflows/release.yml',
+  'docs/integrations/README.md',
+  'docs/integrations/github-action.md',
+  'skills/depfresh/examples/protected-apply.yml',
+  'skills/depfresh/examples/read-only-gate.yml',
+] as const
+
 function workflow(path: string): Workflow {
   return parse(read(path)) as Workflow
 }
@@ -70,6 +82,17 @@ describe('2.0 release readiness', () => {
         }
         if (step.uses) expect(step.uses, path).toMatch(/@[a-f0-9]{40}(?:\s|$)/u)
       }
+    }
+  })
+
+  it('pins every maintained checkout consumer to the exact checkout v7 commit', () => {
+    for (const path of checkoutConsumerPaths) {
+      const references = [...read(path).matchAll(/actions\/checkout@([^\s]+)/gu)].map(
+        (match) => match[1],
+      )
+
+      expect(references.length, path).toBeGreaterThan(0)
+      expect(new Set(references), path).toEqual(new Set([checkoutV7Commit]))
     }
   })
 

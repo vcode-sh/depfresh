@@ -34,7 +34,7 @@ jobs:
           [[ "$PLAN_RUN_ID" =~ ^[1-9][0-9]*$ ]]
           [[ "$PLAN_SHA256" =~ ^[a-f0-9]{64}$ ]]
           [[ "$REVIEWED_REF" =~ ^[a-f0-9]{40}$ ]]
-      - uses: actions/checkout@de0fac2e4500dabe0009b4744f4bb1efb9dd2dec
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
         with:
           ref: ${{ inputs.reviewed-ref }}
           persist-credentials: false
