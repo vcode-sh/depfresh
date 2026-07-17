@@ -165,3 +165,25 @@ build, the 5-file/98-test release suite, all 139 files and 1,473 tests with 86.9
 89.36% line coverage, the near-timeout fake-manager integration three consecutive times, the exact
 uppercase release smoke three consecutive times, the WUN-shaped demo, and `git diff --check`.
 Exact npm 11.12.0 reproduced the same 53-file, 259,407-byte tarball and SHA-512 integrity.
+
+The second authorized replacement pointed `v2.0.0` to `3a52eb7` after hosted `main` run
+`29558365285` passed all four required checks. Release run `29558561833` passed every source,
+coverage, smoke, demo, dry-run, pack, and exact-package verification gate, then failed while
+installing the verified tarball into the separate packed-demo prefix. npm resolved the relative
+`artifacts/depfresh-2.0.0.tgz` input from that prefix, interpreted it as a GitHub shorthand, and
+attempted an SSH `ls-remote`; publish and hosted-release jobs were skipped. The retained release
+test now requires an absolute `file:$GITHUB_WORKSPACE/artifacts/...` specifier. Plan 027 remains IN
+PROGRESS pending a green replacement commit, hosted workflow, and public npm/GitHub evidence. On
+2026-07-17 the maintainer explicitly reauthorized replacing the failed tag after this correction;
+manual publishing and a movable `v2` tag remain forbidden.
+
+The corrected candidate then passed a disposable-store frozen install under Node 24.15.0 and pnpm
+10.33.0; schemas, typecheck, lint, strict zero-warning Biome, release actionlint, build, three
+consecutive 5-file/98-test release suites, all 139 files and 1,473 tests with 87.03% statement and
+89.40% line coverage, the 26-check/49-request smoke, the WUN-shaped demo, and `git diff --check`.
+Exact npm 11.12.0 reproduced and verified the unchanged 53-file, 259,407-byte tarball, installed it
+through the absolute `file:` specifier into a separate prefix, passed the packed WUN demo, and
+accepted the same absolute form for a lifecycle-disabled public publish dry-run. Independent review
+identified and blocked the equivalent relative publish input before retagging; the retained test
+now requires absolute `file:` inputs for both local artifact consumers and rejects the former bare
+publish call.

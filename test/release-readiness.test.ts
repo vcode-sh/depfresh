@@ -162,12 +162,18 @@ describe('2.0 release readiness', () => {
     }
     expect(release).toContain('npm@11.12.0')
     expect(release).toContain('refs/tags/v$' + '{PACKAGE_VERSION}')
-    expect(release).toContain('npm publish "$PACKAGE_TARBALL" --access public --ignore-scripts')
+    expect(release).toContain(
+      'npm publish "file:$GITHUB_WORKSPACE/$PACKAGE_TARBALL" --access public --ignore-scripts',
+    )
+    expect(release).not.toContain('npm publish "$PACKAGE_TARBALL" --access public --ignore-scripts')
     expect(release).toContain('body_path: docs/releases/v2.0.0.md')
     expect(release).toContain('npm view "depfresh@$' + '{PACKAGE_VERSION}" dist.integrity')
     expect(release).toContain('--install-spec "depfresh@$PACKAGE_VERSION"')
     expect(release).toContain(
       'DEPFRESH_CLI_PATH="$DEMO_INSTALL_ROOT/node_modules/depfresh/dist/cli.mjs"',
+    )
+    expect(release).toContain(
+      '"file:$GITHUB_WORKSPACE/artifacts/$' + '{{ steps.pack.outputs.package-tarball }}"',
     )
     expect(release).toContain('package-integrity: $' + '{{ steps.pack.outputs.package-integrity }}')
     expect(release).toContain(

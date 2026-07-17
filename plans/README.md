@@ -152,6 +152,22 @@ the fake-manager integration three times, the exact uppercase release smoke thre
 and the unchanged exact npm 11.12.0 tarball. The final local coverage observation was 86.96%
 statements and 89.36% lines.
 
+The second authorized replacement targeted `3a52eb7` after hosted `main` run `29558365285` passed.
+Tag run `29558561833` completed all source and exact-artifact gates, then the packed-demo install
+resolved its repository-relative tarball path from a separate temporary prefix and npm interpreted
+it as a GitHub shorthand. Publish and release were skipped. The retained release regression now
+requires an absolute workspace `file:` specifier. The maintainer explicitly reauthorized replacing
+the failed tag after this correction; Plan 027 remains IN PROGRESS until the hosted workflow and
+public artifact evidence pass.
+
+The corrected candidate passed the disposable-store exact-Node frozen install, static gates,
+three release-suite runs, all 139 files and 1,473 tests at 87.03% statement and 89.40% line
+coverage, build, smoke, demo, and exact npm 11.12.0 package verification. Exact npm also installed
+the unchanged tarball through the absolute `file:` specifier into a separate prefix and the packed
+demo passed. Independent review then found the same ambiguous relative form in the later publish
+step before retagging. Both install and publish now require absolute workspace `file:` inputs; an
+exact npm 11.12.0 lifecycle-disabled publish dry-run passed.
+
 ## Split coverage map
 
 No requirement from the prior plans was dropped. This map records its new owner.

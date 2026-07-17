@@ -125,7 +125,7 @@ jobs:
           DEMO_INSTALL_ROOT=$(mktemp -d "$RUNNER_TEMP/depfresh-release-demo.XXXXXX")
           trap 'rm -rf -- "$DEMO_INSTALL_ROOT"' EXIT
           npm install --prefix "$DEMO_INSTALL_ROOT" --ignore-scripts --no-audit --no-fund \
-            "artifacts/${{ steps.pack.outputs.package-tarball }}"
+            "file:$GITHUB_WORKSPACE/artifacts/${{ steps.pack.outputs.package-tarball }}"
           DEPFRESH_CLI_PATH="$DEMO_INSTALL_ROOT/node_modules/depfresh/dist/cli.mjs" pnpm test:demo
 
       - name: Upload verified release evidence
@@ -226,7 +226,7 @@ jobs:
               exit 1
             }
           else
-            npm publish "$PACKAGE_TARBALL" --access public --ignore-scripts
+            npm publish "file:$GITHUB_WORKSPACE/$PACKAGE_TARBALL" --access public --ignore-scripts
           fi
 
       - name: Verify exact public package artifact

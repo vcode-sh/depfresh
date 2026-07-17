@@ -250,6 +250,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Semver
   now remove both lowercase `npm_config_*` and uppercase `NPM_CONFIG_*` variables before loading
   their fixture-local registry. The release workflow's isolated npm configuration can no longer
   redirect deterministic smoke requests to the public registry.
+- **Release tarball consumers are workspace-absolute** -- the release workflow installs and
+  publishes the verified tarball through absolute `file:` specifiers. Neither a separate temporary
+  install prefix nor npm publish can reinterpret the repository-relative artifact path as a GitHub
+  shorthand.
 - **Large machine JSON is fully drained** -- inspect, plan, apply, capabilities, and compatibility
   JSON no longer call immediate normal-path process exits that could truncate piped output at 64
   KiB. A backpressure subprocess regression proves a schema-valid inspect document larger than the
