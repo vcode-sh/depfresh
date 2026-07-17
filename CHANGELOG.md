@@ -246,6 +246,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Semver
   the Node 24.15.0 executable directly instead of requiring the setup-node `npm` symlink to resolve
   beside it. The previous directory-identity guard stopped the first tag workflow before npm
   installation; publish and hosted-release jobs were skipped.
+- **Release smoke fixtures contain parent npm configuration** -- practical CLI smoke subprocesses
+  now remove both lowercase `npm_config_*` and uppercase `NPM_CONFIG_*` variables before loading
+  their fixture-local registry. The release workflow's isolated npm configuration can no longer
+  redirect deterministic smoke requests to the public registry.
 - **Large machine JSON is fully drained** -- inspect, plan, apply, capabilities, and compatibility
   JSON no longer call immediate normal-path process exits that could truncate piped output at 64
   KiB. A backpressure subprocess regression proves a schema-valid inspect document larger than the

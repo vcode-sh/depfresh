@@ -130,15 +130,27 @@ Release-preparation commit `75cacb7` and hosted `main` run `29542182146` passed,
 run `29542342329` stopped before packing or publishing because its npm bootstrap incorrectly
 required the setup-node npm symlink to resolve beside the Node executable. The portable exact-Node
 regression and workflow repair are recorded in Plan 027. npm 2.0.0 and the hosted release remain
-absent, and the plan remains IN PROGRESS. On 2026-07-17 the maintainer explicitly authorized one
-replacement of the failed public `v2.0.0` tag at the newly proven release commit; a movable `v2`
-tag and manual unverified publishing remain forbidden.
+absent, and the plan remains IN PROGRESS. On 2026-07-17 the maintainer explicitly authorized
+replacing the failed public `v2.0.0` tag at newly proven release commits as required to complete the
+automated recovery; a movable `v2` tag and manual unverified publishing remain forbidden.
 
 The authorized replacement candidate then passed the disposable-home frozen install, exact Node
 24.15.0 schemas/type/lint/build gates, three focused 7-file/144-test runs, the 5-file/98-test
 release suite, all 139 files and 1,473 tests with coverage, smoke, built and packed demos, and the
 exact npm 11.12.0 53-file artifact verifier. Plan 027 remains IN PROGRESS until hosted publication
 and public npm/GitHub evidence pass.
+
+The first authorized replacement targeted `9832e0a` after hosted `main` run `29557337581` passed.
+Tag run `29557541254` reached the practical smoke after all prior release gates, then failed because
+uppercase isolated `NPM_CONFIG_*` values overrode the fixture registry; publish and release jobs
+were skipped. An exact-environment RED reproduced `1 !== 3`, and case-insensitive npm-config
+filtering made ordinary and uppercase-isolated 26-check/49-request smoke runs GREEN. The package
+artifact is unchanged; Plan 027 remains IN PROGRESS pending a complete hosted replacement run.
+
+Recovery verification then passed the release suite, all 139 files and 1,473 tests with coverage,
+the fake-manager integration three times, the exact uppercase release smoke three times, the demo,
+and the unchanged exact npm 11.12.0 tarball. The final local coverage observation was 86.96%
+statements and 89.36% lines.
 
 ## Split coverage map
 

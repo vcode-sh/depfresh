@@ -128,8 +128,8 @@ The regression test retains the failing guard as RED evidence and requires both 
 bootstrap blocks to execute the selected Node binary and observe exactly `v24.15.0`. Plan 027 stays
 IN PROGRESS until a provenance-bound immutable release path completes all remaining hosted and
 public-artifact gates. On 2026-07-17 the maintainer explicitly authorized replacing the failed
-public `v2.0.0` tag at the newly proven release commit and continuing the automated release. This
-one authorized replacement does not permit a movable `v2` tag or a manual unverified publish.
+public `v2.0.0` tag at newly proven release commits as required to complete the automated recovery.
+This authorization does not permit a movable `v2` tag or a manual unverified publish.
 
 ## Authorized replacement preflight
 
@@ -142,3 +142,26 @@ npm 11.12.0 reproduced the reviewed 53-file tarball at 259,407 packed and 1,595,
 with SHA-512 integrity
 `sha512-J9w5ccxXKpEmtywVyq8Bz2SyqtpC5QrAEP9rIHFDOwRRboQR+ClRLCTyN4SobQy9PHKtIRlYxV+UZ+3mo7M2Zg==`.
 The changelog now includes the bootstrap repair in 2.0.0 rather than `Unreleased`.
+
+## Hosted replacement attempt
+
+The first authorized replacement pointed `v2.0.0` to `9832e0a` after hosted `main` run
+`29557337581` passed all four required checks. Release run `29557541254` passed bootstrap, install,
+schemas, typecheck, lint, build, release tests, and full coverage, then failed the practical CLI
+smoke before packing. Its isolated uppercase `NPM_CONFIG_REGISTRY`, `NPM_CONFIG_USERCONFIG`, and
+`NPM_CONFIG_GLOBALCONFIG` variables escaped into smoke child processes because the fixture removed
+only lowercase `npm_config_*` names. The child used the public registry, producing one result where
+the deterministic local fixture required three. Publish and hosted-release jobs were skipped, so
+npm 2.0.0 and the GitHub Release remained absent.
+
+The retained regression asserts uppercase removal. Exact release-environment RED reproduced
+`1 !== 3`; case-insensitive filtering then produced GREEN in both ordinary and uppercase-isolated
+runs, each completing all 26 checks with 49 fixed-registry requests. The package tarball remains
+unchanged because the repair is confined to the unpackaged release test harness. Plan 027 remains
+IN PROGRESS pending a newly proven commit, replacement tag, and complete public release evidence.
+
+Recovery verification passed schemas, typecheck, lint, zero-warning Biome, release actionlint,
+build, the 5-file/98-test release suite, all 139 files and 1,473 tests with 86.96% statement and
+89.36% line coverage, the near-timeout fake-manager integration three consecutive times, the exact
+uppercase release smoke three consecutive times, the WUN-shaped demo, and `git diff --check`.
+Exact npm 11.12.0 reproduced the same 53-file, 259,407-byte tarball and SHA-512 integrity.

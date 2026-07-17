@@ -282,10 +282,20 @@ writeJson(join(workspaceRoot, 'packages', 'web', 'package.json'), {
 })
 writeFileSync(join(workspaceRoot, '.npmrc'), `registry=${registryUrl}\n`, 'utf8')
 
-// Strip npm_config_* env vars that pnpm injects — they override .npmrc in fixtures
-const cleanEnv = Object.fromEntries(
-  Object.entries(process.env).filter(([k]) => !k.startsWith('npm_config_')),
+function stripNpmConfigEnvironment(environment) {
+  return Object.fromEntries(
+    Object.entries(environment).filter(([name]) => !name.toLowerCase().startsWith('npm_config_')),
+  )
+}
+
+assert.equal(
+  stripNpmConfigEnvironment({ NPM_CONFIG_REGISTRY: 'https://registry.npmjs.org/' })
+    .NPM_CONFIG_REGISTRY,
+  undefined,
 )
+
+// Package-manager config from the parent would override the fixture-local .npmrc registry.
+const cleanEnv = stripNpmConfigEnvironment(process.env)
 
 async function runCli(args, extra = {}) {
   return await new Promise((resolve, reject) => {
