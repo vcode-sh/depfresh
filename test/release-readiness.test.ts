@@ -59,6 +59,21 @@ function steps(path: string): WorkflowStep[] {
 }
 
 describe('2.0 release readiness', () => {
+  it('keeps every shipped release fix inside the 2.0.0 changelog section', () => {
+    const changelog = read('CHANGELOG.md')
+    const unreleased = changelog.slice(
+      changelog.indexOf('## Unreleased') + '## Unreleased'.length,
+      changelog.indexOf('## [2.0.0]'),
+    )
+    const release = changelog.slice(
+      changelog.indexOf('## [2.0.0]'),
+      changelog.indexOf('## [1.2.0]'),
+    )
+
+    expect(unreleased.trim()).toBe('')
+    expect(release).toContain('Portable isolated npm bootstrap in the release workflow')
+  })
+
   it('couples all current package and runner surfaces to 2.0.0', () => {
     const packageJson = JSON.parse(read('package.json')) as { version: string }
     expect(packageJson.version).toBe('2.0.0')

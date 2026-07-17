@@ -127,4 +127,18 @@ release.
 The regression test retains the failing guard as RED evidence and requires both isolated npm
 bootstrap blocks to execute the selected Node binary and observe exactly `v24.15.0`. Plan 027 stays
 IN PROGRESS until a provenance-bound immutable release path completes all remaining hosted and
-public-artifact gates. The failed tag is not moved, recreated, or bypassed with a manual publish.
+public-artifact gates. On 2026-07-17 the maintainer explicitly authorized replacing the failed
+public `v2.0.0` tag at the newly proven release commit and continuing the automated release. This
+one authorized replacement does not permit a movable `v2` tag or a manual unverified publish.
+
+## Authorized replacement preflight
+
+Before replacing the failed tag, the final candidate passed a disposable-home frozen install with
+Node 24.15.0 and pnpm 10.33.0; schemas, typecheck, lint, zero-warning Biome, release-workflow
+actionlint, workflow YAML, and `git diff --check`; three consecutive focused runs of 7 files and
+144 tests; the 5-file, 98-test release suite; all 139 files and 1,473 tests with 87.02% statement
+and 89.40% line coverage; build; 26-check smoke; and both built and packed WUN-shaped demos. Exact
+npm 11.12.0 reproduced the reviewed 53-file tarball at 259,407 packed and 1,595,185 unpacked bytes,
+with SHA-512 integrity
+`sha512-J9w5ccxXKpEmtywVyq8Bz2SyqtpC5QrAEP9rIHFDOwRRboQR+ClRLCTyN4SobQy9PHKtIRlYxV+UZ+3mo7M2Zg==`.
+The changelog now includes the bootstrap repair in 2.0.0 rather than `Unreleased`.

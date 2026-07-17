@@ -4,13 +4,6 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Semver
 
 ## Unreleased
 
-### Fixed
-
-- **Portable isolated npm bootstrap in the release workflow** -- exact-Node verification now checks
-  the Node 24.15.0 executable directly instead of requiring the setup-node `npm` symlink to resolve
-  beside it. The previous directory-identity guard stopped the immutable 2.0.0 tag workflow before
-  npm installation on GitHub-hosted Ubuntu; no package or hosted release was published.
-
 ## [2.0.0] - 2026-07-17
 
 ### Added
@@ -249,6 +242,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Semver
 
 ### Fixed
 
+- **Portable isolated npm bootstrap in the release workflow** -- exact-Node verification checks
+  the Node 24.15.0 executable directly instead of requiring the setup-node `npm` symlink to resolve
+  beside it. The previous directory-identity guard stopped the first tag workflow before npm
+  installation; publish and hosted-release jobs were skipped.
 - **Large machine JSON is fully drained** -- inspect, plan, apply, capabilities, and compatibility
   JSON no longer call immediate normal-path process exits that could truncate piped output at 64
   KiB. A backpressure subprocess regression proves a schema-valid inspect document larger than the

@@ -130,7 +130,15 @@ Release-preparation commit `75cacb7` and hosted `main` run `29542182146` passed,
 run `29542342329` stopped before packing or publishing because its npm bootstrap incorrectly
 required the setup-node npm symlink to resolve beside the Node executable. The portable exact-Node
 regression and workflow repair are recorded in Plan 027. npm 2.0.0 and the hosted release remain
-absent, and the plan remains IN PROGRESS; the existing immutable tag has not been moved or bypassed.
+absent, and the plan remains IN PROGRESS. On 2026-07-17 the maintainer explicitly authorized one
+replacement of the failed public `v2.0.0` tag at the newly proven release commit; a movable `v2`
+tag and manual unverified publishing remain forbidden.
+
+The authorized replacement candidate then passed the disposable-home frozen install, exact Node
+24.15.0 schemas/type/lint/build gates, three focused 7-file/144-test runs, the 5-file/98-test
+release suite, all 139 files and 1,473 tests with coverage, smoke, built and packed demos, and the
+exact npm 11.12.0 53-file artifact verifier. Plan 027 remains IN PROGRESS until hosted publication
+and public npm/GitHub evidence pass.
 
 ## Split coverage map
 
