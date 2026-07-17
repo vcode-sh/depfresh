@@ -17,6 +17,9 @@ interface CapabilityFlag {
   alias?: string
   default?: unknown
   values?: readonly string[]
+  repeatable?: boolean
+  matching?: 'exact-literal'
+  commandScope?: Array<'check' | 'plan'>
 }
 
 interface Workflow {
@@ -37,7 +40,7 @@ interface InvocationGrant {
 export interface CliCapabilities {
   contract: 'depfresh.capabilities'
   schemaVersion: number
-  schema: 'depfresh/schemas/capabilities-v1.json'
+  schema: 'depfresh/schemas/capabilities-v2.json'
   version: string
   command: string
   enums: {
@@ -85,6 +88,10 @@ export interface CliCapabilities {
     requirement: string
   }>
   assets: string[]
+  contractVersions: Record<
+    'capabilities' | 'plan' | 'inspect' | 'apply' | 'error',
+    { current: string; supported: string[]; applyCompatible?: string[] }
+  >
 }
 
 const ENUM_VALUES_BY_FLAG: Record<string, readonly string[]> = {
@@ -186,6 +193,11 @@ const JSON_OUTPUT_SCHEMA: Record<string, string> = {
   'summary.minor': 'Count of minor updates',
   'summary.patch': 'Count of patch updates',
   'summary.failedResolutions': 'Count of dependencies that failed to resolve',
+  selection: 'Optional exact workspace/catalog invocation receipt',
+  'selection.requests[]': 'Bound exact requested identities and repository occurrence IDs',
+  'selection.summary.excludedOccurrences': 'Unique occurrences excluded by invocation selection',
+  'selection.summary.eligibleSharedCatalogOwners':
+    'Shared physical catalog owners left eligible by workspace-only exclusion',
   'meta.schemaVersion': 'JSON schema version (currently 1)',
   'meta.cwd': 'Working directory used',
   'meta.effectiveRoot': 'Derived project root used for discovery and root-aware operations',
@@ -227,6 +239,11 @@ function buildFlagDefinitions(argsDef: ArgsDef): {
       ...(def.default !== undefined ? { default: def.default } : {}),
       ...(ENUM_VALUES_BY_FLAG[name] ? { values: ENUM_VALUES_BY_FLAG[name] } : {}),
     }
+    if (name === 'exclude-workspace' || name === 'exclude-catalog') {
+      capability.repeatable = true
+      capability.matching = 'exact-literal'
+      capability.commandScope = ['check', 'plan']
+    }
 
     if (def.type === 'positional') {
       positional[name] = capability
@@ -247,8 +264,8 @@ export function getCliCapabilities(): CliCapabilities {
 
   return {
     contract: 'depfresh.capabilities',
-    schemaVersion: 1,
-    schema: 'depfresh/schemas/capabilities-v1.json',
+    schemaVersion: 2,
+    schema: 'depfresh/schemas/capabilities-v2.json',
     version,
     command: 'depfresh',
     enums: {
@@ -271,7 +288,7 @@ export function getCliCapabilities(): CliCapabilities {
       capabilities: {
         description:
           'Deterministic installed command, schema, feature, runner, and asset descriptor.',
-        schema: 'depfresh/schemas/capabilities-v1.json',
+        schema: 'depfresh/schemas/capabilities-v2.json',
         surface: 'cli',
       },
       inspect: {
@@ -281,7 +298,7 @@ export function getCliCapabilities(): CliCapabilities {
       },
       plan: {
         description: 'Registry-aware planning without file or process side effects.',
-        schema: 'depfresh/schemas/plan-v1.json',
+        schema: 'depfresh/schemas/plan-v2.json',
         surface: 'cli',
       },
       apply: {
@@ -302,9 +319,11 @@ export function getCliCapabilities(): CliCapabilities {
       },
     },
     contractSchemas: {
-      capabilities: 'depfresh/schemas/capabilities-v1.json',
+      capabilities: 'depfresh/schemas/capabilities-v2.json',
+      capabilitiesV1: 'depfresh/schemas/capabilities-v1.json',
       inspect: 'depfresh/schemas/inspect-v1.json',
-      plan: 'depfresh/schemas/plan-v1.json',
+      plan: 'depfresh/schemas/plan-v2.json',
+      planV1: 'depfresh/schemas/plan-v1.json',
       apply: 'depfresh/schemas/apply-v1.json',
       error: 'depfresh/schemas/error-v1.json',
       globalPlan: 'depfresh/schemas/global-plan-v1.json',
@@ -353,7 +372,9 @@ export function getCliCapabilities(): CliCapabilities {
       },
     ],
     assets: [
+      'depfresh/schemas/capabilities-v2.json',
       'depfresh/schemas/capabilities-v1.json',
+      'depfresh/schemas/plan-v2.json',
       'depfresh/skills/depfresh/SKILL.md',
       'depfresh/skills/depfresh/recipes/runners.md',
       'depfresh/skills/depfresh/recipes/manager-phases.md',
@@ -363,6 +384,32 @@ export function getCliCapabilities(): CliCapabilities {
       'depfresh/skills/depfresh/examples/read-only-gate.yml',
       'depfresh/skills/depfresh/examples/protected-apply.yml',
     ],
+    contractVersions: {
+      capabilities: {
+        current: 'depfresh/schemas/capabilities-v2.json',
+        supported: [
+          'depfresh/schemas/capabilities-v1.json',
+          'depfresh/schemas/capabilities-v2.json',
+        ],
+      },
+      plan: {
+        current: 'depfresh/schemas/plan-v2.json',
+        supported: ['depfresh/schemas/plan-v1.json', 'depfresh/schemas/plan-v2.json'],
+        applyCompatible: ['depfresh/schemas/plan-v1.json', 'depfresh/schemas/plan-v2.json'],
+      },
+      inspect: {
+        current: 'depfresh/schemas/inspect-v1.json',
+        supported: ['depfresh/schemas/inspect-v1.json'],
+      },
+      apply: {
+        current: 'depfresh/schemas/apply-v1.json',
+        supported: ['depfresh/schemas/apply-v1.json'],
+      },
+      error: {
+        current: 'depfresh/schemas/error-v1.json',
+        supported: ['depfresh/schemas/error-v1.json'],
+      },
+    },
   }
 }
 

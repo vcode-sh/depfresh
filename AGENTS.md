@@ -30,9 +30,13 @@ Two entry points: `src/cli/index.ts` (CLI via citty) and `src/index.ts` (library
   target-file Git state
 - **Machine contracts** (`src/contracts/`, `src/commands/inspect/`, `src/commands/plan/`) —
   Schema-derived inspect/plan documents, canonical fingerprints, process-free inspection, and
-  memory-only registry planning with exact occurrence operations
+  memory-only registry planning with exact occurrence operations; current plan/capabilities
+  producers use v2 while published v1 schema bytes and apply compatibility remain stable
 - **Policy** (`src/policy/`) — Strict JSON rule validation, legacy compilation, model-derived
   occurrence context, independent action/mode matching, traces, and candidate finalization
+- **Invocation selection** (`src/selection.ts`, `src/cli/scope-exclusions.ts`) — Repeatable exact
+  workspace/catalog CLI literals, fail-closed repository binding, internal physical-catalog rules,
+  and derived human/JSON/plan receipts; library configuration remains unchanged
 - **Signals** (`src/signals/`) — Pure repository-runtime, complete planned-peer-graph, explicit and
   inferred cohort, fixed-clock release/deprecation, evidence completeness, and passive-presence
   evaluation with separate ordered policy effects

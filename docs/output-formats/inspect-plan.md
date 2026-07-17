@@ -20,9 +20,10 @@ The package exports strict JSON Schema draft-07 artifacts:
 
 - `depfresh/schemas/inspect-v1.json`
 - `depfresh/schemas/plan-v1.json`
+- `depfresh/schemas/plan-v2.json` (current producer)
 - `depfresh/schemas/error-v1.json`
 
-Each document has a `contract` discriminator, `schemaVersion: 1`, and the producing `toolVersion`.
+Each document has a `contract` discriminator, a supported `schemaVersion`, and the producing `toolVersion`.
 Consumers must reject unsupported contract/schema combinations before interpreting fields. The
 same authoritative descriptors derive the public TypeScript result types, runtime validators, and
 packaged files.
@@ -52,6 +53,13 @@ Machine planning reads only declarative JSON configuration: `depfresh.config.jso
 `.depfreshrc.json`, JSON `.depfreshrc`, or `package.json#depfresh`. If normal precedence selects a
 JavaScript or TypeScript config, planning fails with `EXECUTABLE_CONFIG_FORBIDDEN` before importing
 it. Configuration can shape policy but never grant side-effect authority.
+
+Current plans use schema v2 and always contain `selection`. CLI workspace/catalog requests record
+their exact values, matched package or physical-catalog entity IDs, bound occurrence IDs, and
+derived counts. The receipt is fingerprinted and validators recompute its entity, decision,
+operation, shared-owner, and summary bindings. A library plan contains the same mandatory shape
+with empty requests. Apply dispatches v1/v2 by discriminator and continues to accept unchanged
+reviewed v1 plans.
 
 Every inspected occurrence appears exactly once in `decisions` as `operation`, `unchanged`,
 `skipped`, `blocked`, `unknown`, or `error`. The record retains its policy trace and, when registry

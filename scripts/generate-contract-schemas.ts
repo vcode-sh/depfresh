@@ -5,15 +5,18 @@ import {
   commandErrorSchema,
   inspectResultSchema,
   planResultSchema,
+  planResultV2Schema,
 } from '../src/contracts/schemas'
-import { capabilitiesSchema } from '../src/contracts/capabilities-schema'
+import { capabilitiesSchema, capabilitiesV2Schema } from '../src/contracts/capabilities-schema'
 import { globalApplySchema, globalPlanSchema } from '../src/contracts/global-schemas'
 
 const root = resolve(import.meta.dirname, '..')
 const artifacts = [
   ['schemas/capabilities-v1.json', capabilitiesSchema],
+  ['schemas/capabilities-v2.json', capabilitiesV2Schema],
   ['schemas/inspect-v1.json', inspectResultSchema],
   ['schemas/plan-v1.json', planResultSchema],
+  ['schemas/plan-v2.json', planResultV2Schema],
   ['schemas/apply-v1.json', applyResultSchema],
   ['schemas/error-v1.json', commandErrorSchema],
   ['schemas/global-plan-v1.json', globalPlanSchema],

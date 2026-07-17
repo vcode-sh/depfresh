@@ -25,6 +25,12 @@ depfresh -wI
 # CI pipeline
 depfresh --fail-on-outdated --output json
 
+# Exclude one exact workspace while keeping shared catalogs eligible
+depfresh --exclude-workspace apps/admin
+
+# Exclude every physical catalog named payments
+depfresh --exclude-catalog payments
+
 # Process-free repository evidence
 depfresh inspect --json
 
@@ -47,6 +53,10 @@ write, interactive, legacy post-write, and global flags before discovery. Apply 
 [Compatibility Signals](../output-formats/compatibility-signals.md), plus the
 [Apply Contract](../output-formats/apply.md) for schemas, fingerprints, side-effect boundaries,
 recovery, and exit codes.
+
+Normal check/write and `plan` accept repeatable exact `--exclude-workspace` and
+`--exclude-catalog` values. Inspect and apply reject them: inspect stays policy-free, while apply
+uses only the selection already fingerprinted in its reviewed plan.
 
 Global checks remain available through `--global` and `--global-all`. Adding `--write` routes every
 physical manager/package occurrence through the separate non-transactional global state machine;

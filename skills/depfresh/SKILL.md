@@ -13,7 +13,7 @@ logic in automation.
 1. Select a runner from [recipes/runners.md](recipes/runners.md): prefer a repository-local,
    lockfile-pinned depfresh; otherwise use an exact approved package version.
 2. Run `depfresh capabilities --json`. Validate it with
-   `depfresh/schemas/capabilities-v1.json` and use only advertised commands, schemas, selectors,
+   `depfresh/schemas/capabilities-v2.json` and use only advertised commands, schemas, selectors,
    managers, phases, and grants.
 3. Run `inspect --output json`, then `plan --output json`. Exit `1` is a valid machine result with
    findings; exit `2` is fatal. Neither command grants writes or process execution.
@@ -21,8 +21,12 @@ logic in automation.
 ## Review before authority
 
 Review the immutable plan's operations, skipped/blocked/unknown/error decisions, compatibility and
-trust signals, diagnostics, risks, required capabilities, manager evidence, and fingerprint. An
+trust signals, selection receipt, diagnostics, risks, required capabilities, manager evidence, and fingerprint. An
 unknown or warning is never success. Configuration can shape policy but cannot grant authority.
+
+For a one-run exact scope, repeat `--exclude-workspace <path>` or `--exclude-catalog <name>` on
+check/write or plan. Workspace exclusion leaves shared physical catalog owners eligible unless the
+catalog is explicitly excluded. Missing targets are fatal; never turn them into no-op success.
 
 Request only the flags required by the reviewed phases. Pass the unchanged plan to
 `apply --output json --write --plan-file ...`. Add `--sync-lockfile`, `--install`, `--verify`, or

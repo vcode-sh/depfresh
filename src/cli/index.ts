@@ -3,15 +3,10 @@ import { version } from '../../package.json' with { type: 'json' }
 import { ConfigError } from '../errors'
 import { getSafeErrorDetails } from '../utils/redact'
 import { args } from './args-schema'
-import { normalizeCliRawArgs } from './raw-args'
+import { findRawMachineCommand, normalizeCliRawArgs } from './raw-args'
+import { hasInvocationScopeExclusions, parseInvocationScopeExclusions } from './scope-exclusions'
 import { showUsageWithLinks } from './usage'
 import './signals'
-
-function rawMachineCommand(rawArgs: string[]): 'inspect' | 'plan' | 'apply' | undefined {
-  return rawArgs[0] === 'inspect' || rawArgs[0] === 'plan' || rawArgs[0] === 'apply'
-    ? rawArgs[0]
-    : undefined
-}
 
 function wantsJsonOutput(rawArgs: string[]): boolean {
   if (
@@ -49,7 +44,7 @@ function getRawMode(rawArgs: string[]): string {
 }
 
 async function outputStartupError(error: unknown, rawArgs: string[]): Promise<void> {
-  const command = rawMachineCommand(rawArgs)
+  const command = findRawMachineCommand(rawArgs)
   if (command) {
     const { buildMachineCommandError } = await import('../contracts/error-document')
     // biome-ignore lint/suspicious/noConsole: intentional stable machine output
@@ -75,6 +70,8 @@ const main = defineCommand({
   args,
   async run({ args }) {
     try {
+      const invocationSelection = parseInvocationScopeExclusions(originalRawArgs)
+
       if (args.mode_arg === 'help') {
         const { showUsage } = await import('citty')
         await showUsage(main)
@@ -86,6 +83,15 @@ const main = defineCommand({
         throw new ConfigError('--plan-file is only valid with the apply command.', {
           reason: 'UNSUPPORTED_COMBINATION',
         })
+      }
+
+      if (args['help-json'] || args.mode_arg === 'capabilities') {
+        if (hasInvocationScopeExclusions(invocationSelection)) {
+          throw new ConfigError(
+            '--exclude-workspace and --exclude-catalog are only valid for check and plan.',
+            { reason: 'UNSUPPORTED_COMBINATION' },
+          )
+        }
       }
 
       if (args['help-json']) {
@@ -166,7 +172,11 @@ const main = defineCommand({
         }
         const { planForInvocation } = await import('../commands/plan')
         const { normalizePlanCommandArgs } = await import('./machine-commands')
-        const result = await planForInvocation(normalizePlanCommandArgs(commandArgs), 'cli')
+        const result = await planForInvocation(
+          normalizePlanCommandArgs(commandArgs),
+          'cli',
+          invocationSelection,
+        )
         // biome-ignore lint/suspicious/noConsole: intentional stable machine output
         console.log(JSON.stringify(result, null, 2))
         const findings =
@@ -189,7 +199,16 @@ const main = defineCommand({
       const { checkFromCli } = await import('../commands/check/run-check')
 
       const options = await normalizeArgs(args)
-      const exitCode = await checkFromCli(options)
+      if (
+        hasInvocationScopeExclusions(invocationSelection) &&
+        (options.global || options.globalAll)
+      ) {
+        throw new ConfigError(
+          '--exclude-workspace and --exclude-catalog are not valid for global checks.',
+          { reason: 'UNSUPPORTED_COMBINATION' },
+        )
+      }
+      const exitCode = await checkFromCli(options, undefined, invocationSelection)
       process.exitCode = exitCode
     } catch (error) {
       const machineCommand =
@@ -203,7 +222,12 @@ const main = defineCommand({
         process.exitCode = 2
         return
       }
-      if (args.output === 'json') {
+      if (
+        args.output === 'json' ||
+        args.json ||
+        args['help-json'] ||
+        args.mode_arg === 'capabilities'
+      ) {
         const { outputJsonError } = await import('../commands/check/json-output')
         outputJsonError(error, {
           cwd: typeof args.cwd === 'string' ? args.cwd : process.cwd(),
@@ -223,6 +247,7 @@ const originalRawArgs = process.argv.slice(2)
 let normalizedRawArgs: string[] | undefined
 
 try {
+  parseInvocationScopeExclusions(originalRawArgs)
   normalizedRawArgs = normalizeCliRawArgs(originalRawArgs)
 } catch (error) {
   await outputStartupError(error, originalRawArgs)

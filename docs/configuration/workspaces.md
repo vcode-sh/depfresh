@@ -179,6 +179,30 @@ Catalog dependencies are resolved alongside regular dependencies, but the catalo
 physical version declaration. When writing (`--write`), depfresh updates that owner in the catalog
 source file. Consumer manifests retain their `catalog:` or `catalog:<name>` references unchanged.
 
+### Exact one-run exclusions
+
+```bash
+depfresh --exclude-workspace apps/admin
+depfresh --exclude-catalog payments
+depfresh plan --json --exclude-workspace . --exclude-catalog default
+```
+
+`--exclude-workspace` binds to exactly one canonical `workspacePath`. It skips that package's
+direct declarations, overrides, resolutions, package-manager declaration, and linked explanatory
+catalog consumers. It never selects a catalog owner, including when the workspace is `.` or when
+all known consumers are excluded. The receipt reports any shared catalog owners that remain
+eligible.
+
+`--exclude-catalog` binds to every physical pnpm/Bun/Yarn catalog with the exact requested name.
+It skips those owners and only consumers linked to their physical IDs. An unresolved or ambiguous
+same-name consumer and a direct dependency with the same package name are unaffected. `default`
+means the default catalog; punctuation, spaces, Unicode, and commas are literal.
+
+Unknown, ignored, unavailable, or ambiguous-only targets fail with
+`SELECTION_TARGET_UNPROVEN` before registry/cache/interactive/plan-operation/write work. Use
+`--exclude` for dependency names, `--ignore-paths` for discovery, and `policyRules` for persistent
+patterns.
+
 Policy can select `catalogName` and exact `catalogRole` values (`owner`, `consumer`, or `direct`).
 Owners and consumers are evaluated independently. A workspace- or package-specific consumer rule
 never propagates into a shared owner; only the owner decision controls the physical entry. A rule
@@ -190,8 +214,8 @@ export default defineConfig({
   mode: 'latest',
   policyRules: [
     {
-      id: 'native-catalog-minor',
-      selectors: { catalogName: 'native' },
+      id: 'payments-catalog-minor',
+      selectors: { catalogName: '^payments$' },
       mode: 'minor',
     },
   ],

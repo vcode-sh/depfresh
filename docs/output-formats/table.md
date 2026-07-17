@@ -10,6 +10,11 @@ depfresh
 
 ## Columns
 
+When exact workspace/catalog exclusions are requested, depfresh prints one durable line before
+registry resolution, for example `Exclusions: 2 workspaces · 1 catalog · 34 occurrences`. If a
+workspace exclusion leaves shared catalog owners eligible, a second concise note explains that
+`--exclude-catalog` is required to exclude them. Progress rendering suspends around both lines.
+
 | Column    | Description                                                  |
 |-----------|--------------------------------------------------------------|
 | **name**  | Package name. The thing you `npm install`-ed and forgot about. |

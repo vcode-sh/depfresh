@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -10,6 +11,7 @@ import {
   commandErrorSchema,
   inspectResultSchema,
   planResultSchema,
+  planResultV2Schema,
 } from './schemas'
 import { validateApplyResult, validateInspectResult, validatePlanResult } from './validate'
 
@@ -44,12 +46,26 @@ describe('shipped contract schemas', () => {
   it.each([
     ['schemas/inspect-v1.json', inspectResultSchema],
     ['schemas/plan-v1.json', planResultSchema],
+    ['schemas/plan-v2.json', planResultV2Schema],
     ['schemas/apply-v1.json', applyResultSchema],
     ['schemas/error-v1.json', commandErrorSchema],
     ['schemas/global-plan-v1.json', globalPlanSchema],
     ['schemas/global-apply-v1.json', globalApplySchema],
   ])('matches the authoritative descriptor for %s', (path, schema) => {
     expect(JSON.parse(readFileSync(resolve(root, path), 'utf8'))).toEqual(schema)
+  })
+
+  it('keeps published v1 plan and capabilities schema bytes stable', () => {
+    const hashes = {
+      'schemas/plan-v1.json': '1f9d8c19d4eb56cfd0fa98a16244c877fc75a538106297f8135bdc7d2d64a5bd',
+      'schemas/capabilities-v1.json':
+        '5c6ef7fdc9cb75325a6a711ae6f0311a948a25000bae5cc75a68e9bf2925e2ec',
+    }
+
+    for (const [path, expected] of Object.entries(hashes)) {
+      const bytes = readFileSync(resolve(root, path))
+      expect(createHash('sha256').update(bytes).digest('hex'), path).toBe(expected)
+    }
   })
 
   it('rejects additional inspect fields and absolute source paths', () => {

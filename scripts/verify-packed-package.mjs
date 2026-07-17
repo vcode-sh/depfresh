@@ -62,11 +62,13 @@ const requiredPaths = [
   'dist/index.mjs',
   'dist/schemas/apply-v1.json',
   'dist/schemas/capabilities-v1.json',
+  'dist/schemas/capabilities-v2.json',
   'dist/schemas/error-v1.json',
   'dist/schemas/global-apply-v1.json',
   'dist/schemas/global-plan-v1.json',
   'dist/schemas/inspect-v1.json',
   'dist/schemas/plan-v1.json',
+  'dist/schemas/plan-v2.json',
   'skills/depfresh/SKILL.md',
   'skills/depfresh/examples/README.md',
   'skills/depfresh/examples/catalog-policy.json',
@@ -157,6 +159,9 @@ try {
     'ArtifactTrustDimensionResult',
     'ArtifactTrustResult',
     'ArtifactVerificationTarget',
+    'PlanResultV1',
+    'PlanResultV2',
+    'SelectionReceipt',
   ]) {
     if (!installedDeclarations.includes(typeName)) fail(`Missing public declaration: ${typeName}`)
   }
@@ -174,6 +179,160 @@ try {
   })
   if (capabilitiesRun.stderr !== '') fail('Packed capabilities command wrote stderr')
 
+  const runPackedCli = (label, cwd, args, expectedStatus) => {
+    const result = spawnSync(process.execPath, [cliPath, ...args], {
+      cwd,
+      encoding: 'utf8',
+      env: isolatedEnvironment(home, cache, emptyUserConfig, emptyGlobalConfig),
+    })
+    if (result.error || result.status !== expectedStatus || result.stderr !== '') {
+      fail(`Packed ${label} selection command failed`)
+    }
+    try {
+      return JSON.parse(result.stdout ?? '')
+    } catch {
+      fail(`Packed ${label} selection command returned invalid JSON`)
+    }
+  }
+
+  const workspaceFixture = join(project, 'workspace-selection')
+  mkdirSync(join(workspaceFixture, 'apps', 'admin'), { recursive: true })
+  writeFileSync(
+    join(workspaceFixture, 'package.json'),
+    '{"name":"root","private":true}\n',
+  )
+  writeFileSync(join(workspaceFixture, 'pnpm-workspace.yaml'), "packages:\n  - 'apps/*'\n")
+  writeFileSync(
+    join(workspaceFixture, 'apps', 'admin', 'package.json'),
+    '{"name":"admin","private":true,"dependencies":{"workspace-probe":"1.0.0"}}\n',
+  )
+  const workspaceSelection = runPackedCli(
+    'workspace',
+    workspaceFixture,
+    ['--output', 'json', '--exclude-workspace', 'apps/admin'],
+    0,
+  )
+  if (
+    workspaceSelection.selection?.summary?.matchedWorkspaces !== 1 ||
+    workspaceSelection.selection?.summary?.excludedOccurrences !== 1
+  ) {
+    fail('Packed workspace selection receipt mismatch')
+  }
+  const workspaceManifestPath = join(workspaceFixture, 'apps', 'admin', 'package.json')
+  const workspaceManifestBefore = readFileSync(workspaceManifestPath)
+  const workspaceWrite = runPackedCli(
+    'workspace write',
+    workspaceFixture,
+    ['--write', '--output', 'json', '--exclude-workspace', 'apps/admin'],
+    0,
+  )
+  if (
+    workspaceWrite.selection?.summary?.excludedOccurrences !== 1 ||
+    !readFileSync(workspaceManifestPath).equals(workspaceManifestBefore)
+  ) {
+    fail('Packed workspace write changed an excluded manifest')
+  }
+
+  const catalogFixture = join(project, 'catalog-selection')
+  mkdirSync(join(catalogFixture, 'apps', 'admin'), { recursive: true })
+  writeFileSync(
+    join(catalogFixture, 'package.json'),
+    '{"name":"root","private":true,"dependencies":{"catalog-probe":"file:./catalog-probe.tgz"}}\n',
+  )
+  writeFileSync(
+    join(catalogFixture, 'pnpm-workspace.yaml'),
+    "packages:\n  - 'apps/*'\ncatalogs:\n  payments:\n    catalog-probe: 1.0.0\n",
+  )
+  writeFileSync(
+    join(catalogFixture, 'apps', 'admin', 'package.json'),
+    '{"name":"admin","private":true,"dependencies":{"catalog-probe":"catalog:payments","direct-probe":"file:./direct-probe.tgz"}}\n',
+  )
+  const catalogManifestPath = join(catalogFixture, 'pnpm-workspace.yaml')
+  const catalogConsumerPath = join(catalogFixture, 'apps', 'admin', 'package.json')
+  const catalogManifestBefore = readFileSync(catalogManifestPath)
+  const catalogConsumerBefore = readFileSync(catalogConsumerPath)
+  const catalogWrite = runPackedCli(
+    'catalog write',
+    catalogFixture,
+    ['--write', '--output', 'json', '--exclude-catalog', 'payments'],
+    0,
+  )
+  if (
+    catalogWrite.selection?.summary?.excludedOccurrences !== 2 ||
+    !readFileSync(catalogManifestPath).equals(catalogManifestBefore) ||
+    !readFileSync(catalogConsumerPath).equals(catalogConsumerBefore)
+  ) {
+    fail('Packed catalog write changed excluded catalog bytes')
+  }
+  const catalogSelection = runPackedCli(
+    'catalog',
+    catalogFixture,
+    ['plan', '--json', '--exclude-catalog', 'payments'],
+    1,
+  )
+  if (
+    catalogSelection.schemaVersion !== 2 ||
+    catalogSelection.selection?.summary?.matchedCatalogOwners !== 1 ||
+    catalogSelection.selection?.summary?.excludedOccurrences !== 2
+  ) {
+    fail('Packed catalog selection receipt mismatch')
+  }
+  const combinedSelection = runPackedCli(
+    'combined',
+    catalogFixture,
+    [
+      'plan',
+      '--json',
+      '--exclude-workspace',
+      'apps/admin',
+      '--exclude-catalog',
+      'payments',
+    ],
+    1,
+  )
+  if (
+    combinedSelection.selection?.summary?.requestedWorkspaces !== 1 ||
+    combinedSelection.selection?.summary?.requestedCatalogs !== 1 ||
+    combinedSelection.selection?.summary?.excludedOccurrences !== 3
+  ) {
+    fail('Packed combined selection receipt mismatch')
+  }
+  const combinedPlanPath = join(catalogFixture, 'selection-plan.json')
+  writeFileSync(combinedPlanPath, `${JSON.stringify(combinedSelection, null, 2)}\n`)
+  const combinedApply = runPackedCli(
+    'combined apply',
+    catalogFixture,
+    ['apply', '--json', '--write', '--plan-file', combinedPlanPath],
+    0,
+  )
+  if (
+    combinedApply.status !== 'noop' ||
+    combinedApply.planFingerprint !== combinedSelection.planFingerprint ||
+    !readFileSync(catalogManifestPath).equals(catalogManifestBefore) ||
+    !readFileSync(catalogConsumerPath).equals(catalogConsumerBefore)
+  ) {
+    fail('Packed apply did not retain the fingerprinted selection plan')
+  }
+
+  const malformedSelection = runPackedCli(
+    'malformed',
+    catalogFixture,
+    ['--output', 'json', '--exclude-catalog', '/private/catalog'],
+    2,
+  )
+  if (malformedSelection.error?.reason !== 'SELECTION_TARGET_UNPROVEN') {
+    fail('Packed malformed selection did not fail closed')
+  }
+  const missingSelection = runPackedCli(
+    'missing',
+    catalogFixture,
+    ['plan', '--json', '--exclude-workspace', 'apps/missing'],
+    2,
+  )
+  if (missingSelection.errors?.[0]?.reason !== 'SELECTION_TARGET_UNPROVEN') {
+    fail('Packed missing selection did not fail closed')
+  }
+
   const probePath = join(project, 'probe.mjs')
   writeFileSync(
     probePath,
@@ -185,7 +344,7 @@ const capabilities = JSON.parse(process.env.DEPFRESH_CAPABILITIES)
 if (packageJson.version !== process.env.DEPFRESH_VERSION) throw new Error('package version mismatch')
 if (capabilities.version !== process.env.DEPFRESH_VERSION) throw new Error('capabilities version mismatch')
 if (!depfresh.validateCapabilities(capabilities)) throw new Error('invalid capabilities')
-for (const name of ['apply', 'check', 'inspect', 'plan', 'validateApplyResult', 'validateCapabilities', 'validateInspectResult', 'validatePlanResult']) {
+for (const name of ['apply', 'check', 'inspect', 'plan', 'validateApplyResult', 'validateCapabilities', 'validateCapabilitiesV1', 'validateCapabilitiesV2', 'validateInspectResult', 'validatePlanResult', 'validatePlanResultV1', 'validatePlanResultV2']) {
   if (typeof depfresh[name] !== 'function') throw new Error('missing runtime export: ' + name)
 }
 for (const subpath of ${JSON.stringify(Object.keys(packageJson.exports))}) {

@@ -384,14 +384,62 @@ Stop and amend this plan before implementation broadens scope if:
 
 ## Completion record
 
-Pending implementation.
+Completed on 2026-07-17.
 
-The planning audit completed on 2026-07-17. Three independent read-only audits agreed on the two
-exact invocation shortcuts, fail-closed target binding, explicit shared-catalog ownership, generic
-documentation, and end-to-end proof. Final adversarial review identified two Important contract
-gaps before execution: mutating strict v1 schemas in place and matching unresolved consumers by
-catalog name alone. The plan now requires versioned plan/capabilities v2 contracts with unchanged v1
-artifacts/apply compatibility and internal physical catalog-ID binding. A separate semantic review
-narrowed concurrent-removal claims to observable binding plus existing stale-safe mutation checks.
-Both reviewers re-reviewed the amended full plan and returned `APPROVED` with no remaining Critical
-or Important findings.
+The implementation adds repeatable exact-literal `--exclude-workspace` and `--exclude-catalog`
+flags for normal check/write and machine plan commands. Invocation parsing preserves first-seen
+order, canonicalizes only safe workspace spellings, and rejects unsafe, empty, missing, ignored,
+unavailable, or unmatched targets with `SELECTION_TARGET_UNPROVEN`. Repository binding completes
+before addons, cache, registry, interaction, planning operations, or writes. Workspace requests
+exclude only the exact package's direct and consumer occurrences; catalog requests bind every
+same-named physical catalog ID plus its proven consumers without matching unresolved consumers or
+same-name direct dependencies. Deterministic final action-only rules make the selection visible
+without changing configured mode traces, policy behavior, library calls, or invocation authority.
+
+Current plan and capabilities producers now emit strict v2 documents. Plan v2 fingerprints a
+mandatory receipt containing exact requests, repository entity IDs, occurrence IDs, and recomputed
+summaries. Semantic validation independently re-derives reserved rule IDs, winners, decisions,
+reasons, entity links, overlap counts, and operation exclusion before apply accepts the document.
+Apply continues to accept reviewed plan v1 and v2 inputs while apply output remains v1. The existing
+`plan-v1.json` and `capabilities-v1.json` bytes were preserved exactly. Legacy check JSON gained only
+an additive receipt, and human output writes one durable selection summary.
+
+Public help, capabilities, README, current documentation, API references, Action validation,
+packaged skills/examples, smoke/demo fixtures, package exports, schema generation, and the installed
+tarball verifier now describe and exercise the same generic command scope and ownership rules. The
+historical v2.0.0 release document was not changed, and its former README anchor remains available.
+
+Verification evidence:
+
+- The pinned `pnpm@10.33.0` frozen install passed under exact Node `24.15.0` with disposable
+  HOME/cache/store state. Schema checking, TypeScript, Biome lint, strict zero-warning Biome, and
+  `git diff --check` passed.
+- The affected 23-file focused matrix passed three consecutive exact-Node runs with 440 tests each:
+  70.91 seconds, 144.74 seconds, and 168.42 seconds.
+- The full exact-Node coverage run passed 141 files and 1,528 tests in 224.06 seconds: 86.84%
+  statements, 79.74% branches, 93.60% functions, and 89.30% lines. The five-file release regression
+  suite separately passed 99 tests in 23.77 seconds.
+- The final build produced a 1.85 MB `dist` with both v1 and v2 schema assets. Built practical smoke
+  passed 33 checks with 62 isolated registry requests, including catalog-excluded eligible writes
+  and a selection-bearing plan/apply. The sanitized demo passed with 5 packages, 12 occurrences,
+  and cold/warm registry counts of 3/0.
+- Exact npm `11.12.1` packed and installed the 56-file tarball under Node `24.15.0`. The verifier
+  passed source/built/installed workspace-only, catalog-only, combined, malformed, missing-target,
+  write, and plan/apply cases. The artifact is 284,730 bytes, 1,877,698 bytes unpacked, with integrity
+  `sha512-65Dx7dxwuaRf476sJO3lEkI8VDUwISFZZ4xCu+e+eJmGcglksYSjLdAoNvuUphoIV1P9AIh3HvlWz+IR2Eezhw==`.
+- Temporary HOME/cache fixtures proved a warm run added zero registry requests and never used the
+  real user cache. Before/after SHA-256 values remained identical for `.git/index`
+  (`42e4019b0572848da6f325304e7926869da5576cdfabd4bdf1c9120f0539a91e`), the historical release doc
+  (`9cb8c8aa2aa9397a0e12e5d5265efc29cba1e671875f185501ad4f6edb111c15`), plan v1
+  (`1f9d8c19d4eb56cfd0fa98a16244c877fc75a538106297f8135bdc7d2d64a5bd`), and capabilities v1
+  (`5c6ef7fdc9cb75325a6a711ae6f0311a948a25000bae5cc75a68e9bf2925e2ec`).
+- A fresh independent reviewer reproduced and drove fixes for addon ordering, reserved-rule forgery,
+  unsafe catalog text, command-order rejection, stable empty-input errors, and installed write/apply
+  proof. The final full-diff re-review returned `APPROVED` with no Critical, Important, or Minor
+  findings.
+
+Known boundaries remain intentional: the shortcuts are CLI invocation selection for check/write and
+plan only; inspect, apply, capabilities, global, and global-all reject them. Apply consumes the
+reviewed receipt rather than rebinding it, and existing stale-safe preconditions own changes after
+binding. No push, tag, publish, release, branch, worktree, or pull request was created. The package
+version remains `2.0.0`.

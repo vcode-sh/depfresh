@@ -77,6 +77,10 @@ This applies to both normal flag usage and positional mode shorthand (`depfresh 
 `--install` is redirected to plan/apply. `--version` must be used alone. Use `--name=value` when a
 string value intentionally starts with `-`, such as `--include=--write`.
 
+Only `--exclude-workspace` and `--exclude-catalog` are repeatable string options. Different values
+must repeat the flag; values are not comma-split. Repeating an identical value deduplicates it in
+first-seen order.
+
 ## Machine Discoverability
 
 For AI agents and other automation, depfresh exposes a JSON capability endpoint:
@@ -103,6 +107,8 @@ public-npm verification; it does not execute the verifier while planning.
 | Flag | Command | Description |
 | --- | --- | --- |
 | `--as-of <timestamp>` | `plan` | Canonical UTC semantic time required when cooldown is positive, for example `2026-07-16T10:00:00.000Z` |
+| `--exclude-workspace <path>` | `plan`, normal check/write | Exclude one exact proven repository-relative workspace path; repeat for another path. |
+| `--exclude-catalog <name>` | `plan`, normal check/write | Exclude all proven physical catalogs with one exact name; repeat for another name. |
 
 Inspect rejects all phase flags. Plan rejects `--write`, `--interactive`, `--update`, `--execute`,
 `--verify`, `--verify-command`, `--strict-post-write`, `--global`, and `--global-all` before
@@ -142,7 +148,14 @@ Apply exits `0` only for `applied` or `noop`, `1` for a schema-valid `conflicted
 |------|-------|------|---------|-------------|
 | `--include <patterns>` | `-n` | string | -- | Compatibility policy input: exclude by default, then include matching occurrence names. A CLI array replaces configured include patterns. |
 | `--exclude <patterns>` | `-x` | string | -- | Compatibility policy input evaluated after include, so a matching exclusion wins. A CLI array replaces configured exclude patterns. |
+| `--exclude-workspace <path>` | -- | repeatable string | -- | Exclude direct declarations and catalog consumers owned by one exact workspace path. `.` means the root package. |
+| `--exclude-catalog <name>` | -- | repeatable string | -- | Exclude every physical catalog with the exact name plus only consumers linked to those owners. |
 | `--ignore-paths <patterns>` | -- | string | -- | Additional ignore glob patterns (comma-separated) merged with default ignore paths. Useful for skipping specific folders during recursive scan. |
+
+Workspace paths may use a safe leading `./` or trailing slash, which canonicalizes away. Absolute
+paths, parent traversal, backslashes, control text, missing targets, and catalog names without a
+proven physical owner fail with `SELECTION_TARGET_UNPROVEN` before registry/cache/interactive/plan
+operation/write work. A root workspace exclusion never captures co-located catalog owners.
 
 CLI ignore paths replace configured custom ignore paths for that invocation, while the built-in
 `node_modules`, `dist`, `coverage`, and `.git` safety exclusions are always retained and deduped.

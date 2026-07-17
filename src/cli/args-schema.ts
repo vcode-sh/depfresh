@@ -47,6 +47,14 @@ export const args: ArgsDef = {
     alias: 'x',
     description: 'Exclude packages matching these regex/glob patterns (comma-separated)',
   },
+  'exclude-workspace': {
+    type: 'string',
+    description: 'Exclude one exact workspace path for check/plan (repeatable)',
+  },
+  'exclude-catalog': {
+    type: 'string',
+    description: 'Exclude one exact physical catalog for check/plan (repeatable)',
+  },
   force: {
     type: 'boolean',
     alias: 'f',

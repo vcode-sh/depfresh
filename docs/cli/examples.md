@@ -35,6 +35,26 @@ depfresh --deps-only
 depfresh --exclude "eslint-plugin-"
 ```
 
+## Exact workspace and catalog exclusions
+
+```bash
+# One proven repository-relative workspace; repeat the flag for another
+depfresh --exclude-workspace apps/admin --exclude-workspace packages/legacy
+
+# One exact physical catalog name; the comma is part of the name
+depfresh --exclude-catalog=mobile,v2
+
+# Fingerprint the same selection in a reviewed machine plan
+depfresh plan --json \
+  --exclude-workspace apps/worker \
+  --exclude-catalog payments > depfresh-plan.json
+```
+
+A workspace exclusion skips its direct declarations and linked catalog-consumer occurrences. Shared
+catalog owners remain eligible and the receipt calls that out. Exclude a physical catalog only when
+that is also intended. Normal JSON adds `selection`; table output prints one durable `Exclusions:`
+line before resolution.
+
 ## Interactive
 
 ```bash
@@ -308,6 +328,6 @@ the physical catalog owner; package manifests keep their `catalog:` references u
 
 Named `peers` catalogs are skipped unless `--peer` is enabled.
 
-To exclude a named Expo/native catalog safely, target the physical catalog owner rather than only
-the consuming app. See the copy-paste policy and ownership explanation in
-[Workspace Configuration](../configuration/workspaces.md#how-catalogs-are-updated).
+For a persistent catalog policy, target the physical catalog owner rather than only a consuming
+workspace. Native/Expo is one optional example; the same ownership rules apply to every catalog.
+See [Workspace Configuration](../configuration/workspaces.md#how-catalogs-are-updated).

@@ -8,7 +8,9 @@ interface CliOptionDefinition {
 
 const optionDefinitions = new Map<string, CliOptionDefinition>()
 const numericOptionNames = new Set(['concurrency', 'cooldown'])
+const repeatableOptionNames = new Set(['exclude-workspace', 'exclude-catalog'])
 const commandNames = new Set(['capabilities', 'inspect', 'plan', 'apply'])
+const machineCommandNames = new Set(['inspect', 'plan', 'apply'])
 
 for (const [name, rawDefinition] of Object.entries(args)) {
   if (rawDefinition.type !== 'boolean' && rawDefinition.type !== 'string') continue
@@ -39,6 +41,7 @@ function recordOccurrence(
   name: string,
   value: string | boolean,
 ): void {
+  if (repeatableOptionNames.has(name)) return
   const previous = occurrences.get(name)
   if (previous !== undefined && previous !== value) {
     throw new ConfigError(
@@ -60,6 +63,36 @@ function parseBooleanAssignment(name: string, value: string): boolean {
 function isAllowedOptionValue(definition: CliOptionDefinition, value: string): boolean {
   if (!value.startsWith('-')) return true
   return numericOptionNames.has(definition.name) && /^-\d/u.test(value)
+}
+
+export function findRawMachineCommand(
+  rawArgs: readonly string[],
+): 'inspect' | 'plan' | 'apply' | undefined {
+  for (let index = 0; index < rawArgs.length; index++) {
+    const token = rawArgs[index] ?? ''
+    if (token === '--') return undefined
+
+    if (token.startsWith('--')) {
+      const equalsIndex = token.indexOf('=')
+      const optionToken = equalsIndex === -1 ? token : token.slice(0, equalsIndex)
+      const rawName = optionToken.slice(2)
+      const negated = rawName.startsWith('no-')
+      const definition = optionDefinitions.get(negated ? rawName.slice(3) : rawName)
+      if (!definition) return undefined
+      if (definition.type === 'string' && !negated && equalsIndex === -1) index += 1
+      continue
+    }
+
+    if (token.startsWith('-') && token !== '-') {
+      const definition = optionDefinitions.get(token[1] ?? '')
+      if (!definition) return undefined
+      if (definition.type === 'string' && token.length === 2) index += 1
+      continue
+    }
+
+    return machineCommandNames.has(token) ? (token as 'inspect' | 'plan' | 'apply') : undefined
+  }
+  return undefined
 }
 
 function normalizeLongOption(

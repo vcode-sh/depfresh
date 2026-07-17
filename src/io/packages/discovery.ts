@@ -1,5 +1,6 @@
 import { resolve } from 'pathe'
 import { glob } from 'tinyglobby'
+import type { InvocationScopeExclusions } from '../../cli/scope-exclusions'
 import type { depfreshOptions, PackageMeta } from '../../types'
 import { createLogger } from '../../utils/logger'
 import { loadCatalogs } from '../catalogs/index'
@@ -18,10 +19,11 @@ export interface PackageLoadObserver {
 export async function loadPackages(
   options: depfreshOptions,
   observer?: PackageLoadObserver,
+  invocationSelection?: InvocationScopeExclusions,
 ): Promise<PackageMeta[]> {
   if (options.global || options.globalAll) return discoverPackages(options, observer)
   const { inspectRepositoryWithProjection } = await import('../../repository/inspect')
-  return (await inspectRepositoryWithProjection(options, observer)).packages
+  return (await inspectRepositoryWithProjection(options, observer, invocationSelection)).packages
 }
 
 export async function discoverPackages(

@@ -12,7 +12,9 @@ const packageJson = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))
 }
 
 const publicAssets = [
+  'schemas/capabilities-v2.json',
   'schemas/capabilities-v1.json',
+  'schemas/plan-v2.json',
   'skills/depfresh/SKILL.md',
   'skills/depfresh/recipes/runners.md',
   'skills/depfresh/recipes/manager-phases.md',
@@ -30,6 +32,10 @@ describe('published workflow assets', () => {
     expect(packageJson.exports['./schemas/capabilities-v1.json']).toBe(
       './dist/schemas/capabilities-v1.json',
     )
+    expect(packageJson.exports['./schemas/capabilities-v2.json']).toBe(
+      './dist/schemas/capabilities-v2.json',
+    )
+    expect(packageJson.exports['./schemas/plan-v2.json']).toBe('./dist/schemas/plan-v2.json')
     for (const asset of publicAssets.filter((entry) => entry.startsWith('skills/'))) {
       expect(packageJson.exports[`./${asset}`]).toBe(`./${asset}`)
     }

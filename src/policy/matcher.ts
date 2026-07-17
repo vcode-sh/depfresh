@@ -8,7 +8,12 @@ import type {
   PolicyOccurrenceContext,
 } from '../types/policy'
 import { patternToRegex } from '../utils/patterns'
-import type { CompatibilityAction, InternalCompiledPolicyRule } from './internal-types'
+import {
+  type CompatibilityAction,
+  type InternalCompiledPolicyRule,
+  type InternalPolicyOccurrenceContext,
+  internalCatalogId,
+} from './internal-types'
 
 interface PendingIndeterminate {
   ruleId: string
@@ -197,7 +202,11 @@ function matchSelectorsWithoutManager(
   context: PolicyOccurrenceContext,
 ): boolean {
   const selectors = rule.selectors
+  const internalRule = rule as InternalCompiledPolicyRule
+  const internalContext = context as InternalPolicyOccurrenceContext
   return (
+    (internalRule[internalCatalogId] === undefined ||
+      internalRule[internalCatalogId] === internalContext[internalCatalogId]) &&
     matchPattern(
       selectors.dependencyName,
       rule.dependencyNameSource === 'resolution'

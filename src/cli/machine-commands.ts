@@ -32,6 +32,8 @@ const planOptions = new Set([
   'mode',
   'include',
   'exclude',
+  'exclude-workspace',
+  'exclude-catalog',
   'force',
   'peer',
   'include-locked',
@@ -120,7 +122,7 @@ export function assertMachineCommandSafety(
 
 function collectExplicitOptions(rawArgs: readonly string[]): Set<string> {
   const names = new Set<string>()
-  for (const token of rawArgs.slice(1)) {
+  for (const token of rawArgs) {
     if (token.startsWith('--')) {
       const rawName = token.slice(2).split('=', 1)[0] ?? ''
       names.add(rawName.startsWith('no-') ? rawName.slice(3) : rawName)

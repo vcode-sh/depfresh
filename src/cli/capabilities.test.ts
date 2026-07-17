@@ -1,13 +1,13 @@
 import Ajv from 'ajv'
 import { describe, expect, it } from 'vitest'
-import { capabilitiesSchema, validateCapabilities } from '../contracts/capabilities-schema'
+import { capabilitiesV2Schema, validateCapabilities } from '../contracts/capabilities-schema'
 import { getCliCapabilities } from './capabilities'
 
 describe('getCliCapabilities', () => {
   it('returns machine-discoverable schema with enums, defaults, and exit codes', () => {
     const capabilities = getCliCapabilities()
 
-    expect(capabilities.schemaVersion).toBe(1)
+    expect(capabilities.schemaVersion).toBe(2)
     expect(capabilities.command).toBe('depfresh')
     expect(capabilities.enums.mode).toContain('major')
     expect(capabilities.enums.output).toEqual(['table', 'json'])
@@ -62,12 +62,12 @@ describe('getCliCapabilities', () => {
   it('is deterministic, schema-valid, and has no volatile generation fields', () => {
     const first = getCliCapabilities()
     const second = getCliCapabilities()
-    const validate = new Ajv({ allErrors: true, strict: true }).compile(capabilitiesSchema)
+    const validate = new Ajv({ allErrors: true, strict: true }).compile(capabilitiesV2Schema)
 
     expect(first).toEqual(second)
     expect(first).not.toHaveProperty('generatedAt')
     expect(first.contract).toBe('depfresh.capabilities')
-    expect(first.schema).toBe('depfresh/schemas/capabilities-v1.json')
+    expect(first.schema).toBe('depfresh/schemas/capabilities-v2.json')
     expect(validate(first), JSON.stringify(validate.errors)).toBe(true)
     expect(validateCapabilities(first)).toBe(true)
     expect(validateCapabilities({ ...first, generatedAt: new Date().toISOString() })).toBe(false)
@@ -132,7 +132,9 @@ describe('getCliCapabilities', () => {
       },
     ])
     expect(capabilities.assets).toEqual([
+      'depfresh/schemas/capabilities-v2.json',
       'depfresh/schemas/capabilities-v1.json',
+      'depfresh/schemas/plan-v2.json',
       'depfresh/skills/depfresh/SKILL.md',
       'depfresh/skills/depfresh/recipes/runners.md',
       'depfresh/skills/depfresh/recipes/manager-phases.md',
@@ -151,22 +153,52 @@ describe('getCliCapabilities', () => {
       expect.arrayContaining(['major', 'inspect', 'plan', 'apply', 'capabilities']),
     )
     expect(capabilities.commands.inspect?.schema).toBe('depfresh/schemas/inspect-v1.json')
-    expect(capabilities.commands.plan?.schema).toBe('depfresh/schemas/plan-v1.json')
+    expect(capabilities.commands.plan?.schema).toBe('depfresh/schemas/plan-v2.json')
     expect(capabilities.commands.apply?.schema).toBe('depfresh/schemas/apply-v1.json')
     expect(capabilities.contractSchemas.error).toBe('depfresh/schemas/error-v1.json')
     expect(capabilities.commands.capabilities).toMatchObject({
-      schema: 'depfresh/schemas/capabilities-v1.json',
+      schema: 'depfresh/schemas/capabilities-v2.json',
       surface: 'cli',
     })
     expect(capabilities.commands.globalPlan).toMatchObject({
       schema: 'depfresh/schemas/global-plan-v1.json',
       surface: 'library',
     })
-    expect(capabilities.contractSchemas.capabilities).toBe('depfresh/schemas/capabilities-v1.json')
+    expect(capabilities.contractSchemas.capabilities).toBe('depfresh/schemas/capabilities-v2.json')
     expect(capabilities.contractSchemas.globalPlan).toBe('depfresh/schemas/global-plan-v1.json')
     expect(capabilities.contractSchemas.globalApply).toBe('depfresh/schemas/global-apply-v1.json')
     expect(capabilities.machineExitCodes['0']).toContain('applied')
     expect(capabilities.machineExitCodes['1']).toContain('conflicted')
+  })
+
+  it('describes exact repeatable workspace and catalog selection with command scope', () => {
+    const capabilities = getCliCapabilities()
+
+    for (const name of ['exclude-workspace', 'exclude-catalog']) {
+      expect(capabilities.flags[name]).toMatchObject({
+        type: 'string',
+        repeatable: true,
+        matching: 'exact-literal',
+        commandScope: ['check', 'plan'],
+      })
+    }
+    expect(capabilities.contractVersions.plan).toEqual({
+      current: 'depfresh/schemas/plan-v2.json',
+      supported: ['depfresh/schemas/plan-v1.json', 'depfresh/schemas/plan-v2.json'],
+      applyCompatible: ['depfresh/schemas/plan-v1.json', 'depfresh/schemas/plan-v2.json'],
+    })
+    expect(
+      validateCapabilities({
+        ...capabilities,
+        flags: {
+          ...capabilities.flags,
+          'exclude-catalog': {
+            ...capabilities.flags['exclude-catalog'],
+            repeatable: false,
+          },
+        },
+      }),
+    ).toBe(false)
   })
 
   it('includes flag relationships with requires and conflicts', () => {

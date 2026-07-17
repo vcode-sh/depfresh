@@ -2,10 +2,13 @@ import { performance } from 'node:perf_hooks'
 import c from 'ansis'
 import { createAddonLifecycle } from '../../addons'
 import { createSqliteCache } from '../../cache/index'
+import type { InvocationScopeExclusions } from '../../cli/scope-exclusions'
+import { hasInvocationScopeExclusions } from '../../cli/scope-exclusions'
 import { createInvocationAuthority, snapshotInvocationAuthority } from '../../invocation-authority'
 import { loadPackages } from '../../io/packages'
 import { resolveDiscoveryContext } from '../../io/packages/root-detection'
 import { createResolveContext, resolvePackage } from '../../io/resolve'
+import { readInvocationSelectionReceipt, type SelectionReceipt } from '../../selection'
 import type {
   depfreshOptions,
   InvocationAuthority,
@@ -42,14 +45,16 @@ export async function check(
 export async function checkFromCli(
   options: depfreshOptions,
   requestedAuthority: InvocationAuthority = createInvocationAuthority(options),
+  invocationSelection?: InvocationScopeExclusions,
 ): Promise<number> {
-  return runCheck(options, requestedAuthority, true)
+  return runCheck(options, requestedAuthority, true, invocationSelection)
 }
 
 async function runCheck(
   options: depfreshOptions,
   requestedAuthority: InvocationAuthority,
   renderProgress: boolean,
+  invocationSelection?: InvocationScopeExclusions,
 ): Promise<number> {
   const authority = snapshotInvocationAuthority(requestedAuthority)
   const totalStart = performance.now()
@@ -68,7 +73,6 @@ async function runCheck(
 
   try {
     validateOptions(runtimeOptions, authority)
-    await addons.setup()
 
     const hasPerDependencyLifecycle = Boolean(
       options.onDependencyResolved || options.addons?.some((addon) => addon.onDependencyResolved),
@@ -79,22 +83,38 @@ async function runCheck(
     progress = renderProgress && !hasPerDependencyLifecycle ? createCheckProgress(options) : null
     const discoveryStart = performance.now()
     const activeProgress = progress
-    const packages = activeProgress
-      ? await loadPackages(runtimeOptions, {
-          onPackagesDiscovered: (discoveredPackages) => {
+    let selectionReceipt: SelectionReceipt | undefined
+    const hasSelection = Boolean(
+      invocationSelection && hasInvocationScopeExclusions(invocationSelection),
+    )
+    const progressObserver = activeProgress
+      ? {
+          onPackagesDiscovered: (discoveredPackages: PackageMeta[]) => {
             activeProgress.onPackagesDiscovered(discoveredPackages)
             if (!(runtimeOptions.global || runtimeOptions.globalAll)) {
               activeProgress.onRepositoryInspectionStart()
             }
           },
-          writeDurable: (write) => activeProgress.suspend(write),
-        })
-      : await loadPackages(runtimeOptions)
+          writeDurable: <T>(write: () => T) => activeProgress.suspend(write),
+        }
+      : undefined
+    const packages = activeProgress
+      ? hasSelection
+        ? await loadPackages(runtimeOptions, progressObserver, invocationSelection)
+        : await loadPackages(runtimeOptions, progressObserver)
+      : hasSelection
+        ? await loadPackages(runtimeOptions, undefined, invocationSelection)
+        : await loadPackages(runtimeOptions)
+    selectionReceipt = readInvocationSelectionReceipt(runtimeOptions)
     const discoveryMs = performance.now() - discoveryStart
     progress?.onPackagesReady(packages)
+    if (selectionReceipt && hasSelection && runtimeOptions.output === 'table') {
+      writeDurable(progress, () => renderSelectionReceipt(selectionReceipt!))
+    }
     if (runtimeOptions.explainDiscovery && runtimeOptions.output === 'table') {
       writeDurable(progress, () => logDiscoveryReport(runtimeOptions, logger))
     }
+    await writeDurableAsync(progress, () => addons.setup())
     const executionState: JsonExecutionState = {
       scannedPackages: packages.length,
       packagesWithUpdates: 0,
@@ -132,7 +152,7 @@ async function runCheck(
       }
       logger.warn('No packages found')
       if (options.output === 'json') {
-        outputJsonEnvelope([], runtimeOptions, executionState)
+        outputJsonEnvelope([], runtimeOptions, executionState, [], selectionReceipt)
       }
       return options.failOnNoPackages ? 2 : 0
     }
@@ -350,7 +370,7 @@ async function runCheck(
     }
 
     if (options.output === 'json') {
-      outputJsonEnvelope(jsonPackages, runtimeOptions, executionState, jsonErrors)
+      outputJsonEnvelope(jsonPackages, runtimeOptions, executionState, jsonErrors, selectionReceipt)
     } else if (executionState.plannedUpdates > 0) {
       logger.info(
         `Writes: ${executionState.appliedUpdates} applied, ${executionState.skippedUpdates} skipped, ${executionState.conflictedUpdates} conflicted, ${executionState.revertedUpdates} reverted, ${executionState.failedWrites} failed, ${executionState.unknownWrites} unknown`,
@@ -415,6 +435,22 @@ function writeDurable<T>(progress: CheckProgress | null, write: () => T): T {
 
 function writeDurableAsync<T>(progress: CheckProgress | null, write: () => Promise<T>): Promise<T> {
   return progress ? progress.suspendAsync(write) : write()
+}
+
+function renderSelectionReceipt(receipt: SelectionReceipt): void {
+  const { summary } = receipt
+  const workspaceLabel = summary.matchedWorkspaces === 1 ? 'workspace' : 'workspaces'
+  const catalogLabel = summary.matchedCatalogNames === 1 ? 'catalog' : 'catalogs'
+  // biome-ignore lint/suspicious/noConsole: intentional durable human receipt
+  console.log(
+    `Exclusions: ${summary.matchedWorkspaces} ${workspaceLabel} · ${summary.matchedCatalogNames} ${catalogLabel} · ${summary.excludedOccurrences} occurrences`,
+  )
+  if (summary.eligibleSharedCatalogOwners > 0) {
+    // biome-ignore lint/suspicious/noConsole: intentional durable human receipt
+    console.log(
+      'Shared catalog owners remain eligible; use --exclude-catalog to exclude them explicitly.',
+    )
+  }
 }
 
 function logProfileReport(

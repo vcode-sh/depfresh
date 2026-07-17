@@ -21,8 +21,8 @@ export default defineConfig({
   mode: 'latest',
   policyRules: [
     {
-      id: 'native-catalog-minor',
-      selectors: { catalogName: 'native' },
+      id: 'payments-catalog-minor',
+      selectors: { catalogName: '^payments$' },
       mode: 'minor',
     },
   ],
@@ -34,6 +34,11 @@ Rules target repository occurrences, not just package names. See
 compatibility translation for `include`, `exclude`, `mode`, and `packageMode`.
 Compatibility signal policy is documented under
 [Compatibility signal policy](./options.md#compatibility-signal-policy).
+
+For a one-run exact exclusion, prefer the CLI-only `--exclude-workspace <path>` or
+`--exclude-catalog <name>` flags. They bind to repository evidence after inspection and do not add
+top-level config fields or change the library API. Persistent patterns still belong in
+`policyRules`.
 
 `depfresh plan` and `plan()` intentionally do not evaluate executable configuration. Define
 `cohorts` and `signalRules` as plain data in `.depfreshrc`, `depfresh.config.json`, or

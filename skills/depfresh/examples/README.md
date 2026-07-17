@@ -3,10 +3,22 @@
 Select `DEPFRESH` from `../recipes/runners.md`. Store outputs outside tracked source files or in an
 explicit CI artifact directory.
 
-## Read-only audit and broad catalog policy
+## Read-only audit and exact invocation exclusions
+
+```bash
+"${DEPFRESH[@]}" --exclude-workspace apps/admin --output json > depfresh-check.json
+"${DEPFRESH[@]}" plan --output json \
+  --exclude-workspace apps/admin \
+  --exclude-catalog payments > depfresh-plan.json || test "$?" -eq 1
+```
+
+Review `selection`: a workspace request does not freeze a shared physical catalog owner. Repeat
+flags for additional exact values; commas are literal and not list separators.
+
+## Broad persistent catalog policy
 
 Copy `catalog-policy.json` to `.depfreshrc.json`. It applies `latest` broadly while capping only the
-physical `native` catalog owner at `minor`; catalog consumers stay references and direct same-name
+physical `payments` catalog owner at `minor`; catalog consumers stay references and direct same-name
 dependencies remain independent.
 
 ```bash
@@ -16,7 +28,7 @@ dependencies remain independent.
 
 Review `summary`, `operations`, every non-selected decision, `signals`, `diagnostics`, `risks`,
 `requiredCapabilities`, `execution`, and `planFingerprint`. Validate the document with
-`depfresh/schemas/plan-v1.json`; `apply` also enforces semantic and fingerprint invariants.
+`depfresh/schemas/plan-v2.json`; `apply` also enforces semantic and fingerprint invariants.
 
 ## Reviewed apply and stale re-plan
 

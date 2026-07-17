@@ -99,6 +99,12 @@ Spits out a single JSON envelope to stdout. All log output is automatically supp
 
 ## Field Reference
 
+When exact workspace/catalog flags are present, the compatibility envelope adds `selection` with
+requested literal identities, matched workspace/catalog/physical-owner counts, bound occurrence
+IDs, excluded occurrence count, and eligible shared catalog-owner count. The field is omitted when
+no such flag was requested. Counts are derived after repository binding; they are not copied from
+argv.
+
 ### `packages[]`
 
 | Field | Type | Description |

@@ -15,7 +15,7 @@ inspect/plan/apply/global machine contracts.
   semantics, authority grants, runners, registries, and packaged assets.
 
 - **[Inspect and Plan](./inspect-plan.md)** -- Deterministic schema-v1 repository evidence and
-  immutable plan operations with canonical fingerprints.
+  current schema-v2 immutable plan operations/selection receipts with canonical fingerprints.
 - **[Compatibility Signals](./compatibility-signals.md)** -- Repository-runtime, exact-owner peer
   constraints with conservative unknown topology, cohort, release, deprecation, completeness, and
   passive-presence evidence in plans.

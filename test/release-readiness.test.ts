@@ -70,8 +70,12 @@ describe('2.0 release readiness', () => {
       changelog.indexOf('## [1.2.0]'),
     )
 
-    expect(unreleased.trim()).toBe('')
+    expect(unreleased).toContain('First-class exact workspace and catalog exclusions')
     expect(release).toContain('Portable isolated npm bootstrap in the release workflow')
+  })
+
+  it('preserves historical README anchors referenced by the 2.0.0 release record', () => {
+    expect(read('README.md')).toContain('<a id="skip-native-or-expo-updates-in-a-monorepo"></a>')
   })
 
   it('couples all current package and runner surfaces to 2.0.0', () => {

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createVSCodeAddon } from '../../addons'
+import { ConfigError } from '../../errors'
 import type { depfreshAddon } from '../../types'
 import { baseOptions, type CheckMocks, makePkg, makeResolved, setupMocks } from './test-helpers'
 
@@ -84,6 +85,25 @@ describe('addons', () => {
     const code = await check({ ...baseOptions, addons: [addon] })
 
     expect(code).toBe(2)
+  })
+
+  it('binds CLI selection before addon setup can perform side effects', async () => {
+    const setup = vi.fn()
+    mocks.loadPackagesMock.mockRejectedValue(
+      new ConfigError('Selection target is unavailable.', {
+        reason: 'SELECTION_TARGET_UNPROVEN',
+      }),
+    )
+
+    const { checkFromCli } = await import('./run-check')
+    const code = await checkFromCli(
+      { ...baseOptions, addons: [{ name: 'side-effect-addon', setup }] },
+      undefined,
+      { workspaces: ['apps/missing'], catalogs: [] },
+    )
+
+    expect(code).toBe(2)
+    expect(setup).not.toHaveBeenCalled()
   })
 
   it('creates engines.vscode when syncing @types/vscode into a package without engines', async () => {

@@ -4,6 +4,16 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Semver
 
 ## Unreleased
 
+### Added
+
+- **First-class exact workspace and catalog exclusions** -- normal check/write and machine plan now
+  accept repeatable literal `--exclude-workspace` and `--exclude-catalog` flags. Every request binds
+  to deterministic repository entities before registry/cache/interactive/operation/write work,
+  compiles as final action-only CLI policy, and emits a derived receipt. Workspace exclusion never
+  freezes shared catalog owners; catalog exclusion targets all proven same-name physical owners and
+  only their linked consumers. Current plan/capabilities output uses strict schema v2, while v1
+  schema bytes and reviewed-plan apply compatibility remain unchanged.
+
 ## [2.0.0] - 2026-07-17
 
 ### Added

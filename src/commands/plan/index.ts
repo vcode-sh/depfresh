@@ -1,6 +1,7 @@
 import * as semver from 'semver'
 import { version } from '../../../package.json' with { type: 'json' }
 import { createMemoryCache } from '../../cache'
+import type { InvocationScopeExclusions } from '../../cli/scope-exclusions'
 import { resolveDataConfigForSource } from '../../config'
 import {
   EXACT_SHA512_INTEGRITY_REGEX,
@@ -22,12 +23,13 @@ import {
   projectVcs,
 } from '../../contracts/repository-projection'
 import { isContractSafeArgv, isContractSafeText } from '../../contracts/sanitize'
-import type { PlanResult } from '../../contracts/schemas'
+import type { PlanResult, PlanResultV2 } from '../../contracts/schemas'
 import { assertPlanResult } from '../../contracts/validate'
 import { ConfigError } from '../../errors'
 import { createResolveContext, resolvePackage } from '../../io/resolve'
 import { resolvePhysicalValues } from '../../io/write/occurrence'
 import { inspectRepositoryWithProjection } from '../../repository/inspect'
+import { createSelectionReceipt } from '../../selection'
 import { evaluatePlanSignals, validateSignalConfiguration } from '../../signals'
 import type {
   depfreshOptions,
@@ -157,14 +159,15 @@ function createRuntimeOverrides(options: PlanOptions): Partial<depfreshOptions> 
   }
 }
 
-export async function plan(options: PlanOptions): Promise<PlanResult> {
+export async function plan(options: PlanOptions): Promise<PlanResultV2> {
   return planForInvocation(options, 'library')
 }
 
 export async function planForInvocation(
   options: PlanOptions,
   invocationSource: Extract<PolicyRuleSource, 'library' | 'cli'>,
-): Promise<PlanResult> {
+  invocationSelection?: InvocationScopeExclusions,
+): Promise<PlanResultV2> {
   try {
     assertPlainDataInput(options)
   } catch {
@@ -188,7 +191,11 @@ export async function planForInvocation(
   }
   const asOf = semanticAsOf(options, runtimeOptions)
   validateSignalConfiguration(runtimeOptions.cohorts, runtimeOptions.signalRules)
-  const inspection = await inspectRepositoryWithProjection(runtimeOptions)
+  const inspection = await inspectRepositoryWithProjection(
+    runtimeOptions,
+    undefined,
+    invocationSelection,
+  )
   const { model } = inspection
   const repository = projectRepository(model)
   const occurrences = projectOccurrences(model)
@@ -612,8 +619,8 @@ export async function planForInvocation(
     signals: signalResult.summary,
   }
   const semanticResult = {
-    contract: 'depfresh.plan',
-    schemaVersion: 1,
+    contract: 'depfresh.plan' as const,
+    schemaVersion: 2 as const,
     toolVersion: version,
     repository,
     asOf: asOf.iso,
@@ -631,6 +638,8 @@ export async function planForInvocation(
     errors,
     requiredCapabilities: requiredPlanCapabilities(operations.length, execution),
     summary,
+    selection:
+      inspection.selection ?? createSelectionReceipt(undefined, model, inspection.decisions),
   }
   const result = { ...semanticResult, planFingerprint: createPlanFingerprint(semanticResult) }
   assertPlanResult(result)

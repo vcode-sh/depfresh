@@ -1,6 +1,13 @@
+import type { InvocationScopeExclusions } from '../cli/scope-exclusions'
 import { discoverPackages, type PackageLoadObserver } from '../io/packages/discovery'
 import { compilePolicy } from '../policy/compiler'
 import { applyPolicyToProjection, evaluateRepositoryPolicy } from '../policy/repository'
+import {
+  attachInvocationSelectionReceipt,
+  bindInvocationSelection,
+  createSelectionReceipt,
+  type SelectionReceipt,
+} from '../selection'
 import type { depfreshOptions, PackageMeta, PolicyDecision } from '../types'
 import { DEFAULT_OPTIONS } from '../types'
 import type { InspectRepositoryOptions, RepositoryModel } from '../types/repository'
@@ -10,6 +17,7 @@ export interface RepositoryInspection {
   model: RepositoryModel
   packages: PackageMeta[]
   decisions: PolicyDecision[]
+  selection?: SelectionReceipt
 }
 
 export async function inspectRepository(
@@ -22,6 +30,7 @@ export async function inspectRepository(
 export async function inspectRepositoryWithProjection(
   options: depfreshOptions,
   observer?: PackageLoadObserver,
+  invocationSelection?: InvocationScopeExclusions,
 ): Promise<RepositoryInspection> {
   const discoveryOptions = { ...options, include: undefined, exclude: undefined }
   const packages = await discoverPackages(discoveryOptions, observer)
@@ -39,7 +48,7 @@ export async function inspectRepositoryWithProjection(
     options.ignorePaths,
     options.repositoryVcs ?? 'probe',
   )
-  const policy =
+  const basePolicy =
     options.compiledPolicy ??
     compilePolicy([
       { source: 'defaults', mode: DEFAULT_OPTIONS.mode ?? 'default' },
@@ -52,11 +61,20 @@ export async function inspectRepositoryWithProjection(
         policyRules: options.policyRules,
       },
     ])
+  const boundSelection = invocationSelection
+    ? bindInvocationSelection(root, model, invocationSelection)
+    : undefined
+  const policy = boundSelection ? boundSelection.appendToPolicy(basePolicy) : basePolicy
   const decisions = evaluateRepositoryPolicy(model, policy)
+  const selection = boundSelection
+    ? createSelectionReceipt(boundSelection, model, decisions)
+    : undefined
+  if (selection) attachInvocationSelectionReceipt(options, selection)
   return {
     model,
     packages: applyPolicyToProjection(root, packages, model, decisions),
     decisions,
+    ...(selection ? { selection } : {}),
   }
 }
 

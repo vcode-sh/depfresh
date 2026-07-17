@@ -162,6 +162,11 @@ import { DEFAULT_OPTIONS } from 'depfresh'
 
 ## Workflow Examples
 
+The CLI-only repeatable `--exclude-workspace` and `--exclude-catalog` shortcuts do not alter
+`depfreshOptions` or library precedence. Programmatic callers use existing ordered `policyRules`.
+Current `plan()` results use schema v2 and include an empty selection receipt unless the CLI bound
+exact invocation selection before planning.
+
 ### Custom CLI Wrapper
 
 Build your own opinionated wrapper around depfresh. Because the existing CLI is apparently not opinionated enough.

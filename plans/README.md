@@ -55,7 +55,7 @@ may grant side effects. Unknown state is never reported as success.
 | [025](./025-ci-portability-ledger-truth.md) | CI portability and ledger truth | P1 | S | 024 | DONE |
 | [026](./026-repository-performance-progress-ux.md) | Repository performance and progress UX | P1 | M | 025 | DONE |
 | [027](./027-wun-demo-release-proof.md) | WUN-shaped demo and release proof | P1 | M | 026 | DONE |
-| [028](./028-first-class-workspace-catalog-exclusions.md) | First-class workspace and catalog exclusions | P1 | L | 017, 018, 019, 024, 026, 027 | TODO |
+| [028](./028-first-class-workspace-catalog-exclusions.md) | First-class workspace and catalog exclusions | P1 | L | 017, 018, 019, 024, 026, 027 | DONE |
 
 The implementation order through 016 is present locally. Plans 011 through 013 passed their final
 blocker replays, regression fixes, full gates, and independent re-reviews on 2026-07-16. Plans 014
@@ -184,6 +184,15 @@ discovery ignores while current docs overfit the feature to the earlier native e
 adds exact fail-closed invocation shortcuts, preserves explicit shared-catalog ownership, makes the
 effective selection observable, and replaces the native-centric current product framing without
 rewriting the published v2.0.0 release history.
+
+Plan 028 completed exact workspace/catalog CLI selection with fail-closed pre-network binding,
+physical catalog-ID ownership, durable check receipts, fingerprinted plan v2 selection receipts,
+capabilities v2, plan v1/v2 apply compatibility, generic current documentation, and source/built/
+installed write/apply proof. The exact Node 24.15.0 focused matrix passed three times, all 141 files
+and 1,528 tests passed with coverage, npm 11.12.1 verified the 56-file tarball, immutable v1 and
+historical-release bytes remained unchanged, and the final independent review returned `APPROVED`
+with no findings. Version remains `2.0.0`; no push, tag, publish, release, branch, worktree, or pull
+request was created.
 
 ## Split coverage map
 

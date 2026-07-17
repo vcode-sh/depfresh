@@ -28,8 +28,12 @@ export { resolveConfig } from './config'
 export { canonicalJson } from './contracts/canonical-json'
 export {
   CAPABILITIES_SCHEMA_ID,
+  CAPABILITIES_V2_SCHEMA_ID,
   capabilitiesSchema,
+  capabilitiesV2Schema,
   validateCapabilities,
+  validateCapabilitiesV1,
+  validateCapabilitiesV2,
 } from './contracts/capabilities-schema'
 export {
   createPlanFingerprint,
@@ -47,6 +51,8 @@ export type {
   InspectResult,
   MachineCommandError,
   PlanResult,
+  PlanResultV1,
+  PlanResultV2,
 } from './contracts/schemas'
 export {
   APPLY_SCHEMA_ID,
@@ -56,7 +62,9 @@ export {
   INSPECT_SCHEMA_ID,
   inspectResultSchema,
   PLAN_SCHEMA_ID,
+  PLAN_V2_SCHEMA_ID,
   planResultSchema,
+  planResultV2Schema,
 } from './contracts/schemas'
 export {
   assertApplyResult,
@@ -68,6 +76,8 @@ export {
   validateInspectResult,
   validateMachineCommandError,
   validatePlanResult,
+  validatePlanResultV1,
+  validatePlanResultV2,
 } from './contracts/validate'
 export type { depfreshErrorReason } from './errors'
 export {
@@ -101,6 +111,7 @@ export {
   validatePolicyRules,
 } from './policy'
 export { inspectRepository } from './repository/inspect'
+export type { SelectionReceipt, SelectionReceiptRequest } from './selection'
 export {
   type EvaluatePlanSignalsInput,
   type EvaluatePlanSignalsResult,

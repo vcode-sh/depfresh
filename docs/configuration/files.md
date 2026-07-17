@@ -105,6 +105,10 @@ invocation layer. Compiled rules retain deterministic source, kind, and index pr
 CLI `--ignore-paths` also replaces configured custom ignore paths for that invocation, but retains
 and dedupes the four built-in discovery safety exclusions.
 
+The repeatable `--exclude-workspace` and `--exclude-catalog` flags are invocation-only selection,
+not config aliases. They are bound to exact modeled packages/catalogs and appended as final
+action-only CLI rules. Existing configured mode winners and traces remain intact.
+
 Invalid policy fails configuration loading with `ConfigError`. Unknown or authority-shaped fields,
 non-JSON values, duplicate IDs, invalid patterns or enums, and invalid action/mode combinations are
 never ignored. See [Full Options](./options.md#occurrence-policy) for the selector vocabulary and

@@ -1,3 +1,4 @@
+import type { SelectionReceipt } from '../../selection'
 import type {
   DiffType,
   DiscoveryReport,
@@ -81,6 +82,7 @@ export interface LegacyCheckJsonResult {
   }
   discovery?: DiscoveryReport
   profile?: ProfileReport
+  selection?: SelectionReceipt
 }
 
 export interface LegacyCheckJsonError {
@@ -121,8 +123,16 @@ export function outputJsonEnvelope(
   options: depfreshOptions,
   executionState: JsonExecutionState,
   errors: JsonError[] = [],
+  selection?: SelectionReceipt,
 ): void {
-  const output = buildLegacyCheckJsonResult(packages, options, executionState, errors)
+  const output = buildLegacyCheckJsonResult(
+    packages,
+    options,
+    executionState,
+    errors,
+    undefined,
+    selection,
+  )
 
   // biome-ignore lint/suspicious/noConsole: intentional JSON output
   console.log(JSON.stringify(output, null, 2))
@@ -134,6 +144,7 @@ export function buildLegacyCheckJsonResult(
   executionState: JsonExecutionState,
   errors: JsonError[] = [],
   timestamp = new Date().toISOString(),
+  selection?: SelectionReceipt,
 ): LegacyCheckJsonResult {
   const allUpdates = packages.flatMap((p) => p.updates)
   const count = (diff: DiffType) => allUpdates.filter((u) => u.diff === diff).length
@@ -176,6 +187,7 @@ export function buildLegacyCheckJsonResult(
       ? { discovery: options.discoveryReport }
       : {}),
     ...(options.profile && options.profileReport ? { profile: options.profileReport } : {}),
+    ...(selection ? { selection } : {}),
   }
 
   return redactSensitiveValue(output) as LegacyCheckJsonResult

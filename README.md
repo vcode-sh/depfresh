@@ -77,11 +77,37 @@ JSON output is still valid on exit `1`.
 See [automation and machine workflows](docs/agents/README.md) for schemas, lockfile phases,
 artifact verification, and CI examples.
 
-## Skip native or Expo updates in a monorepo
+<a id="skip-native-or-expo-updates-in-a-monorepo"></a>
 
-depfresh supports npm, pnpm, Yarn, and Bun workspaces. Pnpm, Yarn, and Bun catalogs include shared
-and named catalogs. Add a declarative `.depfreshrc.json` when one part of a workspace needs a
-different update policy:
+## Exclude an exact workspace or catalog
+
+Use repeatable exact-literal flags when one workspace or physical catalog should stay unchanged for
+one invocation:
+
+```bash
+depfresh -r --exclude-workspace apps/admin
+depfresh -r -w \
+  --exclude-workspace apps/admin \
+  --exclude-workspace packages/legacy \
+  --exclude-catalog payments
+depfresh plan --json --exclude-catalog default
+```
+
+`--exclude-workspace` excludes declarations owned by that workspace plus its explanatory catalog
+consumers. It never excludes a physical catalog owner, even for the root workspace `.`. Use
+`--exclude-catalog` separately to exclude every proven physical catalog with that exact name and
+its linked consumers. Commas and punctuation are literal, so `--exclude-catalog=mobile,v2` is one
+catalog name. Missing or unprovable targets fail before registry or write work.
+
+Choose the narrowest control that matches your intent:
+
+- `--exclude` filters dependency names.
+- `--ignore-paths` changes repository discovery and therefore removes evidence.
+- `--exclude-workspace` selects one proven repository-relative package path.
+- `--exclude-catalog` selects all proven physical owners of one exact catalog name.
+
+For persistent patterns, use declarative policy rules. For example, a native/Expo lane can still
+use `.depfreshrc.json`:
 
 ```json
 {

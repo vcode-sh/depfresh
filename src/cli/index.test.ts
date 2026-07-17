@@ -1,4 +1,7 @@
 import { spawnSync } from 'node:child_process'
+import { existsSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 
@@ -230,4 +233,143 @@ describe('CLI unsupported combinations', () => {
     }
     expect(output.error.reason).toBe('UNSUPPORTED_COMBINATION')
   })
+})
+
+describe('CLI workspace and catalog exclusions', () => {
+  it('emits a bounded compatibility JSON receipt for a proven empty root workspace', () => {
+    const root = mkdtempSync(join(tmpdir(), 'depfresh-cli-selection-'))
+    writeFileSync(join(root, 'package.json'), JSON.stringify({ name: 'fixture' }))
+
+    const result = runCli(['--cwd', root, '--output', 'json', '--exclude-workspace', './'])
+
+    expect(result.status).toBe(0)
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      selection: {
+        requests: [{ kind: 'workspace', value: '.', occurrenceIds: [] }],
+        summary: {
+          requestedWorkspaces: 1,
+          matchedWorkspaces: 1,
+          excludedOccurrences: 0,
+          eligibleSharedCatalogOwners: 0,
+        },
+      },
+    })
+  })
+
+  it('prints a durable human receipt even when informational logging is silent', () => {
+    const root = mkdtempSync(join(tmpdir(), 'depfresh-cli-selection-human-'))
+    writeFileSync(join(root, 'package.json'), JSON.stringify({ name: 'fixture' }))
+
+    const result = runCli(['--cwd', root, '--loglevel', 'silent', '--exclude-workspace', '.'])
+
+    expect(result.status).toBe(0)
+    expect(result.stdout).toContain('Exclusions: 1 workspace · 0 catalogs · 0 occurrences')
+  })
+
+  it('fails an unproven workspace before creating persistent cache state', () => {
+    const root = mkdtempSync(join(tmpdir(), 'depfresh-cli-selection-missing-'))
+    writeFileSync(join(root, 'package.json'), JSON.stringify({ name: 'fixture' }))
+
+    const result = runCli([
+      '--cwd',
+      root,
+      '--output',
+      'json',
+      '--exclude-workspace',
+      'apps/missing',
+    ])
+
+    expect(result.status).toBe(2)
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      error: { code: 'ERR_CONFIG', reason: 'SELECTION_TARGET_UNPROVEN' },
+    })
+  })
+
+  it('rejects unsafe selection before executable configuration can run', () => {
+    const root = mkdtempSync(join(tmpdir(), 'depfresh-cli-selection-config-'))
+    const marker = join(root, 'config-ran')
+    writeFileSync(join(root, 'package.json'), JSON.stringify({ name: 'fixture' }))
+    writeFileSync(
+      join(root, 'depfresh.config.mjs'),
+      `import { writeFileSync } from 'node:fs'\nwriteFileSync(${JSON.stringify(marker)}, 'ran')\nexport default {}\n`,
+    )
+
+    const result = runCli([
+      '--cwd',
+      root,
+      '--output',
+      'json',
+      '--exclude-catalog',
+      '/private/catalog',
+    ])
+
+    expect(result.status).toBe(2)
+    expect(existsSync(marker)).toBe(false)
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      error: { reason: 'SELECTION_TARGET_UNPROVEN' },
+    })
+  })
+
+  it.each([
+    [['inspect', '--json', '--exclude-workspace', '.'], 'inspect'],
+    [['--exclude-workspace', '.', 'inspect', '--json'], 'inspect with leading option'],
+    [['inspect', '--json', '--exclude-catalog', 'default'], 'inspect catalog'],
+    [['--exclude-catalog', 'default', 'inspect', '--json'], 'inspect catalog with leading option'],
+    [
+      ['apply', '--json', '--write', '--plan-file', 'missing.json', '--exclude-workspace', '.'],
+      'apply',
+    ],
+    [
+      ['--exclude-workspace', '.', 'apply', '--json', '--write', '--plan-file', 'missing.json'],
+      'apply with leading option',
+    ],
+    [
+      ['--exclude-catalog', 'default', 'apply', '--json', '--write', '--plan-file', 'missing.json'],
+      'apply catalog with leading option',
+    ],
+  ])('rejects selection flags for $1', (command) => {
+    const result = runCli(command)
+
+    expect(result.status).toBe(2)
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      errors: [{ reason: 'UNSUPPORTED_COMBINATION' }],
+    })
+  })
+
+  it.each([
+    [['plan', '--json', '--exclude-workspace='], 'workspace after command'],
+    [['--exclude-workspace=', 'plan', '--json'], 'workspace before command'],
+    [['plan', '--json', '--exclude-catalog='], 'catalog after command'],
+    [['--exclude-catalog=', 'plan', '--json'], 'catalog before command'],
+  ])('returns the stable selection error for empty $1', (command) => {
+    const result = runCli(command)
+
+    expect(result.status).toBe(2)
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      contract: 'depfresh.error',
+      command: 'plan',
+      errors: [{ reason: 'SELECTION_TARGET_UNPROVEN' }],
+    })
+  })
+
+  it('rejects selection flags for global checks', () => {
+    const result = runCli(['--global', '--exclude-catalog', 'default', '--output', 'json'])
+
+    expect(result.status).toBe(2)
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      error: { reason: 'UNSUPPORTED_COMBINATION' },
+    })
+  })
+
+  it.each([['capabilities', '--json'], ['--help-json']])(
+    'rejects selection flags outside the advertised check/plan command scope for %j',
+    (...argv) => {
+      const result = runCli([...argv, '--exclude-catalog', 'default'])
+
+      expect(result.status).toBe(2)
+      expect(JSON.parse(result.stdout)).toMatchObject({
+        error: { reason: 'UNSUPPORTED_COMBINATION' },
+      })
+    },
+  )
 })

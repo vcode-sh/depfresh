@@ -13,7 +13,8 @@ The full type catalogue. Every interface, union, and enum that depfresh exports.
 | `DiffType` | Version diff classification: `'major'` \| `'minor'` \| `'patch'` \| `'none'` \| `'error'` |
 | `InvocationAuthority` | Immutable grants for file write, process execution, lockfile write, install, exact command verification, artifact verification, network access, legacy compatibility, and global-write side effects |
 | `InspectOptions` / `InspectResult` | Process-free schema-v1 repository evidence input and schema-derived result |
-| `PlanOptions` / `PlanResult` | Registry-aware non-mutating planner input, including optional manager/verification intent, and schema-derived semantic plan result |
+| `PlanOptions` / `PlanResultV1` / `PlanResultV2` / `PlanResult` | Registry-aware non-mutating planner input, immutable v1/v2 results, and their compatibility union. Current producers return v2 with a mandatory selection receipt. |
+| `SelectionReceipt` / `SelectionReceiptRequest` | Derived exact CLI invocation binding and summary embedded in plan v2 and optionally in legacy check JSON. |
 | `CohortInput` / `SignalRuleInput` / `SignalRuleEffect` | Strict explicit package-family coordination and ordered `warn`/`block` signal-effect configuration |
 | `EvaluatePlanSignalsInput` / `EvaluatePlanSignalsResult` | Pure fixed-clock repository-signal evaluator input and normalized signals/evidence/summary/block result |
 | `PlanSignal` / `SignalEvidence` / `SignalSummary` | Fingerprinted immutable signal truth, normalized source evidence, policy trace, and exact counts |

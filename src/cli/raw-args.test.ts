@@ -1,5 +1,20 @@
 import { describe, expect, it } from 'vitest'
-import { normalizeCliRawArgs } from './raw-args'
+import { findRawMachineCommand, normalizeCliRawArgs } from './raw-args'
+
+describe('findRawMachineCommand', () => {
+  it.each([
+    [['plan', '--json'], 'plan'],
+    [['--exclude-workspace=', 'plan', '--json'], 'plan'],
+    [['-ojson', 'inspect'], 'inspect'],
+    [['-o', 'json', 'apply'], 'apply'],
+    [['--cwd', 'plan', 'inspect'], 'inspect'],
+    [['--exclude-catalog', 'plan', '--json'], undefined],
+    [['--no-exclude-workspace', 'plan', '--json'], 'plan'],
+    [['--unknown', 'plan'], undefined],
+  ])('finds only an actual positional machine command in %j', (rawArgs, expected) => {
+    expect(findRawMachineCommand(rawArgs)).toBe(expected)
+  })
+})
 
 describe('normalizeCliRawArgs', () => {
   it('keeps non-help args unchanged', () => {
@@ -49,6 +64,19 @@ describe('normalizeCliRawArgs', () => {
       '--write',
       '-w',
     ])
+  })
+
+  it('allows different repeated workspace and catalog exclusion values', () => {
+    const rawArgs = [
+      '--exclude-workspace',
+      'apps/admin',
+      '--exclude-workspace=packages/legacy',
+      '--exclude-catalog',
+      'mobile,v2',
+      '--exclude-catalog=-preview',
+    ]
+
+    expect(normalizeCliRawArgs(rawArgs)).toEqual(rawArgs)
   })
 
   it('keeps a machine command distinct from its range mode', () => {

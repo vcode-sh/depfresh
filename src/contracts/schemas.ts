@@ -1,4 +1,5 @@
 import type { FromSchema, JSONSchema } from 'json-schema-to-ts'
+import type { SelectionReceipt } from '../selection'
 import { SIGNAL_FAMILIES, SIGNAL_REASONS, SIGNAL_STATES } from '../types'
 import { EXACT_SHA512_INTEGRITY_PATTERN, NPM_ARTIFACT_VERIFIER_SUPPORT } from './artifact-verifier'
 
@@ -415,6 +416,7 @@ const commonDefinitions = {
 
 export const INSPECT_SCHEMA_ID = 'https://depfresh.dev/schemas/inspect-v1.schema.json'
 export const PLAN_SCHEMA_ID = 'https://depfresh.dev/schemas/plan-v1.schema.json'
+export const PLAN_V2_SCHEMA_ID = 'https://depfresh.dev/schemas/plan-v2.schema.json'
 export const APPLY_SCHEMA_ID = 'https://depfresh.dev/schemas/apply-v1.schema.json'
 export const COMMAND_ERROR_SCHEMA_ID = 'https://depfresh.dev/schemas/error-v1.schema.json'
 
@@ -885,6 +887,69 @@ export const planResultSchema = {
   definitions: commonDefinitions,
 } as const satisfies JSONSchema
 
+const selectionReceiptSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['requests', 'summary'],
+  properties: {
+    requests: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['kind', 'value', 'entityIds', 'occurrenceIds'],
+        properties: {
+          kind: { enum: ['workspace', 'catalog'] },
+          value: { type: 'string', minLength: 1 },
+          entityIds: {
+            type: 'array',
+            minItems: 1,
+            items: { type: 'string', minLength: 1 },
+          },
+          occurrenceIds: {
+            type: 'array',
+            items: { type: 'string', minLength: 1 },
+          },
+        },
+      },
+    },
+    summary: {
+      type: 'object',
+      additionalProperties: false,
+      required: [
+        'requestedWorkspaces',
+        'requestedCatalogs',
+        'matchedWorkspaces',
+        'matchedCatalogNames',
+        'matchedCatalogOwners',
+        'excludedOccurrences',
+        'eligibleSharedCatalogOwners',
+      ],
+      properties: {
+        requestedWorkspaces: { type: 'integer', minimum: 0 },
+        requestedCatalogs: { type: 'integer', minimum: 0 },
+        matchedWorkspaces: { type: 'integer', minimum: 0 },
+        matchedCatalogNames: { type: 'integer', minimum: 0 },
+        matchedCatalogOwners: { type: 'integer', minimum: 0 },
+        excludedOccurrences: { type: 'integer', minimum: 0 },
+        eligibleSharedCatalogOwners: { type: 'integer', minimum: 0 },
+      },
+    },
+  },
+} as const
+
+export const planResultV2Schema = {
+  ...planResultSchema,
+  $id: PLAN_V2_SCHEMA_ID,
+  title: 'depfresh plan contract v2',
+  required: [...planResultSchema.required, 'selection'],
+  properties: {
+    ...planResultSchema.properties,
+    schemaVersion: { const: 2 },
+    selection: selectionReceiptSchema,
+  },
+} as const satisfies JSONSchema
+
 const writeOutcomeSummarySchema = {
   type: 'object',
   additionalProperties: false,
@@ -1141,6 +1206,11 @@ export const commandErrorSchema = {
 } as const satisfies JSONSchema
 
 export type InspectResult = FromSchema<typeof inspectResultSchema>
-export type PlanResult = FromSchema<typeof planResultSchema>
+export type PlanResultV1 = FromSchema<typeof planResultSchema>
+export type PlanResultV2 = Omit<PlanResultV1, 'schemaVersion'> & {
+  schemaVersion: 2
+  selection: SelectionReceipt
+}
+export type PlanResult = PlanResultV1 | PlanResultV2
 export type ApplyResult = FromSchema<typeof applyResultSchema>
 export type MachineCommandError = FromSchema<typeof commandErrorSchema>

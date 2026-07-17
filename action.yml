@@ -435,7 +435,7 @@ runs:
               plan: "depfresh.plan",
               apply: "depfresh.apply",
             }[command]
-            if (!expectedContract || data?.contract !== expectedContract || data?.schemaVersion !== 1) {
+            if (!expectedContract || data?.contract !== expectedContract) {
               throw new Error("Invalid machine contract")
             }
             const validate = {

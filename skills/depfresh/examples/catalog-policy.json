@@ -2,9 +2,9 @@
   "mode": "latest",
   "policyRules": [
     {
-      "id": "native-catalog-minor",
+      "id": "payments-catalog-minor",
       "selectors": {
-        "catalogName": "native"
+        "catalogName": "^payments$"
       },
       "mode": "minor"
     }

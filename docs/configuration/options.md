@@ -25,6 +25,10 @@ Every option from the `depfreshOptions` interface. I documented all of them beca
 | `packageMode` | `Record<string, RangeMode>` | `undefined` | Per-dependency-resolution-name strategies. See [packageMode](#packagemode). |
 | `policyRules` | `PolicyRuleInput[]` | `undefined` | Ordered occurrence rules. See [Occurrence policy](#occurrence-policy). |
 
+`--exclude-workspace` and `--exclude-catalog` intentionally do not appear in `depfreshOptions`.
+They are CLI-only, repeatable, exact-literal invocation inputs for normal check/write and machine
+plan. Library callers express the same persistent selection through `policyRules`.
+
 ## Compatibility signal policy
 
 | Option | Type | Default | Description |
@@ -145,8 +149,8 @@ export default defineConfig({
   mode: 'latest',
   policyRules: [
     {
-      id: 'native-catalog-minor',
-      selectors: { catalogName: 'native' },
+      id: 'payments-catalog-minor',
+      selectors: { catalogName: '^payments$' },
       mode: 'minor',
     },
     {

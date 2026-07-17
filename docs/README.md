@@ -14,8 +14,8 @@ Everything I know about depfresh is in here, split into files so you can pretend
 - **[Configuration](./configuration/)** -- Config files, ordered occurrence policy, compatibility inputs, `depFields`, private registries, and cache settings.
   - [Config Files](./configuration/files.md) -- formats, private registries, cache
   - [Options Reference](./configuration/options.md) -- the exhaustive list
-  - [Workspaces](./configuration/workspaces.md) -- monorepos, catalogs, scanning, and native/Expo
-    exclusions
+  - [Workspaces](./configuration/workspaces.md) -- monorepos, catalogs, scanning, and exact
+    workspace/catalog exclusions
 
 - **[Programmatic API](./api/)** -- Exported policy/repository functions, lifecycle callbacks, addons, types, and workflow examples.
   - [Overview](./api/overview.md) -- quick start, defaults, examples
@@ -36,6 +36,9 @@ Everything I know about depfresh is in here, split into files so you can pretend
     release, deprecation, completeness, and passive-presence evidence
 
 - **[Agent Workflows](./agents/README.md)** -- quickstarts for AI coding agents with copy-paste command patterns.
+
+- Exact one-run workspace and physical-catalog exclusions are documented in the
+  [CLI flags](./cli/flags.md) and [workspace/catalog guide](./configuration/workspaces.md).
 
 - **[Integrations](./integrations/README.md)** -- Version-coupled GitHub Action and fixed-input
   machine-wrapper guidance.

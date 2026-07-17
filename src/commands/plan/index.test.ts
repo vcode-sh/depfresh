@@ -13,7 +13,7 @@ const { fetchPackageData } = vi.hoisted(() => ({
 
 vi.mock('../../io/registry', () => ({ fetchPackageData }))
 
-import { plan } from './index'
+import { plan, planForInvocation } from './index'
 
 describe('plan contract', () => {
   beforeEach(() => {
@@ -41,6 +41,19 @@ describe('plan contract', () => {
     const result = await plan({ cwd: root, mode: 'latest' })
 
     expect(result.contract).toBe('depfresh.plan')
+    expect(result.schemaVersion).toBe(2)
+    expect(result.selection).toEqual({
+      requests: [],
+      summary: {
+        requestedWorkspaces: 0,
+        requestedCatalogs: 0,
+        matchedWorkspaces: 0,
+        matchedCatalogNames: 0,
+        matchedCatalogOwners: 0,
+        excludedOccurrences: 0,
+        eligibleSharedCatalogOwners: 0,
+      },
+    })
     expect(result.operations).toHaveLength(1)
     expect(result.decisions).toHaveLength(result.occurrences.length)
     expect(new Set(result.decisions.map((decision) => decision.occurrenceId))).toEqual(
@@ -60,6 +73,73 @@ describe('plan contract', () => {
     expect(JSON.stringify(result)).not.toContain(root)
     expect(readFileSync(manifest)).toEqual(before)
     expect(existsSync(join(home, '.depfresh'))).toBe(false)
+  })
+
+  it('fingerprints CLI workspace selection and rejects forged receipt counts', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'depfresh-plan-selection-'))
+    writeFileSync(
+      join(root, 'package.json'),
+      JSON.stringify({ name: 'fixture', dependencies: { alpha: '^1.0.0' } }),
+    )
+
+    const result = await planForInvocation({ cwd: root, mode: 'latest' }, 'cli', {
+      workspaces: ['.'],
+      catalogs: [],
+    })
+
+    expect(fetchPackageData).not.toHaveBeenCalled()
+    expect(result.operations).toEqual([])
+    expect(result.selection).toMatchObject({
+      requests: [
+        {
+          kind: 'workspace',
+          value: '.',
+          occurrenceIds: [result.occurrences[0]?.id],
+        },
+      ],
+      summary: { excludedOccurrences: 1, eligibleSharedCatalogOwners: 0 },
+    })
+    expect(validatePlanResult(result)).toBe(true)
+
+    const { planFingerprint: _fingerprint, ...forgedBase } = {
+      ...result,
+      selection: {
+        ...result.selection,
+        summary: { ...result.selection.summary, excludedOccurrences: 2 },
+      },
+    }
+    expect(
+      validatePlanResult({
+        ...forgedBase,
+        planFingerprint: createPlanFingerprint(forgedBase),
+      }),
+    ).toBe(false)
+
+    const originalRuleId = result.decisions[0]?.policy.winningActionRuleId
+    expect(originalRuleId).toMatch(/^\$cli:exclude-workspace:/u)
+    const forgedRuleId = '$cli:exclude-workspace:forged:direct'
+    const { planFingerprint: _ruleFingerprint, ...forgedRuleBase } = {
+      ...result,
+      decisions: result.decisions.map((decision) => ({
+        ...decision,
+        policy: {
+          ...decision.policy,
+          matchedRuleIds: decision.policy.matchedRuleIds.map((id) =>
+            id === originalRuleId ? forgedRuleId : id,
+          ),
+          winningActionRuleId:
+            decision.policy.winningActionRuleId === originalRuleId
+              ? forgedRuleId
+              : decision.policy.winningActionRuleId,
+        },
+      })),
+    }
+    expect(
+      validatePlanResult({
+        ...forgedRuleBase,
+        planFingerprint: createPlanFingerprint(forgedRuleBase),
+      }),
+    ).toBe(false)
   })
 
   it('rejects release signals rebuilt from a target other than the decision candidate', async () => {

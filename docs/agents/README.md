@@ -26,9 +26,10 @@ Verify `"${DEPFRESH[@]}" --version`, then discover the installed surface:
 "${DEPFRESH[@]}" capabilities --json > depfresh-capabilities.json
 ```
 
-The deterministic `depfresh.capabilities` v1 document names every shipped schema, selector,
+The deterministic `depfresh.capabilities` v2 document names every shipped schema, selector,
 signal, supported manager/version/lockfile, apply phase, authority grant, workflow, runner, and
-package asset. Validate it with `depfresh/schemas/capabilities-v1.json`.
+package asset. Validate current output with `depfresh/schemas/capabilities-v2.json`; its version
+registry also lists the retained v1 compatibility artifact.
 
 ## Inspect, plan, review, apply, observe
 
@@ -40,8 +41,13 @@ package asset. Validate it with `depfresh/schemas/capabilities-v1.json`.
 Exit `1` is a valid inspect/plan document containing findings; exit `2` is fatal. Review operations,
 all skipped/blocked/unknown/error decisions, compatibility/trust signals, diagnostics, risks,
 manager evidence, `requiredCapabilities`, and `planFingerprint`. Unknown and warning states are not
-success. Validate the plan shape with `depfresh/schemas/plan-v1.json`; apply also validates semantic
+success. Validate current plan shape with `depfresh/schemas/plan-v2.json`; apply also validates semantic
 references and the fingerprint.
+
+For an exact one-run monorepo scope, repeat `--exclude-workspace <path>` and/or
+`--exclude-catalog <name>` on normal check/write or `plan`. Review the emitted selection receipt.
+Do not add those flags to inspect or apply, and do not infer a catalog exclusion from a workspace
+exclusion.
 
 ```bash
 "${DEPFRESH[@]}" apply --output json --write \

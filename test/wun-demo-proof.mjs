@@ -291,6 +291,60 @@ assert.deepEqual(new Set(operationNames), new Set(['expo-server-sdk', 'typescrip
 assert.equal(coldPlan.summary.blocked, 0)
 assert.equal(coldPlan.summary.errors, 0)
 
+const workspaceSelection = parseJson(
+  await runCli(demoRoot, [
+    'plan',
+    '--json',
+    '--mode',
+    'minor',
+    '--include-locked',
+    '--exclude-workspace',
+    'apps/worker',
+  ]),
+  1,
+)
+assert.deepEqual(workspaceSelection.selection.summary, {
+  requestedWorkspaces: 1,
+  requestedCatalogs: 0,
+  matchedWorkspaces: 1,
+  matchedCatalogNames: 0,
+  matchedCatalogOwners: 0,
+  excludedOccurrences: 2,
+  eligibleSharedCatalogOwners: 1,
+})
+
+const catalogSelection = parseJson(
+  await runCli(demoRoot, [
+    'plan',
+    '--json',
+    '--mode',
+    'minor',
+    '--include-locked',
+    '--exclude-catalog',
+    'default',
+  ]),
+  1,
+)
+assert.equal(catalogSelection.selection.summary.matchedCatalogOwners, 1)
+assert.equal(catalogSelection.selection.summary.excludedOccurrences, 4)
+
+const combinedSelection = parseJson(
+  await runCli(demoRoot, [
+    'plan',
+    '--json',
+    '--mode',
+    'minor',
+    '--include-locked',
+    '--exclude-workspace',
+    'apps/worker',
+    '--exclude-catalog',
+    'default',
+  ]),
+  1,
+)
+assert.equal(combinedSelection.selection.summary.excludedOccurrences, 5)
+assert.equal(combinedSelection.selection.summary.eligibleSharedCatalogOwners, 0)
+
 const requestsBeforeColdCache = registryRequests.length
 parseJson(
   await runCli(demoRoot, [
@@ -389,6 +443,9 @@ console.log(
         'inspect',
         'native catalog exclusion',
         'direct native exclusion',
+        'exact Bun workspace exclusion',
+        'exact Bun catalog exclusion',
+        'combined Bun exclusion receipt',
         'ordinary catalog updates',
         'workspace protocol skip',
         'authority denial',

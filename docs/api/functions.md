@@ -139,14 +139,15 @@ export default defineConfig({
 ## `inspect(options)`, `plan(options)`, and `apply(plan, options, authority)`
 
 `inspect()` returns the schema-v1 process-free repository evidence contract. `plan()` returns the
-schema-v1 registry-aware plan with one terminal decision per occurrence and exact future file
+current schema-v2 registry-aware plan with one terminal decision per occurrence, a mandatory
+selection receipt, and exact future file
 operations. Neither function writes stdout/stderr, changes exit state, writes repository/cache
 files, or runs package-manager/lifecycle/configured commands. Fatal failures throw structured
 errors.
 
 ```ts
 function inspect(options: InspectOptions): Promise<InspectResult>
-function plan(options: PlanOptions): Promise<PlanResult>
+function plan(options: PlanOptions): Promise<PlanResultV2>
 function evaluatePlanSignals(input: EvaluatePlanSignalsInput): EvaluatePlanSignalsResult
 function validateSignalConfiguration(
   cohorts: CohortInput[] | undefined,
@@ -199,6 +200,11 @@ targets and policy; it runs no process during planning. These values express fut
 no authority. See
 [Inspect and Plan Contracts](../output-formats/inspect-plan.md) for the schemas, fingerprints,
 terminal vocabulary, and compatibility boundary.
+
+The library API does not expose the CLI-only workspace/catalog shortcuts; use `policyRules` for
+library selection. Library plans therefore emit an empty but mandatory v2 `selection` receipt.
+Generic `validatePlanResult()` and `apply()` accept reviewed v1 and v2 plans; version-specific
+validators are also exported.
 
 The planner builds all candidate operations before `evaluatePlanSignals()` evaluates repository
 runtime declarations, selected-version peer requirements against the proposed declaration graph,

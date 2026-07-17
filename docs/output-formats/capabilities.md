@@ -3,8 +3,8 @@
 `depfresh capabilities --json` describes the exact installed automation surface without inspecting
 a repository, contacting a registry, or requesting side-effect authority.
 
-The command writes one deterministic `depfresh.capabilities` schema-v1 document. Validate it with
-the packaged `depfresh/schemas/capabilities-v1.json` schema or the public
+The command writes one deterministic `depfresh.capabilities` schema-v2 document. Validate it with
+the packaged `depfresh/schemas/capabilities-v2.json` schema or the public
 `validateCapabilities()` library function.
 
 ```bash
@@ -15,6 +15,9 @@ The document includes:
 
 - package and schema versions;
 - commands, flags, enum values, and flag relationships;
+- structured repeatability, exact-literal matching, and check/plan command scope for
+  `exclude-workspace` and `exclude-catalog`;
+- current, supported, and apply-compatible plan/capabilities schema paths;
 - legacy and machine-command exit semantics;
 - invocation-only authority grants and config-ignored options;
 - public result-schema paths and stable error reasons;
@@ -28,3 +31,6 @@ descriptor was emitted. Exit `2` is fatal; capabilities never uses finding-beari
 
 Capability discovery describes what the package implements. It does not grant file, process,
 install, verification, global, Git, or publishing authority.
+
+The unchanged `capabilities-v1.json` artifact and `validateCapabilitiesV1()` remain available for
+stored v1 documents. Current output is v2.

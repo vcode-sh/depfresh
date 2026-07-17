@@ -134,6 +134,34 @@ function writeJson(filepath, value) {
   writeFileSync(filepath, `${JSON.stringify(value, null, 2)}\n`, 'utf8')
 }
 
+function createCatalogSelectionFixture(name) {
+  const root = join(tmpRoot, name)
+  const consumer = join(root, 'packages', 'consumer')
+  mkdirSync(consumer, { recursive: true })
+  writeJson(join(root, 'package.json'), {
+    name: `${name}-root`,
+    private: true,
+    dependencies: { gamma: '^1.0.0' },
+  })
+  writeFileSync(
+    join(root, 'pnpm-workspace.yaml'),
+    `packages:\n  - "packages/*"\ncatalogs:\n  "mobile,v2":\n    gamma: 1.0.0\n`,
+    'utf8',
+  )
+  writeJson(join(consumer, 'package.json'), {
+    name: `${name}-consumer`,
+    private: true,
+    dependencies: { gamma: 'catalog:mobile,v2' },
+  })
+  writeFileSync(join(root, '.npmrc'), `registry=${registryUrl}\n`, 'utf8')
+  return {
+    root,
+    manifest: join(root, 'package.json'),
+    catalog: join(root, 'pnpm-workspace.yaml'),
+    consumer: join(consumer, 'package.json'),
+  }
+}
+
 function writeExecutable(name, content) {
   const filepath = join(binDir, name)
   writeFileSync(filepath, content, 'utf8')
@@ -270,14 +298,19 @@ writeJson(join(workspaceRoot, 'package.json'), {
   private: true,
   packageManager: 'pnpm@10.33.0',
 })
-writeFileSync(join(workspaceRoot, 'pnpm-workspace.yaml'), 'packages:\n  - "packages/*"\n', 'utf8')
+writeFileSync(
+  join(workspaceRoot, 'pnpm-workspace.yaml'),
+  `packages:\n  - "packages/*"\ncatalog:\n  beta: ^1.0.0\ncatalogs:\n  "mobile,v2":\n    gamma: 1.0.0\n`,
+  'utf8',
+)
 mkdirSync(join(workspaceRoot, 'packages', 'web', 'src'), { recursive: true })
 writeJson(join(workspaceRoot, 'packages', 'web', 'package.json'), {
   name: 'web',
   private: true,
   dependencies: {
     alpha: '^1.0.0',
-    delta: '^1.0.0',
+    beta: 'catalog:',
+    gamma: 'catalog:mobile,v2',
   },
 })
 writeFileSync(join(workspaceRoot, '.npmrc'), `registry=${registryUrl}\n`, 'utf8')
@@ -300,7 +333,16 @@ const cleanEnv = stripNpmConfigEnvironment(process.env)
 async function runCli(args, extra = {}) {
   return await new Promise((resolve, reject) => {
     const needsCache = !args.some((a) =>
-      ['--help', '--help-json', '--version', 'help', 'capabilities'].includes(a),
+      [
+        '--help',
+        '--help-json',
+        '--version',
+        'help',
+        'capabilities',
+        'inspect',
+        'plan',
+        'apply',
+      ].includes(a),
     )
     const cacheArgs = needsCache && extra.refreshCache !== false ? ['--refresh-cache'] : []
     const child = spawn(process.execPath, [cliPath, ...cacheArgs, ...args], {
@@ -448,6 +490,175 @@ await record('profile and explain-discovery', async () => {
   assert.equal(payload.meta.effectiveRoot, realpathSync(workspaceRoot))
   assert.ok(payload.discovery)
   assert.ok(payload.profile)
+})
+
+await record('exact workspace exclusion keeps shared catalog owners eligible', async () => {
+  const beforeRequests = requests.length
+  const result = await runCli([
+    '--cwd',
+    workspaceRoot,
+    '--output',
+    'json',
+    '--mode',
+    'patch',
+    '--include-locked',
+    '--exclude-workspace',
+    'packages/web',
+  ])
+  assert.equal(result.status, 0, JSON.stringify(result, null, 2))
+  const payload = parseJsonStdout(result)
+  assert.equal(payload.selection.summary.matchedWorkspaces, 1)
+  assert.equal(payload.selection.summary.eligibleSharedCatalogOwners, 2)
+  assert.equal(payload.selection.summary.excludedOccurrences, 3)
+  assert.ok(!requests.slice(beforeRequests).includes('alpha'))
+  assert.ok(requests.slice(beforeRequests).includes('beta'))
+  assert.ok(requests.slice(beforeRequests).includes('gamma'))
+})
+
+await record('exact comma catalog exclusion is literal in plan v2', async () => {
+  const beforeRequests = requests.length
+  const result = await runCli([
+    'plan',
+    '--json',
+    '--cwd',
+    workspaceRoot,
+    '--mode',
+    'patch',
+    '--include-locked',
+    '--exclude-catalog=mobile,v2',
+  ])
+  assert.equal(result.status, 1, JSON.stringify(result, null, 2))
+  const payload = parseJsonStdout(result)
+  assert.equal(payload.schemaVersion, 2)
+  assert.equal(payload.selection.summary.matchedCatalogNames, 1)
+  assert.equal(payload.selection.summary.matchedCatalogOwners, 1)
+  assert.equal(payload.selection.summary.excludedOccurrences, 2)
+  assert.ok(!requests.slice(beforeRequests).includes('gamma'))
+})
+
+await record(
+  'combined exclusions deduplicate overlap and retain the other shared owner',
+  async () => {
+    const beforeRequests = requests.length
+    const result = await runCli([
+      'plan',
+      '--json',
+      '--cwd',
+      workspaceRoot,
+      '--mode',
+      'patch',
+      '--include-locked',
+      '--exclude-workspace',
+      'packages/web',
+      '--exclude-catalog=mobile,v2',
+    ])
+    assert.equal(result.status, 1, JSON.stringify(result, null, 2))
+    const payload = parseJsonStdout(result)
+    assert.equal(payload.selection.summary.requestedWorkspaces, 1)
+    assert.equal(payload.selection.summary.requestedCatalogs, 1)
+    assert.equal(payload.selection.summary.excludedOccurrences, 4)
+    assert.equal(payload.selection.summary.eligibleSharedCatalogOwners, 1)
+    assert.ok(!requests.slice(beforeRequests).includes('alpha'))
+    assert.ok(requests.slice(beforeRequests).includes('beta'))
+    assert.ok(!requests.slice(beforeRequests).includes('gamma'))
+  },
+)
+
+await record('malformed and missing selection targets fail before registry work', async () => {
+  for (const args of [
+    ['--exclude-catalog', 'mobile\u200eunsafe'],
+    ['--exclude-workspace', 'packages/missing'],
+    ['--ignore-paths', 'packages/web/**', '--exclude-workspace', 'packages/web'],
+  ]) {
+    const beforeRequests = requests.length
+    const result = await runCli(['--cwd', workspaceRoot, '--output', 'json', ...args])
+    assert.equal(result.status, 2, JSON.stringify(result, null, 2))
+    const payload = parseJsonStdout(result)
+    assert.equal(payload.error.reason, 'SELECTION_TARGET_UNPROVEN')
+    assert.equal(requests.length, beforeRequests)
+  }
+})
+
+await record('catalog-excluded write changes eligible direct bytes only', async () => {
+  const fixture = createCatalogSelectionFixture('catalog-write')
+  const catalogBefore = readFileSync(fixture.catalog)
+  const consumerBefore = readFileSync(fixture.consumer)
+  const result = await runCli([
+    '--cwd',
+    fixture.root,
+    '--write',
+    '--output',
+    'json',
+    '--mode',
+    'patch',
+    '--include-locked',
+    '--exclude-catalog=mobile,v2',
+  ])
+  assert.equal(result.status, 0, JSON.stringify(result, null, 2))
+  const payload = parseJsonStdout(result)
+  assert.equal(payload.selection.summary.excludedOccurrences, 2)
+  assert.equal(JSON.parse(readFileSync(fixture.manifest, 'utf8')).dependencies.gamma, '^1.0.2')
+  assert.deepEqual(readFileSync(fixture.catalog), catalogBefore)
+  assert.deepEqual(readFileSync(fixture.consumer), consumerBefore)
+})
+
+await record('fingerprinted selection plan applies only eligible operations', async () => {
+  const fixture = createCatalogSelectionFixture('catalog-plan-apply')
+  const catalogBefore = readFileSync(fixture.catalog)
+  const consumerBefore = readFileSync(fixture.consumer)
+  const planResult = await runCli([
+    'plan',
+    '--json',
+    '--cwd',
+    fixture.root,
+    '--mode',
+    'patch',
+    '--include-locked',
+    '--exclude-catalog=mobile,v2',
+  ])
+  assert.equal(planResult.status, 1, JSON.stringify(planResult, null, 2))
+  const plan = parseJsonStdout(planResult)
+  assert.equal(plan.schemaVersion, 2)
+  assert.equal(plan.selection.summary.excludedOccurrences, 2)
+  assert.equal(plan.operations.length, 1)
+  const planPath = join(fixture.root, 'selection-plan.json')
+  writeJson(planPath, plan)
+
+  const applyResult = await runCli([
+    'apply',
+    '--json',
+    '--cwd',
+    fixture.root,
+    '--write',
+    '--plan-file',
+    planPath,
+  ])
+  assert.equal(applyResult.status, 0, JSON.stringify(applyResult, null, 2))
+  const applied = parseJsonStdout(applyResult)
+  assert.equal(applied.status, 'applied')
+  assert.equal(applied.planFingerprint, plan.planFingerprint)
+  assert.equal(JSON.parse(readFileSync(fixture.manifest, 'utf8')).dependencies.gamma, '^1.0.2')
+  assert.deepEqual(readFileSync(fixture.catalog), catalogBefore)
+  assert.deepEqual(readFileSync(fixture.consumer), consumerBefore)
+})
+
+await record('workspace-excluded write leaves its manifest byte-identical', async () => {
+  const manifest = join(workspaceRoot, 'packages', 'web', 'package.json')
+  const before = readFileSync(manifest)
+  const result = await runCli([
+    '--cwd',
+    workspaceRoot,
+    '--write',
+    '--output',
+    'json',
+    '--mode',
+    'patch',
+    '--include-locked',
+    '--exclude-workspace',
+    'packages/web',
+  ])
+  assert.equal(result.status, 0, JSON.stringify(result, null, 2))
+  assert.deepEqual(readFileSync(manifest), before)
 })
 
 await record('fail-on-no-packages', async () => {

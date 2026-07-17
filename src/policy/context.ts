@@ -14,6 +14,7 @@ import type {
   RepositoryPackageManifest,
 } from '../types'
 import { isLocked, isRange, normalizeVersion } from '../utils/versions'
+import { type InternalPolicyOccurrenceContext, internalCatalogId } from './internal-types'
 
 const MANAGERS = new Set<RepositoryLockfileManager>(['npm', 'pnpm', 'yarn', 'bun'])
 const DYNAMIC_PROTOCOLS = new Set(['catalog', 'file', 'link', 'git', 'http'])
@@ -45,7 +46,7 @@ export function createPolicyContexts(model: RepositoryModel): PolicyOccurrenceCo
         ? unresolvedCatalogManager(model, occurrence, source?.path)
         : deriveManagerContext(model, pkg, catalog)
     const specifier = classifySpecifier(occurrence)
-    return {
+    const context: InternalPolicyOccurrenceContext = {
       occurrenceId: occurrence.id,
       dependencyName: occurrence.name,
       ...resolutionName(occurrence),
@@ -59,6 +60,8 @@ export function createPolicyContexts(model: RepositoryModel): PolicyOccurrenceCo
       ...specifier,
       ...manager,
     }
+    if (catalog) context[internalCatalogId] = catalog.id
+    return context
   })
 }
 

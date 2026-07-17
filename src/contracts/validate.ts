@@ -1,24 +1,34 @@
 import Ajv, { type ErrorObject, type ValidateFunction } from 'ajv'
 import * as semver from 'semver'
 import { resolveManagerAdapter } from '../commands/apply/manager-adapters'
+import { catalogSelectionRuleId, workspaceSelectionRuleIds } from '../selection'
 import { exactDeclaredVersion } from '../utils/exact-version'
 import { EXACT_SHA512_INTEGRITY_REGEX, NPM_ARTIFACT_VERIFIER_SUPPORT } from './artifact-verifier'
 import { canonicalJson } from './canonical-json'
 import { createPlanFingerprint, createRepositoryFingerprint, hashExactBytes } from './fingerprint'
 import { isSupportedManagerOccurrence } from './manager-occurrence'
 import { isContractSafeArgv, isContractSafeText } from './sanitize'
-import type { ApplyResult, InspectResult, MachineCommandError, PlanResult } from './schemas'
+import type {
+  ApplyResult,
+  InspectResult,
+  MachineCommandError,
+  PlanResult,
+  PlanResultV1,
+  PlanResultV2,
+} from './schemas'
 import {
   APPLY_PHASE_NAMES,
   applyResultSchema,
   commandErrorSchema,
   inspectResultSchema,
   planResultSchema,
+  planResultV2Schema,
 } from './schemas'
 
 const ajv = new Ajv({ allErrors: true, strict: true })
 const inspectValidator = ajv.compile(inspectResultSchema) as ValidateFunction<InspectResult>
-const planValidator = ajv.compile(planResultSchema) as ValidateFunction<PlanResult>
+const planV1Validator = ajv.compile(planResultSchema) as ValidateFunction<PlanResultV1>
+const planV2Validator = ajv.compile(planResultV2Schema) as ValidateFunction<PlanResultV2>
 const applyValidator = ajv.compile(applyResultSchema) as ValidateFunction<ApplyResult>
 const errorValidator = ajv.compile(commandErrorSchema) as ValidateFunction<MachineCommandError>
 
@@ -52,7 +62,9 @@ export function assertInspectResult(value: unknown): asserts value is InspectRes
 }
 
 export function assertPlanResult(value: unknown): asserts value is PlanResult {
-  assertValid('depfresh.plan', planValidator, value)
+  if (planVersion(value) === 1) assertValid('depfresh.plan', planV1Validator, value)
+  else if (planVersion(value) === 2) assertValid('depfresh.plan', planV2Validator, value)
+  else throw new ContractValidationError('depfresh.plan', [semanticError])
   if (!hasValidPlanSemantics(value)) {
     throw new ContractValidationError('depfresh.plan', [semanticError])
   }
@@ -74,7 +86,29 @@ export function validateInspectResult(value: unknown): value is InspectResult {
 }
 
 export function validatePlanResult(value: unknown): value is PlanResult {
-  return planValidator(value) && hasValidPlanSemantics(value)
+  const validShape =
+    planVersion(value) === 1
+      ? planV1Validator(value)
+      : planVersion(value) === 2
+        ? planV2Validator(value)
+        : false
+  return validShape && hasValidPlanSemantics(value as PlanResult)
+}
+
+export function validatePlanResultV1(value: unknown): value is PlanResultV1 {
+  return planV1Validator(value) && hasValidPlanSemantics(value)
+}
+
+export function validatePlanResultV2(value: unknown): value is PlanResultV2 {
+  return planV2Validator(value) && hasValidPlanSemantics(value)
+}
+
+function planVersion(value: unknown): number | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
+  const record = value as Record<string, unknown>
+  return record.contract === 'depfresh.plan' && typeof record.schemaVersion === 'number'
+    ? record.schemaVersion
+    : undefined
 }
 
 export function validateApplyResult(value: unknown): value is ApplyResult {
@@ -575,6 +609,7 @@ function hasValidPlanSemantics(plan: PlanResult): boolean {
     ) {
       return false
     }
+    if (plan.schemaVersion === 2 && !hasValidSelectionSemantics(plan)) return false
     if (!hasValidPlanSignals(plan)) return false
     if (!hasValidPlanExecution(plan)) return false
     return (
@@ -586,6 +621,143 @@ function hasValidPlanSemantics(plan: PlanResult): boolean {
   } catch {
     return false
   }
+}
+
+function hasValidSelectionSemantics(plan: PlanResultV2): boolean {
+  const { requests, summary } = plan.selection
+  const seen = new Set<string>()
+  let catalogPhase = false
+  const decisionsById = new Map(plan.decisions.map((decision) => [decision.occurrenceId, decision]))
+  const workspacePrefix = '$cli:exclude-workspace:'
+  const catalogPrefix = '$cli:exclude-catalog:'
+  const expectedRulesByOccurrence = new Map<string, string[]>()
+
+  const addExpectedRule = (occurrenceId: string, ruleId: string): void => {
+    const existing = expectedRulesByOccurrence.get(occurrenceId)
+    if (existing) existing.push(ruleId)
+    else expectedRulesByOccurrence.set(occurrenceId, [ruleId])
+  }
+
+  for (const request of requests) {
+    if (request.kind === 'catalog') catalogPhase = true
+    else if (catalogPhase) return false
+    const key = `${request.kind}\0${request.value}`
+    if (seen.has(key)) return false
+    seen.add(key)
+    if (new Set(request.entityIds).size !== request.entityIds.length) return false
+    if (new Set(request.occurrenceIds).size !== request.occurrenceIds.length) return false
+
+    const expectedEntityIds =
+      request.kind === 'workspace'
+        ? plan.repository.packages
+            .filter((pkg) => pkg.workspacePath === request.value)
+            .map((pkg) => pkg.id)
+        : plan.repository.catalogs
+            .filter((catalog) => catalog.name === request.value)
+            .map((catalog) => catalog.id)
+            .sort()
+    if (canonicalJson(request.entityIds) !== canonicalJson(expectedEntityIds)) return false
+    if (expectedEntityIds.length === 0) return false
+    const entityIds = new Set(request.entityIds)
+    const expectedOccurrenceIds = plan.occurrences
+      .filter((occurrence) => {
+        if (request.kind === 'workspace') {
+          return (
+            entityIds.has(occurrence.ownerId) &&
+            occurrence.role !== 'catalog-owner' &&
+            occurrence.role !== 'global'
+          )
+        }
+        return occurrence.catalogId !== undefined && entityIds.has(occurrence.catalogId)
+      })
+      .map((occurrence) => occurrence.id)
+    if (canonicalJson(request.occurrenceIds) !== canonicalJson(expectedOccurrenceIds)) return false
+
+    if (request.kind === 'workspace') {
+      const packageId = request.entityIds[0]
+      if (!packageId) return false
+      const [directRuleId, consumerRuleId] = workspaceSelectionRuleIds(request.value, packageId)
+      for (const occurrenceId of expectedOccurrenceIds) {
+        const occurrence = plan.occurrences.find((candidate) => candidate.id === occurrenceId)
+        if (!occurrence) return false
+        addExpectedRule(
+          occurrenceId,
+          occurrence.role === 'catalog-consumer' ? consumerRuleId : directRuleId,
+        )
+      }
+    } else {
+      for (const occurrenceId of expectedOccurrenceIds) {
+        const occurrence = plan.occurrences.find((candidate) => candidate.id === occurrenceId)
+        if (!occurrence?.catalogId) return false
+        addExpectedRule(occurrenceId, catalogSelectionRuleId(request.value, occurrence.catalogId))
+      }
+    }
+  }
+
+  for (const decision of plan.decisions) {
+    const expectedRules = expectedRulesByOccurrence.get(decision.occurrenceId) ?? []
+    const matchedReservedRules = decision.policy.matchedRuleIds.filter(
+      (id) => id.startsWith(workspacePrefix) || id.startsWith(catalogPrefix),
+    )
+    const indeterminateReservedRules = decision.policy.indeterminateRuleIds.filter(
+      (id) => id.startsWith(workspacePrefix) || id.startsWith(catalogPrefix),
+    )
+    if (canonicalJson(matchedReservedRules) !== canonicalJson(expectedRules)) return false
+    if (indeterminateReservedRules.length > 0) return false
+    if (expectedRules.length === 0) continue
+    if (
+      decision.status !== 'skipped' ||
+      decision.reason !== 'POLICY_RULE_EXCLUDED' ||
+      decision.policy.status !== 'skipped' ||
+      decision.policy.reason !== 'POLICY_RULE_EXCLUDED' ||
+      decision.policy.action !== 'exclude' ||
+      decision.policy.winningActionRuleId !== expectedRules.at(-1)
+    ) {
+      return false
+    }
+  }
+
+  const workspaceRequests = requests.filter((request) => request.kind === 'workspace')
+  const catalogRequests = requests.filter((request) => request.kind === 'catalog')
+  const excludedOccurrences = expectedRulesByOccurrence.size
+  const eligibleSharedCatalogIds = new Set<string>()
+  for (const relationship of plan.repository.relationships.catalogConsumers) {
+    const consumerRules = expectedRulesByOccurrence.get(relationship.occurrenceId) ?? []
+    if (!consumerRules.some((id) => id.startsWith(workspacePrefix))) continue
+    const ownerIds =
+      plan.repository.catalogs
+        .find((catalog) => catalog.id === relationship.catalogId)
+        ?.entries.map((entry) => entry.occurrenceId) ?? []
+    if (
+      ownerIds.some((id) => {
+        const owner = decisionsById.get(id)
+        return (
+          owner?.policy.action === 'include' &&
+          !(expectedRulesByOccurrence.get(id) ?? []).some((ruleId) =>
+            ruleId.startsWith(catalogPrefix),
+          )
+        )
+      })
+    ) {
+      eligibleSharedCatalogIds.add(relationship.catalogId)
+    }
+  }
+  const expectedSummary = {
+    requestedWorkspaces: workspaceRequests.length,
+    requestedCatalogs: catalogRequests.length,
+    matchedWorkspaces: workspaceRequests.reduce(
+      (sum, request) => sum + request.entityIds.length,
+      0,
+    ),
+    matchedCatalogNames: catalogRequests.length,
+    matchedCatalogOwners: catalogRequests.reduce(
+      (sum, request) => sum + request.entityIds.length,
+      0,
+    ),
+    excludedOccurrences,
+    eligibleSharedCatalogOwners: eligibleSharedCatalogIds.size,
+  }
+  return canonicalJson(summary) === canonicalJson(expectedSummary)
 }
 
 function hasValidPlanSignals(plan: PlanResult): boolean {
