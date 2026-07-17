@@ -7,7 +7,7 @@
 - **Risk**: HIGH
 - **Depends on**: 026
 - **Opened at**: `3ba0066`, 2026-07-17
-- **Status**: IN PROGRESS
+- **Status**: DONE
 
 ## Objective
 
@@ -187,3 +187,23 @@ accepted the same absolute form for a lifecycle-disabled public publish dry-run.
 identified and blocked the equivalent relative publish input before retagging; the retained test
 now requires absolute `file:` inputs for both local artifact consumers and rejects the former bare
 publish call.
+
+## Completion record
+
+Commit `e485ebc` passed all four required hosted `main` checks in run `29561096139`. The annotated
+`v2.0.0` tag object `71452c6` peels to that exact commit. Release run `29561313135` completed all
+three jobs successfully: exact artifact verification, OIDC trusted publication, and curated GitHub
+release creation. npm now exposes `latest=2.0.0`; the hosted artifact, public npm download, and
+GitHub release asset are byte-identical at 53 files, 259,412 packed bytes, and 1,595,185 unpacked
+bytes, with SHA-512 integrity
+`sha512-3big7W4o7TDSAPUWFVOI8cfAF2RO8eMxyfULk4wexyUg0+VWODW50nAuyyO3z120MUmBVhMlpre9KnHgR7Ukog==`,
+SHA-1 `48f2ecfaead2adc095ef400aca54837e32d71793`, and GitHub asset SHA-256
+`d5b9b1eb8e045f33a9c353c433e586cc17703c69a33d25442554a6c1cc56b1f9`.
+
+The public SLSA v1 attestation binds package `depfresh@2.0.0` and the artifact SHA-512 digest to
+`refs/tags/v2.0.0`, `.github/workflows/release.yml`, commit
+`e485ebc63c505c7cd0aa0fd56d8aaf8abe02cbae`, and run `29561313135` on the GitHub-hosted builder.
+Exact npm 11.12.0 downloaded the public tarball byte-for-byte, the installed-package verifier
+passed, and `npm audit signatures --json` reported empty invalid and missing sets. GitHub exposes a
+non-draft, non-prerelease `v2.0.0` release with the exact tarball asset. No movable `v2` tag or
+manual publish was created.

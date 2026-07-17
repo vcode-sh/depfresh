@@ -54,7 +54,7 @@ may grant side effects. Unknown state is never reported as success.
 | [024](./024-official-agent-workflow.md) | Official workflow and distribution | P2 | M | 010, 018–023 | DONE |
 | [025](./025-ci-portability-ledger-truth.md) | CI portability and ledger truth | P1 | S | 024 | DONE |
 | [026](./026-repository-performance-progress-ux.md) | Repository performance and progress UX | P1 | M | 025 | DONE |
-| [027](./027-wun-demo-release-proof.md) | WUN-shaped demo and release proof | P1 | M | 026 | IN PROGRESS |
+| [027](./027-wun-demo-release-proof.md) | WUN-shaped demo and release proof | P1 | M | 026 | DONE |
 
 The implementation order through 016 is present locally. Plans 011 through 013 passed their final
 blocker replays, regression fixes, full gates, and independent re-reviews on 2026-07-16. Plans 014
@@ -167,6 +167,13 @@ the unchanged tarball through the absolute `file:` specifier into a separate pre
 demo passed. Independent review then found the same ambiguous relative form in the later publish
 step before retagging. Both install and publish now require absolute workspace `file:` inputs; an
 exact npm 11.12.0 lifecycle-disabled publish dry-run passed.
+
+Final recovery commit `e485ebc` passed hosted `main` run `29561096139`. Annotated tag `v2.0.0`
+peels to that exact commit, and release run `29561313135` completed exact verification, trusted npm
+publication, public installed-package verification, and curated GitHub release creation. npm
+`latest` is `2.0.0`; the workflow artifact, npm download, and GitHub asset are byte-identical, and
+the SLSA v1 provenance binds their SHA-512 digest to the tag, release workflow, commit, and hosted
+run. Plan 027 is DONE; no movable `v2` tag or manual publish was created.
 
 ## Split coverage map
 
