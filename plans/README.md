@@ -55,6 +55,7 @@ may grant side effects. Unknown state is never reported as success.
 | [025](./025-ci-portability-ledger-truth.md) | CI portability and ledger truth | P1 | S | 024 | DONE |
 | [026](./026-repository-performance-progress-ux.md) | Repository performance and progress UX | P1 | M | 025 | DONE |
 | [027](./027-wun-demo-release-proof.md) | WUN-shaped demo and release proof | P1 | M | 026 | DONE |
+| [028](./028-first-class-workspace-catalog-exclusions.md) | First-class workspace and catalog exclusions | P1 | L | 017, 018, 019, 024, 026, 027 | TODO |
 
 The implementation order through 016 is present locally. Plans 011 through 013 passed their final
 blocker replays, regression fixes, full gates, and independent re-reviews on 2026-07-16. Plans 014
@@ -174,6 +175,15 @@ publication, public installed-package verification, and curated GitHub release c
 `latest` is `2.0.0`; the workflow artifact, npm download, and GitHub asset are byte-identical, and
 the SLSA v1 provenance binds their SHA-512 digest to the tag, release workflow, commit, and hosted
 run. Plan 027 is DONE; no movable `v2` tag or manual publish was created.
+
+Plan 028 was opened after the maintainer clarified that the intended product capability is generic
+one-off exclusion of any application/workspace or physical catalog, not special treatment for
+Expo/native. A read-only audit at `730cc7c` confirmed that the occurrence policy engine already has
+the required workspace/catalog identities, but the CLI exposes only dependency-name filters and
+discovery ignores while current docs overfit the feature to the earlier native example. The plan
+adds exact fail-closed invocation shortcuts, preserves explicit shared-catalog ownership, makes the
+effective selection observable, and replaces the native-centric current product framing without
+rewriting the published v2.0.0 release history.
 
 ## Split coverage map
 
