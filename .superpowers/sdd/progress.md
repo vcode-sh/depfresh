@@ -13,4 +13,7 @@ Plan 027: complete; v2.0.0 is published from immutable tag commit e485ebc and ho
 29561313135. No movable v2 tag or manual publish was created.
 Plan 028: complete; exact workspace/catalog CLI selection, plan/capabilities v2, v1 compatibility,
 generic documentation, exact-Node source/built/packed gates, and final no-findings independent review
-passed. Version remains 2.0.0.
+passed.
+Plan 029: complete; depfresh 2.0.1 is published from immutable release commit 6552b1b and annotated
+tag v2.0.1. Hosted main run 29579908968 and release run 29580175679 passed; npm, GitHub, signatures,
+and SLSA provenance expose the exact verified artifact. No floating v2 tag or manual publish exists.

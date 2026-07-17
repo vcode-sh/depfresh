@@ -56,7 +56,7 @@ may grant side effects. Unknown state is never reported as success.
 | [026](./026-repository-performance-progress-ux.md) | Repository performance and progress UX | P1 | M | 025 | DONE |
 | [027](./027-wun-demo-release-proof.md) | WUN-shaped demo and release proof | P1 | M | 026 | DONE |
 | [028](./028-first-class-workspace-catalog-exclusions.md) | First-class workspace and catalog exclusions | P1 | L | 017, 018, 019, 024, 026, 027 | DONE |
-| [029](./029-v2.0.1-release.md) | Publish and prove depfresh 2.0.1 | P1 | M | 028 | IN PROGRESS |
+| [029](./029-v2.0.1-release.md) | Publish and prove depfresh 2.0.1 | P1 | M | 028 | DONE |
 
 The implementation order through 016 is present locally. Plans 011 through 013 passed their final
 blocker replays, regression fixes, full gates, and independent re-reviews on 2026-07-16. Plans 014
@@ -201,6 +201,13 @@ npm `latest` remained `2.0.0`, and no `v2.0.1` tag, release, or package existed.
 version-coupled patch release, exact local and hosted verification, immutable `v2.0.1` tag, trusted
 OIDC publication, curated GitHub release, public artifact/provenance proof, and final ledger
 closeout. It forbids local publishing, a floating `v2` tag, and force-moving `v2.0.1`.
+
+Plan 029 completed from release commit `6552b1b`, hosted main CI run `29579908968`, annotated tag
+object `5d6c278`, and Release run `29580175679`. npm `latest` is `2.0.1`; the workflow artifact,
+public npm downloads, and GitHub release asset are byte-identical, the public install and signature
+audit passed, and the SLSA v1 attestation binds the exact artifact digest to the tag, workflow,
+commit, run, and GitHub-hosted builder. GitHub exposes a non-draft, non-prerelease `v2.0.1`
+release. No floating `v2` tag or manual publish was created.
 
 ## Split coverage map
 
