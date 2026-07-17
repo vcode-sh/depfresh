@@ -46,3 +46,6 @@ Everything I know about depfresh is in here, split into files so you can pretend
 - **[Compare](./compare/)** -- How depfresh stacks up. Coverage matrix, migration guide, solved issues, receipts.
 
 - **[Troubleshooting](./troubleshooting.md)** -- Common issues, workspace gotchas, and known limitations. The page you'll find via Google at 2 AM after everything breaks. I've been there. The kettle's already on.
+
+- **[2.0.1 Release Notes](./releases/v2.0.1.md)** -- Exact workspace/catalog invocation
+  exclusions, versioned machine contracts, and release verification.

@@ -70,7 +70,7 @@ describe('published workflow assets', () => {
 })
 
 describe('npm pack manifest compatibility', () => {
-  const entry = { name: 'depfresh', version: '2.0.0' }
+  const entry = { name: 'depfresh', version: '2.0.1' }
 
   it('accepts the npm 11 single-package array format', () => {
     expect(extractSinglePackEntry([entry])).toBe(entry)

@@ -20,7 +20,7 @@ Use the equivalent locked local executor for another package manager.
 When no locked local copy exists, set an exact reviewed version:
 
 ```bash
-DEPFRESH_VERSION=2.0.0
+DEPFRESH_VERSION=2.0.1
 DEPFRESH=(npm exec --yes --package="depfresh@$DEPFRESH_VERSION" -- depfresh)
 "${DEPFRESH[@]}" --version
 "${DEPFRESH[@]}" capabilities --json

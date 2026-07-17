@@ -58,37 +58,56 @@ function steps(path: string): WorkflowStep[] {
   return Object.values(workflow(path).jobs ?? {}).flatMap((job) => job.steps ?? [])
 }
 
-describe('2.0 release readiness', () => {
-  it('keeps every shipped release fix inside the 2.0.0 changelog section', () => {
+describe('2.0.1 release readiness', () => {
+  it('moves the shipped workspace and catalog exclusions into the 2.0.1 changelog section', () => {
     const changelog = read('CHANGELOG.md')
     const unreleased = changelog.slice(
       changelog.indexOf('## Unreleased') + '## Unreleased'.length,
+      changelog.indexOf('## [2.0.1]'),
+    )
+    const patchRelease = changelog.slice(
+      changelog.indexOf('## [2.0.1]'),
       changelog.indexOf('## [2.0.0]'),
     )
-    const release = changelog.slice(
+    const historicalRelease = changelog.slice(
       changelog.indexOf('## [2.0.0]'),
       changelog.indexOf('## [1.2.0]'),
     )
 
-    expect(unreleased).toContain('First-class exact workspace and catalog exclusions')
-    expect(release).toContain('Portable isolated npm bootstrap in the release workflow')
+    expect(unreleased.trim()).toBe('')
+    expect(patchRelease).toContain('First-class exact workspace and catalog exclusions')
+    expect(historicalRelease).toContain('Portable isolated npm bootstrap in the release workflow')
   })
 
   it('preserves historical README anchors referenced by the 2.0.0 release record', () => {
     expect(read('README.md')).toContain('<a id="skip-native-or-expo-updates-in-a-monorepo"></a>')
   })
 
-  it('couples all current package and runner surfaces to 2.0.0', () => {
+  it('couples all current package and runner surfaces to 2.0.1', () => {
     const packageJson = JSON.parse(read('package.json')) as { version: string }
-    expect(packageJson.version).toBe('2.0.0')
+    expect(packageJson.version).toBe('2.0.1')
     expect(read('.nvmrc')).toBe('24.15.0\n')
 
-    expect(read('README.md')).toContain('depfresh@2.0.0')
+    expect(read('README.md')).toContain('depfresh@2.0.1')
+    expect(read('README.md')).toContain('[2.0.1 release notes](docs/releases/v2.0.1.md)')
     for (const path of ['docs/agents/README.md', 'skills/depfresh/recipes/runners.md']) {
-      expect(read(path), path).toContain('DEPFRESH_VERSION=2.0.0')
+      expect(read(path), path).toContain('DEPFRESH_VERSION=2.0.1')
       expect(read(path), path).toContain('depfresh@$DEPFRESH_VERSION')
       expect(read(path), path).not.toContain('depfresh@1.2.0')
     }
+    expect(read('docs/integrations/README.md')).toContain('capabilities-v2.json` in 2.0.1')
+    expect(read('test/wun-demo-proof.mjs')).toContain("capabilities.version, '2.0.1'")
+  })
+
+  it('ships a dedicated immutable 2.0.1 release record', () => {
+    const release = read('docs/releases/v2.0.1.md')
+
+    expect(release).toContain('# depfresh 2.0.1')
+    expect(release).toContain('`--exclude-workspace`')
+    expect(release).toContain('`--exclude-catalog`')
+    expect(release).toContain('v2.0.1')
+    expect(release).not.toContain('TBD')
+    expect(release).not.toContain('TODO')
   })
 
   it('uses exact Node and immutable external actions in every release-facing workflow', () => {
@@ -170,7 +189,7 @@ describe('2.0 release readiness', () => {
       'npm publish "file:$GITHUB_WORKSPACE/$PACKAGE_TARBALL" --access public --ignore-scripts',
     )
     expect(release).not.toContain('npm publish "$PACKAGE_TARBALL" --access public --ignore-scripts')
-    expect(release).toContain('body_path: docs/releases/v2.0.0.md')
+    expect(release).toContain('body_path: docs/releases/v2.0.1.md')
     expect(release).toContain('npm view "depfresh@$' + '{PACKAGE_VERSION}" dist.integrity')
     expect(release).toContain('--install-spec "depfresh@$PACKAGE_VERSION"')
     expect(release).toContain(

@@ -51,7 +51,7 @@ Use the packaged [official workflow](../agents/README.md) instead of exposing ar
 generic write boolean. A wrapper should:
 
 1. run `depfresh capabilities --json` and validate
-   the current advertised schema (`depfresh/schemas/capabilities-v2.json` in 2.0.0);
+   the current advertised schema (`depfresh/schemas/capabilities-v2.json` in 2.0.1);
 2. expose separate fixed-input read-only `inspect` and `plan` operations;
 3. validate complete result documents with the exact installed library validators;
 4. accept apply only as a distinct operation with one contained reviewed plan file and explicit

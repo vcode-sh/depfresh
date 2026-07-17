@@ -4,6 +4,8 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Semver
 
 ## Unreleased
 
+## [2.0.1] - 2026-07-17
+
 ### Added
 
 - **First-class exact workspace and catalog exclusions** -- normal check/write and machine plan now
@@ -726,7 +728,8 @@ First release. Wrote it from scratch because waiting for PRs to get merged in ta
 - TTY detection. No spinners in your CI logs. `NO_COLOR` respected.
 - 54 tests. More than some production apps I've seen.
 
-[Unreleased]: https://github.com/vcode-sh/depfresh/compare/v2.0.0...HEAD
+[Unreleased]: https://github.com/vcode-sh/depfresh/compare/v2.0.1...HEAD
+[2.0.1]: https://github.com/vcode-sh/depfresh/compare/v2.0.0...v2.0.1
 [2.0.0]: https://github.com/vcode-sh/depfresh/releases/tag/v2.0.0
 [1.0.0]: https://github.com/vcode-sh/depfresh/releases/tag/v1.0.0
 [0.11.1]: https://github.com/vcode-sh/depfresh/releases/tag/v0.11.1
