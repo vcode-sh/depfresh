@@ -311,6 +311,10 @@ nor recovery: retain the failed/unknown apply fact, skip both model phases, and 
 blocked/failed/unknown plus structural not-attempted receipts. Never invent inspect or recovery to
 advance the reducer.
 
+An all-no-change result is different: lock/stage and apply are skipped, but the engine still records
+a passed inspect phase. Use a fact-bearing no-mutation stage transition that skips apply/recovery and
+activates observe, then retain exact neutral skipped operations and structural not-attempted truth.
+
 Retain engine `skipped` as an exact neutral operation outcome, distinct from structural
 not-attempted truth. A physical target whose member operations have different exact outcomes uses a
 mixed target result rather than selecting a worst status. Target attempt evidence applies to every
