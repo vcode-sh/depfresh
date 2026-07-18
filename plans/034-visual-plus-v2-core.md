@@ -468,7 +468,7 @@ and `onError()` failures never replace that first error. Contract and usage erro
 or repeated start, illegal state calls, divergent retries, and stale or foreign input, clean up and
 rethrow without calling `onError()`. User suspension callback failures also do not call `onError()`.
 
-- [ ] **Step 1: Write renderer lifecycle RED tests**
+- [x] **Step 1: Write renderer lifecycle RED tests**
 
 Assert synchronous feedback (and therefore feedback within 100 ms), one active indicator, one
 pending 50 ms callback, burst coalescing, durable nested sync/async suspension, stable phase
@@ -544,19 +544,19 @@ suspension is active. `dispose()` ends renderer ownership during an outstanding 
 suspension but cannot suppress later bytes written by that caller-owned callback. Task 4 must await
 every `suspendAsync()` before finalization, and route-level tests must prove that ordering.
 
-- [ ] **Step 2: Run renderer RED tests**
+- [x] **Step 2: Run renderer RED tests**
 
 Run: `pnpm exec vitest run src/commands/check/visual-plus/renderer.test.ts`
 
 Expected: FAIL because the renderer does not exist.
 
-- [ ] **Step 3: Implement bounded live-region rendering**
+- [x] **Step 3: Implement bounded live-region rendering**
 
 Reuse the current 50 ms maximum refresh cadence. Redraw only lifecycle lines, clear only lines the
 renderer owns, and suspend/resolve the live region before any durable section. On non-motion modes,
 write a phase only when state changes. Never replay accumulated frames.
 
-- [ ] **Step 4: Preserve compatibility ownership until route migration**
+- [x] **Step 4: Preserve compatibility ownership until route migration**
 
 Task 3 is standalone and dormant. Keep `progress.ts` behavior and bytes unchanged while its callers
 still exist. Task 4 must construct exactly one of legacy progress or Visual+ for a route, disable
@@ -569,10 +569,24 @@ Width is the immutable startup capability width from Task 1 for all Task 3 frame
 rendering is deferred unless a later plan explicitly adds an injected width source; the renderer
 must not privately reread `process.stdout.columns`.
 
-- [ ] **Step 5: Run renderer GREEN tests**
+- [x] **Step 5: Run renderer GREEN tests**
 
 Run renderer/progress/orchestration tests with fake timers and real output buffers. Expected: all
 pass, no open handles, and final scrollback contains no spinner or erased durable content.
+
+**Completion evidence (2026-07-18):** The exact writer, scheduler, lifecycle, suspension,
+validation, reentrancy, and compatibility contract was defined in `3b9c3b9` after two independent
+authority audits stopped the underspecified original task. The live renderer and pure incremental
+lifecycle/read-only-target helpers were implemented in `3db6f80`. The initial RED failed before
+collection with `Cannot find module './renderer'`. Review-driven RED waves then proved six contract
+gaps, one retained-ownership cleanup leak, and two atomic clear/draw boundary failures before their
+fixes. The final focused matrix passed 241/241 tests across renderer, sections, legacy progress,
+controller, run model, and orchestration. Typecheck, focused Biome, whitespace, and byte checks
+passed; `progress.ts`, its tests, callers, and Task 4 integration files remain unchanged. Atomic
+accepted clear/draw chunks retain exact physical-line ownership, never erase durable content, and
+remain safe when a hostile injected writer swallows reentrant renderer calls. Final independent
+spec and terminal-quality reviews reported no Critical, Important, or Minor findings. Task 4 is
+next and owns exclusive route construction plus real signal integration.
 
 ### Task 4: Integrate Visual+ as default human output
 

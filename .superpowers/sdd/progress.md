@@ -129,4 +129,13 @@ exact run, owner-group, physical-target, canonical receipt, result, and recovery
 sections retain all 76 changes, 15 logical owners, and 14 targets with lossless capable/constrained
 wrapping and hostile-terminal containment. The final render union passed 226/226 tests; typecheck,
 Biome, whitespace, and two independent C0/I0/M0 reviews passed. Legacy renderer files and callers
-remain unchanged. Task 3 single live-region and cursor ownership is next.
+remain unchanged.
+Plan 034 Task 3: complete through 3db6f80 after the exact dormant-renderer contract in 3b9c3b9.
+One injected stdout writer and one 50ms scheduler own atomic live clear/draw frames, durable
+lifecycle resolution, nested suspension, fail-closed review/final identity, canonical receipt
+validation, and idempotent teardown. Review-driven RED waves covered synchronous subscription
+drift, receipt/complete gaps, contract error taxonomy, swallowed reentrancy, retained ownership,
+and atomic clear/draw boundaries. The final focused matrix passed 241/241 tests with typecheck,
+Biome, whitespace, and legacy-progress byte checks green; two independent final reviews reported
+no Critical, Important, or Minor issues. Progress and callers remain unchanged. Task 4 exclusive
+route integration is next.
