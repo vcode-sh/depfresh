@@ -164,3 +164,14 @@ from copied authoritative evidence. RED/GREEN waves closed missing insight, meta
 validator drift, catalog ownership, fixture topology, ordering, collision, mixed-evidence, and
 alias-freeze gaps. Final focused gates passed 208/208 tests with typecheck, Biome, diff checks, and
 independent spec plus quality reviews at C0/I0/M0. Task 2 functional map rendering is next.
+Plan 035 Task 2: complete in 672a3f0 after the reviewed integration contract in fb0c978. The
+renderer now derives insights exactly once from the validated snapshot and emits topology,
+distribution, majors-only risk, owner impact, and all shared physical occurrences before the
+unchanged 76-row operation review. Pure capability-only map sections retain 15 owners, 18 shared
+dependency IDs/39 occurrences, and two cards/three major operations with numeric text equivalents,
+explicit age/compatibility, no operation-ID duplication, and zero-state safety. The extracted exact
+fixture drives 40/60/80/118 layouts plus both real plain 8/10 profiles; map-only plain output is
+strictly ASCII while color strips to identical semantic bytes. Review-driven REDs closed incomplete
+combined hierarchy and weak ASCII-bar assertions. The final broad gate passed 11 files and 275
+tests with typecheck, Biome, diff checks, and independent spec plus quality reviews at C0/I0/M0.
+Task 3 deterministic repository/registry fixture is next.

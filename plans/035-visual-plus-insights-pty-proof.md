@@ -346,7 +346,7 @@ stable order pass.
   `test-fixture.ts` and reuse it from insight and section tests. Do not import another `.test.ts` or
   duplicate the arithmetic.
 
-- [ ] **Step 1: Write RED snapshots at required widths**
+- [x] **Step 1: Write RED snapshots at required widths**
 
 Snapshot 40, 60, 80, and 118 columns plus plain 8/10-column containment. Assert every shared
 occurrence and major owner remains present, bars have numeric labels, and color stripping preserves
@@ -368,25 +368,25 @@ inventories for completeness rather than raw snapshots of all 76 operations. Inc
   section bytes, maps contain no operation IDs, and the unchanged change list retains all 76 exact
   operation rows once.
 
-- [ ] **Step 2: Run section RED tests**
+- [x] **Step 2: Run section RED tests**
 
 Run: `pnpm exec vitest run src/commands/check/visual-plus/sections/insights.test.ts`
 
 Expected: FAIL because the map sections do not exist.
 
-- [ ] **Step 3: Implement adaptive map topology**
+- [x] **Step 3: Implement adaptive map topology**
 
 Wide layouts may place label/count/bar on one line. Medium/narrow layouts stack labels and values.
 Plain mode uses ASCII separators and ordinary lists. Decorative connectors disappear before any
 name, count, path, risk, or compatibility label.
 
-- [ ] **Step 4: Insert maps into the approved hierarchy**
+- [x] **Step 4: Insert maps into the approved hierarchy**
 
 Render topology, distribution, risk, impact, and shared surfaces before the complete change list.
 Do not duplicate dependency detail: maps reference owners/relationships, while the change list
 remains the exact operation review surface.
 
-- [ ] **Step 5: Run GREEN visual tests**
+- [x] **Step 5: Run GREEN visual tests**
 
 Run all Visual+ section, renderer, width, ANSI, and overflow suites. Expected: no horizontal
 overflow, hidden relationships, or color-only meaning.
