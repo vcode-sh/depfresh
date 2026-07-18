@@ -477,23 +477,23 @@ evidence and the intentionally deferred mixed no-change plus completed-recovery 
 - Consumes: Tasks 1-4.
 - Produces: the safe command lifecycle required by Visual+ v2.
 
-- [ ] **Step 1: Run the focused matrix three times**
+- [x] **Step 1: Run the focused matrix three times**
 
 Repeat preparation, legacy-plan, command-apply integration, apply fault, orchestration, addon,
 callback, interactive, global, JSON, and post-write suites three times. Expected: stable counts,
 zero flakes, zero leaked locks/timers/processes.
 
-- [ ] **Step 2: Run complete gates**
+- [x] **Step 2: Run complete gates**
 
 Run schemas check, typecheck, lint, full coverage, build, smoke, demo, and packed verification.
 Expected: all exit `0` and target/Git state assertions remain green.
 
-- [ ] **Step 3: Require adversarial review**
+- [x] **Step 3: Require adversarial review**
 
 One reviewer audits authority, stale/recovery, deduplication, and callback semantics; another audits
 JSON/result reconciliation and documentation. Plan 034 cannot start while either has findings.
 
-- [ ] **Step 4: Resolve final-review findings before replay**
+- [x] **Step 4: Resolve final-review findings before replay**
 
 Serialize only the declaration Rollup traversal so repeated clean builds preserve the exact public
 `2.0.2` declaration bytes. Add a durable repeated-build verifier covering all four declarations.
@@ -504,3 +504,16 @@ new RED tests before implementation. Explicitly unmock every production seam rep
 check test helper before the real command-apply integration imports the command path; the complete
 suite must exercise real discovery, resolution, cache, npmrc, filesystem, process, and legacy apply
 modules. Then replay Steps 1-3 and require both reviewers to report no findings.
+
+**Completion evidence (2026-07-18):** Final-review corrections were implemented in `b54cf95`
+after the scope amendments in `7bdf5e6` and `0a72db5`. The exact 26-file focused matrix passed
+three times at 397/397 tests with `--retry=0` and no flake, open-handle, timer, process, or lock
+warnings. Full coverage passed 149 files and 1,775 tests at 87.72% statements, 81.06% branches,
+94.29% functions, and 90.01% lines. Schemas, typecheck, lint over 319 files, build, 35-check and
+69-request smoke, 14-check demo, 102 release tests, exact 56-file package verification, and package
+dry-run all passed. The repeated declaration verifier produced the exact public `2.0.2` hashes for
+all four declaration files in every run. Complete blocked attempt evidence, deterministic
+multi-operation target projection, reversed-order stability, outside-root fail-closed behavior, and
+real integration isolation all passed their regressions. Independent authority/model and
+JSON/result/declaration/documentation reviews reported no Critical, Important, or Minor findings.
+Plan 033 is DONE; Plan 034 is the next executable plan.

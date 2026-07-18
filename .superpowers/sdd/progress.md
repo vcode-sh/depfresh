@@ -102,3 +102,20 @@ operation ID. Public apply/schema/declaration/version surfaces are unchanged. Ad
 structural 6/6, broader 185/185, full apply 71/71, typecheck, build, schemas, Biome, and diff gates
 pass. Independent concurrency/protocol/format/containment/authority review found no Critical,
 Important, or Minor issues. Task 3 authoritative orchestration is next.
+Plan 033 Task 3: complete in 590e3d5. All local package decisions are collected before one
+authoritative command apply, complete run-model facts project from exact command evidence, and
+post-write actions require an observed non-blocking result. Full project, check, compatibility,
+static, build, schema, and independent review gates passed.
+Plan 033 Task 4: complete in 28d530f. Exact stale, recovery, final-observation, interruption,
+fresh-authoritative-follow-up, receipt, and practical built-smoke journeys passed. Human output uses
+private exact attempt evidence while public JSON, callbacks, schemas, declarations, and version stay
+unchanged. Independent recovery and contract review reported no findings.
+Plan 033 Task 5 and final closeout: complete through b54cf95. Final review corrections retain every
+contained blocked operation with deterministic false attempt evidence, support multiple operations
+per target, keep reversed projection order stable, preserve outside-root fail-closed behavior,
+serialize declaration-only Rollup traversal, and isolate the real command integration from shared
+unit-test mocks. The final focused matrix passed three times at 397/397; full coverage passed 149
+files and 1,775 tests. Schemas, typecheck, lint over 319 files, build, 35-check/69-request smoke,
+14-check demo, 102 release tests, exact 56-file package verification, package dry-run, repeated
+public declaration byte checks, and final C0/I0/M0 reviews all passed. Plan 033 is DONE; Plan 034 is
+next.

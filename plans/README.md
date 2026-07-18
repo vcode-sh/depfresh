@@ -60,7 +60,7 @@ may grant side effects. Unknown state is never reported as success.
 | [030](./030-vcs-write-trust-hotfix.md) | VCS write trust hotfix | P0 | M | 029 | DONE |
 | [031](./031-v2.0.2-release.md) | Publish and prove depfresh 2.0.2 | P0 | M | 030 | DONE |
 | [032](./032-check-run-model.md) | Renderer-neutral check run model | P1 | M | 031 | DONE |
-| [033](./033-command-level-local-apply.md) | Command-level local apply | P0 | L | 032 | TODO |
+| [033](./033-command-level-local-apply.md) | Command-level local apply | P0 | L | 032 | DONE |
 | [034](./034-visual-plus-v2-core.md) | Visual+ v2 core terminal renderer | P1 | L | 033 | TODO |
 | [035](./035-visual-plus-insights-pty-proof.md) | Visual+ insights and PTY proof | P1 | L | 034 | TODO |
 | [036](./036-v2.1.0-release.md) | Publish and prove depfresh 2.1.0 | P1 | M | 035 | TODO |
@@ -250,10 +250,15 @@ Plan 032 completed through `4556a06`. The immutable renderer-neutral model and i
 read-only/error streams passed three focused 185-test runs, full 1,656-test coverage, complete
 static/build/smoke/demo/release/package gates, public declaration byte comparison, and independent
 lifecycle plus drift reviews with no findings. Legacy write and global invocations emit no
-incomplete model stream. Plan 033 is now next and makes one command-level local plan/apply
-authoritative, preflighting every selected physical target before the first replacement while
-preserving honest per-file atomicity, structural replacement-attempt evidence, and best-effort
-recovery. Plan 034 replaces fragmented table/progress output with the inline, complete, copyable
+incomplete model stream.
+
+Plan 033 completed through `b54cf95`. One command-level local plan/apply is authoritative,
+preflights every selected physical target before the first replacement, and retains exact
+structural attempts plus best-effort recovery evidence. The final 397-test focused matrix passed
+three times, full coverage passed 149 files and 1,775 tests, all static/build/smoke/demo/release and
+56-file package gates passed, and repeated declaration builds exactly matched public `2.0.2`.
+Independent authority/model and public-contract reviews reported no findings. Plan 034 is now next
+and replaces fragmented table/progress output with the inline, complete, copyable
 Visual+ v2 renderer. Plan 035 adds topology, severity, impact, shared-surface, and major-risk
 visualizations plus full built-CLI PTY/fallback proof against the deterministic 66-package,
 616-declaration, 76-update, 14-target acceptance fixture. Plan 036 owns the immutable `2.1.0`
