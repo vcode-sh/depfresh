@@ -22,6 +22,8 @@ test-only adapter, Vitest, Biome, pnpm `10.33.0`. No new runtime/native dependen
 - The fixture contract is exact: 66 packages, 616 declared, 612 eligible, 76 selected updates,
   15 owner groups, 14 physical targets, 18 repeated names, 39 repeated occurrences, and 2 major
   blast-radius cards.
+- The selected severity distribution is exactly 3 major, 37 minor, and 36 patch operations. The
+  three major operations form two cards; operation counts and card counts are never conflated.
 - The two approved major cards are `react-dropzone` `^15 -> ^17` across `lab-editor` and `web`,
   and root-catalog `nanoid` `^5.1.16 -> ^6.0.0`; both use a fixed about-five-day age and explicit
   unknown Node compatibility in the deterministic fixture.
@@ -50,8 +52,15 @@ overlap unrelated concurrent edits.
 
 - Create: `src/commands/check/visual-plus/insights.ts`
 - Create: `src/commands/check/visual-plus/insights.test.ts`
+- Modify: `src/commands/apply/legacy-plan.ts`
+- Modify: `src/commands/apply/legacy-plan.test.ts`
 - Modify: `src/commands/check/run-model.ts`
 - Modify: `src/commands/check/run-model.test.ts`
+- Modify: `src/commands/check/visual-plus/integration.ts`
+- Modify: `src/commands/check/visual-plus/integration.test.ts`
+- Modify: `src/commands/check/visual-plus/input.ts`
+- Create: `src/commands/check/visual-plus/input.test.ts`
+- Modify: `src/commands/check/json-output.compatibility.test.ts`
 
 **Interfaces:**
 
@@ -59,11 +68,183 @@ overlap unrelated concurrent edits.
   metadata.
 - Produces: `buildVisualPlusInsights(snapshot): VisualPlusInsights`.
 
+**Authoritative evidence contract:**
+
+- The one-way chain is `LegacySelectionEvidence -> VisualPlusSelectionProjection ->
+  CheckRunSnapshot`. The integration must retain selected evidence; the insight builder must not
+  reconstruct identities from labels, array positions, display text, or repository state.
+- A physical occurrence key is the tuple `(sourceFileId, occurrencePath)`. `sourceFileId` must map
+  bijectively to one safe, contained repository-relative `sourcePath`; contradictory mappings fail.
+- A source file ID is `createRepositoryId('source', sourcePath)`. A dependency ID is
+  `createRepositoryId('dependency', rawDependencyName)`, so hostile names that sanitize to equal
+  display text cannot merge. A manifest owner ID is `createRepositoryId('package', ownerPath)` and
+  its label is the sanitized manifest name with owner path fallback. A catalog owner ID uses the
+  repository-model formula `createRepositoryId('catalog',
+  `${sourcePath}\0${manager}\0${name}`)` and its label is the sanitized catalog name with source
+  path fallback. Catalog consumers are explanatory and never become owners.
+- Physical owner order is the zero-based index assigned after evidence reconciliation by code-unit
+  comparison of owner path, role, catalog manager, catalog name, and owner ID. It is unique within
+  the snapshot and never depends on consumer order, map enumeration, locale, or display labels.
+- `CheckRunChange.owner` remains the physical transaction target. Add optional internal
+  `CheckRunChange.insight`; Visual+ local projections require it for every selected operation,
+  while legacy/global callers may omit it. This is internal data only: no public JSON or schema
+  changes are allowed.
+- `dependencyId` is the exact dependency identity used for grouping. Equal rendered names with
+  different dependency IDs must remain separate; equal owner labels with different owner IDs must
+  remain separate.
+- Every retained path must be normalized, repository-relative, contained, and free of absolute or
+  parent traversal segments. Missing or contradictory selected evidence throws a dedicated
+  `VisualPlusInsightError`; unknown evidence is represented explicitly and never inferred.
+- For every selected change, `change.owner`, `insight.sourcePath`,
+  `insight.owner.physicalTarget`, and its one selected target path are equal, and
+  `insight.sourceFileId === createRepositoryId('source', insight.sourcePath)`. Its dependency ID is
+  `createRepositoryId('dependency', insight.rawName)` and
+  `sanitizeTerminalText(insight.rawName) === change.name`.
+- Direct manifest evidence requires `catalog.role === 'direct'`, `owner.role === 'manifest'`,
+  `owner.path === sourcePath`, and `owner.id === createRepositoryId('package', owner.path)`.
+  Catalog-owned evidence requires `catalog.role === 'owner'`, `owner.role === 'catalog'`,
+  `owner.id === catalog.id`, `owner.path === catalog.sourcePath`,
+  `catalog.sourcePath === sourcePath`, `catalog.sourceFileId === sourceFileId`, and the exact catalog
+  ID formula above. Every mismatch is a fail-closed contract error with an explicit RED test.
+- `VisualPlusChangeMetadata` is a transitional renderer projection, not a second truth source.
+  `visual-plus/input.ts` must either derive it from `snapshot.changes[].insight` or require exact
+  equality for operation ID, owner ID/order/label/physical target, age, compatibility, and catalog
+  name/source before rendering. Contradictory maps and change-list evidence must fail closed.
+- One owner ID maps to exactly one complete owner reference. One dependency ID maps to exactly one
+  raw dependency name and sanitized display name. Owner orders are derived from the complete owner
+  inventory, contiguous `0..ownerCount - 1`, and equal the contract-defined sort; supplied order
+  values are validated rather than trusted.
+
+```ts
+export interface CheckRunOwnerReference {
+  id: string
+  role: 'manifest' | 'catalog'
+  label: string
+  path: string
+  order: number
+  physicalTarget: string
+}
+
+export type CheckRunCatalogEvidence =
+  | { role: 'direct' }
+  | {
+      role: 'owner'
+      id: string
+      manager: 'pnpm' | 'bun' | 'yarn'
+      name: string
+      sourceFileId: string
+      sourcePath: string
+    }
+
+export interface CheckRunInsightEvidence {
+  dependencyId: string
+  rawName: string
+  sourceFileId: string
+  sourcePath: string
+  occurrencePath: readonly string[]
+  owner: CheckRunOwnerReference
+  catalog: CheckRunCatalogEvidence
+  ageMs: number | null
+  compatibility: {
+    status: 'compatible' | 'incompatible' | 'unknown'
+    detail?: string
+  }
+}
+
+export interface PhysicalDependencyOccurrence {
+  operationId: string
+  dependencyId: string
+  name: string
+  sourceFileId: string
+  sourcePath: string
+  occurrencePath: readonly string[]
+  owner: CheckRunOwnerReference
+  catalog: CheckRunCatalogEvidence
+  current: string
+  target: string
+  diff: 'major' | 'minor' | 'patch'
+  ageMs: number | null
+  compatibility: CheckRunInsightEvidence['compatibility']
+}
+
+export interface OwnerImpact {
+  owner: CheckRunOwnerReference
+  operationIds: readonly string[]
+  updates: number
+  distribution: { major: number; minor: number; patch: number }
+}
+
+export interface SharedDependencySurface {
+  dependencyId: string
+  name: string
+  occurrences: readonly PhysicalDependencyOccurrence[]
+}
+
+export interface MajorBlastRadius {
+  dependencyId: string
+  name: string
+  current: string
+  target: string
+  operationIds: readonly string[]
+  owners: readonly CheckRunOwnerReference[]
+  occurrences: readonly PhysicalDependencyOccurrence[]
+  age: { state: 'known'; ageMs: number } | { state: 'unknown' } | { state: 'mixed' }
+  compatibility: { compatible: number; incompatible: number; unknown: number }
+}
+```
+
+**Builder invariants:**
+
+- `topology.packages/declared/eligible` come from snapshot counts;
+  `topology.updates = counts.operations` and `topology.files = counts.targets`.
+- Distribution is counted from selected changes, must sum to `counts.operations`, and rejects
+  `none`, `unknown`, unsupported, or inconsistent diffs.
+- Owners group only by owner ID. Shared surfaces group only by `dependencyId` and include entries
+  with at least two distinct physical occurrence keys. Major cards group by
+  `(dependencyId, current, target)`.
+- `OwnerImpact.operationIds` exactly match that owner's occurrences in canonical occurrence order,
+  and every selected operation appears in exactly one owner impact. `MajorBlastRadius.operationIds`
+  exactly match its occurrences; its owners are deduplicated by owner ID and sorted by reconciled
+  owner order. Singleton and non-major operations remain present in owner impact even though they
+  are intentionally absent from `shared` or `majors`; insight construction never drops a selected
+  operation.
+- Major age is `known` only when every occurrence has the same known value, `unknown` only when all
+  values are null, and `mixed` otherwise. Exact per-occurrence values remain retained.
+- Major compatibility has independent compatible/incompatible/unknown occurrence counts; it never
+  converts unknown to success or uses the executor runtime.
+- All comparisons use deterministic JavaScript code-unit ordering, never `localeCompare`.
+  Occurrences order by source path, `canonicalJson(occurrencePath)`, then operation ID; shared
+  surfaces by dependency ID then name; major cards by dependency ID, current, then target; owners
+  by the reconciled owner order then ID.
+- The reducer and insight builder deep-copy nested insight evidence before freezing. They never
+  freeze caller-owned input objects. The complete result, all nested arrays, and retained nested
+  evidence are deeply frozen.
+
+**Deterministic synthetic insight fixture:**
+
+- Severity is exactly `3 major / 37 minor / 36 patch`.
+- Owner 0 has 6 operations; owners 1-14 have 5 each, for 76 operations total. Owner 0 is
+  `lab-editor`, owner 1 is `web`, and owner 14 is `root-catalog`.
+- Owners 0-12 each own one physical target. Owners 13 and 14 are distinct physical owners sharing
+  one workspace configuration target, yielding 15 owner groups and 14 physical targets.
+- `react-dropzone` has two occurrences; three other dependency IDs have three occurrences each;
+  fourteen have two occurrences each. This yields 18 repeated dependency identities and 39
+  repeated occurrences. The other 37 occurrences are singletons, including `nanoid`.
+- The three major operations form exactly two cards: the two `react-dropzone` occurrences
+  `^15 -> ^17`, and root-catalog `nanoid` `^5.1.16 -> ^6.0.0`. All three retain age
+  `432_000_000` ms and compatibility `unknown`.
+- Include permutation, equal-label/different-ID, equal-display-name/different-dependency-ID,
+  duplicate-occurrence, conflicting-source, unsafe-path, mixed-age, mixed-compatibility, and
+  deep-freeze assertions.
+
 - [ ] **Step 1: Write insight RED tests**
 
-Assert exact topology, major/minor/patch distribution, owner impact, physical shared occurrences,
-catalog-owner identity, deterministic ordering, and two major cards. Ensure equal dependency names
-with different physical identities are not merged incorrectly.
+Build the deterministic synthetic fixture above. Assert exact topology, `3/37/36` distribution,
+`6 + 14*5` owner impact, 14 physical targets, `18/39` shared identities/occurrences, catalog-owner
+identity, deterministic permutation invariance, strict failure cases, deep freezing, and the two
+major cards. Ensure equal display names with different dependency IDs and equal owner labels with
+different owner IDs are never merged. Prove caller-owned nested evidence remains mutable after the
+snapshot/result copy is frozen.
 
 ```ts
 export interface VisualPlusInsights {
@@ -83,15 +264,21 @@ Expected: FAIL because the insight builder does not exist.
 
 - [ ] **Step 3: Retain exact relationship inputs in the run model**
 
-Add internal source file ID, repository-relative owner path, occurrence path, catalog identity/role,
-and compatibility evidence required by pure insights. Do not expose absolute paths or add JSON.
+First extend `LegacySelectionEvidenceOperation`, then project it through
+`VisualPlusSelectionProjection`, and finally retain it in optional `CheckRunChange.insight`. Add the
+exact dependency ID, source file ID/path, physical manifest or catalog owner, occurrence path,
+catalog identity/role, explicit age, and compatibility evidence required by pure insights. Assert
+the full cross-field coherence matrix, source-ID/path bijection, catalog ID formula, stable owner
+assignment, transitional metadata equality, and a byte-for-byte regression for every existing
+public JSON result. Do not expose absolute paths or add JSON/schema fields.
 
 - [ ] **Step 4: Implement deterministic insight builders**
 
-Group shared surfaces by dependency name and physical occurrence identity, not display owner name.
-Include only names with at least two physical occurrences. Compute proportional distribution from
-counts while retaining numeric labels. Major cards include current/target, all owners, age, and
-known/unknown compatibility; never synthesize runtime compatibility.
+Validate and deep-freeze the authoritative evidence before grouping. Group shared surfaces by exact
+dependency ID and distinct physical occurrence key, owners by owner ID, and majors by exact
+dependency ID/current/target. Use the ordering and aggregation rules above. Compute distribution
+from selected operations while retaining numeric labels. Never infer identity, age, catalog
+ownership, or runtime compatibility from display metadata.
 
 - [ ] **Step 5: Run insight GREEN tests**
 
