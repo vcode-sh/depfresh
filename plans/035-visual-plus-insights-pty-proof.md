@@ -25,7 +25,8 @@ test-only adapter, Vitest, Biome, pnpm `10.33.0`. No new runtime/native dependen
   blast-radius cards.
 - The selected severity distribution is exactly 3 major, 37 minor, and 36 patch operations. The
   three major operations form two cards; operation counts and card counts are never conflated.
-- The two approved major cards are `react-dropzone` `^15 -> ^17` across `lab-editor` and `web`,
+- The two approved major cards are `react-dropzone` `^15.0.0 -> ^17.0.0` across `lab-editor` and
+  `web`,
   and root-catalog `nanoid` `^5.1.16 -> ^6.0.0`; both use a fixed about-five-day age and explicit
   unknown Node compatibility in the deterministic fixture.
 - Both success and safety-block previews show all 76 rows and all 14 targets correctly.
@@ -232,7 +233,7 @@ export interface MajorBlastRadius {
   fourteen have two occurrences each. This yields 18 repeated dependency identities and 39
   repeated occurrences. The other 37 occurrences are singletons, including `nanoid`.
 - The three major operations form exactly two cards: the two `react-dropzone` occurrences
-  `^15 -> ^17`, and root-catalog `nanoid` `^5.1.16 -> ^6.0.0`. All three retain age
+  `^15.0.0 -> ^17.0.0`, and root-catalog `nanoid` `^5.1.16 -> ^6.0.0`. All three retain age
   `432_000_000` ms and compatibility `unknown`.
 - Include permutation, equal-label/different-ID, equal-display-name/different-dependency-ID,
   duplicate-occurrence, conflicting-source, unsafe-path, mixed-age, mixed-compatibility, and
@@ -399,6 +400,9 @@ overflow, hidden relationships, or color-only meaning.
 - Create: `test/helpers/visual-plus-fixture.mjs`
 - Create: `test/visual-plus-fixture.test.ts`
 - Modify: `test/practical-cli-smoke.mjs`
+- Modify: `src/commands/check/visual-plus/test-fixture.ts`
+- Modify: `src/commands/check/visual-plus/insights.test.ts`
+- Modify: `src/commands/check/visual-plus/sections/insights.test.ts`
 
 **Interfaces:**
 
@@ -451,7 +455,7 @@ overflow, hidden relationships, or color-only meaning.
 - Every spawned Git/CLI process uses argument arrays, a 30-second timeout, and explicit output
   bounds. Full tracked-list measurement uses a sufficiently large buffer and asserts a trailing NUL,
   complete entry count, clean worktree, and bytes greater than 1,250,160 on macOS and Linux.
-- Use a fixed 6,000-file ASCII filler formula with a 210-character filename body, components at
+- Use a fixed 6,000-file ASCII filler formula with a 220-character filename body, components at
   most 240 bytes, absolute paths below 1,024 bytes, and at least 10% margin above the byte boundary.
   Fixture tests declare an explicit extended timeout covering setup and teardown; generation is
   never adaptive or unbounded.
@@ -484,6 +488,12 @@ identities, and 2 major cards plus 3 major operations. Include the approved `rea
 `nanoid` relationships.
 Initialize Git with fixed local identity/dates and record target bytes/hashes. Never copy Spreadu
 source, private names, secrets, or absolute paths.
+
+The real resolver accepts only faithfully rewritable simple ranges here. Use
+`react-dropzone ^15.0.0 -> ^17.0.0`; the shorter `^15` is classified as an unsupported complex
+range and registry semver `17.0.0` cannot produce `^17`. Align the synthetic test fixture and its
+focused insight assertions with these canonical production bytes. Keep
+`nanoid ^5.1.16 -> ^6.0.0` unchanged.
 
 - [ ] **Step 4: Add success and safety variants**
 
