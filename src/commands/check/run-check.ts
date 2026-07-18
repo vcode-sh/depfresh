@@ -15,6 +15,7 @@ import type {
   InvocationAuthority,
   PackageMeta,
   ResolvedDepChange,
+  WriteOutcome,
 } from '../../types'
 import { summarizeWriteOutcomes } from '../../types'
 import { sanitizeTerminalText } from '../../utils/format'
@@ -385,7 +386,7 @@ async function runCheck(
     if (options.output === 'json') {
       outputJsonEnvelope(jsonPackages, runtimeOptions, executionState, jsonErrors, selectionReceipt)
     } else {
-      renderGlobalWriteOutcomes(executionState.globalResults, logger)
+      renderGlobalWriteOutcomes(executionState.writeOutcomes, executionState.globalResults, logger)
       const localWriteOutcomes = executionState.writeOutcomes.filter(
         (outcome) => !outcome.occurrence.file.startsWith('global:'),
       )
@@ -474,12 +475,34 @@ function renderWriteReceipt(lines: string[], logger: ReturnType<typeof createLog
 }
 
 function renderGlobalWriteOutcomes(
+  outcomes: WriteOutcome[],
   results: GlobalApplyResult[],
   logger: ReturnType<typeof createLogger>,
 ): void {
-  const items = results.flatMap((result) =>
-    result.items.filter((item) => item.status !== 'applied'),
-  )
+  const executorKeys = new Set<string>()
+  const renderedKeys = new Set<string>()
+  const items: Array<{ manager: string; name: string; status: string; reason: string }> = []
+  const append = (item: { manager: string; name: string; status: string; reason: string }) => {
+    const key = [item.manager, item.name, item.status, item.reason].join('\u0000')
+    if (renderedKeys.has(key)) return
+    renderedKeys.add(key)
+    items.push(item)
+  }
+
+  for (const result of results) {
+    for (const item of result.items) {
+      executorKeys.add(globalOutcomeKey(item.manager, item.name))
+      if (item.status !== 'applied') append(item)
+    }
+  }
+
+  for (const outcome of outcomes) {
+    if (!outcome.occurrence.file.startsWith('global:') || outcome.status === 'applied') continue
+    const manager = outcome.occurrence.file.slice('global:'.length)
+    if (executorKeys.has(globalOutcomeKey(manager, outcome.name))) continue
+    append({ manager, name: outcome.name, status: outcome.status, reason: outcome.reason })
+  }
+
   if (items.length === 0) return
   const lines = [
     'Global write outcomes',
@@ -488,6 +511,10 @@ function renderGlobalWriteOutcomes(
     ),
   ]
   logger.info(lines.join('\n'))
+}
+
+function globalOutcomeKey(manager: string, name: string): string {
+  return `${manager}\u0000${name}`
 }
 
 interface CheckExitCauses {

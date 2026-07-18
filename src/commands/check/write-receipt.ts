@@ -261,8 +261,10 @@ function formatExit(receipt: WriteReceipt, exit: WriteReceiptExit): string {
   const hasNonLocalExitCause =
     exit.strictResolutionFailed || exit.globalWriteFailed || exit.strictPostWriteFailed
   if (hasNonLocalExitCause && receipt.verdict !== 'complete') {
-    const changedFiles = receipt.verdict === 'partial' ? ' and the changed files' : ''
-    return `Exit ${exit.code} · inspect the errors above${changedFiles} and correct each blocked target before rerunning`
+    if (receipt.verdict === 'partial') {
+      return `Exit ${exit.code} · review all reported errors and changed files, then correct each blocked target before rerunning`
+    }
+    return `Exit ${exit.code} · review all reported errors and correct each blocked target before rerunning`
   }
   if (receipt.verdict === 'partial') {
     if (onlyVcsUnavailable) {

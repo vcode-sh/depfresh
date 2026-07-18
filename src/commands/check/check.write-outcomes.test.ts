@@ -304,8 +304,9 @@ describe('observed write outcome reporting', () => {
     expect(receiptBlocks).toHaveLength(1)
     expect(stdout).toContain('Safety block · no files were changed')
     expect(stdout).toContain(
-      'Exit 2 · inspect the errors above and correct each blocked target before rerunning',
+      'Exit 2 · review all reported errors and correct each blocked target before rerunning',
     )
+    expect(stdout).not.toContain('errors above')
     expect(stdout).not.toContain('Exit 2 · fix the Git evidence problem, then rerun')
     expect(stderr).not.toMatch(/Safety block|Preflight could not confirm Git state|Exit 2/u)
   })

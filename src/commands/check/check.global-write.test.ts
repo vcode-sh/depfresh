@@ -278,6 +278,118 @@ describe('global write dispatch', () => {
     expect(stderr).not.toContain('INVENTORY_TIMEOUT')
   })
 
+  it('renders pre-execution global outcomes when no manager request is executable', async () => {
+    const pkg: PackageMeta = {
+      name: 'Global packages',
+      type: 'global',
+      filepath: 'global:yarn',
+      deps: [],
+      resolved: [],
+      raw: {},
+      indent: '  ',
+    }
+    mocks.loadPackagesMock.mockResolvedValue([pkg])
+    mocks.resolvePackageMock.mockResolvedValue([
+      makeResolved({ name: 'missing-target' }),
+      makeResolved({ name: 'missing-observation', globalManager: 'npm' }),
+    ])
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+
+    const { check } = await import('./index')
+    const exitCode = await check({
+      ...baseOptions,
+      write: true,
+      global: true,
+      loglevel: 'info',
+    })
+    const stdout = logSpy.mock.calls.flat().map(String).join('\n')
+
+    expect(exitCode).toBe(2)
+    expect(mocks.createGlobalApplyPlanMock).not.toHaveBeenCalled()
+    expect(mocks.applyGlobalPlanMock).not.toHaveBeenCalled()
+    expect(stdout).toContain('Global write outcomes')
+    expect(stdout).toContain('yarn · missing-target · unknown · GLOBAL_TARGET_MISSING')
+    expect(stdout).toContain('npm · missing-observation · unknown · GLOBAL_OBSERVATION_FAILED')
+    expect(stdout.match(/missing-target/gu)).toHaveLength(2)
+    expect(stdout.match(/missing-observation/gu)).toHaveLength(2)
+    expect(stdout).not.toMatch(/(?:Complete|Partial result|Safety block).*across/u)
+  })
+
+  it('combines incomplete and executed global outcomes without losing exact executor reasons', async () => {
+    const pkg: PackageMeta = {
+      name: 'Global packages',
+      type: 'global',
+      filepath: 'global:npm+pnpm',
+      deps: [],
+      resolved: [],
+      raw: {
+        managersByDependency: { typescript: ['npm', 'pnpm'] },
+        versionsByDependency: { typescript: { npm: '5.0.0' } },
+      },
+      indent: '  ',
+    }
+    mocks.loadPackagesMock.mockResolvedValue([pkg])
+    mocks.resolvePackageMock.mockResolvedValue([
+      makeResolved({
+        name: 'typescript',
+        currentVersion: '5.0.0',
+        targetVersion: '6.0.0',
+      }),
+    ])
+    mocks.applyGlobalPlanMock.mockResolvedValue({
+      contract: 'depfresh.global-apply',
+      schemaVersion: 1,
+      toolVersion: '2.0.1',
+      planFingerprint: 'a'.repeat(64),
+      status: 'unknown',
+      items: [
+        {
+          operationId: 'operation-0',
+          occurrenceId: 'occurrence-0',
+          manager: 'npm',
+          name: 'typescript',
+          expectedVersion: '5.0.0',
+          targetVersion: '6.0.0',
+          status: 'unknown',
+          reason: 'INVENTORY_TIMEOUT',
+        },
+      ],
+      commands: [],
+      summary: {
+        planned: 1,
+        applied: 0,
+        skipped: 0,
+        conflicted: 0,
+        failed: 0,
+        unknown: 1,
+      },
+      requiredCapabilities: ['global-write', 'process-execute'],
+      rollback: 'not-supported',
+    })
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+
+    const { check } = await import('./index')
+    const exitCode = await check({
+      ...baseOptions,
+      write: true,
+      globalAll: true,
+      loglevel: 'info',
+    })
+    const stdout = logSpy.mock.calls.flat().map(String).join('\n')
+    const outcomeBlock = logSpy.mock.calls
+      .flat()
+      .map(String)
+      .find((value) => value.includes('Global write outcomes'))
+
+    expect(exitCode).toBe(2)
+    expect(outcomeBlock).toBeDefined()
+    expect(outcomeBlock).toContain('npm · typescript · unknown · INVENTORY_TIMEOUT')
+    expect(outcomeBlock).toContain('pnpm · typescript · unknown · GLOBAL_OBSERVATION_FAILED')
+    expect(outcomeBlock?.match(/(?:^|\n)npm · typescript/gu)).toHaveLength(1)
+    expect(outcomeBlock?.match(/(?:^|\n)pnpm · typescript/gu)).toHaveLength(1)
+    expect(stdout).not.toMatch(/(?:^|\n)npm · typescript · unknown · GLOBAL_OBSERVATION_FAILED/u)
+  })
+
   it('exposes the state-machine run result in legacy JSON output', async () => {
     const pkg: PackageMeta = {
       name: 'Global packages',

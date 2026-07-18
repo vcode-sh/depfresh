@@ -123,9 +123,25 @@ write. `Safety block · no files were changed` appears only when no applied or r
 exists and every blocked group proves replacement was not attempted. The receipt's `Exit` line uses
 the final normal command exit code, including strict resolution or post-write failures; it is not
 inferred from write outcomes alone. Guidance says to fix the Git evidence problem only when every
-blocking group is `VCS_UNAVAILABLE`. Mixed or non-VCS blocks instead say to inspect and correct each
-blocked target, whose receipt group retains its exact status and cause. Global package-manager
-outcomes keep their separate state-machine summary and are never counted as physical files.
+local blocking group is `VCS_UNAVAILABLE` and no strict resolution, global write, or strict
+post-write failure also causes the final exit. Mixed local causes use blocked-target guidance. When
+one of those non-local causes also exists, the position-neutral guidance is
+`Exit 2 · review all reported errors and correct each blocked target before rerunning`; for a
+partial write it also tells the operator to review the changed files. Each receipt group retains
+its exact local status and cause.
+
+Global package-manager outcomes are rendered separately on stdout. Every sanitized non-applied
+item uses its manager, package, status, and exact available reason, including failures detected
+before a manager command can be planned and exact executor reasons when a global apply result
+exists:
+
+```text
+Global write outcomes
+npm · typescript · unknown · INVENTORY_TIMEOUT
+```
+
+These lines are not physical-file receipt groups and make no file-count or atomicity claim. Global
+outcomes remain in their state-machine summary and are never counted as physical files.
 
 The complete receipt is one ordered durable stdout block: headline, physical groups and reasons,
 then final exit guidance. Receipt fragments are never split across stdout and stderr, including in

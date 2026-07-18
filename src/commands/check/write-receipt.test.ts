@@ -356,14 +356,17 @@ describe('formatWriteReceipt', () => {
   })
 
   it('does not give Git-only guidance when a global write also blocks the exit', () => {
-    const safetyBlock = buildWriteReceipt({
-      outcomes: [outcome(join(root, 'package.json'), 0, 'unknown', 'VCS_UNAVAILABLE')],
+    const partial = buildWriteReceipt({
+      outcomes: [
+        outcome(join(root, 'applied.json'), 0, 'applied', 'APPLIED'),
+        outcome(join(root, 'package.json'), 1, 'unknown', 'VCS_UNAVAILABLE'),
+      ],
       diagnostics: [diagnostic('VCS_NOT_REPOSITORY', 'package.json')],
       cwd: root,
     })
 
-    expect(formatWriteReceipt(safetyBlock, exit(2, { globalWriteFailed: true })).at(-1)).toBe(
-      'Exit 2 · inspect the errors above and correct each blocked target before rerunning',
+    expect(formatWriteReceipt(partial, exit(2, { globalWriteFailed: true })).at(-1)).toBe(
+      'Exit 2 · review all reported errors and changed files, then correct each blocked target before rerunning',
     )
   })
 
@@ -375,7 +378,7 @@ describe('formatWriteReceipt', () => {
     })
 
     expect(formatWriteReceipt(safetyBlock, exit(2, { strictPostWriteFailed: true })).at(-1)).toBe(
-      'Exit 2 · inspect the errors above and correct each blocked target before rerunning',
+      'Exit 2 · review all reported errors and correct each blocked target before rerunning',
     )
   })
 })

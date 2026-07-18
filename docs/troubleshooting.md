@@ -48,13 +48,30 @@ A reverted outcome also produces `Partial result` and exit code `2`: recovery ob
 value, so the requested update was not retained. The headline reports both reverted operations and
 the physical files recovered, including runs that also applied or blocked other targets.
 
-Do not rerun blindly. Inspect the changed files named by the receipt first. When every blocking
-group is `VCS_UNAVAILABLE`, correct the Git evidence problem and then rerun. If any blocking group
-has another cause, inspect that group and correct each named target before rerunning instead of
-assuming Git is the only problem. A preflight-only receipt may say
+Do not rerun blindly. Inspect the changed files named by the receipt first. When every local
+blocking group is `VCS_UNAVAILABLE` **and** no strict resolution, global write, or strict post-write
+failure also causes the final exit, correct the Git evidence problem and then rerun. If any local
+blocking group has another cause, inspect that group and correct each named target before rerunning
+instead of assuming Git is the only problem. When a non-local cause is also present, the receipt
+uses position-neutral multi-cause guidance such as
+`Exit 2 · review all reported errors and correct each blocked target before rerunning` rather than
+claiming Git is the only blocker. A preflight-only receipt may say
 `Safety block · no files were changed` only when no outcome was applied or reverted and every
 blocked target proves replacement was not attempted. The 2.0.x grouped receipt does not claim
 command-level atomicity.
+
+Global write failures have their own sanitized stdout section, for example:
+
+```text
+Global write outcomes
+npm · typescript · unknown · INVENTORY_TIMEOUT
+```
+
+Each line preserves the global manager, package, status, and exact available reason. This includes
+pre-execution outcomes such as `GLOBAL_TARGET_MISSING` or `GLOBAL_OBSERVATION_FAILED`; when an
+executor result exists, its exact reason takes precedence over the compatibility-mapped write
+reason. The section is separate from the local physical-target receipt, does not count global
+managers as files, and makes no atomicity claim.
 
 ## "Invalid value for --mode/--output/--sort/--loglevel"
 
