@@ -368,8 +368,13 @@ reported no Critical, Important, or Minor findings. The detailed evidence is ret
 
 **Files:**
 
+- Modify: `src/commands/apply/engine.ts`
 - Modify: `src/commands/apply/index.test.ts`
 - Create: `src/commands/check/check.command-apply.integration.test.ts`
+- Modify: `src/commands/check/run-check.ts`
+- Modify: `src/commands/check/write-receipt.ts`
+- Modify: `src/commands/check/write-receipt.test.ts`
+- Modify: `src/commands/check/check.write-outcomes.test.ts`
 - Modify: `test/practical-cli-smoke.mjs`
 - Modify: `docs/output-formats/table.md`
 - Modify: `docs/troubleshooting.md`
@@ -380,11 +385,33 @@ reported no Critical, Important, or Minor findings. The detailed evidence is ret
 - Consumes: authoritative command apply from Task 3.
 - Produces: end-to-end filesystem proof and accurate safety language.
 
+Task 4 may add private local-command evidence wiring for the human receipt and project exact local
+recovery paths into the fields already present in `ApplyResult`. Public `WriteOutcome`, callback,
+JSON, schema, declaration, dependency, and version contracts remain unchanged. Reconcile exact
+apply operations and structural attempts by contained repository-relative file plus occurrence
+path before rendering. When command evidence exists, receipt status, reason, and attempted state
+come only from that evidence; never fall back to legacy reason heuristics after reconciliation
+fails. Such a failure must remain an exit-2 unknown/error and can never print complete or safety
+block.
+
+`Safety block · no files were changed` requires zero applied/reverted results, exact not-attempted
+evidence for every blocking group, and no retained or prior recovery uncertainty. In particular,
+clean `SOURCE_CHANGED` and `VCS_UNAVAILABLE` preflight blocks may qualify, while
+`RECOVERY_REQUIRED`, incomplete/unknown cleanup, a recovery journal, restored/unrecovered paths, or
+external effects never qualify. Preserve projected legacy outcomes for callbacks and public JSON;
+the exact command evidence is private to the human receipt.
+
 - [ ] **Step 1: Add integration fault checkpoints**
 
 Cover stale before first replacement, stale before a later rename, observation failure, completed
 recovery, partial recovery, unknown recovery, orphan journal, and signal interruption. Assert exact
 target bytes, lock/journal presence, recovery paths, operation statuses, receipt verdict, and exit.
+
+Signal interruption is a two-invocation proof, not graceful same-run recovery. Start a child with
+the real CLI signal handler, interrupt after an observed replacement, and assert exit 143 plus the
+exact changed/original target bytes and retained owned lock, relative journal, and backups. Then run
+a fresh authoritative check and require exact `RECOVERY_REQUIRED`, an unknown receipt, exit 2, and
+no further mutation or cleanup. Same-run cancellation/recovery is outside this plan.
 
 - [ ] **Step 2: Run the integration RED/GREEN loop**
 
