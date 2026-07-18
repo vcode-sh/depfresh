@@ -13,6 +13,13 @@ import type {
 } from '../../types'
 import { summarizeWriteOutcomes } from '../../types'
 import type { Logger } from '../../utils/logger'
+
+export {
+  applyLegacyCommandWrite,
+  type LegacyCommandApplyResult,
+  type LegacyCommandSelection,
+} from '../apply/legacy-plan'
+
 import { applyLegacyPackageWrite, type LegacyWriteDiagnostic } from '../apply/legacy'
 
 export interface PackageWriteResult extends WriteOutcomeSummary {

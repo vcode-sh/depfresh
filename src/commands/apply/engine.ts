@@ -101,15 +101,27 @@ interface PreflightFailure {
   unknown: boolean
 }
 
+export interface ApplyExecutionEvidence {
+  targetPath: string
+  operationIds: string[]
+  replacementAttempted: boolean
+}
+
+export type ApplyExecutionEvidenceObserver = (evidence: ApplyExecutionEvidence) => void
+export type ApplyVcsEvidenceObserver = (evidence: RepositoryVcsEvidence) => void
+
 export async function applyPlanWithRuntime(
   planInput: unknown,
   options: ApplyOptions,
   requestedAuthority: InvocationAuthority,
   runtimeOverrides: Partial<ApplyRuntime> = {},
+  executionEvidenceObserver?: ApplyExecutionEvidenceObserver,
+  vcsEvidenceObserver?: ApplyVcsEvidenceObserver,
 ): Promise<ApplyResult> {
   validateInputs(planInput, options)
   assertPlanResult(planInput)
   const plan = planInput
+  emitInitialExecutionEvidence(plan, executionEvidenceObserver)
   const authority = snapshotInvocationAuthority(requestedAuthority)
   if (!authority.write) {
     throw new ConfigError('Applying a plan requires explicit file-write invocation authority.', {
@@ -155,6 +167,7 @@ export async function applyPlanWithRuntime(
     root,
     plan,
     groups.map((group) => group.file),
+    vcsEvidenceObserver,
   )
   if (initialVcs) return blockedResult(plan, phases, initialVcs.reason, initialVcs.unknown)
   phases.push(phase('preflight', 'passed', 'PRECONDITIONS_CONFIRMED'))
@@ -275,7 +288,7 @@ export async function applyPlanWithRuntime(
   try {
     runtime.checkpoint('before-precommit', {})
     if (!ownsApplyLock(lock)) throw new ApplyRunError('LOCK_LOST')
-    const recheckFailure = recheckAllTargets(root, plan, groups)
+    const recheckFailure = recheckAllTargets(root, plan, groups, vcsEvidenceObserver)
     if (recheckFailure) throw new ApplyRunError(recheckFailure.reason, recheckFailure.unknown)
     runtime.checkpoint('after-precommit', {})
     phases.push(phase('precommit', 'passed', 'ALL_TARGETS_RECHECKED'))
@@ -333,6 +346,11 @@ export async function applyPlanWithRuntime(
         throw new ApplyRunError('BACKUP_SOURCE_CHANGED')
       }
       group.replacementAttempted = true
+      emitExecutionEvidence(executionEvidenceObserver, {
+        targetPath: group.file,
+        operationIds: group.operations.map((operation) => operation.id),
+        replacementAttempted: true,
+      })
       runtime.rename(required(group.stagePath), group.original.absolutePath)
       runtime.checkpoint('after-replace', {
         file: group.file,
@@ -550,6 +568,32 @@ export async function applyPlanWithRuntime(
   )
 }
 
+function emitInitialExecutionEvidence(
+  plan: PlanResult,
+  observer: ApplyExecutionEvidenceObserver | undefined,
+): void {
+  if (!observer) return
+  const operationsByTarget = new Map<string, string[]>()
+  for (const operation of plan.operations) {
+    const operationIds = operationsByTarget.get(operation.file)
+    if (operationIds) operationIds.push(operation.id)
+    else operationsByTarget.set(operation.file, [operation.id])
+  }
+  for (const [targetPath, operationIds] of operationsByTarget) {
+    emitExecutionEvidence(observer, { targetPath, operationIds, replacementAttempted: false })
+  }
+}
+
+function emitExecutionEvidence(
+  observer: ApplyExecutionEvidenceObserver | undefined,
+  evidence: ApplyExecutionEvidence,
+): void {
+  if (!observer) return
+  try {
+    observer(evidence)
+  } catch {}
+}
+
 function validateExecutionAuthority(plan: PlanResult, authority: InvocationAuthority): void {
   const phaseRequired =
     plan.operations.length > 0 &&
@@ -748,8 +792,10 @@ function validateTargetVcs(
   root: string,
   plan: PlanResult,
   targets: string[],
+  observer?: ApplyVcsEvidenceObserver,
 ): PreflightFailure | undefined {
   const current = collectVcsEvidence(root, targets)
+  emitVcsEvidence(observer, current)
   const plannedNonRepository = isNonRepository(plan.vcs)
   const currentNonRepository = isNonRepository(current)
   if (plannedNonRepository && currentNonRepository) return undefined
@@ -879,6 +925,7 @@ function recheckAllTargets(
   root: string,
   plan: PlanResult,
   groups: TargetGroup[],
+  vcsEvidenceObserver?: ApplyVcsEvidenceObserver,
 ): PreflightFailure | undefined {
   for (const group of groups) {
     let current: FileSnapshot
@@ -911,7 +958,18 @@ function recheckAllTargets(
     root,
     plan,
     groups.map((group) => group.file),
+    vcsEvidenceObserver,
   )
+}
+
+function emitVcsEvidence(
+  observer: ApplyVcsEvidenceObserver | undefined,
+  evidence: RepositoryVcsEvidence,
+): void {
+  if (!observer) return
+  try {
+    observer(evidence)
+  } catch {}
 }
 
 function sameSource(left: FileSnapshot, right: FileSnapshot): boolean {

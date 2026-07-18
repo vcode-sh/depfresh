@@ -179,6 +179,49 @@ describe('applyPackageWrite observed outcome accounting', () => {
     expect(readFileSync(filepath, 'utf8')).toBe('{"dependencies":{"shared":"1.0.0"}}\n')
   })
 
+  it('projects the apply-time VCS diagnostic rather than stale planning evidence', async () => {
+    const filepath = join(tmpDir, 'package.json')
+    writeFileSync(filepath, '{"dependencies":{"shared":"1.0.0"}}\n')
+    collectVcsEvidenceMock
+      .mockReturnValueOnce({
+        status: 'confirmed',
+        targetFiles: [{ path: 'package.json', state: 'clean' }],
+        unrelatedDirtyPaths: [],
+        diagnostics: [],
+      })
+      .mockReturnValueOnce({
+        status: 'unavailable',
+        targetFiles: [],
+        unrelatedDirtyPaths: [],
+        diagnostics: [{ code: 'VCS_PROBE_FAILED', path: 'package.json' }],
+      })
+    const pkg: PackageMeta = {
+      name: 'fixture',
+      type: 'package.json',
+      filepath,
+      deps: [],
+      resolved: [],
+      raw: {},
+      indent: '  ',
+    }
+
+    const result = await applyPackageWrite(
+      pkg,
+      [makeChange()],
+      options,
+      authority,
+      createLogger('silent'),
+    )
+
+    expect(result.outcomes[0]).toMatchObject({ status: 'unknown', reason: 'VCS_UNAVAILABLE' })
+    expect(result.diagnostics).toEqual([
+      {
+        code: 'VCS_PROBE_FAILED',
+        target: { identity: realpathSync.native(filepath), display: 'package.json' },
+      },
+    ])
+  })
+
   it('reports mixed global manager states individually without claiming a transaction', async () => {
     applyGlobalPlanMock.mockResolvedValue(
       globalResult([

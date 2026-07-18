@@ -31,7 +31,7 @@ import { validateApplyResult, validatePlanResult } from '../../contracts/validat
 import { createRepositoryId } from '../../repository/identity'
 import type { InvocationAuthority } from '../../types'
 import { applyPlanWithRuntime } from './engine'
-import { apply } from './index'
+import { apply, applyWithExecutionEvidence } from './index'
 import { acquireApplyLock, defaultApplyRuntime, releaseApplyLock } from './lock'
 import type { ApplyCheckpoint } from './types'
 
@@ -2563,6 +2563,132 @@ exit 17`,
     expect(readFileSync(join(root, 'packages', 'package.json'), 'utf8')).toBe(second)
     expect(existsSync(join(root, '.depfresh'))).toBe(false)
   })
+
+  it('reports structural replacement evidence through the package-private apply path', async () => {
+    const root = temporaryRoot()
+    const content = '{"dependencies":{"alpha":"1.0.0"}}'
+    writeFileSync(join(root, 'package.json'), content)
+    const plan = makePlan([
+      {
+        file: 'package.json',
+        content,
+        path: ['dependencies', 'alpha'],
+        name: 'alpha',
+        expectedValue: '1.0.0',
+        requestedValue: '2.0.0',
+      },
+    ])
+    const { evidence } = await applyWithExecutionEvidence(plan, { cwd: root }, authority)
+
+    expect(evidence).toEqual([
+      {
+        targetPath: 'package.json',
+        operationIds: [plan.operations[0]?.id],
+        replacementAttempted: true,
+      },
+    ])
+  })
+
+  it('does not let a package-private evidence observer change apply behavior', async () => {
+    const root = temporaryRoot()
+    const content = '{"dependencies":{"alpha":"1.0.0"}}'
+    writeFileSync(join(root, 'package.json'), content)
+    const plan = makePlan([
+      {
+        file: 'package.json',
+        content,
+        path: ['dependencies', 'alpha'],
+        name: 'alpha',
+        expectedValue: '1.0.0',
+        requestedValue: '2.0.0',
+      },
+    ])
+
+    const result = await applyPlanWithRuntime(plan, { cwd: root }, authority, {}, () => {
+      throw new Error('observer failure')
+    })
+
+    expect(result.status).toBe('applied')
+    expect(JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).dependencies.alpha).toBe(
+      '2.0.0',
+    )
+  })
+
+  it('keeps the package-private evidence recorder stateless when apply throws', async () => {
+    const root = temporaryRoot()
+    const content = '{"dependencies":{"alpha":"1.0.0"}}'
+    writeFileSync(join(root, 'package.json'), content)
+    const plan = makePlan([
+      {
+        file: 'package.json',
+        content,
+        path: ['dependencies', 'alpha'],
+        name: 'alpha',
+        expectedValue: '1.0.0',
+        requestedValue: '2.0.0',
+      },
+    ])
+
+    await expect(
+      applyWithExecutionEvidence(plan, { cwd: root }, { ...authority, write: false }),
+    ).rejects.toMatchObject({ reason: 'AUTHORITY_REQUIRED' })
+    const result = await applyWithExecutionEvidence(plan, { cwd: root }, authority)
+
+    expect(result.applyResult.status).toBe('applied')
+    expect(result.evidence).toMatchObject([
+      { targetPath: 'package.json', replacementAttempted: true },
+    ])
+  })
+
+  it.each([
+    { fault: 'after-stage-write' as const, expected: [false, false] },
+    { fault: 'before-replace' as const, expected: [false, false] },
+    { fault: 'after-replace' as const, expected: [true, false] },
+  ])(
+    'retains exact target attempt facts when $fault aborts the run',
+    async ({ fault, expected }) => {
+      const root = temporaryRoot()
+      const first = '{"dependencies":{"alpha":"1.0.0"}}'
+      const second = '{"dependencies":{"beta":"1.0.0"}}'
+      writeFileSync(join(root, 'package.json'), first)
+      mkdirSync(join(root, 'packages'))
+      writeFileSync(join(root, 'packages', 'package.json'), second)
+      const plan = makePlan([
+        {
+          file: 'package.json',
+          content: first,
+          path: ['dependencies', 'alpha'],
+          name: 'alpha',
+          expectedValue: '1.0.0',
+          requestedValue: '2.0.0',
+        },
+        {
+          file: 'packages/package.json',
+          content: second,
+          path: ['dependencies', 'beta'],
+          name: 'beta',
+          expectedValue: '1.0.0',
+          requestedValue: '2.0.0',
+        },
+      ])
+      const attempts = new Map<string, boolean>()
+
+      await applyPlanWithRuntime(
+        plan,
+        { cwd: root },
+        authority,
+        {
+          checkpoint(name, context) {
+            if (name !== fault) return
+            if (fault === 'after-stage-write' || context.index === 0) throw new Error('fault')
+          },
+        },
+        (entry) => attempts.set(entry.targetPath, entry.replacementAttempted),
+      )
+
+      expect([...attempts.values()]).toEqual(expected)
+    },
+  )
 
   it('blocks live and malformed locks but reclaims a definitely dead owner without a journal', async () => {
     const root = temporaryRoot()
