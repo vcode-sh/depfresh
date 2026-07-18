@@ -70,3 +70,9 @@ away. The approved correction is to instrument complete read-only/error streams 
 keeping write-mode model emission inactive. Plan 033 owns the first write stream after it collects
 all selections and invokes one command-level apply. Global invocations also remain inactive because
 their logical owner identities cannot truthfully satisfy the repository-relative target contract.
+Plan 032 Task 3: complete through 438647b. Explicitly injected local read-only/error runs emit exact
+discovery, inspection, resolution, selection, result, and completion facts from verified seams.
+Public and uninjected calls create no controller; legacy write and global invocations emit no model
+events. The focused proof passes 171/171 tests across 11 files with typecheck, Biome, and diff checks
+green. Exact output/cursor/callback/addon/write/exit behavior is unchanged, and final re-review found
+no Critical, Important, or Minor issues. Task 4 full verification is next.

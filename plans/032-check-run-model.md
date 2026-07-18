@@ -212,26 +212,26 @@ reported no Critical, Important, or Minor findings.
 - Produces: one complete event stream for local read-only and error journeys alongside current
   behavior. Write-mode and global injection remain deliberately inactive.
 
-- [ ] **Step 1: Characterize current output and callback order**
+- [x] **Step 1: Characterize current output and callback order**
 
 Capture table stdout/stderr, JSON bytes excluding the existing timestamp, addon callback order,
 write mock calls, progress writes, and exit codes for read-only, write-success, partial write,
 resolution error, no-package, and thrown-error cases. The two write cases prove unchanged legacy
 behavior and that no incomplete or invented model stream is emitted.
 
-- [ ] **Step 2: Write failing event-stream tests**
+- [x] **Step 2: Write failing event-stream tests**
 
 Inject a recording controller and require ordered phase/count/result/final events for read-only,
 resolution-error, no-package, and thrown-error journeys. Inject it into write-success, partial
 write, and global cases and require no model events; Plan 033 replaces the local-write boundary.
 
-- [ ] **Step 3: Run the new RED test**
+- [x] **Step 3: Run the new RED test**
 
 Run: `pnpm exec vitest run src/commands/check/run-check.model.test.ts`
 
 Expected: FAIL because `runCheck()` does not emit model events.
 
-- [ ] **Step 4: Emit events at verified seams**
+- [x] **Step 4: Emit events at verified seams**
 
 For local read-only invocations, add events immediately after package discovery, repository
 inspection start/end, resolution completion, selection completion, and final exit selection. Use
@@ -242,7 +242,7 @@ not attach the controller to any write or global invocation in this plan. Extend
 package observer only as needed to preserve the default discovery log bytes while emitting the real
 discovery callback before repository inspection starts; never emit retrospective active timing.
 
-- [ ] **Step 5: Prove zero public behavior drift**
+- [x] **Step 5: Prove zero public behavior drift**
 
 Run:
 
@@ -258,6 +258,15 @@ pnpm exec vitest run src/commands/check/run-check.model.test.ts \
 ```
 
 Expected: all pass; characterization bytes/callback order/write call count are unchanged.
+
+**Completion evidence (2026-07-18):** Local read-only/error instrumentation was implemented through
+`438647b`. The focused model/orchestration/callback/addon/JSON/core/write/progress/controller/
+reducer/discovery matrix passes 171/171 tests across 11 files, with typecheck, focused Biome, and
+diff checks green. Events use the real discovery observer before repository inspection, reconcile
+exact resolution and selection facts without clamping, and close every injected journey exactly
+once. Public and uninjected calls create no controller; write and global invocations emit no model
+events. Exact output, cursor, callback, addon, write, and exit behavior is unchanged. Independent
+review reported no Critical, Important, or Minor findings.
 
 ### Task 4: Model verification and handoff
 
