@@ -659,7 +659,7 @@ function copyAndValidateResults(
 
   const totals = deriveOperationTotals(operations)
   const targetTotals = deriveTargetTotals(targets)
-  assertResultPhaseCoherence(state, totals, targets)
+  assertResultPhaseCoherence(state, operations, totals, targets)
   return {
     operations,
     targets,
@@ -759,10 +759,7 @@ function assertTargetOutcomeCoherence(
   }
   if (
     targetResult.outcome === 'reverted' &&
-    (!operations.some((operation) => operation.outcome === 'reverted') ||
-      operations.some(
-        (operation) => operation.outcome !== 'applied' && operation.outcome !== 'reverted',
-      ))
+    operations.some((operation) => operation.outcome !== 'reverted')
   ) {
     throw new CheckRunInvariantError('reverted physical target outcome differs from operations')
   }
@@ -788,6 +785,7 @@ function assertTargetOutcomeCoherence(
 
 function assertResultPhaseCoherence(
   state: CheckRunSnapshot,
+  operations: readonly CheckRunOperationResult[],
   totals: CheckRunResultTotals,
   targets: readonly CheckRunTargetResult[],
 ): void {
@@ -884,6 +882,19 @@ function assertResultPhaseCoherence(
   }
   if (state.recovery.status === 'partial' && recover !== 'failed') {
     throw new CheckRunInvariantError('partial recovery requires a failed recovery phase')
+  }
+  if (
+    state.recovery.status === 'partial' &&
+    !operations.some(
+      (operation) =>
+        operation.outcome === 'reverted' ||
+        operation.outcome === 'failed' ||
+        operation.outcome === 'unknown',
+    )
+  ) {
+    throw new CheckRunInvariantError(
+      'partial recovery requires a reverted, failed, or unknown result',
+    )
   }
   if (state.recovery.status === 'unknown' && recover !== 'unknown') {
     throw new CheckRunInvariantError('unknown recovery requires an unknown recovery phase')

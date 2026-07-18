@@ -326,6 +326,68 @@ function applyRecoveryCompatibilityCase(fixture: RecoveryCompatibilityCase): Che
   )
 }
 
+interface PartialRecoveryMatrixCase {
+  readonly name: string
+  readonly outcomes: readonly CheckRunOperationResult['outcome'][]
+  readonly accepted: boolean
+  readonly unknownReceipt?: boolean
+}
+
+const partialRecoveryMatrices: readonly PartialRecoveryMatrixCase[] = [
+  { name: 'reverted only', outcomes: ['reverted'], accepted: true },
+  { name: 'failed only', outcomes: ['failed'], accepted: true },
+  { name: 'unknown only', outcomes: ['unknown'], accepted: true },
+  { name: 'applied and reverted', outcomes: ['applied', 'reverted'], accepted: true },
+  { name: 'reverted and failed', outcomes: ['reverted', 'failed'], accepted: true },
+  {
+    name: 'applied, reverted, and unknown',
+    outcomes: ['applied', 'reverted', 'unknown'],
+    accepted: true,
+  },
+  { name: 'applied only', outcomes: ['applied'], accepted: false },
+  { name: 'not attempted only', outcomes: ['not-attempted'], accepted: false },
+  { name: 'blocked only', outcomes: ['blocked'], accepted: false },
+  {
+    name: 'blocked only with an overlapping unknown receipt',
+    outcomes: ['blocked'],
+    accepted: false,
+    unknownReceipt: true,
+  },
+  { name: 'no operation outcomes', outcomes: [], accepted: false },
+]
+
+function applyPartialRecoveryMatrix(
+  outcomes: readonly CheckRunOperationResult['outcome'][],
+  unknownReceipt = false,
+): CheckRunSnapshot {
+  let state = completePhase(selectedInventoryState(outcomes.length, outcomes.length), 'preflight')
+  state = completePhase(state, 'stage')
+  state = completePhase(state, 'apply', outcomes.includes('blocked') ? 'blocked' : 'failed')
+  state = reduceCheckRun(state, {
+    type: 'recovery-recorded',
+    status: 'partial',
+    restoredPaths: ['package-lock.json'],
+    unrecoveredPaths: [],
+  })
+  state = completePhase(state, 'recover', 'failed')
+  state = completePhase(state, 'observe')
+  return results(
+    state,
+    state.targets.map((selected, index) => ({
+      ...operationResult(selected.operationIds[0]!, outcomes[index]!),
+      unknown: unknownReceipt || outcomes[index] === 'unknown',
+    })),
+    state.targets.map((selected, index) => ({
+      ...targetResult(selected, outcomes[index]!),
+      unknown: unknownReceipt || outcomes[index] === 'unknown',
+    })),
+  )
+}
+
+function applyPartialRecoveryFixture(fixture: PartialRecoveryMatrixCase): CheckRunSnapshot {
+  return applyPartialRecoveryMatrix(fixture.outcomes, fixture.unknownReceipt)
+}
+
 describe('check run model', () => {
   it('reconciles complete lifecycle inventories and resolution counts', () => {
     const selected = inventory(76, 14)
@@ -648,7 +710,31 @@ describe('check run model', () => {
     expect(state.results.targets.map((result) => result.outcome)).toEqual(fixture.outcomes)
   })
 
-  it('accepts partial recovery with applied and reverted operations aggregated as reverted', () => {
+  it.each(partialRecoveryMatrices)('validates the partial recovery matrix: $name', (fixture) => {
+    if (!fixture.accepted) {
+      expect(() => applyPartialRecoveryFixture(fixture)).toThrow(
+        'partial recovery requires a reverted, failed, or unknown result',
+      )
+      return
+    }
+
+    const state = applyPartialRecoveryFixture(fixture)
+    expect(state.results.operations.map((result) => result.outcome)).toEqual(fixture.outcomes)
+    expect(state.results.targets.map((result) => result.outcome)).toEqual(fixture.outcomes)
+  })
+
+  it('accepts applied and reverted outcomes on separate exact physical targets', () => {
+    const state = applyPartialRecoveryMatrix(['applied', 'reverted'])
+
+    expect(state.results.targets).toEqual([
+      targetResult(state.targets[0]!, 'applied'),
+      targetResult(state.targets[1]!, 'reverted'),
+    ])
+    expect(state.results.totals).toMatchObject({ applied: 1, reverted: 1 })
+    expect(state.results.targetTotals).toMatchObject({ applied: 1, reverted: 1 })
+  })
+
+  it('rejects a reverted target that combines applied and reverted owned operations', () => {
     let state = completePhase(selectedInventoryState(2, 1), 'preflight')
     state = completePhase(state, 'stage')
     state = completePhase(state, 'apply', 'failed')
@@ -659,19 +745,19 @@ describe('check run model', () => {
       unrecoveredPaths: [],
     })
     state = completePhase(state, 'recover', 'failed')
-    state = completePhase(state, 'observe', 'passed')
+    state = completePhase(state, 'observe')
     const selected = state.targets[0]!
-    state = results(
-      state,
-      [
-        operationResult(selected.operationIds[0]!, 'applied'),
-        operationResult(selected.operationIds[1]!, 'reverted'),
-      ],
-      [targetResult(selected, 'reverted')],
-    )
 
-    expect(state.results.totals).toMatchObject({ applied: 1, reverted: 1 })
-    expect(state.results.targetTotals).toMatchObject({ applied: 0, reverted: 1 })
+    expect(() =>
+      results(
+        state,
+        [
+          operationResult(selected.operationIds[0]!, 'applied'),
+          operationResult(selected.operationIds[1]!, 'reverted'),
+        ],
+        [targetResult(selected, 'reverted')],
+      ),
+    ).toThrow('reverted physical target outcome differs from operations')
   })
 
   it.each([
