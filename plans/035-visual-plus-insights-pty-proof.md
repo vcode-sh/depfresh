@@ -19,7 +19,8 @@ test-only adapter, Vitest, Biome, pnpm `10.33.0`. No new runtime/native dependen
 
 - All code, documentation, plans, and commit messages are English.
 - Begin only after Plan 034 is complete and reviewed; keep package version `2.0.2`.
-- The fixture contract is exact: 66 packages, 616 declared, 612 eligible, 76 selected updates,
+- The fixture contract is exact: 66 discovered package inventories (64 `package.json` manifests
+  plus two named catalog pseudo-packages), 616 declared, 612 eligible, 76 selected updates,
   15 owner groups, 14 physical targets, 18 repeated names, 39 repeated occurrences, and 2 major
   blast-radius cards.
 - The selected severity distribution is exactly 3 major, 37 minor, and 36 patch operations. The
@@ -401,14 +402,69 @@ overflow, hidden relationships, or color-only meaning.
 
 **Interfaces:**
 
-- Consumes: a disposable root and local registry URL.
-- Produces: `createVisualPlusFixture(root, options)` with exact manifests, Git state, registry data,
-  expected changes, and before/after hashes.
+- Consumes: a canonical absolute empty disposable root, a loopback HTTP registry URL with an
+  explicit port, and `options.asOfMs`.
+- Produces: `createVisualPlusFixture(root, options)` with a contained `repository/` Git root and
+  sibling `runtime/` isolation root, exact package inventories, registry metadata, Git state,
+  selected owner/target/change identities, child-local success/safety Git environments, a VCS
+  probe counter, and before/expected-after bytes and SHA-256 hashes for all 14 physical targets.
+
+**Fixture and safety contract:**
+
+- Generate exactly 64 `package.json` manifests. Discovery must add exactly two named pnpm catalog
+  pseudo-packages from one shared workspace configuration, yielding 66 runtime package inventories;
+  filler must never contain another manifest or workspace/catalog declaration.
+- Thirteen selected manifest owners plus two selected catalog owners share 14 physical targets.
+  The two catalog owners share only the workspace configuration target. The remaining 51 manifests
+  are discovered but have no selected operation.
+- Assign 76 selected declarations plus 540 non-updating declarations. Exactly four non-updating
+  declarations are explicitly ineligible and 536 are eligible/current, yielding independently
+  derived `616 declared / 612 eligible / 76 selected / 0 unresolved` counts and `3/37/36` severity.
+- Fixture expectations are not count authority. Invariant tests derive counts, identities,
+  relationships, and target membership from the production loader/resolver/run-model projection.
+- `options.asOfMs` is required. Fixed publication times use one captured clock, with both approved
+  major targets published at `asOfMs - 432_000_000`; fixture construction never calls `Date.now()`.
+- The safety variant uses a test-harness-only Git command-boundary wrapper in the child `PATH`. It
+  recognizes only `ls-files -z --cached --full-name --` with the exact sorted 14 literal target
+  pathspecs. It delegates matching occurrence 1 during plan construction, then injects a
+  deterministic bounded oversized response on matching occurrence 2 during initial apply
+  validation. The counter must equal 2, every target's `replacementAttempted` evidence must be
+  false, and no lock, stage, journal, backup, or replacement may have begun. Every other invocation
+  delegates to the fixed real Git executable. This seam may only reduce authority, remains outside
+  production source, and never mutates `.git`, index, worktree, or target bytes.
+- Success and safety variants have byte-identical selected IDs, owner IDs, target IDs, proposed
+  versions, and before hashes. Success must end at every expected-after hash; safety must exit `2`
+  with every before hash unchanged and no lock, stage, journal, backup, or replacement residue.
+- The builder rejects a non-empty, relative, symlinked, or non-canonical root and keeps all
+  generated paths under it. Tests create and clean only their own `mkdtemp` child in `finally`.
+- Return isolated `HOME`, XDG cache/config, Corepack, npm cache, pnpm home/store, wrapper/counter,
+  and Git config paths below the sibling `runtime/` root, never inside the Git worktree. Child launch
+  strips inherited `npm_config_*` case-insensitively, uses `GIT_CONFIG_NOSYSTEM=1`, `LC_ALL=C`,
+  `LANG=C`, `TZ=UTC`, and preserves no user cache/store. Porcelain must be empty before and after
+  both variants without broad ignore rules.
+- The registry URL validator accepts only credential-free loopback HTTP with an explicit port and
+  no query/hash. Metadata uses fixed npm abbreviated bytes/timestamps and supports bounded GET/HEAD
+  routing, including single-decoded npm scoped names. The test/smoke caller owns the loopback
+  server: it may listen with a closure, installs the fixture's immutable response-byte map, caps
+  request URL/body sizes, returns GET bodies, equivalent empty HEAD responses, deterministic
+  404/405 results, and always awaits socket closure in `finally`. The fixture owns no socket.
+- Every spawned Git/CLI process uses argument arrays, a 30-second timeout, and explicit output
+  bounds. Full tracked-list measurement uses a sufficiently large buffer and asserts a trailing NUL,
+  complete entry count, clean worktree, and bytes greater than 1,250,160 on macOS and Linux.
+- Use a fixed 6,000-file ASCII filler formula with a 210-character filename body, components at
+  most 240 bytes, absolute paths below 1,024 bytes, and at least 10% margin above the byte boundary.
+  Fixture tests declare an explicit extended timeout covering setup and teardown; generation is
+  never adaptive or unbounded.
+- Expected-after bytes are an independent oracle generated from the same explicit deterministic
+  JSON/YAML templates with only the selected version substitutions. The success journey must prove
+  production-written bytes equal this oracle before its hashes are reused for variant comparison.
 
 - [ ] **Step 1: Write fixture invariant RED tests**
 
-Require exact counts from the design and assert the complete `git ls-files -z` output exceeds
-1,250,160 bytes while only 14 selected targets participate in apply.
+Require the complete contract above. Independently assert the production-discovered
+`64 manifests + 2 catalogs = 66` inventories, all exact counts and relationships, and that the
+complete `git ls-files -z --cached --full-name` output exceeds 1,250,160 bytes while only 14
+selected physical targets participate in planning/apply VCS evidence.
 
 - [ ] **Step 2: Run fixture RED tests**
 
@@ -418,20 +474,30 @@ Expected: FAIL because the fixture builder does not exist.
 
 - [ ] **Step 3: Generate deterministic repository and registry evidence**
 
-Create 66 manifests and enough harmless tracked filler paths to cross the old buffer. Use fixed
-registry versions/timestamps and exact dependency assignment to yield 616/612/76/15/14/18/39/2,
-including the approved `react-dropzone` and `nanoid` major relationships. Initialize Git and record
-target hashes. Never copy Spreadu source, private names, secrets, or absolute paths.
+Create 64 manifests, two catalog pseudo-packages, and enough physically present, committed, clean,
+harmless tracked filler paths to cross the old buffer. Keep every ASCII path component at most 240
+bytes and full paths conservatively portable. Stage with `git add -A` rather than an unbounded
+argument list. Use fixed registry versions/timestamps and exact dependency assignment to yield 616
+declared occurrences, 612 eligible occurrences, 76 selected operations, 15 owner groups, 14
+physical targets, 18 repeated dependency identities, 39 occurrences belonging to repeated
+identities, and 2 major cards plus 3 major operations. Include the approved `react-dropzone` and
+`nanoid` relationships.
+Initialize Git with fixed local identity/dates and record target bytes/hashes. Never copy Spreadu
+source, private names, secrets, or absolute paths.
 
 - [ ] **Step 4: Add success and safety variants**
 
-Success keeps all exact target VCS evidence available. Safety injects an internal test seam that
-makes root VCS evidence unavailable before apply without mutating Git. Both variants use identical
-selected changes so output comparison is meaningful.
+Success keeps all exact target VCS evidence available. Safety uses the child-local, test-harness
+Git wrapper defined above to make the exact apply-time target probe unavailable before replacement,
+without mutating Git. Both variants use identical selected changes so output comparison is
+meaningful. Assert root/cache/registry cleanup and no leaked process/socket on success and setup or
+execution failure.
 
 - [ ] **Step 5: Run fixture GREEN invariants**
 
-Expected: all exact counts and byte boundaries pass on macOS and Linux with stable ordering.
+Expected: all exact counts, ownership/relationship membership, isolation, cleanup, Git state, and
+byte boundaries pass on macOS and Linux with stable code-unit ordering. Repeat the invariant suite
+three times and require identical normalized target hashes and selected IDs.
 
 ### Task 4: Real PTY and durable fallback harness
 
