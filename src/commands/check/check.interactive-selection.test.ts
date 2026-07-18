@@ -119,10 +119,9 @@ describe('interactive selection integration', () => {
 
     expect(result).toBe(0)
     expect(sentKeys).toBe(true)
-    expect(mocks.writePackageMock).toHaveBeenCalledWith(
-      pkg,
-      updates,
-      'silent',
+    expect(mocks.commandWriteMock).toHaveBeenCalledWith(
+      '/tmp/test',
+      [{ packageIndex: 0, pkg, changes: updates }],
       expect.objectContaining({ write: true }),
     )
     expect(afterPackageWrite).toHaveBeenCalledWith(pkg, updates)
@@ -176,10 +175,9 @@ describe('interactive selection integration', () => {
 
     expect(result).toBe(0)
     expect(sentKeys).toBe(true)
-    expect(mocks.writePackageMock).toHaveBeenCalledWith(
-      pkg,
-      [updates[0]],
-      'silent',
+    expect(mocks.commandWriteMock).toHaveBeenCalledWith(
+      '/tmp/test',
+      [{ packageIndex: 0, pkg, changes: [updates[0]] }],
       expect.objectContaining({ write: true }),
     )
     expect(afterPackageWrite).toHaveBeenCalledWith(pkg, [updates[0]])

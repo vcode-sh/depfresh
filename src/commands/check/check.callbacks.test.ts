@@ -142,4 +142,123 @@ describe('lifecycle callbacks', () => {
       'afterPackagesEnd',
     ])
   })
+
+  it('cleans earlier preparations without starting a writer when later preparation fails', async () => {
+    const packages = [makePkg('first'), makePkg('second'), makePkg('third')]
+    mocks.loadPackagesMock.mockResolvedValue(packages)
+    mocks.resolvePackageMock.mockResolvedValue([makeResolved()])
+    const beforePackageWrite = vi.fn((pkg) => {
+      if (pkg === packages[1]) throw new Error('second preparation failed')
+      return true
+    })
+    const afterPackageEnd = vi.fn()
+    const afterPackagesEnd = vi.fn()
+
+    const { check } = await import('./index')
+    const exitCode = await check({
+      ...baseOptions,
+      write: true,
+      beforePackageWrite,
+      afterPackageEnd,
+      afterPackagesEnd,
+    })
+
+    expect(exitCode).toBe(2)
+    expect(mocks.commandWriteMock).not.toHaveBeenCalled()
+    expect(mocks.writePackageMock).not.toHaveBeenCalled()
+    expect(afterPackageEnd.mock.calls.map(([pkg]) => pkg.name)).toEqual(['second', 'first'])
+    expect(afterPackagesEnd).not.toHaveBeenCalled()
+  })
+
+  it('retains the first earlier package cleanup error after preparation fails', async () => {
+    const packages = [makePkg('first'), makePkg('second'), makePkg('third')]
+    mocks.loadPackagesMock.mockResolvedValue(packages)
+    mocks.resolvePackageMock.mockResolvedValue([makeResolved()])
+    const beforePackageWrite = vi.fn((pkg) => {
+      if (pkg === packages[2]) throw new Error('third preparation failed')
+      return true
+    })
+    const afterPackageEnd = vi.fn((pkg) => {
+      if (pkg === packages[0]) throw new Error('first cleanup failed')
+      if (pkg === packages[1]) throw new Error('second cleanup failed')
+    })
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    const { check } = await import('./index')
+    const exitCode = await check({
+      ...baseOptions,
+      write: true,
+      loglevel: 'info',
+      beforePackageWrite,
+      afterPackageEnd,
+    })
+
+    expect(exitCode).toBe(2)
+    expect(afterPackageEnd.mock.calls.map(([pkg]) => pkg.name)).toEqual([
+      'third',
+      'first',
+      'second',
+    ])
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.any(String),
+      'Check failed:',
+      'first cleanup failed',
+    )
+  })
+
+  it('ends every prepared package and omits afterPackagesEnd when the command adapter throws', async () => {
+    const packages = [makePkg('first'), makePkg('second')]
+    mocks.loadPackagesMock.mockResolvedValue(packages)
+    mocks.resolvePackageMock.mockResolvedValue([makeResolved()])
+    mocks.commandWriteMock.mockRejectedValue(new Error('command adapter failed'))
+    const afterPackageEnd = vi.fn()
+    const afterPackagesEnd = vi.fn()
+
+    const { check } = await import('./index')
+    const exitCode = await check({
+      ...baseOptions,
+      write: true,
+      afterPackageEnd,
+      afterPackagesEnd,
+    })
+
+    expect(exitCode).toBe(2)
+    expect(mocks.commandWriteMock).toHaveBeenCalledTimes(1)
+    expect(afterPackageEnd.mock.calls.map(([pkg]) => pkg.name)).toEqual(['first', 'second'])
+    expect(afterPackagesEnd).not.toHaveBeenCalled()
+  })
+
+  it('attempts every real package completion in order after one completion hook throws', async () => {
+    const packages = [makePkg('first'), makePkg('second')]
+    mocks.loadPackagesMock.mockResolvedValue(packages)
+    mocks.resolvePackageMock.mockResolvedValue([makeResolved()])
+    const afterPackageWrite = vi.fn((pkg) => {
+      if (pkg === packages[0]) throw new Error('first completion failed')
+      if (pkg === packages[1]) throw new Error('second completion failed')
+    })
+    const afterPackageEnd = vi.fn()
+    const afterPackagesEnd = vi.fn()
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    const { check } = await import('./index')
+    const exitCode = await check({
+      ...baseOptions,
+      write: true,
+      loglevel: 'info',
+      afterPackageWrite,
+      afterPackageEnd,
+      afterPackagesEnd,
+    })
+
+    expect(exitCode).toBe(2)
+    expect(mocks.commandWriteMock).toHaveBeenCalledTimes(1)
+    expect(afterPackageWrite.mock.calls.map(([pkg]) => pkg.name)).toEqual(['first', 'second'])
+    expect(afterPackageEnd.mock.calls.map(([pkg]) => pkg.name)).toEqual(['first', 'second'])
+    expect(afterPackagesEnd).not.toHaveBeenCalled()
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.any(String),
+      'Check failed:',
+      'first completion failed',
+    )
+  })
 })

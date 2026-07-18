@@ -141,7 +141,13 @@ describe('check option validation', () => {
     const result = await resultPromise
 
     expect(result).toBe(0)
-    expect(mocks.writePackageMock).toHaveBeenCalledTimes(1)
+    expect(mocks.commandWriteMock).toHaveBeenCalledTimes(1)
+    expect(mocks.commandWriteMock).toHaveBeenCalledWith(
+      '/tmp/test',
+      expect.any(Array),
+      expect.objectContaining({ write: true }),
+    )
+    expect(mocks.writePackageMock).not.toHaveBeenCalled()
   })
 
   it('does not write when authority is broader than the resolved options', async () => {

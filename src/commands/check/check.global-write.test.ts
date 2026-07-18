@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PackageMeta } from '../../types'
-import { baseOptions, type CheckMocks, makeResolved, setupMocks } from './test-helpers'
+import { baseOptions, type CheckMocks, makePkg, makeResolved, setupMocks } from './test-helpers'
 
 describe('global write dispatch', () => {
   let mocks: CheckMocks
@@ -428,5 +428,114 @@ describe('global write dispatch', () => {
     expect(envelope.globalResults).toMatchObject([
       { contract: 'depfresh.global-apply', status: 'applied', rollback: 'not-supported' },
     ])
+  })
+
+  it('continues separately authorized global writes after a blocked local command result', async () => {
+    const local = makePkg('local-app', [makeResolved({ name: 'local-dep' })])
+    const global: PackageMeta = {
+      name: 'Global packages',
+      type: 'global',
+      filepath: 'global:npm',
+      deps: [
+        {
+          name: 'typescript',
+          currentVersion: '5.0.0',
+          source: 'dependencies',
+          update: true,
+          parents: [],
+        },
+      ],
+      resolved: [],
+      raw: { versionsByDependency: { typescript: { npm: '5.0.0' } } },
+      indent: '  ',
+    }
+    const localUpdate = makeResolved({ name: 'local-dep' })
+    const globalUpdate = makeResolved({
+      name: 'typescript',
+      currentVersion: '5.0.0',
+      targetVersion: '6.0.0',
+    })
+    mocks.loadPackagesMock.mockResolvedValue([local, global])
+    mocks.resolvePackageMock.mockImplementation(async (pkg: PackageMeta) =>
+      pkg.type === 'global' ? [globalUpdate] : [localUpdate],
+    )
+    mocks.commandWriteMock.mockImplementation(async (_root, selections) => ({
+      status: 'blocked' as const,
+      packages: selections.map(
+        (selection: {
+          packageIndex: number
+          pkg: PackageMeta
+          changes: (typeof localUpdate)[]
+        }) => ({
+          packageIndex: selection.packageIndex,
+          outcomes: selection.changes.map((change) => ({
+            name: change.name,
+            occurrence: {
+              file: selection.pkg.filepath,
+              path: [change.source, ...change.parents, change.name],
+            },
+            expectedValue: change.currentVersion,
+            requestedValue: change.targetVersion,
+            status: 'conflicted' as const,
+            reason: 'AMBIGUOUS_OCCURRENCE' as const,
+          })),
+        }),
+      ),
+      diagnostics: [],
+      attempts: [
+        {
+          targetPath: 'local-app/package.json',
+          operationIds: ['operation-local'],
+          replacementAttempted: false,
+        },
+      ],
+    }))
+
+    const { check } = await import('./index')
+    const exitCode = await check({ ...baseOptions, write: true, global: true })
+
+    expect(exitCode).toBe(2)
+    expect(mocks.commandWriteMock).toHaveBeenCalledTimes(1)
+    expect(mocks.applyGlobalPlanMock).toHaveBeenCalledTimes(1)
+    expect(mocks.commandWriteMock.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.applyGlobalPlanMock.mock.invocationCallOrder[0]!,
+    )
+  })
+
+  it('stops global execution and ends prepared packages when the local adapter throws', async () => {
+    const local = makePkg('local-app', [makeResolved({ name: 'local-dep' })])
+    const global: PackageMeta = {
+      name: 'Global packages',
+      type: 'global',
+      filepath: 'global:npm',
+      deps: [],
+      resolved: [],
+      raw: { versionsByDependency: { typescript: { npm: '5.0.0' } } },
+      indent: '  ',
+    }
+    mocks.loadPackagesMock.mockResolvedValue([local, global])
+    mocks.resolvePackageMock.mockResolvedValue([makeResolved({ name: 'local-dep' })])
+    mocks.commandWriteMock.mockRejectedValue(new Error('local adapter failed'))
+    const afterPackageEnd = vi.fn()
+    const afterPackagesEnd = vi.fn()
+
+    const { check } = await import('./index')
+    const exitCode = await check({
+      ...baseOptions,
+      write: true,
+      global: true,
+      afterPackageEnd,
+      afterPackagesEnd,
+    })
+
+    expect(exitCode).toBe(2)
+    expect(mocks.commandWriteMock).toHaveBeenCalledTimes(1)
+    expect(mocks.createGlobalApplyPlanMock).not.toHaveBeenCalled()
+    expect(mocks.applyGlobalPlanMock).not.toHaveBeenCalled()
+    expect(afterPackageEnd.mock.calls.map(([pkg]) => pkg.name)).toEqual([
+      'local-app',
+      'Global packages',
+    ])
+    expect(afterPackagesEnd).not.toHaveBeenCalled()
   })
 })

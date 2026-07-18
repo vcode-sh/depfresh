@@ -68,7 +68,7 @@ describe('addons', () => {
     expect(afterPackageWrite).toHaveBeenCalledWith(expect.any(Object), pkg, resolved)
     expect(afterPackageEnd).toHaveBeenCalledTimes(1)
     expect(afterPackagesEnd).toHaveBeenCalledTimes(1)
-    expect(mocks.writePackageMock).toHaveBeenCalledTimes(1)
+    expect(mocks.commandWriteMock).toHaveBeenCalledTimes(1)
     expect(order).toEqual([
       'setup',
       'afterPackagesLoaded',
@@ -79,9 +79,9 @@ describe('addons', () => {
       'afterPackagesEnd',
     ])
     expect(beforePackageWrite.mock.invocationCallOrder[0]).toBeLessThan(
-      mocks.writePackageMock.mock.invocationCallOrder[0]!,
+      mocks.commandWriteMock.mock.invocationCallOrder[0]!,
     )
-    expect(mocks.writePackageMock.mock.invocationCallOrder[0]).toBeLessThan(
+    expect(mocks.commandWriteMock.mock.invocationCallOrder[0]).toBeLessThan(
       afterPackageWrite.mock.invocationCallOrder[0]!,
     )
   })
@@ -107,6 +107,7 @@ describe('addons', () => {
     const { check } = await import('./index')
     await check({ ...baseOptions, write: true, addons: [addon] })
 
+    expect(mocks.commandWriteMock).not.toHaveBeenCalled()
     expect(mocks.writePackageMock).not.toHaveBeenCalled()
     expect(afterPackageWrite).not.toHaveBeenCalled()
     expect(afterPackageEnd).toHaveBeenCalledTimes(1)
@@ -168,10 +169,9 @@ describe('addons', () => {
         vscode: '^1.92.0',
       },
     })
-    expect(mocks.writePackageMock).toHaveBeenCalledWith(
-      pkg,
-      resolved,
-      'silent',
+    expect(mocks.commandWriteMock).toHaveBeenCalledWith(
+      '/tmp/test',
+      [{ packageIndex: 0, pkg, changes: resolved }],
       expect.objectContaining({ write: true }),
     )
   })

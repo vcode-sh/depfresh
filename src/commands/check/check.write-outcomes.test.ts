@@ -1,6 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { PackageMeta, ResolvedDepChange } from '../../types'
-import { baseOptions, type CheckMocks, makePkg, makeResolved, setupMocks } from './test-helpers'
+import type { PackageMeta, ResolvedDepChange, WriteOutcome } from '../../types'
+import {
+  baseOptions,
+  type CheckMocks,
+  createCommandResultWithOutcomes,
+  makePkg,
+  makeResolved,
+  setupMocks,
+} from './test-helpers'
 
 const runExecuteMock = vi.hoisted(() => vi.fn())
 
@@ -33,29 +40,29 @@ describe('observed write outcome reporting', () => {
     const second = makeResolved({ name: 'second', currentVersion: '1.0.0', targetVersion: '2.0.0' })
     mocks.loadPackagesMock.mockResolvedValue([pkg])
     mocks.resolvePackageMock.mockResolvedValue([first, second])
-    mocks.writePackageMock.mockReturnValue({
-      outcomes: [
-        {
-          name: 'first',
-          occurrence: { file: pkg.filepath, path: ['dependencies', 'first'] },
-          expectedValue: '1.0.0',
-          requestedValue: '2.0.0',
-          observedValue: '2.0.0',
-          status: 'applied',
-          reason: 'APPLIED',
-        },
-        {
-          name: 'second',
-          occurrence: { file: pkg.filepath, path: ['dependencies', 'second'] },
-          expectedValue: '1.0.0',
-          requestedValue: '2.0.0',
-          observedValue: '1.5.0',
-          status: 'conflicted',
-          reason: 'EXPECTED_VALUE_MISMATCH',
-        },
-      ],
-      diagnostics: [],
-    })
+    const outcomes: WriteOutcome[] = [
+      {
+        name: 'first',
+        occurrence: { file: pkg.filepath, path: ['dependencies', 'first'] },
+        expectedValue: '1.0.0',
+        requestedValue: '2.0.0',
+        observedValue: '2.0.0',
+        status: 'applied',
+        reason: 'APPLIED',
+      },
+      {
+        name: 'second',
+        occurrence: { file: pkg.filepath, path: ['dependencies', 'second'] },
+        expectedValue: '1.0.0',
+        requestedValue: '2.0.0',
+        observedValue: '1.5.0',
+        status: 'conflicted',
+        reason: 'EXPECTED_VALUE_MISMATCH',
+      },
+    ]
+    mocks.commandWriteMock.mockImplementation(async (root, selections) =>
+      createCommandResultWithOutcomes(root, selections, [{ packageIndex: 0, outcomes }]),
+    )
     const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
 
     const { check } = await import('./index')
@@ -89,20 +96,20 @@ describe('observed write outcome reporting', () => {
     })
     mocks.loadPackagesMock.mockResolvedValue([pkg])
     mocks.resolvePackageMock.mockResolvedValue([dep])
-    mocks.writePackageMock.mockReturnValue({
-      outcomes: [
-        {
-          name: 'hostile',
-          occurrence: { file: pkg.filepath, path: ['dependencies', 'hostile'] },
-          expectedValue: 'https://user:password@registry.example/pkg?token=expected-secret',
-          requestedValue: 'Bearer requested-secret',
-          observedValue: 'NPM_TOKEN=observed-secret',
-          status: 'conflicted',
-          reason: 'EXPECTED_VALUE_MISMATCH',
-        },
-      ],
-      diagnostics: [],
-    })
+    const outcomes: WriteOutcome[] = [
+      {
+        name: 'hostile',
+        occurrence: { file: pkg.filepath, path: ['dependencies', 'hostile'] },
+        expectedValue: 'https://user:password@registry.example/pkg?token=expected-secret',
+        requestedValue: 'Bearer requested-secret',
+        observedValue: 'NPM_TOKEN=observed-secret',
+        status: 'conflicted',
+        reason: 'EXPECTED_VALUE_MISMATCH',
+      },
+    ]
+    mocks.commandWriteMock.mockImplementation(async (root, selections) =>
+      createCommandResultWithOutcomes(root, selections, [{ packageIndex: 0, outcomes }]),
+    )
     const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
 
     const { check } = await import('./index')
@@ -122,20 +129,20 @@ describe('observed write outcome reporting', () => {
     const dep = makeResolved({ name: 'shared', currentVersion: '1.0.0', targetVersion: '2.0.0' })
     mocks.loadPackagesMock.mockResolvedValue([pkg])
     mocks.resolvePackageMock.mockResolvedValue([dep])
-    mocks.writePackageMock.mockReturnValue({
-      outcomes: [
-        {
-          name: 'shared',
-          occurrence: { file: pkg.filepath, path: ['dependencies', 'shared'] },
-          expectedValue: '1.0.0',
-          requestedValue: '2.0.0',
-          observedValue: '1.5.0',
-          status: 'conflicted',
-          reason: 'EXPECTED_VALUE_MISMATCH',
-        },
-      ],
-      diagnostics: [],
-    })
+    const outcomes: WriteOutcome[] = [
+      {
+        name: 'shared',
+        occurrence: { file: pkg.filepath, path: ['dependencies', 'shared'] },
+        expectedValue: '1.0.0',
+        requestedValue: '2.0.0',
+        observedValue: '1.5.0',
+        status: 'conflicted',
+        reason: 'EXPECTED_VALUE_MISMATCH',
+      },
+    ]
+    mocks.commandWriteMock.mockImplementation(async (root, selections) =>
+      createCommandResultWithOutcomes(root, selections, [{ packageIndex: 0, outcomes }]),
+    )
 
     const { check } = await import('./index')
     const exitCode = await check({
@@ -154,24 +161,34 @@ describe('observed write outcome reporting', () => {
     const dep = makeResolved({ name: 'shared', currentVersion: '1.0.0', targetVersion: '2.0.0' })
     mocks.loadPackagesMock.mockResolvedValue([pkg])
     mocks.resolvePackageMock.mockResolvedValue([dep])
-    mocks.writePackageMock.mockReturnValue({
-      outcomes: [
-        {
-          name: 'shared',
-          occurrence: { file: pkg.filepath, path: ['dependencies', 'shared'] },
-          expectedValue: '1.0.0',
-          requestedValue: '2.0.0',
-          status: 'unknown',
-          reason: 'VCS_UNAVAILABLE',
-        },
-      ],
-      diagnostics: [
-        {
-          code: 'VCS_OUTPUT_LIMIT_EXCEEDED',
-          target: { identity: pkg.filepath, display: 'package.json' },
-        },
-      ],
-    })
+    const outcomes: WriteOutcome[] = [
+      {
+        name: 'shared',
+        occurrence: { file: pkg.filepath, path: ['dependencies', 'shared'] },
+        expectedValue: '1.0.0',
+        requestedValue: '2.0.0',
+        status: 'unknown',
+        reason: 'VCS_UNAVAILABLE',
+      },
+    ]
+    const diagnostics: Array<{
+      code: 'VCS_OUTPUT_LIMIT_EXCEEDED'
+      target: { identity: string; display: string }
+    }> = [
+      {
+        code: 'VCS_OUTPUT_LIMIT_EXCEEDED',
+        target: { identity: pkg.filepath, display: 'package.json' },
+      },
+    ]
+    mocks.commandWriteMock.mockImplementation(async (root, selections) =>
+      createCommandResultWithOutcomes(
+        root,
+        selections,
+        [{ packageIndex: 0, outcomes }],
+        diagnostics,
+        false,
+      ),
+    )
     const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
 
     const { check } = await import('./index')
@@ -194,20 +211,20 @@ describe('observed write outcome reporting', () => {
     const dep = makeResolved({ name: 'recovered', currentVersion: '1.0.0', targetVersion: '2.0.0' })
     mocks.loadPackagesMock.mockResolvedValue([pkg])
     mocks.resolvePackageMock.mockResolvedValue([dep])
-    mocks.writePackageMock.mockReturnValue({
-      outcomes: [
-        {
-          name: 'recovered',
-          occurrence: { file: pkg.filepath, path: ['dependencies', 'recovered'] },
-          expectedValue: '1.0.0',
-          requestedValue: '2.0.0',
-          observedValue: '1.0.0',
-          status: 'reverted',
-          reason: 'WRITE_FAILED',
-        },
-      ],
-      diagnostics: [],
-    })
+    const outcomes: WriteOutcome[] = [
+      {
+        name: 'recovered',
+        occurrence: { file: pkg.filepath, path: ['dependencies', 'recovered'] },
+        expectedValue: '1.0.0',
+        requestedValue: '2.0.0',
+        observedValue: '1.0.0',
+        status: 'reverted',
+        reason: 'WRITE_FAILED',
+      },
+    ]
+    mocks.commandWriteMock.mockImplementation(async (root, selections) =>
+      createCommandResultWithOutcomes(root, selections, [{ packageIndex: 0, outcomes }]),
+    )
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
 
@@ -264,24 +281,34 @@ describe('observed write outcome reporting', () => {
         diff: 'error',
       }),
     ])
-    mocks.writePackageMock.mockReturnValue({
-      outcomes: [
-        {
-          name: 'blocked',
-          occurrence: { file: pkg.filepath, path: ['dependencies', 'blocked'] },
-          expectedValue: '1.0.0',
-          requestedValue: '2.0.0',
-          status: 'unknown',
-          reason: 'VCS_UNAVAILABLE',
-        },
-      ],
-      diagnostics: [
-        {
-          code: 'VCS_OUTPUT_LIMIT_EXCEEDED',
-          target: { identity: pkg.filepath, display: 'combined-block-app/package.json' },
-        },
-      ],
-    })
+    const outcomes: WriteOutcome[] = [
+      {
+        name: 'blocked',
+        occurrence: { file: pkg.filepath, path: ['dependencies', 'blocked'] },
+        expectedValue: '1.0.0',
+        requestedValue: '2.0.0',
+        status: 'unknown',
+        reason: 'VCS_UNAVAILABLE',
+      },
+    ]
+    const diagnostics: Array<{
+      code: 'VCS_OUTPUT_LIMIT_EXCEEDED'
+      target: { identity: string; display: string }
+    }> = [
+      {
+        code: 'VCS_OUTPUT_LIMIT_EXCEEDED',
+        target: { identity: pkg.filepath, display: 'combined-block-app/package.json' },
+      },
+    ]
+    mocks.commandWriteMock.mockImplementation(async (root, selections) =>
+      createCommandResultWithOutcomes(
+        root,
+        selections,
+        [{ packageIndex: 0, outcomes }],
+        diagnostics,
+        false,
+      ),
+    )
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
 
@@ -338,7 +365,7 @@ describe('observed write outcome reporting', () => {
     expect(output).not.toContain('Exit 0')
   })
 
-  it('renders one physical-target receipt for a partial legacy write', async () => {
+  it('renders one zero-change safety receipt for a late command preflight block', async () => {
     const appliedPackages = Array.from({ length: 13 }, (_, index) => makePkg(`package-${index}`))
     const blockedPackage = { ...makePkg('root'), filepath: '/tmp/test/package.json' }
     mocks.loadPackagesMock.mockResolvedValue([...appliedPackages, blockedPackage])
@@ -349,30 +376,39 @@ describe('observed write outcome reporting', () => {
         makeResolved({ name: `${pkg.name}-dependency-${index}` }),
       )
     })
-    mocks.writePackageMock.mockImplementation((pkg: PackageMeta, changes: ResolvedDepChange[]) => ({
-      outcomes: changes.map((change) => ({
-        name: change.name,
-        occurrence: { file: pkg.filepath, path: ['dependencies', change.name] },
-        expectedValue: '1.0.0',
-        requestedValue: '2.0.0',
-        ...(pkg.name === 'root'
-          ? { status: 'unknown' as const, reason: 'VCS_UNAVAILABLE' as const }
-          : {
-              observedValue: '2.0.0',
-              status: 'applied' as const,
-              reason: 'APPLIED' as const,
-            }),
-      })),
-      diagnostics:
-        pkg.name === 'root'
-          ? [
-              {
-                code: 'VCS_OUTPUT_LIMIT_EXCEEDED' as const,
-                target: { identity: pkg.filepath, display: 'package.json' },
+    mocks.commandWriteMock.mockImplementation(async (root, selections) =>
+      createCommandResultWithOutcomes(
+        root,
+        selections,
+        selections.map(
+          (selection: {
+            packageIndex: number
+            pkg: PackageMeta
+            changes: ResolvedDepChange[]
+          }) => ({
+            packageIndex: selection.packageIndex,
+            outcomes: selection.changes.map((change) => ({
+              name: change.name,
+              occurrence: {
+                file: selection.pkg.filepath,
+                path: ['dependencies', change.name],
               },
-            ]
-          : [],
-    }))
+              expectedValue: '1.0.0',
+              requestedValue: '2.0.0',
+              status: 'unknown' as const,
+              reason: 'VCS_UNAVAILABLE' as const,
+            })),
+          }),
+        ),
+        [
+          {
+            code: 'VCS_OUTPUT_LIMIT_EXCEEDED',
+            target: { identity: '/tmp/test/package.json', display: 'package.json' },
+          },
+        ],
+        false,
+      ),
+    )
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
 
@@ -381,34 +417,34 @@ describe('observed write outcome reporting', () => {
     const output = [...logSpy.mock.calls, ...warnSpy.mock.calls].flat().map(String).join('\n')
 
     expect(exitCode).toBe(2)
-    expect(output).toContain('Partial result · 35 updates applied across 13 files; 1 file blocked')
+    expect(output).toContain('Safety block · no files were changed')
     expect(output.match(/package\.json · 41 updates not attempted/gu)).toHaveLength(1)
     expect(output).toContain(
       'Preflight could not confirm Git state (VCS_UNAVAILABLE / VCS_OUTPUT_LIMIT_EXCEEDED)',
     )
-    expect(output).toContain(
-      'Exit 2 · inspect the changed files, fix the Git evidence problem, then rerun',
-    )
+    expect(output).toContain('Exit 2 · fix the Git evidence problem, then rerun')
     expect(output).not.toContain('Write unknown:')
 
     const receiptBlocks = logSpy.mock.calls
       .flat()
       .map(String)
-      .filter((value) => value.includes('Partial result ·'))
+      .filter((value) => value.includes('Safety block ·'))
     expect(receiptBlocks).toHaveLength(1)
     const receiptBlock = receiptBlocks[0]!
-    expect(receiptBlock.indexOf('Partial result ·')).toBeLessThan(
+    expect(receiptBlock.indexOf('Safety block ·')).toBeLessThan(
       receiptBlock.indexOf('package.json · 41 updates not attempted'),
     )
     expect(receiptBlock.indexOf('package.json · 41 updates not attempted')).toBeLessThan(
-      receiptBlock.indexOf('Preflight could not confirm Git state'),
+      receiptBlock.indexOf(
+        'Preflight could not confirm Git state (VCS_UNAVAILABLE / VCS_OUTPUT_LIMIT_EXCEEDED)',
+      ),
     )
     expect(receiptBlock.indexOf('Preflight could not confirm Git state')).toBeLessThan(
       receiptBlock.indexOf('Exit 2 ·'),
     )
     const stderr = warnSpy.mock.calls.flat().map(String).join('\n')
     expect(stderr).not.toMatch(
-      /Partial result|package\.json · 41|Preflight could not confirm Git state|Exit 2/u,
+      /Safety block|package\.json · 41|Preflight could not confirm Git state|Exit 2/u,
     )
   })
 })

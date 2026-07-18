@@ -1,5 +1,12 @@
+import { execFileSync, type SpawnSyncOptions } from 'node:child_process'
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { dirname, join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { createInvocationAuthority } from '../../invocation-authority'
 import type { depfreshOptions, PackageMeta, ResolvedDepChange } from '../../types'
+import { createCheckRunController } from './run-controller'
+import type { CheckRunEvent } from './run-model'
 import {
   baseOptions,
   type CheckMocks,
@@ -323,6 +330,196 @@ describe('run-check orchestration paths', () => {
     }
   })
 
+  it('preflights all 14 targets before changing any of 76 selected operations', async () => {
+    const root = realpathSync.native(mkdtempSync(join(tmpdir(), 'depfresh-command-preflight-')))
+    try {
+      const packages = createCommandFixture(root)
+      const initialBytes = packages.map((pkg) => readFileSync(pkg.filepath))
+      execFileSync('git', ['init', '--quiet'], { cwd: root })
+      execFileSync('git', ['config', 'user.email', 'check@example.invalid'], { cwd: root })
+      execFileSync('git', ['config', 'user.name', 'Check Test'], { cwd: root })
+      execFileSync('git', ['add', '.'], { cwd: root })
+      execFileSync('git', ['commit', '--quiet', '-m', 'fixture'], { cwd: root })
+
+      const actualFs = await vi.importActual<typeof import('node:fs')>('node:fs')
+      const actualChildProcess =
+        await vi.importActual<typeof import('node:child_process')>('node:child_process')
+      const commandAdapter =
+        await vi.importActual<typeof import('../apply/legacy-plan')>('../apply/legacy-plan')
+      mocks.existsSyncMock.mockImplementation(actualFs.existsSync)
+      const unavailableRoots = new Set([root, dirname(packages.at(-1)!.filepath)])
+      const repositoryProbeCounts = new Map<string, number>()
+      mocks.spawnSyncMock.mockImplementation(
+        (command: string, args: readonly string[] = [], options?: SpawnSyncOptions) => {
+          const cwd = typeof options?.cwd === 'string' ? options.cwd : ''
+          if (args.includes('--show-toplevel') && unavailableRoots.has(cwd)) {
+            const probes = (repositoryProbeCounts.get(cwd) ?? 0) + 1
+            repositoryProbeCounts.set(cwd, probes)
+            if (probes === 2) {
+              return actualChildProcess.spawnSync('__depfresh_missing_git__', [...args], options)
+            }
+          }
+          return actualChildProcess.spawnSync(command, [...args], options)
+        },
+      )
+      mocks.commandWriteMock.mockImplementation(commandAdapter.applyLegacyCommandWrite)
+      mocks.writePackageMock.mockImplementation(
+        async (
+          pkg: PackageMeta,
+          changes: ResolvedDepChange[],
+          _loglevel: string,
+          authority: Parameters<typeof commandAdapter.applyLegacyCommandWrite>[2],
+        ) => {
+          const result = await commandAdapter.applyLegacyCommandWrite(
+            dirname(pkg.filepath),
+            [{ packageIndex: 0, pkg, changes }],
+            authority,
+          )
+          return { outcomes: result.packages[0]?.outcomes ?? [], diagnostics: result.diagnostics }
+        },
+      )
+      mocks.loadPackagesMock.mockImplementation(
+        async (
+          _options: depfreshOptions,
+          observer?: { onPackagesDiscovered(pkgs: PackageMeta[]): void },
+        ) => {
+          observer?.onPackagesDiscovered(packages)
+          return packages
+        },
+      )
+      mocks.resolvePackageMock.mockImplementation(async (pkg: PackageMeta) => pkg.resolved)
+      const beforePackageWrite = vi.fn(() => true)
+      const options = {
+        ...baseOptions,
+        cwd: root,
+        effectiveRoot: root,
+        output: 'json' as const,
+        write: true,
+        beforePackageWrite,
+      }
+      const controller = createCheckRunController({ mode: 'default', write: true, now: () => 0 })
+      vi.spyOn(console, 'log').mockImplementation(() => {})
+
+      const { runCheck } = await import('./run-check')
+      const exitCode = await runCheck(
+        options,
+        createInvocationAuthority(options),
+        false,
+        undefined,
+        controller,
+      )
+
+      expect(exitCode).toBe(2)
+      expect(packages.reduce((sum, pkg) => sum + pkg.resolved.length, 0)).toBe(76)
+      expect(packages.map((pkg) => readFileSync(pkg.filepath))).toEqual(initialBytes)
+      expect(mocks.commandWriteMock).toHaveBeenCalledTimes(1)
+      expect(controller.snapshot()).toMatchObject({
+        exitCode: 2,
+        counts: { operations: 76, targets: 14 },
+        results: {
+          totals: { unknown: 76, notAttempted: 76 },
+          targetTotals: { unknown: 14, notAttempted: 14 },
+        },
+      })
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('applies 15 prepared owner groups through one 14-target command lifecycle', async () => {
+    const shared = makeResolved({ name: 'shared', currentVersion: '1.0.0', targetVersion: '2.0.0' })
+    const packages = Array.from({ length: 14 }, (_, index) =>
+      makePkg(`owner-${index}`, [index === 0 ? shared : makeResolved({ name: `dep-${index}` })]),
+    )
+    const duplicateOwner = {
+      ...makePkg('owner-14', [shared]),
+      filepath: packages[0]!.filepath,
+    }
+    packages.push(duplicateOwner)
+    mocks.loadPackagesMock.mockImplementation(
+      async (
+        _options: depfreshOptions,
+        observer?: { onPackagesDiscovered(pkgs: PackageMeta[]): void },
+      ) => {
+        observer?.onPackagesDiscovered(packages)
+        return packages
+      },
+    )
+    mocks.resolvePackageMock.mockImplementation(async (pkg: PackageMeta) =>
+      pkg.deps.map((dependency) =>
+        dependency.name === 'shared'
+          ? shared
+          : makeResolved({ name: dependency.name, currentVersion: '1.0.0' }),
+      ),
+    )
+    const afterPackageWrite = vi.fn()
+    const afterPackageEnd = vi.fn()
+    const afterPackagesEnd = vi.fn()
+    const options = {
+      ...baseOptions,
+      output: 'json' as const,
+      write: true,
+      afterPackageWrite,
+      afterPackageEnd,
+      afterPackagesEnd,
+    }
+    const controller = createCheckRunController({ mode: 'default', write: true, now: () => 0 })
+    const events: CheckRunEvent[] = []
+    controller.subscribe(() => undefined)
+    const recordingController = {
+      ...controller,
+      emit(event: CheckRunEvent): void {
+        events.push(event)
+        controller.emit(event)
+      },
+    }
+    const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+
+    const { runCheck } = await import('./run-check')
+    const exitCode = await runCheck(
+      options,
+      createInvocationAuthority(options),
+      false,
+      undefined,
+      recordingController,
+    )
+
+    expect(exitCode, consoleSpy.mock.calls.flat().map(String).join(' ')).toBe(0)
+    expect(mocks.commandWriteMock).toHaveBeenCalledTimes(1)
+    expect(mocks.commandWriteMock).toHaveBeenCalledWith(
+      '/tmp/test',
+      packages.map((pkg, packageIndex) => ({
+        packageIndex,
+        pkg,
+        changes: [packageIndex === 0 || packageIndex === 14 ? shared : expect.any(Object)],
+      })),
+      expect.objectContaining({ write: true }),
+    )
+    const commandResult = await mocks.commandWriteMock.mock.results[0]?.value
+    expect(commandResult.attempts).toHaveLength(14)
+    expect(mocks.writePackageMock).not.toHaveBeenCalled()
+    expect(afterPackageWrite.mock.calls.map(([pkg]) => pkg.name)).toEqual(
+      packages.map((pkg) => pkg.name),
+    )
+    expect(afterPackageEnd.mock.calls.map(([pkg]) => pkg.name)).toEqual(
+      packages.map((pkg) => pkg.name),
+    )
+    expect(afterPackagesEnd).toHaveBeenCalledWith(packages)
+    expect(mocks.commandWriteMock.mock.invocationCallOrder[0]).toBeLessThan(
+      afterPackageWrite.mock.invocationCallOrder[0]!,
+    )
+    expect(afterPackageEnd.mock.invocationCallOrder.at(-1)).toBeLessThan(
+      afterPackagesEnd.mock.invocationCallOrder[0]!,
+    )
+    expect(events.filter((event) => event.type === 'results-recorded')).toHaveLength(1)
+    expect(events.filter((event) => event.type === 'run-completed')).toHaveLength(1)
+    expect(controller.snapshot()).toMatchObject({
+      exitCode: 0,
+      counts: { operations: 14, targets: 14 },
+      results: { totals: { applied: 14 } },
+    })
+  })
+
   it('does not claim repository-evidence inspection for global CLI discovery', async () => {
     const packages = makeMixedPackages()
     mocks.loadPackagesMock.mockImplementation(
@@ -478,6 +675,30 @@ function makeMixedPackages(): PackageMeta[] {
       }),
     ]),
   ]
+}
+
+function createCommandFixture(root: string): PackageMeta[] {
+  return Array.from({ length: 14 }, (_, packageIndex) => {
+    const operationCount = packageIndex < 6 ? 6 : 5
+    const changes = Array.from({ length: operationCount }, (_, operationIndex) =>
+      makeResolved({
+        name: `dependency-${packageIndex}-${operationIndex}`,
+        currentVersion: '1.0.0',
+        rawVersion: '1.0.0',
+        targetVersion: '2.0.0',
+      }),
+    )
+    const pkg = makePkg(`package-${packageIndex}`, changes)
+    pkg.filepath = join(root, `package-${packageIndex}`, 'package.json')
+    pkg.resolved = changes
+    pkg.raw = {
+      name: pkg.name,
+      dependencies: Object.fromEntries(changes.map((change) => [change.name, '1.0.0'])),
+    }
+    mkdirSync(dirname(pkg.filepath), { recursive: true })
+    writeFileSync(pkg.filepath, `${JSON.stringify(pkg.raw, null, 2)}\n`)
+    return pkg
+  })
 }
 
 function resolvedForPackage(pkg: PackageMeta): ResolvedDepChange[] {

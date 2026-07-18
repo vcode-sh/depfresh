@@ -94,7 +94,7 @@ describe('check', () => {
     const result = await check({ ...baseOptions, write: true, failOnOutdated: true })
 
     expect(result).toBe(0)
-    expect(mocks.writePackageMock).toHaveBeenCalled()
+    expect(mocks.commandWriteMock).toHaveBeenCalled()
   })
 
   it('returns 0 when updates available and write=true', async () => {
@@ -108,7 +108,7 @@ describe('check', () => {
     const result = await check({ ...baseOptions, write: true })
 
     expect(result).toBe(0)
-    expect(mocks.writePackageMock).toHaveBeenCalled()
+    expect(mocks.commandWriteMock).toHaveBeenCalled()
   })
 
   it('handles errors gracefully and returns 2', async () => {
@@ -183,7 +183,7 @@ describe('check', () => {
     expect(result).toBe(2)
   })
 
-  it('calls writePackage when write=true and beforePackageWrite returns true', async () => {
+  it('calls the command adapter when write=true and beforePackageWrite returns true', async () => {
     const pkg = makePkg('my-app')
     mocks.loadPackagesMock.mockResolvedValue([pkg])
     mocks.resolvePackageMock.mockResolvedValue([
@@ -196,7 +196,19 @@ describe('check', () => {
     const { check } = await import('./index')
     await check({ ...baseOptions, write: true, beforePackageWrite, afterPackageWrite })
 
-    expect(mocks.writePackageMock).toHaveBeenCalled()
+    expect(mocks.commandWriteMock).toHaveBeenCalledWith(
+      '/tmp/test',
+      [
+        {
+          packageIndex: 0,
+          pkg,
+          changes: expect.arrayContaining([
+            expect.objectContaining({ name: 'test-dep', targetVersion: '^1.0.1' }),
+          ]),
+        },
+      ],
+      expect.objectContaining({ write: true }),
+    )
     expect(afterPackageWrite).toHaveBeenCalledWith(
       pkg,
       expect.arrayContaining([
@@ -221,6 +233,7 @@ describe('check', () => {
     const { check } = await import('./index')
     await check({ ...baseOptions, write: true, beforePackageWrite, afterPackageWrite })
 
+    expect(mocks.commandWriteMock).not.toHaveBeenCalled()
     expect(mocks.writePackageMock).not.toHaveBeenCalled()
     expect(afterPackageWrite).not.toHaveBeenCalled()
   })
@@ -231,7 +244,7 @@ describe('check', () => {
     mocks.resolvePackageMock.mockResolvedValue([
       makeResolved({ diff: 'patch', targetVersion: '^1.0.1' }),
     ])
-    mocks.writePackageMock.mockRejectedValueOnce(new Error('writer failed'))
+    mocks.commandWriteMock.mockRejectedValueOnce(new Error('writer failed'))
     const afterPackageWrite = vi.fn()
     const afterPackageEnd = vi.fn()
 

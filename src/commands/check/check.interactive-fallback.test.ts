@@ -64,12 +64,12 @@ describe('interactive fallback integration', () => {
 
     expect(result).toBe(0)
     expect(clackMock.groupMultiselect).toHaveBeenCalledOnce()
-    expect(mocks.writePackageMock).toHaveBeenCalledWith(
-      pkg,
-      [updates[0], updates[2]],
-      'silent',
+    expect(mocks.commandWriteMock).toHaveBeenCalledWith(
+      '/tmp/test',
+      [{ packageIndex: 0, pkg, changes: [updates[0], updates[2]] }],
       expect.objectContaining({ write: true }),
     )
+    expect(mocks.writePackageMock).not.toHaveBeenCalled()
   })
 
   it('writes every dependency in the selected group when the group header is chosen', async () => {
@@ -91,11 +91,11 @@ describe('interactive fallback integration', () => {
 
     expect(result).toBe(0)
     expect(clackMock.groupMultiselect).toHaveBeenCalledOnce()
-    expect(mocks.writePackageMock).toHaveBeenCalledWith(
-      pkg,
-      [updates[0], updates[1]],
-      'silent',
+    expect(mocks.commandWriteMock).toHaveBeenCalledWith(
+      '/tmp/test',
+      [{ packageIndex: 0, pkg, changes: [updates[0], updates[1]] }],
       expect.objectContaining({ write: true }),
     )
+    expect(mocks.writePackageMock).not.toHaveBeenCalled()
   })
 })
