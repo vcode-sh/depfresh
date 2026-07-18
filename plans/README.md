@@ -57,6 +57,13 @@ may grant side effects. Unknown state is never reported as success.
 | [027](./027-wun-demo-release-proof.md) | WUN-shaped demo and release proof | P1 | M | 026 | DONE |
 | [028](./028-first-class-workspace-catalog-exclusions.md) | First-class workspace and catalog exclusions | P1 | L | 017, 018, 019, 024, 026, 027 | DONE |
 | [029](./029-v2.0.1-release.md) | Publish and prove depfresh 2.0.1 | P1 | M | 028 | DONE |
+| [030](./030-vcs-write-trust-hotfix.md) | VCS write trust hotfix | P0 | M | 029 | TODO |
+| [031](./031-v2.0.2-release.md) | Publish and prove depfresh 2.0.2 | P0 | M | 030 | TODO |
+| [032](./032-check-run-model.md) | Renderer-neutral check run model | P1 | M | 031 | TODO |
+| [033](./033-command-level-local-apply.md) | Command-level local apply | P0 | L | 032 | TODO |
+| [034](./034-visual-plus-v2-core.md) | Visual+ v2 core terminal renderer | P1 | L | 033 | TODO |
+| [035](./035-visual-plus-insights-pty-proof.md) | Visual+ insights and PTY proof | P1 | L | 034 | TODO |
+| [036](./036-v2.1.0-release.md) | Publish and prove depfresh 2.1.0 | P1 | M | 035 | TODO |
 
 The implementation order through 016 is present locally. Plans 011 through 013 passed their final
 blocker replays, regression fixes, full gates, and independent re-reviews on 2026-07-16. Plans 014
@@ -208,6 +215,34 @@ public npm downloads, and GitHub release asset are byte-identical, the public in
 audit passed, and the SLSA v1 attestation binds the exact artifact digest to the tag, workflow,
 commit, run, and GitHub-hosted builder. GitHub exposes a non-draft, non-prerelease `v2.0.1`
 release. No floating `v2` tag or manual publish was created.
+
+Plans 030 through 036 implement the approved
+`docs/superpowers/specs/2026-07-18-safe-write-visual-plus-design.md` contract. A real Spreadu
+`bunx depfresh major -w` run proved that the root tracked-file inventory exceeded Node's default
+synchronous child-process buffer: 1,250,160 bytes of `git ls-files` output caused `ENOBUFS` after
+1,114,112 captured bytes. The compatibility adapter then collapsed `VCS_UNAVAILABLE` into
+`WRITE_FAILED`, while package-by-package writes retained 35 applied occurrences across 13 child
+manifests before 41 root operations became unknown. The root manifest and Bun catalog remained
+unchanged, leaving a partial repository result.
+
+Plan 030 owns the narrow `2.0.2` correctness/trust hotfix: exact-target bounded Git evidence, the
+additive `VCS_UNAVAILABLE` legacy reason, one grouped physical-target receipt, and explicit
+documentation of the remaining package-by-package limitation. Plan 031 owns the separate immutable
+`2.0.2` release proof and must complete before the architectural work begins.
+
+Plan 032 introduces the renderer-neutral lifecycle model with zero public-output or authority drift.
+Plan 033 then makes one command-level local plan/apply authoritative, preflighting every selected
+physical target before the first replacement while preserving honest per-file atomicity and
+best-effort recovery. Plan 034 replaces fragmented table/progress output with the inline, complete,
+copyable Visual+ v2 renderer. Plan 035 adds topology, severity, impact, shared-surface, and major-risk
+visualizations plus full built-CLI PTY/fallback proof against the deterministic 66-package,
+616-declaration, 76-update, 14-target acceptance fixture. Plan 036 owns the immutable `2.1.0`
+release and public installed-product replay. Full-screen Focus TUI/OpenTUI is explicitly outside
+this program.
+
+The new queue is strictly ordered. Do not merge Visual+ output before command-level result truth,
+do not begin the `2.1.0` work before public `2.0.2` proof, and do not collapse unknown evidence or
+recovery ambiguity into success to satisfy a visual snapshot.
 
 ## Split coverage map
 

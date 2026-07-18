@@ -1,0 +1,249 @@
+# Renderer-neutral Check Run Model Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
+> (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use
+> checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Introduce one deterministic, renderer-neutral model of the complete check lifecycle
+without changing write orchestration or default terminal bytes yet.
+
+**Architecture:** A pure reducer turns typed check events into immutable snapshots. `run-check.ts`
+emits events at existing orchestration seams while the current progress, table, JSON, addon, and
+write paths remain authoritative. Later plans consume the same snapshot instead of reconstructing
+state from logger strings.
+
+**Tech Stack:** TypeScript, Node `24.15.0`, Vitest, Biome, pnpm `10.33.0`.
+
+## Global Constraints
+
+- All code, documentation, plans, and commit messages are English.
+- Begin only after the public `2.0.2` proof in Plan 031.
+- Keep version `2.0.2`; Plans 033-035 build `2.1.0`, and Plan 036 owns its version bump/release.
+- Add no runtime dependency and no public option, export, JSON field, callback, or schema change.
+- Preserve current stdout/stderr bytes, cursor behavior, package/addon callback order, selection,
+  writes, post-write actions, exit codes, and profile metrics in this plan.
+- The model may describe phases and outcomes but must not grant authority or trigger side effects.
+- Unknown remains distinct from failed, blocked, skipped, and success.
+- Do not stage, commit, push, publish, tag, or create a branch/worktree without separate authority.
+
+## Drift Check and Stop Conditions
+
+Before editing, run `git status --short`, verify public `2.0.2`, and compare every owned check file
+with the Plan 031 completion commit. Stop if the model requires a public API/JSON/schema change,
+cannot represent an approved lifecycle/result state, changes terminal bytes or callback/write order,
+duplicates authority decisions, or overlaps unrelated concurrent edits.
+
+---
+
+### Task 1: Pure event and snapshot contract
+
+**Files:**
+
+- Create: `src/commands/check/run-model.ts`
+- Create: `src/commands/check/run-model.test.ts`
+
+**Interfaces:**
+
+- Consumes: sanitized repository-relative run facts already known by `run-check.ts`.
+- Produces: `createCheckRunState()`, `reduceCheckRun()`, `CheckRunEvent`, and `CheckRunSnapshot`.
+
+- [ ] **Step 1: Write the reducer RED tests**
+
+Cover legal phase progression, rejected backward transitions, immutable snapshots, count
+reconciliation, duplicate event idempotency, unknown state, and recovery branching.
+
+```ts
+let state = createCheckRunState({ mode: 'major', write: true })
+state = reduceCheckRun(state, { type: 'packages-discovered', packages: 66, declared: 616 })
+state = reduceCheckRun(state, { type: 'resolution-completed', eligible: 612, updates: 76 })
+state = reduceCheckRun(state, { type: 'selection-completed', operations: 76, targets: 14 })
+expect(state.counts).toEqual({
+  packages: 66,
+  declared: 616,
+  eligible: 612,
+  updates: 76,
+  operations: 76,
+  targets: 14,
+})
+```
+
+- [ ] **Step 2: Run the RED test**
+
+Run: `pnpm exec vitest run src/commands/check/run-model.test.ts`
+
+Expected: FAIL because the module does not exist.
+
+- [ ] **Step 3: Define exact phase and outcome types**
+
+Use these internal names consistently:
+
+```ts
+export type CheckRunPhaseName =
+  | 'discover'
+  | 'inspect'
+  | 'resolve'
+  | 'review'
+  | 'preflight'
+  | 'stage'
+  | 'apply'
+  | 'observe'
+  | 'recover'
+  | 'complete'
+
+export type CheckRunPhaseStatus =
+  | 'pending'
+  | 'active'
+  | 'passed'
+  | 'skipped'
+  | 'blocked'
+  | 'failed'
+  | 'unknown'
+```
+
+`CheckRunSnapshot` contains `sequence`, mode/write intent, ordered phases, reconciled counts,
+selected change/target arrays, diagnostics, result totals, recovery, elapsed milliseconds, and
+exit code. Every array is readonly and every displayed path is repository-relative.
+
+- [ ] **Step 4: Implement a strict pure reducer**
+
+Reject impossible count reductions and phase completion before activation with a private invariant
+error. Accept duplicate terminal events only when payloads are byte-for-byte equivalent. Return a
+new frozen object for each accepted event; never mutate caller arrays.
+
+- [ ] **Step 5: Run reducer GREEN tests**
+
+Run:
+
+```bash
+pnpm exec vitest run src/commands/check/run-model.test.ts
+pnpm typecheck
+pnpm exec biome check src/commands/check/run-model.ts src/commands/check/run-model.test.ts
+```
+
+Expected: all exit `0` with no warnings.
+
+### Task 2: One internal run controller
+
+**Files:**
+
+- Create: `src/commands/check/run-controller.ts`
+- Create: `src/commands/check/run-controller.test.ts`
+- Modify: `src/commands/check/run-model.ts`
+
+**Interfaces:**
+
+- Consumes: `CheckRunEvent` and a monotonic `now(): number` dependency.
+- Produces: `createCheckRunController(options): CheckRunController`.
+
+- [ ] **Step 1: Write controller RED tests**
+
+Assert observer ordering, stable snapshot delivery, single finalization, observer failure isolation,
+and exact elapsed time from an injected clock.
+
+```ts
+export interface CheckRunController {
+  emit(event: CheckRunEvent): void
+  snapshot(): CheckRunSnapshot
+  subscribe(observer: (snapshot: CheckRunSnapshot) => void): () => void
+}
+```
+
+- [ ] **Step 2: Run the controller RED test**
+
+Run: `pnpm exec vitest run src/commands/check/run-controller.test.ts`
+
+Expected: FAIL because the module does not exist.
+
+- [ ] **Step 3: Implement the controller without I/O**
+
+The controller owns only state, sequence, timing, and observers. It never writes to stdout/stderr,
+starts timers, reads environment variables, invokes callbacks, or changes `process.exitCode`.
+Unsubscribe is idempotent. An observer exception is retained as a sanitized internal diagnostic and
+cannot prevent later observers or command cleanup.
+
+- [ ] **Step 4: Run controller GREEN tests**
+
+Run both new test files, typecheck, and focused Biome. Expected: all pass with no warnings.
+
+### Task 3: Instrument current orchestration without behavior drift
+
+**Files:**
+
+- Modify: `src/commands/check/run-check.ts`
+- Modify: `src/commands/check/run-check.orchestration.test.ts`
+- Modify: `src/commands/check/check.callbacks.test.ts`
+- Modify: `src/commands/check/check.addons.test.ts`
+- Modify: `src/commands/check/check.json-output.test.ts`
+- Create: `src/commands/check/run-check.model.test.ts`
+
+**Interfaces:**
+
+- Consumes: `CheckRunController` through a private optional dependency of `runCheck()` used by
+  tests and later renderers.
+- Produces: one complete event stream alongside current behavior.
+
+- [ ] **Step 1: Characterize current output and callback order**
+
+Capture table stdout/stderr, JSON bytes excluding the existing timestamp, addon callback order,
+write mock calls, progress writes, and exit codes for read-only, write-success, partial write,
+resolution error, no-package, and thrown-error cases.
+
+- [ ] **Step 2: Write failing event-stream tests**
+
+Inject a recording controller and require ordered phase/count events. A write case must include
+preflight/apply/observe facts derived from current results without claiming one command-level apply.
+
+- [ ] **Step 3: Run the new RED test**
+
+Run: `pnpm exec vitest run src/commands/check/run-check.model.test.ts`
+
+Expected: FAIL because `runCheck()` does not emit model events.
+
+- [ ] **Step 4: Emit events at verified seams**
+
+Add events immediately after package discovery, repository inspection start/end, resolution
+completion, selection/write decisions, observed package write results, post-write actions, and
+final exit selection. Use existing computed counts; do not rescan packages or parse rendered text.
+In `catch`/`finally`, resolve every active phase to failed/unknown before finalization.
+
+- [ ] **Step 5: Prove zero public behavior drift**
+
+Run:
+
+```bash
+pnpm exec vitest run src/commands/check/run-check.model.test.ts \
+  src/commands/check/run-check.orchestration.test.ts \
+  src/commands/check/check.callbacks.test.ts \
+  src/commands/check/check.addons.test.ts \
+  src/commands/check/check.json-output.test.ts \
+  src/commands/check/progress.test.ts
+```
+
+Expected: all pass; characterization bytes/callback order/write call count are unchanged.
+
+### Task 4: Model verification and handoff
+
+**Files:**
+
+- Modify: `plans/032-check-run-model.md` with completion evidence only after proof
+- Modify: `plans/README.md` and `.superpowers/sdd/progress.md` only when marking done
+
+**Interfaces:**
+
+- Consumes: Tasks 1-3.
+- Produces: a stable internal model that Plan 033 may make authoritative.
+
+- [ ] **Step 1: Run focused tests three times**
+
+Run all run-model/controller/orchestration/callback/addon/JSON/progress tests three times. Expected:
+identical pass counts and no timer/open-handle leaks.
+
+- [ ] **Step 2: Run complete gates**
+
+Run schemas check, typecheck, lint, full coverage, build, smoke, demo, and packed verification.
+Expected: all exit `0`; public CLI bytes remain behaviorally unchanged from the Plan 031 baseline.
+
+- [ ] **Step 3: Review the model contract**
+
+Require one reviewer to map every design lifecycle phase to an event and another to verify no
+authority/output/API drift. Stop Plan 033 if any required transaction fact cannot be represented.

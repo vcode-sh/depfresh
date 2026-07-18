@@ -17,3 +17,9 @@ passed.
 Plan 029: complete; depfresh 2.0.1 is published from immutable release commit 6552b1b and annotated
 tag v2.0.1. Hosted main run 29579908968 and release run 29580175679 passed; npm, GitHub, signatures,
 and SLSA provenance expose the exact verified artifact. No floating v2 tag or manual publish exists.
+Plans 030-036: opened from the approved Safe Write and Visual+ v2 design at commit 75910f2.
+Plan 030 is next: exact-target VCS evidence, truthful preflight reasons, and grouped physical-target
+receipts.
+Plan 031 owns the separate 2.0.2 release proof. Plans 032-035 then deliver the renderer-neutral run
+model, one command-level local apply, complete inline Visual+ v2, functional relationship maps, and
+real PTY/fallback proof. Plan 036 owns the final 2.1.0 public release proof.

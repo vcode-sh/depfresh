@@ -34,6 +34,7 @@ debug.log
 # AI
 .agent/
 .agents/
+.superpowers/brainstorm/
 skills-lock.json
 next.md
 fix.md
