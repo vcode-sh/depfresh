@@ -370,8 +370,12 @@ reported no Critical, Important, or Minor findings. The detailed evidence is ret
 
 - Modify: `src/commands/apply/engine.ts`
 - Modify: `src/commands/apply/index.test.ts`
+- Modify: `src/contracts/validate.ts`
+- Modify: `src/contracts/schemas.test.ts`
 - Create: `src/commands/check/check.command-apply.integration.test.ts`
 - Modify: `src/commands/check/run-check.ts`
+- Modify: `src/commands/check/run-model.ts`
+- Modify: `src/commands/check/run-model.test.ts`
 - Modify: `src/commands/check/write-receipt.ts`
 - Modify: `src/commands/check/write-receipt.test.ts`
 - Modify: `src/commands/check/check.write-outcomes.test.ts`
@@ -393,6 +397,14 @@ path before rendering. When command evidence exists, receipt status, reason, and
 come only from that evidence; never fall back to legacy reason heuristics after reconciliation
 fails. Such a failure must remain an exit-2 unknown/error and can never print complete or safety
 block.
+
+Completed recovery may retain a later exact precondition conflict only when at least one earlier
+selected operation is reverted, every conflicted operation is structurally not attempted, and its
+reason is `SOURCE_CHANGED`, `STAGED_SOURCE_CHANGED`, or `BACKUP_SOURCE_CHANGED`. This represents a
+fully restored earlier replacement plus a later target that was never mutated. Amend the semantic
+validator and run model narrowly for that matrix. Continue to reject completed recovery containing
+applied, skipped, unknown, attempted-conflict, arbitrary-conflict, or conflict-only results; never
+mislabel the truthful matrix as partial recovery merely to satisfy an older validator.
 
 `Safety block · no files were changed` requires zero applied/reverted results, exact not-attempted
 evidence for every blocking group, and no retained or prior recovery uncertainty. In particular,
