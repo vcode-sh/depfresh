@@ -2,6 +2,23 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PackageMeta, ResolvedDepChange } from '../../types'
 import { baseOptions, type CheckMocks, makePkg, makeResolved, setupMocks } from './test-helpers'
 
+const runExecuteMock = vi.hoisted(() => vi.fn())
+
+vi.mock('../../validate-options', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../validate-options')>()
+  return {
+    ...actual,
+    validateOptions: vi.fn((options, authority) =>
+      actual.validateOptions({ ...options, execute: undefined, strictPostWrite: false }, authority),
+    ),
+  }
+})
+
+vi.mock('./post-write-actions', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./post-write-actions')>()
+  return { ...actual, runExecute: runExecuteMock }
+})
+
 describe('observed write outcome reporting', () => {
   let mocks: CheckMocks
 
@@ -165,6 +182,96 @@ describe('observed write outcome reporting', () => {
     })
     expect(envelope.meta.schemaVersion).toBe(1)
     expect(envelope).not.toHaveProperty('diagnostics')
+  })
+
+  it('returns exit 2 and reports physical recovery for a reverted-only write', async () => {
+    const pkg = makePkg('recovered-app')
+    const dep = makeResolved({ name: 'recovered', currentVersion: '1.0.0', targetVersion: '2.0.0' })
+    mocks.loadPackagesMock.mockResolvedValue([pkg])
+    mocks.resolvePackageMock.mockResolvedValue([dep])
+    mocks.writePackageMock.mockReturnValue({
+      outcomes: [
+        {
+          name: 'recovered',
+          occurrence: { file: pkg.filepath, path: ['dependencies', 'recovered'] },
+          expectedValue: '1.0.0',
+          requestedValue: '2.0.0',
+          observedValue: '1.0.0',
+          status: 'reverted',
+          reason: 'WRITE_FAILED',
+        },
+      ],
+      diagnostics: [],
+    })
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    const { check } = await import('./index')
+    const exitCode = await check({ ...baseOptions, output: 'table', loglevel: 'info', write: true })
+    const output = [...logSpy.mock.calls, ...warnSpy.mock.calls].flat().map(String).join('\n')
+
+    expect(exitCode).toBe(2)
+    expect(output).toContain(
+      'Partial result · 0 updates applied across 0 files; 1 update reverted across 1 file',
+    )
+    expect(output).toContain('Exit 2 · inspect the changed files before rerunning')
+  })
+
+  it('renders the strict resolution exit after an otherwise complete write', async () => {
+    const pkg = makePkg('resolution-app')
+    mocks.loadPackagesMock.mockResolvedValue([pkg])
+    mocks.resolvePackageMock.mockResolvedValue([
+      makeResolved({ name: 'applied', currentVersion: '1.0.0', targetVersion: '2.0.0' }),
+      makeResolved({
+        name: 'missing',
+        currentVersion: '1.0.0',
+        targetVersion: '1.0.0',
+        diff: 'error',
+      }),
+    ])
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+
+    const { check } = await import('./index')
+    const exitCode = await check({
+      ...baseOptions,
+      output: 'table',
+      loglevel: 'info',
+      write: true,
+      failOnResolutionErrors: true,
+    })
+    const output = logSpy.mock.calls.flat().map(String).join('\n')
+
+    expect(exitCode).toBe(2)
+    expect(output).toContain('Complete · 1 update applied across 1 file')
+    expect(output).toContain('Exit 2 · inspect the errors above before rerunning')
+    expect(output).not.toContain('Exit 0')
+  })
+
+  it('renders the strict post-write exit after an otherwise complete write', async () => {
+    const pkg = makePkg('post-write-app')
+    mocks.loadPackagesMock.mockResolvedValue([pkg])
+    mocks.resolvePackageMock.mockResolvedValue([
+      makeResolved({ name: 'applied', currentVersion: '1.0.0', targetVersion: '2.0.0' }),
+    ])
+    runExecuteMock.mockResolvedValue(false)
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+
+    const { check } = await import('./index')
+    const exitCode = await check({
+      ...baseOptions,
+      output: 'table',
+      loglevel: 'info',
+      write: true,
+      execute: 'retired-test-command',
+      strictPostWrite: true,
+    })
+    const output = logSpy.mock.calls.flat().map(String).join('\n')
+
+    expect(exitCode).toBe(2)
+    expect(runExecuteMock).toHaveBeenCalledOnce()
+    expect(output).toContain('Complete · 1 update applied across 1 file')
+    expect(output).toContain('Exit 2 · inspect the errors above before rerunning')
+    expect(output).not.toContain('Exit 0')
   })
 
   it('renders one physical-target receipt for a partial legacy write', async () => {

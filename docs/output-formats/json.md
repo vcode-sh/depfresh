@@ -166,11 +166,12 @@ separate records.
 | `reason` | `string` | Stable machine-readable reason for the terminal status |
 
 For compatibility writes, `applied` means the requested physical occurrence value was observed,
-`failed` means a known operation failed, and `unknown` means required evidence or final state could
-not be confirmed. `VCS_UNAVAILABLE` is the additive stable reason for an unavailable Git preflight;
-it remains `unknown` and exits with code `2`. Narrower repository diagnostics such as
-`VCS_OUTPUT_LIMIT_EXCEEDED` are internal to sanitized human receipts and are not added to this
-schema-v1 envelope.
+`reverted` means recovery observed the original value instead of retaining the request, `failed`
+means a known operation failed, and `unknown` means required evidence or final state could not be
+confirmed. Reverted outcomes exit with code `2`. `VCS_UNAVAILABLE` is the additive stable reason
+for an unavailable Git preflight; it remains `unknown` and exits with code `2`. Narrower repository
+diagnostics such as `VCS_OUTPUT_LIMIT_EXCEEDED` are internal to sanitized human receipts and are not
+added to this schema-v1 envelope.
 
 The complete JSON envelope is redacted immediately before serialization. Credential-bearing
 dependency values, observed write outcomes, authorization assignments, URL userinfo, and sensitive
@@ -271,7 +272,7 @@ Present only when `--profile` is enabled.
   - `meta.noPackagesFound: false` and `summary.total: 0` means packages were found but already up to date.
   - `meta.hadResolutionErrors: true` means the run had registry resolution failures even if `summary.total` is `0`.
   - `summary.plannedUpdates > 0` and `summary.appliedUpdates: 0` with `summary.revertedUpdates > 0` means the compatibility write flow observed recovery to the original values.
-  - Any conflicted, failed, or unknown compatibility write exits with code `2`; retired post-write options are rejected
+  - Any reverted, conflicted, failed, or unknown compatibility write exits with code `2`; retired post-write options are rejected
     after such an outcome.
 
 ## AI Agent Integration

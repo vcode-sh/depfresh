@@ -10,7 +10,9 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Semver
   occurrences by repository-relative physical target, status, and reason; preserves unavailable Git
   preflight causes such as `VCS_OUTPUT_LIMIT_EXCEEDED`; reports partial 2.0.x writes without claiming
   command-level atomicity; and keeps incomplete writes on exit code `2` with instructions to inspect
-  changed files before rerunning. The legacy JSON envelope and schema version remain unchanged.
+  changed files before rerunning. Reverted outcomes are partial with exact recovery counts, and the
+  displayed exit now comes from the final command result so strict resolution or post-write failures
+  cannot print `Exit 0`. The legacy JSON envelope and schema version remain unchanged.
 
 ## [2.0.1] - 2026-07-17
 

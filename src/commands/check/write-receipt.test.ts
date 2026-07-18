@@ -80,6 +80,43 @@ describe('buildWriteReceipt', () => {
     expect(afterRecovery.noFilesChanged).toBe(false)
   })
 
+  it('treats a reverted-only result as partial and reports recovery totals', () => {
+    const receipt = buildWriteReceipt({
+      outcomes: [
+        outcome(join(root, 'package.json'), 0, 'reverted', 'WRITE_FAILED'),
+        outcome(join(root, 'package.json'), 1, 'reverted', 'WRITE_FAILED'),
+      ],
+      diagnostics: [],
+      cwd: root,
+    })
+
+    expect(receipt.verdict).toBe('partial')
+    expect(receipt.files).toMatchObject({ applied: 0, reverted: 1, blocked: 0 })
+    expect(formatWriteReceipt(receipt, 2)).toEqual([
+      'Partial result · 0 updates applied across 0 files; 2 updates reverted across 1 file',
+      'package.json · 2 updates reverted',
+      'Write reverted (WRITE_FAILED)',
+      'Exit 2 · inspect the changed files before rerunning',
+    ])
+  })
+
+  it('reports applied, reverted, and blocked physical totals in one partial headline', () => {
+    const receipt = buildWriteReceipt({
+      outcomes: [
+        outcome(join(root, 'applied.json'), 0, 'applied', 'APPLIED'),
+        outcome(join(root, 'reverted.json'), 1, 'reverted', 'WRITE_FAILED'),
+        outcome(join(root, 'blocked.json'), 2, 'unknown', 'VCS_UNAVAILABLE'),
+      ],
+      diagnostics: [{ code: 'VCS_NOT_REPOSITORY', path: 'blocked.json' }],
+      cwd: root,
+    })
+
+    expect(receipt.verdict).toBe('partial')
+    expect(formatWriteReceipt(receipt, 2)[0]).toBe(
+      'Partial result · 1 update applied across 1 file; 1 update reverted across 1 file; 1 file blocked',
+    )
+  })
+
   it('sanitizes hostile labels and withholds absolute paths outside the repository', () => {
     const hostileName = `unsafe\u001B]8;;https://example.com\u0007name\nnext`
     const receipt = buildWriteReceipt({
@@ -112,6 +149,18 @@ describe('buildWriteReceipt', () => {
 })
 
 describe('formatWriteReceipt', () => {
+  it('uses the actual command exit code for an otherwise complete write receipt', () => {
+    const complete = buildWriteReceipt({
+      outcomes: [outcome(join(root, 'package.json'), 0, 'applied', 'APPLIED')],
+      diagnostics: [],
+      cwd: root,
+    })
+
+    expect(formatWriteReceipt(complete, 2).at(-1)).toBe(
+      'Exit 2 · inspect the errors above before rerunning',
+    )
+  })
+
   it('pluralizes partial and safety-block receipts and gives the safe next action', () => {
     const partial = buildWriteReceipt({
       outcomes: [
@@ -123,7 +172,7 @@ describe('formatWriteReceipt', () => {
       cwd: root,
     })
 
-    expect(formatWriteReceipt(partial)).toEqual([
+    expect(formatWriteReceipt(partial, 2)).toEqual([
       'Partial result · 1 update applied across 1 file; 1 file blocked',
       'package.json · 2 updates not attempted',
       'Preflight could not confirm Git state (VCS_UNAVAILABLE / VCS_OUTPUT_LIMIT_EXCEEDED)',
@@ -136,7 +185,7 @@ describe('formatWriteReceipt', () => {
       cwd: root,
     })
 
-    expect(formatWriteReceipt(safetyBlock)).toEqual([
+    expect(formatWriteReceipt(safetyBlock, 2)).toEqual([
       'Safety block · no files were changed',
       'package.json · 1 update not attempted',
       'Preflight could not confirm Git state (VCS_UNAVAILABLE / VCS_NOT_REPOSITORY)',

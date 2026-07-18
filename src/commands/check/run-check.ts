@@ -341,6 +341,7 @@ async function runCheck(
     const postWriteStart = performance.now()
     const writeFailed =
       executionState.conflictedUpdates > 0 ||
+      executionState.revertedUpdates > 0 ||
       executionState.failedWrites > 0 ||
       executionState.unknownWrites > 0
 
@@ -365,6 +366,14 @@ async function runCheck(
       runtimeOptions.profileReport.failedResolutions = executionState.failedResolutions
     }
 
+    const finalExitCode = resolveCheckExitCode({
+      strictResolutionFailed:
+        executionState.failedResolutions > 0 && options.failOnResolutionErrors,
+      writeFailed,
+      strictPostWriteFailed: postWriteFailed && options.strictPostWrite === true,
+      failOnOutdated: hasUpdates && !options.write && options.failOnOutdated,
+    })
+
     if (options.output === 'json') {
       outputJsonEnvelope(jsonPackages, runtimeOptions, executionState, jsonErrors, selectionReceipt)
     } else if (executionState.plannedUpdates > 0) {
@@ -375,6 +384,7 @@ async function runCheck(
             diagnostics: writeDiagnostics,
             cwd: executionRoot,
           }),
+          finalExitCode,
         ),
         logger,
       )
@@ -403,10 +413,10 @@ async function runCheck(
     }
 
     if (executionState.failedResolutions > 0 && options.failOnResolutionErrors) {
-      return 2
+      return finalExitCode
     }
 
-    if (writeFailed) return 2
+    if (writeFailed) return finalExitCode
 
     if (
       runtimeOptions.profile &&
@@ -417,10 +427,10 @@ async function runCheck(
     }
 
     if (postWriteFailed && options.strictPostWrite) {
-      return 2
+      return finalExitCode
     }
 
-    return hasUpdates && !options.write && options.failOnOutdated ? 1 : 0
+    return finalExitCode
   } catch (error) {
     progress?.done()
     if (options.output === 'json') {
@@ -450,6 +460,16 @@ function renderWriteReceipt(lines: string[], logger: ReturnType<typeof createLog
     if (group) logger.warn(reason ? `${group}\n${reason}` : group)
   }
   if (exit && exit !== headline) logger.info(exit)
+}
+
+function resolveCheckExitCode(input: {
+  strictResolutionFailed: boolean
+  writeFailed: boolean
+  strictPostWriteFailed: boolean
+  failOnOutdated: boolean
+}): 0 | 1 | 2 {
+  if (input.strictResolutionFailed || input.writeFailed || input.strictPostWriteFailed) return 2
+  return input.failOnOutdated ? 1 : 0
 }
 
 function renderSelectionReceipt(receipt: SelectionReceipt): void {

@@ -108,17 +108,21 @@ Preflight could not confirm Git state (VCS_UNAVAILABLE / VCS_OUTPUT_LIMIT_EXCEED
 Exit 2 · inspect the changed files before rerunning
 ```
 
-`applied` means the requested occurrence value was observed after replacement. `failed` means a
-known operation failed; `unknown` means required evidence or final state could not be confirmed.
-`VCS_UNAVAILABLE` is the compatibility outcome for a Git preflight whose evidence could not be
-confirmed. The human receipt may add its narrower sanitized cause, such as
-`VCS_OUTPUT_LIMIT_EXCEEDED`.
+`applied` means the requested occurrence value was observed after replacement. `reverted` means the
+original value was observed after recovery, so the requested update was not retained; a receipt
+with any reverted outcome is partial, reports reverted operation and physical-file counts, and
+exits with code `2`. `failed` means a known operation failed; `unknown` means required evidence or
+final state could not be confirmed. `VCS_UNAVAILABLE` is the compatibility outcome for a Git
+preflight whose evidence could not be confirmed. The human receipt may add its narrower sanitized
+cause, such as `VCS_OUTPUT_LIMIT_EXCEEDED`.
 
 The 2.0.x compatibility flow still processes package writes sequentially. This receipt groups the
 observed results; it does not claim command-level preflight or repository-wide atomicity. A partial,
 failed, or unknown write exits with code `2`. Inspect the changed files before rerunning a partial
 write. `Safety block · no files were changed` appears only when no applied or reverted outcome
-exists and every blocked group proves replacement was not attempted.
+exists and every blocked group proves replacement was not attempted. The receipt's `Exit` line uses
+the final normal command exit code, including strict resolution or post-write failures; it is not
+inferred from write outcomes alone.
 
 ## Contextual Tips
 

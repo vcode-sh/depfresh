@@ -44,6 +44,10 @@ receipt is partial, groups every affected occurrence under that one target, and 
 `VCS_UNAVAILABLE` is an `unknown` outcome, not a write failure; a narrower sanitized cause such as
 `VCS_OUTPUT_LIMIT_EXCEEDED` explains why Git evidence was unavailable.
 
+A reverted outcome also produces `Partial result` and exit code `2`: recovery observed the original
+value, so the requested update was not retained. The headline reports both reverted operations and
+the physical files recovered, including runs that also applied or blocked other targets.
+
 Do not rerun blindly. Inspect the changed files named by the receipt first, correct the Git evidence
 problem, and then rerun. A preflight-only receipt may say `Safety block · no files were changed`
 only when no outcome was applied or reverted and every blocked target proves replacement was not

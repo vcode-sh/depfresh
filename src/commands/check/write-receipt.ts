@@ -5,6 +5,7 @@ import { sanitizeTerminalText } from '../../utils/format'
 import type { LegacyWriteDiagnostic } from '../apply/legacy'
 
 export type WriteReceiptVerdict = 'complete' | 'partial' | 'safety-block' | 'failed' | 'unknown'
+export type WriteReceiptExitCode = 0 | 1 | 2
 
 export interface WriteReceiptInput {
   outcomes: WriteOutcome[]
@@ -121,12 +122,15 @@ export function buildWriteReceipt(input: WriteReceiptInput): WriteReceipt {
   }
 }
 
-export function formatWriteReceipt(receipt: WriteReceipt): string[] {
+export function formatWriteReceipt(
+  receipt: WriteReceipt,
+  exitCode: WriteReceiptExitCode,
+): string[] {
   const lines = [formatHeadline(receipt)]
   for (const group of receipt.groups) {
     lines.push(formatGroup(group), formatReason(group))
   }
-  lines.push(formatExit(receipt))
+  lines.push(formatExit(receipt, exitCode))
   return lines
 }
 
@@ -198,8 +202,9 @@ function receiptVerdict(
   noFilesChanged: boolean,
 ): WriteReceiptVerdict {
   const incomplete = operations.conflicted + operations.failed + operations.unknown
+  if (operations.reverted > 0) return 'partial'
   if (incomplete === 0) return 'complete'
-  if (operations.applied > 0 || operations.reverted > 0) return 'partial'
+  if (operations.applied > 0) return 'partial'
   if (noFilesChanged) return 'safety-block'
   if (operations.unknown > 0) return 'unknown'
   return 'failed'
@@ -214,7 +219,16 @@ function formatHeadline(receipt: WriteReceipt): string {
     return `Complete · ${count(receipt.operations.applied, 'update')} applied across ${count(receipt.files.applied, 'file')}`
   }
   if (receipt.verdict === 'partial') {
-    return `Partial result · ${count(receipt.operations.applied, 'update')} applied across ${count(receipt.files.applied, 'file')}; ${count(receipt.files.blocked, 'file')} blocked`
+    const totals = [
+      `${count(receipt.operations.applied, 'update')} applied across ${count(receipt.files.applied, 'file')}`,
+    ]
+    if (receipt.operations.reverted > 0) {
+      totals.push(
+        `${count(receipt.operations.reverted, 'update')} reverted across ${count(receipt.files.reverted, 'file')}`,
+      )
+    }
+    if (receipt.files.blocked > 0) totals.push(`${count(receipt.files.blocked, 'file')} blocked`)
+    return `Partial result · ${totals.join('; ')}`
   }
   if (receipt.verdict === 'safety-block') return 'Safety block · no files were changed'
   if (receipt.verdict === 'unknown') {
@@ -236,13 +250,18 @@ function formatReason(group: WriteReceiptGroup): string {
   return `Write ${group.status} (${reason})`
 }
 
-function formatExit(receipt: WriteReceipt): string {
-  if (receipt.verdict === 'complete') return 'Exit 0'
-  if (receipt.verdict === 'partial') return 'Exit 2 · inspect the changed files before rerunning'
-  if (receipt.verdict === 'safety-block') {
-    return 'Exit 2 · fix the preflight evidence, then rerun'
+function formatExit(receipt: WriteReceipt, exitCode: WriteReceiptExitCode): string {
+  if (exitCode === 0) return 'Exit 0'
+  if (receipt.verdict === 'partial') {
+    return `Exit ${exitCode} · inspect the changed files before rerunning`
   }
-  return 'Exit 2 · inspect the target files before rerunning'
+  if (receipt.verdict === 'safety-block') {
+    return `Exit ${exitCode} · fix the preflight evidence, then rerun`
+  }
+  if (receipt.verdict === 'complete') {
+    return `Exit ${exitCode} · inspect the errors above before rerunning`
+  }
+  return `Exit ${exitCode} · inspect the target files before rerunning`
 }
 
 function count(value: number, singular: string): string {
