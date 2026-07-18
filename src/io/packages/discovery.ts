@@ -14,7 +14,6 @@ import { getWorkspaceManifestPatterns } from './workspace-discovery'
 export interface PackageLoadObserver {
   onPackagesDiscovered(packages: PackageMeta[]): void
   writeDurable?<T>(write: () => T): T
-  preserveDefaultLog?: boolean
 }
 
 export async function loadPackages(
@@ -61,7 +60,7 @@ export async function discoverPackages(
       ? await loadGlobalPackagesAllObserved(loadOptions)
       : await loadGlobalPackagesObserved(undefined, loadOptions)
     observer?.onPackagesDiscovered(packages)
-    if (!observer || observer.preserveDefaultLog) logPackageCount(packages, logger)
+    if (!observer) logPackageCount(packages, logger)
     return packages
   }
 
@@ -229,7 +228,7 @@ export async function discoverPackages(
   }
 
   observer?.onPackagesDiscovered(packages)
-  if (!observer || observer.preserveDefaultLog) logPackageCount(packages, logger)
+  if (!observer) logPackageCount(packages, logger)
   return packages
 }
 

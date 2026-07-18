@@ -123,10 +123,15 @@ export async function runCheck(
               if (activeProgress && !(runtimeOptions.global || runtimeOptions.globalAll)) {
                 activeProgress.onRepositoryInspectionStart()
               }
+              if (runController && !activeProgress) {
+                logger.info(
+                  `Found ${discoveredPackages.length} packages with ${discoveredPackages.reduce((sum, pkg) => sum + pkg.deps.length, 0)} dependencies`,
+                )
+              }
             },
             ...(activeProgress
               ? { writeDurable: <T>(write: () => T): T => activeProgress.suspend(write) }
-              : { preserveDefaultLog: true }),
+              : {}),
           }
         : undefined
     const packages = packageObserver

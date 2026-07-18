@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createInvocationAuthority } from '../../invocation-authority'
 import type { PackageLoadObserver } from '../../io/packages/discovery'
 import type { PackageMeta, ResolvedDepChange, WriteOutcome } from '../../types'
+import { createLogger } from '../../utils/logger'
 import { type CheckRunController, createCheckRunController } from './run-controller'
 import type { CheckRunEvent } from './run-model'
 import { baseOptions, type CheckMocks, makePkg, makeResolved, setupMocks } from './test-helpers'
@@ -437,6 +438,41 @@ describe('read-only check run model instrumentation', () => {
     })
   })
 
+  it('preserves default discovery log bytes for explicit model injection without progress', async () => {
+    const dependency = makeResolved({ name: 'logged-dependency' })
+    const pkg = makePkg('logged-app', [dependency])
+    mocks.resolvePackageMock.mockResolvedValue([dependency])
+    mocks.loadPackagesMock.mockImplementation(
+      async (
+        options: typeof baseOptions,
+        observer?: PackageLoadObserver,
+      ): Promise<PackageMeta[]> => {
+        observer?.onPackagesDiscovered([pkg])
+        if (!observer) {
+          createLogger(options.loglevel).info('Found 1 packages with 1 dependencies')
+        }
+        return [pkg]
+      },
+    )
+    const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+    const options = { ...baseOptions, output: 'table' as const, loglevel: 'info' as const }
+    const { runCheck } = await import('./run-check')
+
+    await runCheck(options, createInvocationAuthority(options), false)
+    const defaultLogs = consoleSpy.mock.calls.map((call) => [...call])
+    expect(mocks.loadPackagesMock.mock.calls[0]).toHaveLength(1)
+    consoleSpy.mockClear()
+    await runModeledCheck(options)
+
+    expect(mocks.loadPackagesMock.mock.calls[1]?.[1]).toEqual({
+      onPackagesDiscovered: expect.any(Function),
+    })
+    expect(packageCountLogs(defaultLogs)).toEqual([
+      [expect.any(String), 'Found 1 packages with 1 dependencies'],
+    ])
+    expect(consoleSpy.mock.calls).toEqual(defaultLogs)
+  })
+
   it('composes model and progress observers without changing cursor or log bytes', async () => {
     const originalIsTTY = process.stdout.isTTY
     const originalCi = process.env.CI
@@ -644,6 +680,12 @@ function stableJsonBytes(calls: unknown[][]): string {
     }
   }
   throw new Error('Expected timestamped JSON output')
+}
+
+function packageCountLogs(calls: unknown[][]): unknown[][] {
+  return calls.filter((call) =>
+    call.some((value) => typeof value === 'string' && value.startsWith('Found ')),
+  )
 }
 
 function writeOutcome(

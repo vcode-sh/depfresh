@@ -1,10 +1,10 @@
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi } from 'vitest'
 import type { depfreshOptions } from '../../types'
 import { DEFAULT_OPTIONS } from '../../types'
-import { loadPackages } from './discovery'
+import { loadPackages, type PackageLoadObserver } from './discovery'
 
 const baseOptions = { ...DEFAULT_OPTIONS } as depfreshOptions
 
@@ -287,25 +287,25 @@ describe('loadPackages', () => {
     }
   })
 
-  it('preserves the exact default package-count log when an observer requests it', async () => {
+  it('keeps the package-load observer contract limited to coordination callbacks', () => {
+    expectTypeOf<keyof PackageLoadObserver>().toEqualTypeOf<
+      'onPackagesDiscovered' | 'writeDurable'
+    >()
+  })
+
+  it('keeps package-count logging suppressed whenever an observer coordinates discovery', async () => {
     writeFileSync(
       join(tmpDir, 'package.json'),
       JSON.stringify({ name: 'root', dependencies: { lodash: '^4.17.21' } }, null, 2),
     )
     const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
 
-    await loadPackages({ ...baseOptions, cwd: tmpDir, loglevel: 'info' })
-    const defaultCalls = consoleSpy.mock.calls.map((call) => [...call])
-    consoleSpy.mockClear()
     const onPackagesDiscovered = vi.fn()
 
-    await loadPackages(
-      { ...baseOptions, cwd: tmpDir, loglevel: 'info' },
-      { onPackagesDiscovered, preserveDefaultLog: true },
-    )
+    await loadPackages({ ...baseOptions, cwd: tmpDir, loglevel: 'info' }, { onPackagesDiscovered })
 
     expect(onPackagesDiscovered).toHaveBeenCalledWith([expect.objectContaining({ name: 'root' })])
-    expect(consoleSpy.mock.calls).toEqual(defaultCalls)
+    expect(consoleSpy).not.toHaveBeenCalled()
   })
 
   it('does not suspend progress for suppressed debug diagnostics at info level', async () => {
