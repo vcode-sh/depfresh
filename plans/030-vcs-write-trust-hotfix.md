@@ -326,8 +326,11 @@ without editing published `2.0.0` or `2.0.1` release records.
 - [ ] **Step 1: Run focused proof three times**
 
 Run the VCS, apply legacy, write-flow, receipt, JSON, orchestration, render-overflow, and progress
-test files plus global-write, local package-verifier timeout/cleanup, release-readiness, and the built
-CLI pipe smoke three consecutive times. Expected: every run exits `0` with identical test counts.
+test files plus global-write, local package-verifier timeout/cleanup, and release-readiness three
+consecutive times. Build once, then run only the named built-CLI pipe-receipt journey three times
+through the practical-smoke focused selector. The complete practical smoke, including its
+intentionally fail-closed global process supervision, runs once in Step 2. Expected: every focused
+run exits `0` with identical test or journey counts.
 
 - [ ] **Step 2: Run complete local gates**
 
