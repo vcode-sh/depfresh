@@ -36,6 +36,19 @@ If you selected nothing (or hit Ctrl+C), nothing gets written.
 
 **Did `beforePackageWrite` return false?** If you're using the programmatic API with a `beforePackageWrite` callback that returns `false`, depfresh skips writing that package. Check your own code. I'm not debugging your callbacks for you.
 
+## "Partial result" or `VCS_UNAVAILABLE`
+
+Legacy 2.0.x check writes process package targets sequentially. If earlier files were observed at
+their requested values and a later physical target cannot confirm Git preflight evidence, the final
+receipt is partial, groups every affected occurrence under that one target, and exits with code `2`.
+`VCS_UNAVAILABLE` is an `unknown` outcome, not a write failure; a narrower sanitized cause such as
+`VCS_OUTPUT_LIMIT_EXCEEDED` explains why Git evidence was unavailable.
+
+Do not rerun blindly. Inspect the changed files named by the receipt first, correct the Git evidence
+problem, and then rerun. A preflight-only receipt may say `Safety block · no files were changed`
+only when no outcome was applied or reverted and every blocked target proves replacement was not
+attempted. The 2.0.x grouped receipt does not claim command-level atomicity.
+
 ## "Invalid value for --mode/--output/--sort/--loglevel"
 
 depfresh validates enum flags strictly and exits with code `2` for invalid values. There is no fallback to defaults for these flags.

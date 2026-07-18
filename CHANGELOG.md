@@ -4,6 +4,14 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Semver
 
 ## Unreleased
 
+### Fixed
+
+- **Truthful grouped legacy write receipts** -- table output now groups repeated non-success
+  occurrences by repository-relative physical target, status, and reason; preserves unavailable Git
+  preflight causes such as `VCS_OUTPUT_LIMIT_EXCEEDED`; reports partial 2.0.x writes without claiming
+  command-level atomicity; and keeps incomplete writes on exit code `2` with instructions to inspect
+  changed files before rerunning. The legacy JSON envelope and schema version remain unchanged.
+
 ## [2.0.1] - 2026-07-17
 
 ### Added

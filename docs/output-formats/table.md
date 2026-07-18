@@ -95,6 +95,31 @@ In the interactive detail view (`-I`), shows human-readable release-shape notes 
 unknown repository Node compatibility, and missing signature-metadata warnings. Release shape and
 passive registry presence are not safety or verification results.
 
+## Write Receipts
+
+Write mode ends with one receipt grouped by repository-relative physical target, status, and
+reason. Repeated occurrences with the same physical cause do not produce repeated warnings. For
+example, a 2.0.x run that applied earlier package files before a later root preflight block reports:
+
+```text
+Partial result · 35 updates applied across 13 files; 1 file blocked
+package.json · 41 updates not attempted
+Preflight could not confirm Git state (VCS_UNAVAILABLE / VCS_OUTPUT_LIMIT_EXCEEDED)
+Exit 2 · inspect the changed files before rerunning
+```
+
+`applied` means the requested occurrence value was observed after replacement. `failed` means a
+known operation failed; `unknown` means required evidence or final state could not be confirmed.
+`VCS_UNAVAILABLE` is the compatibility outcome for a Git preflight whose evidence could not be
+confirmed. The human receipt may add its narrower sanitized cause, such as
+`VCS_OUTPUT_LIMIT_EXCEEDED`.
+
+The 2.0.x compatibility flow still processes package writes sequentially. This receipt groups the
+observed results; it does not claim command-level preflight or repository-wide atomicity. A partial,
+failed, or unknown write exits with code `2`. Inspect the changed files before rerunning a partial
+write. `Safety block · no files were changed` appears only when no applied or reverted outcome
+exists and every blocked group proves replacement was not attempted.
+
 ## Contextual Tips
 
 When updates exist, depfresh helpfully reminds you of things you probably already know:

@@ -165,6 +165,13 @@ separate records.
 | `status` | `string` | `applied`, `skipped`, `conflicted`, `reverted`, `failed`, or `unknown` |
 | `reason` | `string` | Stable machine-readable reason for the terminal status |
 
+For compatibility writes, `applied` means the requested physical occurrence value was observed,
+`failed` means a known operation failed, and `unknown` means required evidence or final state could
+not be confirmed. `VCS_UNAVAILABLE` is the additive stable reason for an unavailable Git preflight;
+it remains `unknown` and exits with code `2`. Narrower repository diagnostics such as
+`VCS_OUTPUT_LIMIT_EXCEEDED` are internal to sanitized human receipts and are not added to this
+schema-v1 envelope.
+
 The complete JSON envelope is redacted immediately before serialization. Credential-bearing
 dependency values, observed write outcomes, authorization assignments, URL userinfo, and sensitive
 query parameters retain their structural fields but replace secret material with `[REDACTED]`.

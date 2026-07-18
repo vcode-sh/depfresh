@@ -21,6 +21,7 @@ import { loadNpmrc } from '../../utils/npmrc'
 import { getSafeErrorDetails } from '../../utils/redact'
 import { isLocked } from '../../utils/versions'
 import { validateOptions } from '../../validate-options'
+import type { LegacyWriteDiagnostic } from '../apply/legacy'
 import {
   buildJsonPackage,
   type JsonError,
@@ -34,6 +35,7 @@ import { renderUpToDate, runExecute } from './post-write-actions'
 import { type ProcessPackageHooks, processPackage } from './process-package'
 import { type CheckProgress, createCheckProgress } from './progress'
 import { renderResolutionErrors, renderTable } from './render'
+import { buildWriteReceipt, formatWriteReceipt } from './write-receipt'
 
 export async function check(
   options: depfreshOptions,
@@ -164,6 +166,7 @@ async function runCheck(
     let availableUpdates = 0
     const jsonPackages: JsonPackage[] = []
     const jsonErrors: JsonError[] = []
+    const writeDiagnostics: LegacyWriteDiagnostic[] = []
     const totalDependencies = packages.reduce(
       (sum, pkg) => sum + pkg.deps.filter((d) => d.update).length,
       0,
@@ -225,15 +228,8 @@ async function runCheck(
       },
       onWriteResult: (result) => {
         executionState.writeOutcomes.push(...result.outcomes)
+        writeDiagnostics.push(...result.diagnostics)
         if (result.globalResult) executionState.globalResults.push(result.globalResult)
-        if (options.output === 'table') {
-          for (const outcome of result.outcomes) {
-            if (outcome.status === 'applied') continue
-            logger.warn(
-              `Write ${outcome.status}: ${outcome.occurrence.file}#${outcome.occurrence.path.join('.')} (${outcome.reason})`,
-            )
-          }
-        }
         const summary = summarizeWriteOutcomes(executionState.writeOutcomes)
         executionState.plannedUpdates = summary.planned
         executionState.appliedUpdates = summary.applied
@@ -372,8 +368,15 @@ async function runCheck(
     if (options.output === 'json') {
       outputJsonEnvelope(jsonPackages, runtimeOptions, executionState, jsonErrors, selectionReceipt)
     } else if (executionState.plannedUpdates > 0) {
-      logger.info(
-        `Writes: ${executionState.appliedUpdates} applied, ${executionState.skippedUpdates} skipped, ${executionState.conflictedUpdates} conflicted, ${executionState.revertedUpdates} reverted, ${executionState.failedWrites} failed, ${executionState.unknownWrites} unknown`,
+      renderWriteReceipt(
+        formatWriteReceipt(
+          buildWriteReceipt({
+            outcomes: executionState.writeOutcomes,
+            diagnostics: writeDiagnostics,
+            cwd: executionRoot,
+          }),
+        ),
+        logger,
       )
     }
 
@@ -435,6 +438,18 @@ function writeDurable<T>(progress: CheckProgress | null, write: () => T): T {
 
 function writeDurableAsync<T>(progress: CheckProgress | null, write: () => Promise<T>): Promise<T> {
   return progress ? progress.suspendAsync(write) : write()
+}
+
+function renderWriteReceipt(lines: string[], logger: ReturnType<typeof createLogger>): void {
+  const headline = lines[0]
+  const exit = lines.at(-1)
+  if (headline) logger.info(headline)
+  for (let index = 1; index < lines.length - 1; index += 2) {
+    const group = lines[index]
+    const reason = lines[index + 1]
+    if (group) logger.warn(reason ? `${group}\n${reason}` : group)
+  }
+  if (exit && exit !== headline) logger.info(exit)
 }
 
 function renderSelectionReceipt(receipt: SelectionReceipt): void {

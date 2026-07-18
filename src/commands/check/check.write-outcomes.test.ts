@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { PackageMeta, ResolvedDepChange } from '../../types'
 import { baseOptions, type CheckMocks, makePkg, makeResolved, setupMocks } from './test-helpers'
 
 describe('observed write outcome reporting', () => {
@@ -164,5 +165,52 @@ describe('observed write outcome reporting', () => {
     })
     expect(envelope.meta.schemaVersion).toBe(1)
     expect(envelope).not.toHaveProperty('diagnostics')
+  })
+
+  it('renders one physical-target receipt for a partial legacy write', async () => {
+    const appliedPackages = Array.from({ length: 13 }, (_, index) => makePkg(`package-${index}`))
+    const blockedPackage = { ...makePkg('root'), filepath: '/tmp/test/package.json' }
+    mocks.loadPackagesMock.mockResolvedValue([...appliedPackages, blockedPackage])
+    mocks.resolvePackageMock.mockImplementation((pkg: PackageMeta) => {
+      const count =
+        pkg.name === 'root' ? 41 : Number(pkg.name?.slice('package-'.length)) < 9 ? 3 : 2
+      return Array.from({ length: count }, (_, index) =>
+        makeResolved({ name: `${pkg.name}-dependency-${index}` }),
+      )
+    })
+    mocks.writePackageMock.mockImplementation((pkg: PackageMeta, changes: ResolvedDepChange[]) => ({
+      outcomes: changes.map((change) => ({
+        name: change.name,
+        occurrence: { file: pkg.filepath, path: ['dependencies', change.name] },
+        expectedValue: '1.0.0',
+        requestedValue: '2.0.0',
+        ...(pkg.name === 'root'
+          ? { status: 'unknown' as const, reason: 'VCS_UNAVAILABLE' as const }
+          : {
+              observedValue: '2.0.0',
+              status: 'applied' as const,
+              reason: 'APPLIED' as const,
+            }),
+      })),
+      diagnostics:
+        pkg.name === 'root'
+          ? [{ code: 'VCS_OUTPUT_LIMIT_EXCEEDED' as const, path: 'package.json' }]
+          : [],
+    }))
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    const { check } = await import('./index')
+    const exitCode = await check({ ...baseOptions, output: 'table', loglevel: 'info', write: true })
+    const output = [...logSpy.mock.calls, ...warnSpy.mock.calls].flat().map(String).join('\n')
+
+    expect(exitCode).toBe(2)
+    expect(output).toContain('Partial result · 35 updates applied across 13 files; 1 file blocked')
+    expect(output.match(/package\.json · 41 updates not attempted/gu)).toHaveLength(1)
+    expect(output).toContain(
+      'Preflight could not confirm Git state (VCS_UNAVAILABLE / VCS_OUTPUT_LIMIT_EXCEEDED)',
+    )
+    expect(output).toContain('Exit 2 · inspect the changed files before rerunning')
+    expect(output).not.toContain('Write unknown:')
   })
 })
