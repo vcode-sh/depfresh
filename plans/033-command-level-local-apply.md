@@ -90,8 +90,11 @@ Expected: FAIL because preparation is still coupled to `applyPackageWrite()`.
 
 Move resolution result classification, `onHasUpdates`, interactive selection, and
 `beforePackageWrite` into `preparePackage()`. Do not call `afterPackageWrite` or `afterPackageEnd`
-until completion. Keep `beforePackageStart` and `finally` behavior explicit so thrown preparation
-still calls `afterPackageEnd` exactly once.
+until completion. Preserve the existing start boundary: `beforePackageStart` remains outside the
+preparation `try`, so its failure does not call `afterPackageEnd`. After a package has entered
+preparation, every return or throw must transfer to one explicit completion/error-cleanup owner that
+calls `afterPackageEnd` exactly once. A preparation failure must not start a writer or any result or
+after-write hook.
 
 - [ ] **Step 4: Add completion helpers**
 
@@ -107,7 +110,11 @@ export async function completePreparedPackage(
 
 For accepted writes, call internal result hooks, then `afterPackageWrite(pkg, selected)`, then
 `afterPackageEnd(pkg)`. For no-write/rejected/empty packages, preserve current `afterPackageEnd`
-behavior and omit `afterPackageWrite`.
+behavior and omit `afterPackageWrite`. A returned result with `didWrite: false` still calls
+`afterPackageWrite`; only `onDidWrite` is omitted. Accepted plus `undefined` represents a writer or
+adapter that returned no result and calls only `afterPackageEnd`. Rejected/no-write plus a supplied
+result is an internal invariant failure. Completion is idempotent per prepared package, and a thrown
+`afterPackageEnd` retains the current error-precedence behavior.
 
 - [ ] **Step 5: Run GREEN callback tests**
 
