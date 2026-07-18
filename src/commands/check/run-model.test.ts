@@ -165,6 +165,12 @@ function finishApply(state = selectedState()): CheckRunSnapshot {
   return completePhase(next, 'observe')
 }
 
+function startExactApply(state = selectedState()): CheckRunSnapshot {
+  let next = completePhase(state, 'preflight')
+  next = completePhase(next, 'stage')
+  return next
+}
+
 type RecoveryRecordedEvent = Extract<CheckRunEvent, { type: 'recovery-recorded' }>
 type PhaseCompletedEvent = Extract<CheckRunEvent, { type: 'phase-completed' }>
 
@@ -173,7 +179,7 @@ interface RecoveryCompatibilityCase {
   readonly applyStatus: PhaseCompletedEvent['status']
   readonly recoveryStatus: PhaseCompletedEvent['status']
   readonly observeStatus: PhaseCompletedEvent['status']
-  readonly recovery: Omit<RecoveryRecordedEvent, 'type'>
+  readonly recovery: Omit<RecoveryRecordedEvent, 'type' | 'executed'>
   readonly outcomes: readonly CheckRunOperationResult['outcome'][]
   readonly expectedError?: string
 }
@@ -314,7 +320,11 @@ function applyRecoveryCompatibilityCase(fixture: RecoveryCompatibilityCase): Che
   )
   state = completePhase(state, 'stage')
   state = completePhase(state, 'apply', fixture.applyStatus)
-  state = reduceCheckRun(state, { type: 'recovery-recorded', ...fixture.recovery })
+  state = reduceCheckRun(state, {
+    type: 'recovery-recorded',
+    executed: true,
+    ...fixture.recovery,
+  })
   state = completePhase(state, 'recover', fixture.recoveryStatus)
   state = completePhase(state, 'observe', fixture.observeStatus)
   return results(
@@ -365,6 +375,7 @@ function applyPartialRecoveryMatrix(
   state = completePhase(state, 'apply', outcomes.includes('blocked') ? 'blocked' : 'failed')
   state = reduceCheckRun(state, {
     type: 'recovery-recorded',
+    executed: true,
     status: 'partial',
     restoredPaths: ['package-lock.json'],
     unrecoveredPaths: [],
@@ -642,6 +653,7 @@ describe('check run model', () => {
     state = completePhase(state, 'apply', 'failed')
     state = reduceCheckRun(state, {
       type: 'recovery-recorded',
+      executed: true,
       status: 'completed',
       journalId: 'run-reverted',
       restoredPaths: [target.path],
@@ -673,6 +685,7 @@ describe('check run model', () => {
     state = completePhase(state, 'apply', 'failed')
     state = reduceCheckRun(state, {
       type: 'recovery-recorded',
+      executed: true,
       status: 'partial',
       journalId: 'run-failed',
       restoredPaths: [],
@@ -697,6 +710,159 @@ describe('check run model', () => {
     expect(state.results.totals.failed).toBe(1)
     expect(state.recovery.status).toBe('partial')
   })
+
+  it.each([
+    {
+      name: 'completed',
+      recoveryStatus: 'completed' as const,
+      phaseStatus: 'passed' as const,
+      observeStatus: 'passed' as const,
+      outcome: 'reverted' as const,
+      finalStatus: 'failed' as const,
+    },
+    {
+      name: 'partial',
+      recoveryStatus: 'partial' as const,
+      phaseStatus: 'failed' as const,
+      observeStatus: 'failed' as const,
+      outcome: 'failed' as const,
+      finalStatus: 'failed' as const,
+    },
+    {
+      name: 'unknown',
+      recoveryStatus: 'unknown' as const,
+      phaseStatus: 'unknown' as const,
+      observeStatus: 'unknown' as const,
+      outcome: 'unknown' as const,
+      finalStatus: 'unknown' as const,
+    },
+  ])(
+    'preserves a passed commit through $name executed recovery and final inspect',
+    ({ recoveryStatus, phaseStatus, observeStatus, outcome, finalStatus }) => {
+      let state = reduceCheckRun(startExactApply(), {
+        type: 'apply-completed',
+        status: 'passed',
+        recoveryRequired: true,
+      })
+      expect(state.phases.find((phase) => phase.name === 'apply')?.status).toBe('passed')
+      expect(state.phases.find((phase) => phase.name === 'recover')?.status).toBe('active')
+
+      state = reduceCheckRun(state, {
+        type: 'recovery-recorded',
+        executed: true,
+        status: recoveryStatus,
+        journalId: 'run-after-passed-commit',
+        restoredPaths: recoveryStatus === 'completed' ? [target.path] : [],
+        unrecoveredPaths: recoveryStatus === 'partial' ? [target.path] : [],
+      })
+      state = completePhase(state, 'recover', phaseStatus)
+      state = completePhase(state, 'observe', observeStatus)
+      state = results(state, [operationResult(change.id, outcome)], [physicalTarget(outcome)])
+      state = reduceCheckRun(state, {
+        type: 'run-completed',
+        eventId: `complete:passed-commit-${recoveryStatus}`,
+        elapsedMs: 3,
+        exitCode: 2,
+      })
+
+      expect(state.phases.find((phase) => phase.name === 'complete')?.status).toBe(finalStatus)
+      expect(state.recovery.executed).toBe(true)
+    },
+  )
+
+  it('retains cleanup uncertainty without inventing executed recovery', () => {
+    let state = reduceCheckRun(startExactApply(), {
+      type: 'apply-completed',
+      status: 'passed',
+      recoveryRequired: false,
+    })
+    state = completePhase(state, 'observe')
+    const cleanupEvidence = {
+      type: 'recovery-recorded' as const,
+      executed: false,
+      status: 'unknown' as const,
+      journalId: 'retained-cleanup-journal',
+      restoredPaths: [],
+      unrecoveredPaths: [],
+      externalEffects: ['package-manager-cache'],
+    }
+    state = reduceCheckRun(state, cleanupEvidence)
+    const recorded = state
+    expect(reduceCheckRun(state, cleanupEvidence)).toBe(recorded)
+    state = results(state, [operationResult(change.id, 'unknown')], [physicalTarget('unknown')])
+    state = reduceCheckRun(state, {
+      type: 'run-completed',
+      eventId: 'complete:cleanup-unknown',
+      elapsedMs: 4,
+      exitCode: 2,
+    })
+
+    expect(state.phases.find((phase) => phase.name === 'apply')?.status).toBe('passed')
+    expect(state.phases.find((phase) => phase.name === 'observe')?.status).toBe('passed')
+    expect(state.phases.find((phase) => phase.name === 'recover')?.status).toBe('skipped')
+    expect(state.phases.find((phase) => phase.name === 'complete')?.status).toBe('unknown')
+    expect(state.recovery).toMatchObject({
+      executed: false,
+      status: 'unknown',
+      journalId: 'retained-cleanup-journal',
+      externalEffects: ['package-manager-cache'],
+    })
+  })
+
+  it('keeps the exact passed apply path when recovery is not required', () => {
+    const applyCompleted = {
+      type: 'apply-completed',
+      status: 'passed',
+      recoveryRequired: false,
+    } as const
+    let state = reduceCheckRun(startExactApply(), applyCompleted)
+    expect(reduceCheckRun(state, applyCompleted)).toBe(state)
+    expect(() => reduceCheckRun(state, { ...applyCompleted, recoveryRequired: true })).toThrow(
+      'terminal event payload differs',
+    )
+    state = completePhase(state, 'observe')
+    state = results(state)
+    state = reduceCheckRun(state, {
+      type: 'run-completed',
+      eventId: 'complete:no-recovery',
+      elapsedMs: 2,
+      exitCode: 0,
+    })
+
+    expect(state.phases.find((phase) => phase.name === 'complete')?.status).toBe('passed')
+    expect(state.recovery).toMatchObject({ executed: false, status: 'not-needed' })
+  })
+
+  it.each(['completed', 'partial'] as const)(
+    'does not invent %s recovery from retained evidence or execute it off-branch',
+    (recoveryStatus) => {
+      let noRecovery = reduceCheckRun(startExactApply(), {
+        type: 'apply-completed',
+        status: 'passed',
+        recoveryRequired: false,
+      })
+      noRecovery = completePhase(noRecovery, 'observe')
+
+      expect(() =>
+        reduceCheckRun(noRecovery, {
+          type: 'recovery-recorded',
+          executed: false,
+          status: recoveryStatus,
+          restoredPaths: [target.path],
+          unrecoveredPaths: [],
+        }),
+      ).toThrow('retained cleanup evidence must be unknown')
+      expect(() =>
+        reduceCheckRun(noRecovery, {
+          type: 'recovery-recorded',
+          executed: true,
+          status: recoveryStatus,
+          restoredPaths: [target.path],
+          unrecoveredPaths: [],
+        }),
+      ).toThrow('executed recovery requires an active recovery phase')
+    },
+  )
 
   it.each(recoveryCompatibilityCases)('$name', (fixture) => {
     if (fixture.expectedError) {
@@ -740,6 +906,7 @@ describe('check run model', () => {
     state = completePhase(state, 'apply', 'failed')
     state = reduceCheckRun(state, {
       type: 'recovery-recorded',
+      executed: true,
       status: 'partial',
       restoredPaths: ['package-lock.json'],
       unrecoveredPaths: [],
@@ -773,6 +940,7 @@ describe('check run model', () => {
       expect(() =>
         reduceCheckRun(state, {
           type: 'recovery-recorded',
+          executed: true,
           status: 'unknown',
           ...paths,
         }),
@@ -786,6 +954,7 @@ describe('check run model', () => {
     state = completePhase(state, 'apply', 'failed')
     state = reduceCheckRun(state, {
       type: 'recovery-recorded',
+      executed: true,
       status: 'completed',
       restoredPaths: [],
       unrecoveredPaths: [],
@@ -1017,6 +1186,7 @@ describe('check run model', () => {
     state = completePhase(state, 'apply', 'unknown')
     state = reduceCheckRun(state, {
       type: 'recovery-recorded',
+      executed: true,
       status: 'unknown',
       journalId: 'run-123',
       restoredPaths: [],
@@ -1207,6 +1377,7 @@ describe('check run model', () => {
     expect(() =>
       reduceCheckRun(recovering, {
         type: 'recovery-recorded',
+        executed: true,
         status: hostile as Extract<CheckRunEvent, { type: 'recovery-recorded' }>['status'],
         restoredPaths: [],
         unrecoveredPaths: [],

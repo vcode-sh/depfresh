@@ -109,6 +109,7 @@ export interface CheckRunResults {
 }
 
 export interface CheckRunRecovery {
+  readonly executed: boolean
   readonly status: CheckRunRecoveryStatus
   readonly journalId?: string
   readonly restoredPaths: readonly string[]
@@ -171,6 +172,11 @@ export type CheckRunEvent =
       readonly status: CheckRunTerminalPhaseStatus
     }
   | {
+      readonly type: 'apply-completed'
+      readonly status: CheckRunTerminalPhaseStatus
+      readonly recoveryRequired: boolean
+    }
+  | {
       readonly type: 'diagnostics-recorded'
       readonly diagnostics: readonly CheckRunDiagnostic[]
     }
@@ -181,6 +187,7 @@ export type CheckRunEvent =
     }
   | {
       readonly type: 'recovery-recorded'
+      readonly executed: boolean
       readonly status: CheckRunRecoveryStatus
       readonly journalId?: string
       readonly restoredPaths: readonly string[]
@@ -267,6 +274,7 @@ export function createCheckRunState(options: {
     diagnostics: [],
     results: emptyRunResults(),
     recovery: {
+      executed: false,
       status: 'not-needed',
       restoredPaths: [],
       unrecoveredPaths: [],
@@ -294,6 +302,7 @@ export function reduceCheckRun(state: CheckRunSnapshot, event: CheckRunEvent): C
   }
   if (event.type === 'resolution-completed') return completeResolution(state, event)
   if (event.type === 'selection-completed') return completeSelection(state, event)
+  if (event.type === 'apply-completed') return completeExactApply(state, event)
   if (event.type === 'phase-completed') return completePhase(state, event)
   if (event.type === 'diagnostics-recorded') {
     return nextSnapshot(state, {
@@ -416,6 +425,25 @@ function completePhase(
   return acceptedTerminal(state, event, { phases })
 }
 
+function completeExactApply(
+  state: CheckRunSnapshot,
+  event: Extract<CheckRunEvent, { type: 'apply-completed' }>,
+): CheckRunSnapshot {
+  assertTerminalStatus(event.status)
+  assertBoolean('recovery-required receipt', event.recoveryRequired)
+  if (event.status === 'blocked' || event.status === 'skipped') {
+    throw new CheckRunInvariantError('exact apply status must be passed, failed, or unknown')
+  }
+  assertPhase(state.phases, 'apply', 'active')
+  let phases = setPhaseStatus(state.phases, 'apply', event.status)
+  if (event.recoveryRequired) {
+    phases = setPhaseStatus(phases, 'recover', 'active')
+  } else {
+    phases = setPhaseStatus(setPhaseStatus(phases, 'recover', 'skipped'), 'observe', 'active')
+  }
+  return acceptedTerminal(state, event, { phases })
+}
+
 function factEvent(phase: 'discover' | 'resolve' | 'review'): string {
   if (phase === 'discover') return 'packages-discovered'
   if (phase === 'resolve') return 'resolution-completed'
@@ -437,8 +465,13 @@ function recordRecovery(
   state: CheckRunSnapshot,
   event: Extract<CheckRunEvent, { type: 'recovery-recorded' }>,
 ): CheckRunSnapshot {
-  if (phaseStatus(state.phases, 'recover') !== 'active') {
-    throw new CheckRunInvariantError('recovery can only be recorded during recover')
+  assertBoolean('executed recovery receipt', event.executed)
+  const recover = phaseStatus(state.phases, 'recover')
+  if (event.executed && recover !== 'active') {
+    throw new CheckRunInvariantError('executed recovery requires an active recovery phase')
+  }
+  if (!event.executed && recover !== 'skipped') {
+    throw new CheckRunInvariantError('retained cleanup evidence requires skipped recovery')
   }
   return acceptedTerminal(state, event, { recovery: copyRecovery(event) })
 }
@@ -801,26 +834,32 @@ function assertResultPhaseCoherence(
   const recoveryRecorded = hasTerminalEvent(state, 'recovery-recorded')
 
   if (totals.reverted > 0) {
-    if (apply === 'passed' || apply === 'skipped' || recover === 'skipped' || !recoveryRecorded) {
+    if (apply === 'skipped' || recover === 'skipped' || !recoveryRecorded) {
       throw new CheckRunInvariantError('reverted results require a real recovery branch')
     }
   }
 
   if (apply === 'passed' && observe === 'passed') {
-    if (
-      totals.applied !== selected ||
-      totals.blocked > 0 ||
-      totals.notAttempted > 0 ||
-      totals.failed > 0 ||
-      totals.reverted > 0 ||
-      totals.unknown > 0
-    ) {
-      throw new CheckRunInvariantError('passed apply and observe require applied results')
+    if (recover === 'skipped') {
+      const cleanupUnknown =
+        recoveryRecorded && !state.recovery.executed && state.recovery.status === 'unknown'
+      const expectedResults = cleanupUnknown
+        ? totals.unknown === selected && totals.applied === 0
+        : totals.applied === selected && totals.unknown === 0
+      if (
+        !expectedResults ||
+        totals.blocked > 0 ||
+        totals.notAttempted > 0 ||
+        totals.failed > 0 ||
+        totals.reverted > 0
+      ) {
+        throw new CheckRunInvariantError('passed apply and observe require applied results')
+      }
+      if (!cleanupUnknown && state.recovery.status !== 'not-needed') {
+        throw new CheckRunInvariantError('applied results cannot include a recovery branch')
+      }
+      return
     }
-    if (recover !== 'skipped' || state.recovery.status !== 'not-needed') {
-      throw new CheckRunInvariantError('applied results cannot include a recovery branch')
-    }
-    return
   }
 
   if (apply === 'skipped') {
@@ -870,10 +909,15 @@ function assertResultPhaseCoherence(
   }
 
   if (recover === 'skipped') {
-    if (state.recovery.status !== 'not-needed' || recoveryRecorded) {
+    const retainedCleanupUnknown =
+      recoveryRecorded && !state.recovery.executed && state.recovery.status === 'unknown'
+    if (
+      state.recovery.executed ||
+      (!retainedCleanupUnknown && state.recovery.status !== 'not-needed')
+    ) {
       throw new CheckRunInvariantError('skipped recovery cannot retain recovery evidence')
     }
-  } else if (!recoveryRecorded) {
+  } else if (!(recoveryRecorded && state.recovery.executed)) {
     throw new CheckRunInvariantError('recovery phase requires recorded recovery evidence')
   }
 
@@ -974,6 +1018,7 @@ function copyDiagnostics(
 function copyRecovery(
   event: Extract<CheckRunEvent, { type: 'recovery-recorded' }>,
 ): CheckRunRecovery {
+  assertBoolean('executed recovery receipt', event.executed)
   assertRecoveryStatus(event.status)
   if (event.status === 'not-needed') {
     throw new CheckRunInvariantError('active recovery cannot be recorded as not-needed')
@@ -990,7 +1035,16 @@ function copyRecovery(
     assertSafeText('external effect', effect)
     return effect
   })
+  if (!event.executed) {
+    if (event.status !== 'unknown') {
+      throw new CheckRunInvariantError('retained cleanup evidence must be unknown')
+    }
+    if (restoredPaths.length > 0 || unrecoveredPaths.length > 0) {
+      throw new CheckRunInvariantError('retained cleanup evidence cannot claim recovery paths')
+    }
+  }
   return {
+    executed: event.executed,
     status: event.status,
     ...(event.journalId === undefined ? {} : { journalId: event.journalId }),
     restoredPaths,
@@ -1203,6 +1257,7 @@ function terminalEventId(event: CheckRunEvent): string | undefined {
   if (event.type === 'repository-inspection-completed') return 'repository-inspection-completed'
   if (event.type === 'resolution-completed') return 'resolution-completed'
   if (event.type === 'selection-completed') return 'selection-completed'
+  if (event.type === 'apply-completed') return 'apply-completed'
   if (event.type === 'phase-completed') return event.eventId ?? `phase-completed:${event.phase}`
   if (event.type === 'results-recorded') return 'results-recorded'
   if (event.type === 'recovery-recorded') return 'recovery-recorded'
