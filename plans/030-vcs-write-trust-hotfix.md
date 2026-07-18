@@ -139,6 +139,7 @@ prove identical Git index/worktree bytes before and after collection.
 - Modify: `src/types/write.ts`
 - Modify: `src/commands/apply/legacy.ts`
 - Modify: `src/commands/check/write-flow.ts`
+- Modify: `src/commands/check/test-helpers.ts`
 - Modify: `src/commands/apply/index.test.ts`
 - Modify: `src/commands/check/write-flow.observed.test.ts`
 - Modify: `src/commands/check/check.write-outcomes.test.ts`
@@ -207,7 +208,8 @@ Run the three focused files from Step 2 plus:
 
 ```bash
 pnpm exec vitest run src/commands/check/check.json-output.test.ts \
-  src/commands/check/json-output.compatibility.test.ts
+  src/commands/check/json-output.compatibility.test.ts \
+  src/commands/check/check.core-flow.test.ts
 pnpm typecheck
 ```
 
