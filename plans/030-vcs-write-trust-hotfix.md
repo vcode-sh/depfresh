@@ -362,3 +362,16 @@ mutation, and the expected write/result state.
 Require one read-only reviewer for code/correctness and one for docs/terminal copy. Record exact
 commands, counts, and remaining 2.0.x package-by-package limitation. Do not bump the version or
 publish in this plan.
+
+- [ ] **Step 5: Close final human-truth review regressions**
+
+Write RED tests proving that global non-success items retain sanitized manager, package, status,
+and exact global reason in a separate stdout section without physical-file or atomicity language.
+Also combine a VCS-only local safety block with strict resolution failure and prove that the final
+guidance does not claim Git is the only blocker. Implement structured final-exit causes for receipt
+formatting, render global non-success details separately from the local physical-target receipt,
+then rerun the focused receipt/global/JSON/orchestration tests and both independent reviews.
+
+The local package verifier continues to target the repository's required Node/Linux/macOS release
+environment. Direct `npm.cmd` execution with `shell: false` remains an explicitly non-blocking
+Windows portability follow-up; do not weaken no-shell process execution in this hotfix.
