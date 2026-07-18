@@ -120,6 +120,8 @@ pass and no mutation occurs before command orchestration requests it.
 
 - Create: `src/commands/apply/legacy-plan.ts`
 - Create: `src/commands/apply/legacy-plan.test.ts`
+- Modify: `src/commands/apply/engine.ts`
+- Modify: `src/commands/apply/index.ts`
 - Modify: `src/commands/apply/legacy.ts`
 - Modify: `src/commands/apply/index.test.ts`
 - Modify: `src/commands/check/write-flow.ts`
@@ -147,6 +149,11 @@ export interface LegacyCommandApplyResult {
   applyResult: ApplyResult
   packages: Array<{ packageIndex: number; outcomes: WriteOutcome[] }>
   diagnostics: LegacyWriteDiagnostic[]
+  attempts: Array<{
+    targetPath: string
+    operationIds: string[]
+    replacementAttempted: boolean
+  }>
 }
 ```
 
@@ -183,6 +190,12 @@ applyLegacyCommandWrite(
 
 Call `apply(plan, { cwd: root }, authority)` exactly once. Map operation IDs back to all package
 projections without matching by dependency name alone.
+
+Retain exact structural replacement-attempt evidence from the engine before result projection. Add
+an internal, package-private execution-evidence seam rather than changing the public `ApplyResult`
+schema or inferring attempts from reason strings. Every selected operation and physical target must
+map to one explicit `replacementAttempted` fact, including staging failure, zero-replacement commit
+failure, later commit abort, and recovery branches.
 
 - [ ] **Step 6: Run GREEN apply adapter tests**
 
@@ -235,7 +248,8 @@ their separate authority. Complete package hooks in deterministic order and call
 
 Map apply phases `preflight`, `stage`, `commit`, `inspect`, and `recovery` to the renderer-neutral
 phase states. Retain `journalId`, restored/unrecovered paths, external effects, and exact operation
-totals. Do not infer replacement attempts from outcome wording.
+totals. Derive not-attempted totals only from the structural attempt evidence retained by Task 2;
+do not infer replacement attempts from outcome wording.
 
 - [ ] **Step 6: Gate post-write actions on the complete result**
 

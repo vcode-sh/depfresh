@@ -76,3 +76,9 @@ Public and uninjected calls create no controller; legacy write and global invoca
 events. The focused proof passes 171/171 tests across 11 files with typecheck, Biome, and diff checks
 green. Exact output/cursor/callback/addon/write/exit behavior is unchanged, and final re-review found
 no Critical, Important, or Minor issues. Task 4 full verification is next.
+Plan 032 Task 4 review correction: full verification passed, but final reviews found two blockers
+before closeout. The package observer briefly widened the public `loadPackages` type, and the model
+could not preserve passed commit truth across real recovery/cleanup-unknown branches. Both are under
+focused correction. The review also proved that exact replacement-attempt evidence is private to the
+apply engine; Plan 033 Task 2 now explicitly owns a package-private structural evidence seam and may
+not infer attempts from outcome reasons.
