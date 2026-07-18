@@ -4,6 +4,24 @@ import { arrow, visualLength, visualTruncate } from '../../utils/format'
 const MIN_NAME_COL = 8
 const MIN_VERSION_COL = 6
 const MIN_SOURCE_COL = 6
+const DEFAULT_VISUAL_PLUS_WIDTH = 80
+const MEDIUM_VISUAL_PLUS_WIDTH = 60
+const WIDE_VISUAL_PLUS_WIDTH = 100
+
+export type VisualPlusResponsiveLayout = 'wide' | 'medium' | 'narrow'
+
+export function normalizeVisualPlusWidth(columns?: number): number {
+  if (columns === undefined || !Number.isFinite(columns) || columns <= 0) {
+    return DEFAULT_VISUAL_PLUS_WIDTH
+  }
+  return Math.max(1, Math.floor(columns))
+}
+
+export function visualPlusLayoutForWidth(width: number): VisualPlusResponsiveLayout {
+  if (width >= WIDE_VISUAL_PLUS_WIDTH) return 'wide'
+  if (width >= MEDIUM_VISUAL_PLUS_WIDTH) return 'medium'
+  return 'narrow'
+}
 
 export interface ColumnLayout {
   nameWidth: number
