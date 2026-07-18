@@ -28,7 +28,13 @@ import { getSafeErrorDetails } from '../../utils/redact'
 import { isLocked } from '../../utils/versions'
 import { validateOptions } from '../../validate-options'
 import type { LegacyWriteDiagnostic } from '../apply/legacy'
-import type { LegacyCommandApplyResult, LegacyCommandSelection } from '../apply/legacy-plan'
+import {
+  createLegacyPlan,
+  type LegacyCommandApplyResult,
+  type LegacyCommandSelection,
+  type LegacySelectionEvidence,
+  type LegacySelectionEvidenceResult,
+} from '../apply/legacy-plan'
 import {
   buildJsonPackage,
   type JsonError,
@@ -47,7 +53,7 @@ import { renderUpToDate, runExecute } from './post-write-actions'
 import type { ProcessPackageHooks } from './process-package'
 import { type CheckProgress, createCheckProgress } from './progress'
 import { renderResolutionErrors, renderTable } from './render'
-import type { CheckRunController } from './run-controller'
+import { type CheckRunController, createCheckRunController } from './run-controller'
 import type {
   CheckRunChange,
   CheckRunDiagnostic,
@@ -56,12 +62,37 @@ import type {
   CheckRunTargetOutcome,
   CheckRunTargetResult,
 } from './run-model'
+import {
+  detectVisualPlusCapabilities,
+  type VisualPlusCapabilities,
+} from './visual-plus/capabilities'
+import type {
+  VisualPlusRunMetadata,
+  VisualPlusSectionInput,
+  VisualPlusWriteReceiptEvidence,
+} from './visual-plus/input'
+import {
+  createVisualPlusSelectionProjection,
+  isVisualPlusEligible,
+  type VisualPlusSelectionProjection,
+} from './visual-plus/integration'
+import { createVisualPlusRenderer, type VisualPlusRenderer } from './visual-plus/renderer'
 import { applyLegacyCommandWrite, applyPackageWrite, type PackageWriteResult } from './write-flow'
 import {
   buildWriteReceipt,
   type CommandWriteReceiptEvidence,
   formatWriteReceipt,
+  type WriteReceipt,
 } from './write-receipt'
+
+export interface CliTerminalLifecycle {
+  registerSignalCleanup(cleanup: () => void): () => void
+}
+
+interface DurableOutputOwner {
+  suspend<T>(write: () => T): T
+  suspendAsync<T>(write: () => Promise<T>): Promise<T>
+}
 
 export async function check(
   options: depfreshOptions,
@@ -74,8 +105,16 @@ export async function checkFromCli(
   options: depfreshOptions,
   requestedAuthority: InvocationAuthority = createInvocationAuthority(options),
   invocationSelection?: InvocationScopeExclusions,
+  terminalLifecycle?: CliTerminalLifecycle,
 ): Promise<number> {
-  return runCheck(options, requestedAuthority, true, invocationSelection)
+  return runCheck(
+    options,
+    requestedAuthority,
+    true,
+    invocationSelection,
+    undefined,
+    terminalLifecycle,
+  )
 }
 
 export async function runCheck(
@@ -84,10 +123,11 @@ export async function runCheck(
   renderProgress: boolean,
   invocationSelection?: InvocationScopeExclusions,
   injectedRunController?: CheckRunController,
+  terminalLifecycle?: CliTerminalLifecycle,
 ): Promise<number> {
   const authority = snapshotInvocationAuthority(requestedAuthority)
   const totalStart = performance.now()
-  const runController = shouldModelRun(options) ? injectedRunController : undefined
+  let runController = shouldModelRun(options) ? injectedRunController : undefined
   const logLevel = options.output === 'json' ? 'silent' : options.loglevel
   const addonOptions: depfreshOptions = {
     ...options,
@@ -96,20 +136,95 @@ export async function runCheck(
   const logger = createLogger(logLevel)
   const addons = createAddonLifecycle(addonOptions)
   let progress: CheckProgress | null = null
+  let durableOwner: DurableOutputOwner | null = null
+  let visualRenderer: VisualPlusRenderer | undefined
+  let visualCapabilities: VisualPlusCapabilities | undefined
+  let visualProjection: VisualPlusSelectionProjection | undefined
+  let visualEvidence: LegacySelectionEvidence | undefined
+  let visualWallClockMs: number | undefined
+  let rendererError: unknown
+  let unregisterSignalCleanup: (() => void) | undefined
+  let visualResolutionSuspended = false
+  const visualRun: VisualPlusRunMetadata = {
+    workspaceScope: 'unknown',
+    packageManager: { status: 'unknown', sources: [] },
+  }
   const runtimeOptions: depfreshOptions = {
     ...addonOptions,
-    onDependencyResolved: (pkg, dep) => addons.onDependencyResolved(pkg, dep),
+    onDependencyResolved: (pkg, dep) => {
+      const callback = () => addons.onDependencyResolved(pkg, dep)
+      const onFailure = (error: unknown) =>
+        logger.debug(
+          `Ignored onDependencyResolved callback failure: ${error instanceof Error ? error.message : String(error)}`,
+        )
+      if (!visualRenderer) return callback()
+      return visualResolutionSuspended
+        ? runContainedBestEffortCallback(callback, onFailure)
+        : runBestEffortVisualCallback(visualRenderer, callback, onFailure)
+    },
   }
 
   try {
     validateOptions(runtimeOptions, authority)
 
+    const visualPlus = isVisualPlusEligible(options, renderProgress)
+    if (visualPlus) {
+      const wallClockMs = Date.now()
+      if (!(Number.isFinite(wallClockMs) && Number.isInteger(wallClockMs) && wallClockMs >= 0)) {
+        throw new CheckRunInstrumentationError('wall clock must be a finite nonnegative integer')
+      }
+      visualWallClockMs = wallClockMs
+      visualCapabilities = detectVisualPlusCapabilities({
+        stdoutIsTTY: process.stdout.isTTY === true,
+        stderrIsTTY: process.stderr.isTTY === true,
+        ...(process.stdout.columns === undefined ? {} : { columns: process.stdout.columns }),
+        ...(process.env.CI === undefined ? {} : { ci: process.env.CI }),
+        ...(process.env.TERM === undefined ? {} : { term: process.env.TERM }),
+        ...(process.env.NO_COLOR === undefined ? {} : { noColor: process.env.NO_COLOR }),
+      })
+      runController =
+        injectedRunController ??
+        createCheckRunController({
+          mode: options.mode,
+          write: options.write,
+          now: () => performance.now(),
+        })
+      visualRenderer = createVisualPlusRenderer({
+        capabilities: visualCapabilities,
+        writer: { write: (chunk) => void process.stdout.write(chunk) },
+        scheduler: {
+          schedule: (callback, delayMs) => {
+            const timeout = setTimeout(callback, delayMs)
+            timeout.unref()
+            let active = true
+            return () => {
+              if (!active) return
+              active = false
+              clearTimeout(timeout)
+            }
+          },
+        },
+        onError: (error) => {
+          rendererError ??= error
+        },
+      })
+      visualRenderer.start(runController, visualRun)
+      unregisterSignalCleanup = terminalLifecycle?.registerSignalCleanup(() =>
+        visualRenderer?.dispose(),
+      )
+    }
+
     const hasPerDependencyLifecycle = Boolean(
       options.onDependencyResolved || options.addons?.some((addon) => addon.onDependencyResolved),
     )
-    progress = renderProgress && !hasPerDependencyLifecycle ? createCheckProgress(options) : null
+    progress =
+      renderProgress && !visualPlus && !hasPerDependencyLifecycle
+        ? createCheckProgress(options)
+        : null
+    durableOwner = visualRenderer ?? progress
     const discoveryStart = performance.now()
     const activeProgress = progress
+    let packagesDiscovered = false
     let selectionReceipt: SelectionReceipt | undefined
     const hasSelection = Boolean(
       invocationSelection && hasInvocationScopeExclusions(invocationSelection),
@@ -118,6 +233,7 @@ export async function runCheck(
       activeProgress || runController
         ? {
             onPackagesDiscovered: (discoveredPackages: PackageMeta[]) => {
+              packagesDiscovered = true
               activeProgress?.onPackagesDiscovered(discoveredPackages)
               if (runController) {
                 const discoveredDeclarations = discoveredPackages.reduce(
@@ -134,14 +250,14 @@ export async function runCheck(
               if (activeProgress && !(runtimeOptions.global || runtimeOptions.globalAll)) {
                 activeProgress.onRepositoryInspectionStart()
               }
-              if (runController && !activeProgress) {
+              if (runController && !activeProgress && !visualRenderer) {
                 logger.info(
                   `Found ${discoveredPackages.length} packages with ${discoveredPackages.reduce((sum, pkg) => sum + pkg.deps.length, 0)} dependencies`,
                 )
               }
             },
-            ...(activeProgress
-              ? { writeDurable: <T>(write: () => T): T => activeProgress.suspend(write) }
+            ...(durableOwner
+              ? { writeDurable: <T>(write: () => T): T => writeDurable(durableOwner, write) }
               : {}),
           }
         : undefined
@@ -152,18 +268,26 @@ export async function runCheck(
       : hasSelection
         ? await loadPackages(runtimeOptions, undefined, invocationSelection)
         : await loadPackages(runtimeOptions)
+    if (runController && !packagesDiscovered) {
+      runController.emit({
+        type: 'packages-discovered',
+        packages: packages.length,
+        declared: packages.reduce((sum, pkg) => sum + pkg.deps.length, 0),
+      })
+      runController.emit({ type: 'repository-inspection-started' })
+    }
     const declaredDependencies = packages.reduce((sum, pkg) => sum + pkg.deps.length, 0)
     runController?.emit({ type: 'repository-inspection-completed', status: 'passed' })
     selectionReceipt = readInvocationSelectionReceipt(runtimeOptions)
     const discoveryMs = performance.now() - discoveryStart
     progress?.onPackagesReady(packages)
     if (selectionReceipt && hasSelection && runtimeOptions.output === 'table') {
-      writeDurable(progress, () => renderSelectionReceipt(selectionReceipt!))
+      writeDurable(durableOwner, () => renderSelectionReceipt(selectionReceipt!))
     }
     if (runtimeOptions.explainDiscovery && runtimeOptions.output === 'table') {
-      writeDurable(progress, () => logDiscoveryReport(runtimeOptions, logger))
+      writeDurable(durableOwner, () => logDiscoveryReport(runtimeOptions, logger))
     }
-    await writeDurableAsync(progress, () => addons.setup())
+    await writeDurableAsync(durableOwner, () => addons.setup())
     const executionState: JsonExecutionState = {
       scannedPackages: packages.length,
       packagesWithUpdates: 0,
@@ -196,6 +320,12 @@ export async function runCheck(
         changes: [],
         selectedTargets: [],
       })
+      if (visualRenderer && runController && visualCapabilities) {
+        visualProjection = { changes: [], targets: [], metadata: [] }
+        visualRenderer.writeReview(
+          visualSectionInput(runController, visualCapabilities, visualRun, visualProjection),
+        )
+      }
       progress?.done()
       if (runtimeOptions.profile) {
         runtimeOptions.profileReport = {
@@ -213,16 +343,28 @@ export async function runCheck(
           failedResolutions: 0,
         }
       }
-      logger.warn('No packages found')
+      if (!visualRenderer) logger.warn('No packages found')
       if (options.output === 'json') {
         outputJsonEnvelope([], runtimeOptions, executionState, [], selectionReceipt)
       }
       const noPackagesExitCode = options.failOnNoPackages ? 2 : 0
+      throwRetainedRendererError(rendererError)
       finalizeReadOnlyRun(runController, noPackagesExitCode)
+      finalizeVisualRun(
+        visualRenderer,
+        runController,
+        visualCapabilities,
+        visualRun,
+        visualProjection,
+        undefined,
+        undefined,
+        () => rendererError,
+      )
+      if (visualRenderer) renderNonTtyHint(options)
       return noPackagesExitCode
     }
 
-    await writeDurableAsync(progress, () => addons.afterPackagesLoaded(packages))
+    await writeDurableAsync(durableOwner, () => addons.afterPackagesLoaded(packages))
 
     let hasUpdates = false
     let didWrite = false
@@ -259,8 +401,8 @@ export async function runCheck(
         executionState.packagesWithUpdates += 1
         if (options.output === 'json') {
           jsonPackages.push(buildJsonPackage(pkg.name, updates))
-        } else {
-          writeDurable(progress, () => renderTable(pkg.name, updates, options))
+        } else if (!visualRenderer) {
+          writeDurable(durableOwner, () => renderTable(pkg.name, updates, options))
         }
       },
       onErrorDeps: (errors: ResolvedDepChange[]) => {
@@ -275,15 +417,15 @@ export async function runCheck(
             })
           }
         } else {
-          writeDurable(progress, () => renderResolutionErrors(pkg.name, errors))
+          writeDurable(durableOwner, () => renderResolutionErrors(pkg.name, errors))
         }
       },
       onAllModeNoUpdates: () => {
         if (!options.all) return
         if (options.output === 'json') {
           jsonPackages.push(buildJsonPackage(pkg.name, []))
-        } else {
-          writeDurable(progress, () => renderUpToDate(pkg.name))
+        } else if (!visualRenderer) {
+          writeDurable(durableOwner, () => renderUpToDate(pkg.name))
         }
       },
       onPlannedUpdates: (count: number) => {
@@ -311,10 +453,11 @@ export async function runCheck(
 
     const resolutionStart = performance.now()
     let commandReceiptEvidence: CommandWriteReceiptEvidence | undefined
+    let resolutionBodyFailed = false
     try {
       const pendingResolutions = new Map<PackageMeta, Promise<ResolvedDepChange[]>>()
 
-      await writeDurableAsync(progress, async () => {
+      const launchPendingResolutions = async (): Promise<void> => {
         for (const pkg of packages) {
           await addons.beforePackageStart(pkg)
           pendingResolutions.set(
@@ -330,15 +473,30 @@ export async function runCheck(
             ),
           )
         }
-      })
+      }
 
       const completedResolutions = new Map<PackageMeta, ResolvedDepChange[]>()
-      await Promise.all(
-        packages.map(async (pkg) => {
-          const pending = pendingResolutions.get(pkg)
-          if (pending) completedResolutions.set(pkg, await pending)
-        }),
-      )
+      const awaitPendingResolutions = () =>
+        Promise.all(
+          packages.map(async (pkg) => {
+            const pending = pendingResolutions.get(pkg)
+            if (pending) completedResolutions.set(pkg, await pending)
+          }),
+        ).then(() => undefined)
+      if (visualRenderer) {
+        visualResolutionSuspended = true
+        try {
+          await visualRenderer.suspendAsync(async () => {
+            await launchPendingResolutions()
+            await awaitPendingResolutions()
+          })
+        } finally {
+          visualResolutionSuspended = false
+        }
+      } else {
+        await writeDurableAsync(durableOwner, launchPendingResolutions)
+        await awaitPendingResolutions()
+      }
       if (runController) {
         const resolutionFacts = readResolutionFacts(completedResolutions, totalDependencies)
         emitResolution(runController, resolutionFacts)
@@ -351,40 +509,111 @@ export async function runCheck(
         authority,
         packageHooks,
         progress,
+        durableOwner,
       )
+      const observeVisualSelection = (result: LegacySelectionEvidenceResult): void => {
+        if (!visualRenderer) return
+        throwRetainedRendererError(rendererError)
+        if (result.status !== 'ready') {
+          throw new CheckRunInstrumentationError(
+            `Visual+ selection evidence is unavailable: ${result.reason}`,
+          )
+        }
+        const controller = runController
+        const capabilities = visualCapabilities
+        const wallClockMs = visualWallClockMs
+        if (!(controller && capabilities && wallClockMs !== undefined)) {
+          throw new CheckRunInstrumentationError('Visual+ runtime is incomplete')
+        }
+        visualEvidence = result.evidence
+        visualProjection = createVisualPlusSelectionProjection(result.evidence, wallClockMs)
+        emitVisualSelection(controller, visualProjection)
+        visualRenderer.writeReview(
+          visualSectionInput(controller, capabilities, visualRun, visualProjection),
+        )
+        throwRetainedRendererError(rendererError)
+      }
+      if (visualRenderer && !runtimeOptions.write) {
+        const selections = createReadOnlyLegacySelections(preparedPackages)
+        observeVisualSelection(createLegacyPlan(executionRoot, selections).selectionEvidence)
+      }
+      if (
+        visualRenderer &&
+        runtimeOptions.write &&
+        !preparedPackages.some((prepared) => prepared.writeApproved && prepared.kind === 'local')
+      ) {
+        observeVisualSelection(createLegacyPlan(executionRoot, []).selectionEvidence)
+      }
       const applyExecution = await applyPreparedPackages(
         preparedPackages,
         runtimeOptions,
         authority,
         executionRoot,
         packageHooks,
+        visualRenderer ? observeVisualSelection : undefined,
       )
+      if (visualRenderer && runtimeOptions.write && !visualProjection) {
+        throw new CheckRunInstrumentationError('Visual+ write selection was not observed')
+      }
+      throwRetainedRendererError(rendererError)
       let modelEmission: PackageCompletion = { ok: true }
       if (runtimeOptions.write) {
         try {
-          emitLocalWriteResult(runController, executionRoot, applyExecution)
+          if (visualRenderer) {
+            if (!(visualEvidence && visualProjection)) {
+              throw new CheckRunInstrumentationError('Visual+ result projection is unavailable')
+            }
+            emitVisualWriteResult(
+              runController,
+              executionRoot,
+              applyExecution,
+              visualEvidence,
+              visualProjection,
+            )
+          } else {
+            emitLocalWriteResult(runController, executionRoot, applyExecution)
+          }
         } catch (error) {
           modelEmission = { ok: false, error }
         }
       }
-      const completion = await completeAllPackagesRetainingError(
-        preparedPackages,
-        applyExecution.packageResults,
-        packageHooks,
+      const completion = await writeDurableAsync(durableOwner, () =>
+        completeAllPackagesRetainingError(
+          preparedPackages,
+          applyExecution.packageResults,
+          packageHooks,
+        ),
       )
       if (!modelEmission.ok) throw modelEmission.error
       if (!completion.ok) throw completion.error
-      await writeDurableAsync(progress, () => addons.afterPackagesEnd(packages))
+      await writeDurableAsync(durableOwner, () => addons.afterPackagesEnd(packages))
       commandReceiptEvidence =
         runtimeOptions.output === 'table'
           ? createCommandReceiptEvidence(executionRoot, applyExecution.localExecution)
           : undefined
-      if (!runtimeOptions.write) emitReadOnlySelection(runController, packages, executionRoot)
+      if (!(runtimeOptions.write || visualRenderer)) {
+        emitReadOnlySelection(runController, packages, executionRoot)
+      }
+    } catch (error) {
+      resolutionBodyFailed = true
+      throw error
     } finally {
       progress?.done()
       const stats = cache.stats()
       cache.close()
-      logger.debug(`Cache stats: ${stats.hits} hits, ${stats.misses} misses, ${stats.size} entries`)
+      const logCacheStats = () =>
+        logger.debug(
+          `Cache stats: ${stats.hits} hits, ${stats.misses} misses, ${stats.size} entries`,
+        )
+      if (resolutionBodyFailed) {
+        try {
+          writeDurable(durableOwner, logCacheStats)
+        } catch {
+          // Debug output cannot replace the body error already being unwound.
+        }
+      } else {
+        writeDurable(durableOwner, logCacheStats)
+      }
       runtimeOptions.profileReport = {
         discoveryMs,
         resolutionMs: performance.now() - resolutionStart,
@@ -435,16 +664,22 @@ export async function runCheck(
     const writeFailed = localWriteFailed || globalWriteFailed
 
     if (authority.execute && options.execute && authority.write && didWrite && !writeFailed) {
-      const executeSucceeded = await runExecute(options.execute, executionRoot, logger)
+      const executeSucceeded = await writeDurableAsync(durableOwner, () =>
+        runExecute(options.execute!, executionRoot, logger),
+      )
       postWriteFailed = postWriteFailed || !executeSucceeded
     }
 
     if (authority.write && didWrite && !writeFailed) {
       if (authority.update && options.update) {
-        const updateSucceeded = await runUpdate(executionRoot, packages, logger)
+        const updateSucceeded = await writeDurableAsync(durableOwner, () =>
+          runUpdate(executionRoot, packages, logger),
+        )
         postWriteFailed = postWriteFailed || !updateSucceeded
       } else if (authority.install && options.install) {
-        const installSucceeded = await runInstall(executionRoot, packages, logger)
+        const installSucceeded = await writeDurableAsync(durableOwner, () =>
+          runInstall(executionRoot, packages, logger),
+        )
         postWriteFailed = postWriteFailed || !installSucceeded
       }
     }
@@ -465,6 +700,7 @@ export async function runCheck(
     }
     const finalExitCode = resolveCheckExitCode(exitCauses)
 
+    let canonicalWriteReceipt: WriteReceipt | undefined
     if (options.output === 'json') {
       outputJsonEnvelope(jsonPackages, runtimeOptions, executionState, jsonErrors, selectionReceipt)
     } else {
@@ -473,33 +709,45 @@ export async function runCheck(
         (outcome) => !outcome.occurrence.file.startsWith('global:'),
       )
       if (localWriteOutcomes.length > 0) {
-        renderWriteReceipt(
-          formatWriteReceipt(
-            buildWriteReceipt({
-              outcomes: localWriteOutcomes,
-              diagnostics: writeDiagnostics,
-              cwd: executionRoot,
-              ...(commandReceiptEvidence ? { commandEvidence: commandReceiptEvidence } : {}),
-            }),
-            {
+        const receiptOutcomes = visualRenderer
+          ? createVisualPhysicalWriteOutcomes(
+              executionRoot,
+              localWriteOutcomes,
+              commandReceiptEvidence,
+              visualEvidence,
+            )
+          : localWriteOutcomes
+        canonicalWriteReceipt = buildWriteReceipt({
+          outcomes: receiptOutcomes,
+          diagnostics: writeDiagnostics,
+          cwd: executionRoot,
+          ...(commandReceiptEvidence ? { commandEvidence: commandReceiptEvidence } : {}),
+        })
+        if (!visualRenderer) {
+          renderWriteReceipt(
+            formatWriteReceipt(canonicalWriteReceipt, {
               code: finalExitCode,
               strictResolutionFailed: exitCauses.strictResolutionFailed,
               globalWriteFailed: exitCauses.globalWriteFailed,
               strictPostWriteFailed: exitCauses.strictPostWriteFailed,
-            },
-          ),
-          logger,
-        )
+            }),
+            logger,
+          )
+        }
       }
     }
 
-    if (!hasUpdates && executionState.failedResolutions === 0) {
+    if (!(visualRenderer || hasUpdates) && executionState.failedResolutions === 0) {
       logger.success('All dependencies are up to date')
-    } else if (executionState.failedResolutions > 0 && options.output === 'table') {
+    } else if (
+      !visualRenderer &&
+      executionState.failedResolutions > 0 &&
+      options.output === 'table'
+    ) {
       logger.warn(`${executionState.failedResolutions} dependencies failed to resolve`)
     }
 
-    if (hasUpdates && options.output === 'table') {
+    if (!visualRenderer && hasUpdates && options.output === 'table') {
       if (options.mode === 'default') {
         logger.info(c.gray('Tip: Run `depfresh major` to check for major updates'))
       }
@@ -508,20 +756,39 @@ export async function runCheck(
       }
     }
 
-    if (!process.stdout.isTTY && options.output === 'table') {
-      // biome-ignore lint/suspicious/noConsole: intentional stderr hint for non-TTY environments
-      console.error(
-        'Tip: Use --output json for structured output. Run --help-json for CLI capabilities.',
-      )
-    }
+    if (!visualRenderer) renderNonTtyHint(options)
 
     if (executionState.failedResolutions > 0 && options.failOnResolutionErrors) {
+      throwRetainedRendererError(rendererError)
       finalizeReadOnlyRun(runController, finalExitCode)
+      finalizeVisualRun(
+        visualRenderer,
+        runController,
+        visualCapabilities,
+        visualRun,
+        visualProjection,
+        visualEvidence,
+        canonicalWriteReceipt,
+        () => rendererError,
+      )
+      if (visualRenderer) renderNonTtyHint(options)
       return finalExitCode
     }
 
     if (writeFailed) {
+      throwRetainedRendererError(rendererError)
       finalizeReadOnlyRun(runController, finalExitCode)
+      finalizeVisualRun(
+        visualRenderer,
+        runController,
+        visualCapabilities,
+        visualRun,
+        visualProjection,
+        visualEvidence,
+        canonicalWriteReceipt,
+        () => rendererError,
+      )
+      if (visualRenderer) renderNonTtyHint(options)
       return finalExitCode
     }
 
@@ -530,18 +797,47 @@ export async function runCheck(
       runtimeOptions.output === 'table' &&
       runtimeOptions.profileReport
     ) {
-      logProfileReport(runtimeOptions.profileReport, logger)
+      writeDurable(durableOwner, () => logProfileReport(runtimeOptions.profileReport!, logger))
     }
 
     if (postWriteFailed && options.strictPostWrite) {
+      throwRetainedRendererError(rendererError)
       finalizeReadOnlyRun(runController, finalExitCode)
+      finalizeVisualRun(
+        visualRenderer,
+        runController,
+        visualCapabilities,
+        visualRun,
+        visualProjection,
+        visualEvidence,
+        canonicalWriteReceipt,
+        () => rendererError,
+      )
+      if (visualRenderer) renderNonTtyHint(options)
       return finalExitCode
     }
 
+    throwRetainedRendererError(rendererError)
     finalizeReadOnlyRun(runController, finalExitCode)
+    finalizeVisualRun(
+      visualRenderer,
+      runController,
+      visualCapabilities,
+      visualRun,
+      visualProjection,
+      visualEvidence,
+      canonicalWriteReceipt,
+      () => rendererError,
+    )
+    if (visualRenderer) renderNonTtyHint(options)
     return finalExitCode
   } catch (error) {
     progress?.done()
+    try {
+      visualRenderer?.dispose()
+    } catch {
+      // The command failure remains authoritative.
+    }
     tryFailReadOnlyRun(
       runController,
       error instanceof CheckRunInstrumentationError ? 'CHECK_RUN_INVARIANT' : 'CHECK_RUN_FAILED',
@@ -552,6 +848,8 @@ export async function runCheck(
       logger.error('Check failed:', getSafeErrorDetails(error).message)
     }
     return 2
+  } finally {
+    unregisterSignalCleanup?.()
   }
 }
 
@@ -562,11 +860,12 @@ async function prepareAllPackages(
   authority: InvocationAuthority,
   hooksFor: (pkg: PackageMeta) => ProcessPackageHooks,
   progress: CheckProgress | null,
+  durableOwner: DurableOutputOwner | null,
 ): Promise<PreparedPackage[]> {
   const preparedPackages: PreparedPackage[] = []
   try {
     for (const pkg of packages) {
-      const prepared = await writeDurableAsync(progress, () =>
+      const prepared = await writeDurableAsync(durableOwner, () =>
         preparePackage(
           pkg,
           options,
@@ -595,6 +894,90 @@ interface LocalCommandExecution {
 interface PreparedApplyExecution {
   packageResults: ReadonlyMap<PreparedPackage, PackageWriteResult>
   localExecution: LocalCommandExecution | undefined
+}
+
+function createVisualPhysicalWriteOutcomes(
+  root: string,
+  outcomes: readonly WriteOutcome[],
+  commandEvidence: CommandWriteReceiptEvidence | undefined,
+  selectionEvidence: LegacySelectionEvidence | undefined,
+): WriteOutcome[] {
+  if (!(commandEvidence && selectionEvidence)) {
+    throw new CheckRunInstrumentationError('Visual+ physical receipt evidence is unavailable')
+  }
+
+  const selectedByKey = new Map<string, LegacySelectionEvidence['operations'][number]>()
+  for (const operation of selectionEvidence.operations) {
+    const key = physicalKey(operation.physicalTarget, operation.occurrencePath)
+    if (selectedByKey.has(key)) {
+      throw new CheckRunInstrumentationError('Visual+ selection has duplicate physical operations')
+    }
+    selectedByKey.set(key, operation)
+  }
+
+  const commandKeys = new Set<string>()
+  for (const operation of commandEvidence.operations) {
+    const file = requireRepositoryPath(root, operation.file)
+    if (!isSafePhysicalPath(operation.path)) {
+      throw new CheckRunInstrumentationError('Visual+ command occurrence path is unsafe')
+    }
+    const key = physicalKey(file, operation.path)
+    if (commandKeys.has(key) || !selectedByKey.has(key)) {
+      throw new CheckRunInstrumentationError(
+        'Visual+ command operations differ from selection evidence',
+      )
+    }
+    commandKeys.add(key)
+  }
+  if (commandKeys.size !== selectedByKey.size) {
+    throw new CheckRunInstrumentationError('Visual+ command operation inventory is incomplete')
+  }
+
+  const projectionsByKey = new Map<string, WriteOutcome[]>()
+  for (const outcome of outcomes) {
+    const file = requireRepositoryPath(root, outcome.occurrence.file)
+    if (!isSafePhysicalPath(outcome.occurrence.path)) {
+      throw new CheckRunInstrumentationError('Visual+ projected occurrence path is unsafe')
+    }
+    const key = physicalKey(file, outcome.occurrence.path)
+    if (!commandKeys.has(key)) {
+      throw new CheckRunInstrumentationError(
+        'Visual+ projected outcome has no command operation evidence',
+      )
+    }
+    const projections = projectionsByKey.get(key)
+    if (projections) projections.push(outcome)
+    else projectionsByKey.set(key, [outcome])
+  }
+
+  return selectionEvidence.operations.map((selected) => {
+    const key = physicalKey(selected.physicalTarget, selected.occurrencePath)
+    const projections = projectionsByKey.get(key)
+    if (!projections || projections.length === 0) {
+      throw new CheckRunInstrumentationError('Visual+ projected outcome inventory is incomplete')
+    }
+    const canonical = projections[0]!
+    for (const projection of projections) {
+      if (
+        projection.name !== selected.name ||
+        projection.expectedValue !== selected.current ||
+        projection.requestedValue !== selected.target ||
+        projection.observedValue !== canonical.observedValue ||
+        Object.hasOwn(projection, 'observedValue') !== Object.hasOwn(canonical, 'observedValue')
+      ) {
+        throw new CheckRunInstrumentationError(
+          'Visual+ shared outcome projections are inconsistent',
+        )
+      }
+    }
+    return {
+      ...canonical,
+      occurrence: {
+        file: selected.physicalTarget,
+        path: [...selected.occurrencePath],
+      },
+    }
+  })
 }
 
 function createCommandReceiptEvidence(
@@ -672,6 +1055,7 @@ async function applyPreparedPackages(
   authority: InvocationAuthority,
   executionRoot: string,
   hooksFor: (pkg: PackageMeta) => ProcessPackageHooks,
+  selectionObserver?: (evidence: LegacySelectionEvidenceResult) => void,
 ): Promise<PreparedApplyExecution> {
   const packageResults = new Map<PreparedPackage, PackageWriteResult>()
   let localExecution: LocalCommandExecution | undefined
@@ -683,7 +1067,14 @@ async function applyPreparedPackages(
       }
     }
     if (localSelections.length > 0) {
-      const commandResult = await applyLegacyCommandWrite(executionRoot, localSelections, authority)
+      const commandResult = selectionObserver
+        ? await applyLegacyCommandWrite(
+            executionRoot,
+            localSelections,
+            authority,
+            selectionObserver,
+          )
+        : await applyLegacyCommandWrite(executionRoot, localSelections, authority)
       projectCommandResults(commandResult, localSelections, preparedPackages, packageResults)
       localExecution = { result: commandResult, selections: localSelections }
     }
@@ -776,6 +1167,102 @@ interface CommandModelInventory {
     operations: CheckRunOperationResult[]
     targets: CheckRunTargetResult[]
   }
+}
+
+function emitVisualWriteResult(
+  controller: CheckRunController | undefined,
+  root: string,
+  execution: PreparedApplyExecution,
+  evidence: LegacySelectionEvidence,
+  projection: VisualPlusSelectionProjection,
+): void {
+  if (!controller) return
+  const localExecution = execution.localExecution
+  if (!localExecution) {
+    if (evidence.operations.length !== 0 || projection.targets.length !== 0) {
+      throw new CheckRunInstrumentationError('missing command result for reviewed selection')
+    }
+    controller.emit({ type: 'phase-completed', phase: 'preflight', status: 'passed' })
+    controller.emit({ type: 'phase-completed', phase: 'stage', status: 'skipped' })
+    controller.emit({ type: 'results-recorded', operations: [], targets: [] })
+    return
+  }
+  if (localExecution.result.status !== 'executed') {
+    throw new CheckRunInstrumentationError('reviewed selection has no executable result evidence')
+  }
+
+  const diagnostics = commandDiagnostics(root, localExecution.result)
+  const operationsById = new Map(
+    localExecution.result.applyResult.operations.map((operation) => [
+      operation.operationId,
+      operation,
+    ]),
+  )
+  const attempted = reconcileVisualAttempts(
+    root,
+    localExecution.result.attempts,
+    projection.targets,
+  )
+  if (
+    operationsById.size !== evidence.operations.length ||
+    evidence.operations.some((operation) => !operationsById.has(operation.operationId))
+  ) {
+    throw new CheckRunInstrumentationError('command operation IDs differ from review evidence')
+  }
+  const operations = evidence.operations.map((selected) => {
+    const operation = operationsById.get(selected.operationId)
+    if (
+      !operation ||
+      requireRepositoryPath(root, operation.file) !== selected.physicalTarget ||
+      JSON.stringify(operation.path) !== JSON.stringify(selected.occurrencePath) ||
+      operation.name !== selected.name ||
+      operation.expectedValue !== selected.current ||
+      operation.requestedValue !== selected.target
+    ) {
+      throw new CheckRunInstrumentationError('command result differs from review evidence')
+    }
+    return operationModelResult(
+      operation.operationId,
+      operation.status,
+      operation.reason,
+      attempted.get(operation.operationId),
+    )
+  })
+  if (diagnostics.length > 0) controller.emit({ type: 'diagnostics-recorded', diagnostics })
+  emitApplyPhases(controller, localExecution.result.applyResult)
+  controller.emit({
+    type: 'results-recorded',
+    operations,
+    targets: targetModelResults(projection.targets, operations),
+  })
+}
+
+function reconcileVisualAttempts(
+  root: string,
+  attempts: LegacyCommandApplyResult['attempts'],
+  targets: readonly CheckRunTarget[],
+): Map<string, boolean> {
+  const expected = new Map(targets.map((target) => [target.path, target.operationIds]))
+  const receipts = new Map<string, boolean>()
+  if (attempts.length !== expected.size) {
+    throw new CheckRunInstrumentationError('command attempt targets differ from review evidence')
+  }
+  for (const attempt of attempts) {
+    const path = requireRepositoryPath(root, attempt.targetPath)
+    const operationIds = expected.get(path)
+    if (!operationIds || JSON.stringify(operationIds) !== JSON.stringify(attempt.operationIds)) {
+      throw new CheckRunInstrumentationError(
+        'command attempt membership differs from review evidence',
+      )
+    }
+    for (const operationId of attempt.operationIds) {
+      if (receipts.has(operationId)) {
+        throw new CheckRunInstrumentationError('command operation has duplicate attempt evidence')
+      }
+      receipts.set(operationId, attempt.replacementAttempted)
+    }
+  }
+  return receipts
 }
 
 function emitLocalWriteResult(
@@ -1353,6 +1840,104 @@ function shouldModelRun(options: depfreshOptions): boolean {
   return !(options.global || options.globalAll)
 }
 
+function createReadOnlyLegacySelections(
+  preparedPackages: readonly PreparedPackage[],
+): LegacyCommandSelection[] {
+  return preparedPackages.flatMap((prepared, packageIndex) =>
+    prepared.pkg.type !== 'global' && prepared.selected.length > 0
+      ? [{ packageIndex, pkg: prepared.pkg, changes: prepared.selected }]
+      : [],
+  )
+}
+
+function emitVisualSelection(
+  controller: CheckRunController,
+  projection: VisualPlusSelectionProjection,
+): void {
+  controller.emit({
+    type: 'selection-completed',
+    operations: projection.changes.length,
+    targets: projection.targets.length,
+    changes: projection.changes,
+    selectedTargets: projection.targets,
+  })
+}
+
+function visualSectionInput(
+  controller: CheckRunController,
+  capabilities: VisualPlusCapabilities,
+  run: VisualPlusRunMetadata,
+  projection: VisualPlusSelectionProjection,
+  writeReceipt?: VisualPlusWriteReceiptEvidence,
+): VisualPlusSectionInput {
+  return {
+    snapshot: controller.snapshot(),
+    capabilities,
+    run,
+    changes: projection.metadata,
+    ...(writeReceipt === undefined ? {} : { writeReceipt }),
+  }
+}
+
+function throwRetainedRendererError(error: unknown): void {
+  if (error !== undefined) throw error
+}
+
+async function runBestEffortVisualCallback(
+  renderer: VisualPlusRenderer,
+  callback: () => void | Promise<void>,
+  onFailure: (error: unknown) => void,
+): Promise<void> {
+  await renderer.suspendAsync(() => runContainedBestEffortCallback(callback, onFailure))
+}
+
+async function runContainedBestEffortCallback(
+  callback: () => void | Promise<void>,
+  onFailure: (error: unknown) => void,
+): Promise<void> {
+  try {
+    await callback()
+  } catch (error) {
+    onFailure(error)
+  }
+}
+
+function finalizeVisualRun(
+  renderer: VisualPlusRenderer | undefined,
+  controller: CheckRunController | undefined,
+  capabilities: VisualPlusCapabilities | undefined,
+  run: VisualPlusRunMetadata,
+  projection: VisualPlusSelectionProjection | undefined,
+  evidence?: LegacySelectionEvidence,
+  canonical?: WriteReceipt,
+  readRendererError: () => unknown = () => undefined,
+): void {
+  if (!renderer) return
+  throwRetainedRendererError(readRendererError())
+  if (!(controller && capabilities && projection)) {
+    throw new CheckRunInstrumentationError('Visual+ finalization input is incomplete')
+  }
+  let writeReceipt: VisualPlusWriteReceiptEvidence | undefined
+  if (canonical && evidence) {
+    writeReceipt = {
+      canonical,
+      operationIds: evidence.operations.map((operation) => operation.operationId),
+      targets: evidence.targets,
+      recovery: controller.snapshot().recovery,
+    }
+  }
+  renderer.finalize(visualSectionInput(controller, capabilities, run, projection, writeReceipt))
+  throwRetainedRendererError(readRendererError())
+}
+
+function renderNonTtyHint(options: depfreshOptions): void {
+  if (process.stdout.isTTY || options.output !== 'table') return
+  // biome-ignore lint/suspicious/noConsole: intentional stderr hint for non-TTY environments
+  console.error(
+    'Tip: Use --output json for structured output. Run --help-json for CLI capabilities.',
+  )
+}
+
 function emitResolution(
   controller: CheckRunController | undefined,
   facts: Readonly<{ eligible: number; unresolved: number; updates: number }>,
@@ -1503,12 +2088,15 @@ function readOnlyResults(controller: CheckRunController): {
   return { operations, targets }
 }
 
-function writeDurable<T>(progress: CheckProgress | null, write: () => T): T {
-  return progress ? progress.suspend(write) : write()
+function writeDurable<T>(owner: DurableOutputOwner | null, write: () => T): T {
+  return owner ? owner.suspend(write) : write()
 }
 
-function writeDurableAsync<T>(progress: CheckProgress | null, write: () => Promise<T>): Promise<T> {
-  return progress ? progress.suspendAsync(write) : write()
+function writeDurableAsync<T>(
+  owner: DurableOutputOwner | null,
+  write: () => Promise<T>,
+): Promise<T> {
+  return owner ? owner.suspendAsync(write) : write()
 }
 
 function renderWriteReceipt(lines: string[], logger: ReturnType<typeof createLogger>): void {

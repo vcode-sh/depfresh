@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
+import { DEFAULT_OPTIONS, type depfreshOptions } from '../../../types'
 import type { LegacySelectionEvidenceOperation } from '../../apply/legacy-plan'
-import { createVisualPlusSelectionProjection } from './integration'
+import { createVisualPlusSelectionProjection, isVisualPlusEligible } from './integration'
 
 type MutableEvidenceOperation = {
   -readonly [Key in keyof LegacySelectionEvidenceOperation]: LegacySelectionEvidenceOperation[Key]
@@ -273,5 +274,38 @@ describe('Visual+ integration projection', () => {
     expect(() => createVisualPlusSelectionProjection(catalogMismatch, now)).toThrow(
       /catalog physical target is inconsistent/u,
     )
+  })
+})
+
+describe('isVisualPlusEligible', () => {
+  const options: depfreshOptions = {
+    ...(DEFAULT_OPTIONS as depfreshOptions),
+    cwd: '/tmp/test',
+    output: 'table',
+    loglevel: 'info',
+    interactive: false,
+    global: false,
+    globalAll: false,
+  }
+
+  it.each(['info', 'debug'] as const)('accepts local noninteractive CLI table %s', (loglevel) => {
+    expect(isVisualPlusEligible({ ...options, loglevel }, true)).toBe(true)
+  })
+
+  it.each([
+    ['library', options, false],
+    ['json', { ...options, output: 'json' as const }, true],
+    ['silent', { ...options, loglevel: 'silent' as const }, true],
+    ['interactive', { ...options, interactive: true }, true],
+    ['global', { ...options, global: true }, true],
+    ['global all', { ...options, globalAll: true }, true],
+    ['direct veto hook', { ...options, beforePackageWrite: () => false }, true],
+    [
+      'addon veto hook',
+      { ...options, addons: [{ name: 'veto', beforePackageWrite: () => false }] },
+      true,
+    ],
+  ])('rejects %s route', (_name, candidate, renderProgress) => {
+    expect(isVisualPlusEligible(candidate as depfreshOptions, renderProgress)).toBe(false)
   })
 })

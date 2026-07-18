@@ -1,3 +1,4 @@
+import type { depfreshOptions } from '../../../types'
 import { sanitizeTerminalText } from '../../../utils/format'
 import type { LegacySelectionEvidence } from '../../apply/legacy-plan'
 import type { CheckRunChange, CheckRunTarget } from '../run-model'
@@ -13,6 +14,19 @@ export class VisualPlusIntegrationError extends Error {
   constructor(message: string) {
     super(`Visual+ integration: ${message}`)
   }
+}
+
+export function isVisualPlusEligible(options: depfreshOptions, renderProgress: boolean): boolean {
+  return (
+    renderProgress &&
+    options.output === 'table' &&
+    options.loglevel !== 'silent' &&
+    !options.interactive &&
+    !options.global &&
+    !options.globalAll &&
+    !options.beforePackageWrite &&
+    !options.addons?.some((addon) => addon.beforePackageWrite !== undefined)
+  )
 }
 
 export function createVisualPlusSelectionProjection(

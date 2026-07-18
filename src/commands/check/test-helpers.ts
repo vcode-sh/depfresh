@@ -8,10 +8,15 @@ import {
 } from '../../io/write/occurrence'
 import type { depfreshOptions, PackageMeta, ResolvedDepChange, WriteOutcome } from '../../types'
 import { DEFAULT_OPTIONS, summarizeWriteOutcomes } from '../../types'
-import type { LegacyCommandApplyResult, LegacyCommandSelection } from '../apply/legacy-plan'
+import type {
+  LegacyCommandApplyResult,
+  LegacyCommandSelection,
+  LegacySelectionEvidenceResult,
+} from '../apply/legacy-plan'
 
 const physicalWriteMock = vi.hoisted(() => vi.fn())
 const commandWriteMock = vi.hoisted(() => vi.fn())
+const createLegacyPlanMock = vi.hoisted(() => vi.fn())
 const spawnSyncMock = vi.hoisted(() => vi.fn())
 const createGlobalApplyPlanMock = vi.hoisted(() => vi.fn())
 const applyGlobalPlanMock = vi.hoisted(() => vi.fn())
@@ -51,7 +56,11 @@ vi.mock('../apply/legacy', () => ({
 
 vi.mock('../apply/legacy-plan', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../apply/legacy-plan')>()
-  return { ...actual, applyLegacyCommandWrite: commandWriteMock }
+  return {
+    ...actual,
+    createLegacyPlan: createLegacyPlanMock,
+    applyLegacyCommandWrite: commandWriteMock,
+  }
 })
 
 vi.mock('../../cache/index', () => ({
@@ -242,9 +251,21 @@ export async function setupMocks(): Promise<CheckMocks> {
     })),
     diagnostics: [],
   }))
+  createLegacyPlanMock.mockImplementation(
+    (root: string, selections: readonly LegacyCommandSelection[]) => ({
+      selectionEvidence: createTestSelectionEvidence(root, selections),
+    }),
+  )
   commandWriteMock.mockImplementation(
-    async (root: string, selections: readonly LegacyCommandSelection[]) =>
-      createSuccessfulCommandResult(root, selections),
+    async (
+      root: string,
+      selections: readonly LegacyCommandSelection[],
+      _authority: unknown,
+      observer?: (evidence: unknown) => void,
+    ) => {
+      observer?.(createTestSelectionEvidence(root, selections))
+      return createSuccessfulCommandResult(root, selections)
+    },
   )
   ;(occurrenceModule.observeFileOccurrence as ReturnType<typeof vi.fn>).mockImplementation(() => {
     const lastResult = writePackageMock.mock.results.at(-1)?.value as
@@ -404,6 +425,103 @@ export function createSuccessfulCommandResult(
       replacementAttempted: true,
     })),
   }
+}
+
+function createTestSelectionEvidence(
+  root: string,
+  selections: readonly LegacyCommandSelection[],
+): LegacySelectionEvidenceResult {
+  const operationsByKey = new Map<
+    string,
+    {
+      operationId: string
+      packageIndex: number
+      changeIndex: number
+      ownerLabel: string
+      physicalTarget: string
+      occurrencePath: string[]
+      change: ResolvedDepChange
+      current: string
+      target: string
+      catalog?: { name: string; sourcePath: string }
+    }
+  >()
+
+  for (const selection of selections) {
+    for (const [changeIndex, change] of selection.changes.entries()) {
+      const request = commandWriteRequest(selection.pkg, change)
+      const physicalTarget = repositoryRelative(root, request.occurrence.file)
+      const occurrencePath = [...request.occurrence.path]
+      const key = JSON.stringify({ file: physicalTarget, path: occurrencePath })
+      if (operationsByKey.has(key)) continue
+      const values = resolvePhysicalValues(request, undefined)
+      const catalog = testCatalogIdentity(selection.pkg, change, physicalTarget)
+      operationsByKey.set(key, {
+        operationId: `operation-${operationsByKey.size}`,
+        packageIndex: selection.packageIndex,
+        changeIndex,
+        ownerLabel: selection.pkg.name?.trim() || repositoryRelative(root, selection.pkg.filepath),
+        physicalTarget,
+        occurrencePath,
+        change,
+        current: values.expectedValue,
+        target: values.requestedValue,
+        ...(catalog ? { catalog } : {}),
+      })
+    }
+  }
+
+  const operations = [...operationsByKey.values()].map((entry) => ({
+    operationId: entry.operationId,
+    packageIndex: entry.packageIndex,
+    changeIndex: entry.changeIndex,
+    ownerLabel: entry.ownerLabel,
+    physicalTarget: entry.physicalTarget,
+    occurrencePath: entry.occurrencePath,
+    name: entry.change.name,
+    current: entry.current,
+    target: entry.target,
+    diff: entry.change.diff as 'major' | 'minor' | 'patch',
+    ...(entry.change.publishedAt === undefined ? {} : { publishedAt: entry.change.publishedAt }),
+    ...(entry.change.nodeCompatible === undefined
+      ? {}
+      : { nodeCompatible: entry.change.nodeCompatible }),
+    ...(entry.change.nodeCompat === undefined ? {} : { nodeCompat: entry.change.nodeCompat }),
+    ...(entry.catalog ? { catalog: entry.catalog } : {}),
+  }))
+  const targetIds = new Map<string, string[]>()
+  for (const operation of operations) {
+    const existing = targetIds.get(operation.physicalTarget)
+    if (existing) existing.push(operation.operationId)
+    else targetIds.set(operation.physicalTarget, [operation.operationId])
+  }
+  return {
+    status: 'ready',
+    evidence: {
+      operations,
+      targets: [...targetIds]
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([path, operationIds]) => ({ path, operationIds })),
+    },
+  }
+}
+
+function testCatalogIdentity(
+  pkg: PackageMeta,
+  change: ResolvedDepChange,
+  physicalTarget: string,
+): { name: string; sourcePath: string } | undefined {
+  if (pkg.type === 'package.json' || pkg.type === 'package.yaml') return undefined
+  const catalog = pkg.catalogs?.find((candidate) =>
+    candidate.deps.some(
+      (dependency) =>
+        dependency.name === change.name &&
+        (change.parents.length === 0 ||
+          (dependency.parents.length === change.parents.length &&
+            dependency.parents.every((parent, index) => parent === change.parents[index]))),
+    ),
+  )
+  return catalog ? { name: catalog.name, sourcePath: physicalTarget } : undefined
 }
 
 export function createCommandResultWithOutcomes(

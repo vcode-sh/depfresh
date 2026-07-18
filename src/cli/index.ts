@@ -5,8 +5,8 @@ import { getSafeErrorDetails } from '../utils/redact'
 import { args } from './args-schema'
 import { findRawMachineCommand, normalizeCliRawArgs } from './raw-args'
 import { hasInvocationScopeExclusions, parseInvocationScopeExclusions } from './scope-exclusions'
+import { registerSignalCleanup } from './signals'
 import { showUsageWithLinks } from './usage'
-import './signals'
 
 function wantsJsonOutput(rawArgs: string[]): boolean {
   if (
@@ -208,7 +208,9 @@ const main = defineCommand({
           { reason: 'UNSUPPORTED_COMBINATION' },
         )
       }
-      const exitCode = await checkFromCli(options, undefined, invocationSelection)
+      const exitCode = await checkFromCli(options, undefined, invocationSelection, {
+        registerSignalCleanup,
+      })
       process.exitCode = exitCode
     } catch (error) {
       const machineCommand =
