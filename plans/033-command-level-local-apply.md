@@ -287,6 +287,15 @@ local command adapter, project results, then execute existing global state-machi
 their separate authority. Complete package hooks in deterministic order and call
 `afterPackagesEnd` only after every package completion.
 
+If preparation fails, it already owns the failing package's end hook; complete every earlier
+prepared package with `undefined`, start no writer or global action, omit `afterPackagesEnd`, and
+preserve the first package-order cleanup error. After a batch apply returns, attempt completion for
+every prepared package in package order with its real projected result even if an earlier completion
+throws, retain the first package-order rejection, omit `afterPackagesEnd`, then throw. A returned
+local blocked/failed/unknown result does not suppress separately authorized global requests; an
+adapter throw does. These cleanup rules prevent already-applied outcomes from disappearing behind a
+later callback failure.
+
 - [ ] **Step 5: Drive the run model from the real apply result**
 
 Map apply phases `preflight`, `stage`, `commit`, `inspect`, and `recovery` to the renderer-neutral
