@@ -94,6 +94,7 @@ export interface CheckRunOperationResult {
   readonly blocked: boolean
   readonly notAttempted: boolean
   readonly unknown: boolean
+  readonly reason?: string
 }
 
 export interface CheckRunTargetResult {
@@ -970,7 +971,26 @@ function assertResultPhaseCoherence(
     throw new CheckRunInvariantError('applied results require passed apply and observe')
   }
 
-  if (totals.blocked > 0 && !blockedPhase && !zeroMutationFailure) {
+  const completedRecoveredConflict =
+    state.recovery.status === 'completed' &&
+    totals.reverted > 0 &&
+    operations.some((operation) => operation.outcome === 'blocked') &&
+    operations
+      .filter((operation) => operation.outcome === 'blocked')
+      .every(
+        (operation) =>
+          operation.notAttempted &&
+          operation.blocked &&
+          operation.reason !== undefined &&
+          ['SOURCE_CHANGED', 'STAGED_SOURCE_CHANGED', 'BACKUP_SOURCE_CHANGED'].includes(
+            operation.reason,
+          ),
+      ) &&
+    targets
+      .filter((target) => target.outcome === 'blocked')
+      .every((target) => target.notAttempted && target.blocked)
+
+  if (totals.blocked > 0 && !blockedPhase && !zeroMutationFailure && !completedRecoveredConflict) {
     throw new CheckRunInvariantError('blocked results require a blocked mutation phase')
   }
   if (totals.failed > 0 && !failedPhase && state.recovery.status !== 'partial') {
@@ -1024,16 +1044,23 @@ function assertResultPhaseCoherence(
       throw new CheckRunInvariantError('completed recovery cannot retain applied results')
     }
     if (
-      totals.blocked > 0 ||
+      (totals.blocked > 0 && !completedRecoveredConflict) ||
       totals.skipped > 0 ||
       totals.unknown > 0 ||
-      operations.some((operation) => operation.notAttempted && operation.outcome !== 'failed') ||
+      operations.some(
+        (operation) =>
+          operation.notAttempted &&
+          operation.outcome !== 'failed' &&
+          !(completedRecoveredConflict && operation.outcome === 'blocked'),
+      ) ||
       targets.some(
         (target) =>
-          target.outcome === 'blocked' ||
+          (target.outcome === 'blocked' && !completedRecoveredConflict) ||
           target.outcome === 'not-attempted' ||
           target.outcome === 'unknown' ||
-          (target.notAttempted && target.outcome !== 'failed'),
+          (target.notAttempted &&
+            target.outcome !== 'failed' &&
+            !(completedRecoveredConflict && target.outcome === 'blocked')),
       )
     ) {
       throw new CheckRunInvariantError('completed recovery cannot retain forbidden results')

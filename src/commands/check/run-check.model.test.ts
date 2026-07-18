@@ -600,6 +600,7 @@ describe('legacy write and global run model boundary', () => {
           {
             operationId: 'operation-0',
             outcome: 'applied',
+            reason: 'APPLIED',
             blocked: false,
             notAttempted: false,
             unknown: false,

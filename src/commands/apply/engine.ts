@@ -101,6 +101,12 @@ interface PreflightFailure {
   unknown: boolean
 }
 
+interface LocalRecoveryResult {
+  status: 'completed' | 'partial' | 'unknown'
+  restoredPaths: string[]
+  unrecoveredPaths: string[]
+}
+
 export interface ApplyExecutionEvidence {
   targetPath: string
   operationIds: string[]
@@ -314,6 +320,7 @@ export async function applyPlanWithRuntime(
   }
 
   let commitError: ApplyRunError | undefined
+  let commitFailureIndex: number | undefined
   let managerPhaseExecution: ManagerPhaseExecution | undefined
   try {
     journal.value.state = 'committing'
@@ -366,6 +373,7 @@ export async function applyPlanWithRuntime(
       runtime.checkpoint('after-journal-replaced', { file: group.file, index })
     } catch (error) {
       commitError = asRunError(error, 'COMMIT_FAILED')
+      commitFailureIndex = index
       break
     }
   }
@@ -497,13 +505,30 @@ export async function applyPlanWithRuntime(
   phases.push(
     phase(
       'recovery',
-      recovery === 'completed' ? 'passed' : recovery === 'unknown' ? 'unknown' : 'failed',
-      recovery === 'completed' ? 'RECOVERY_COMPLETED' : 'RECOVERY_INCOMPLETE',
+      recovery.status === 'completed'
+        ? 'passed'
+        : recovery.status === 'unknown'
+          ? 'unknown'
+          : 'failed',
+      recovery.status === 'completed' ? 'RECOVERY_COMPLETED' : 'RECOVERY_INCOMPLETE',
     ),
   )
   runtime.checkpoint('before-final-observation', {})
   let outcomes = observeFailedRun(root, groups)
-  if (recovery === 'unknown') {
+  if (
+    commitFailureIndex !== undefined &&
+    isPreconditionConflict(commitError.reason) &&
+    !activeGroups[commitFailureIndex]?.replacementAttempted
+  ) {
+    const failedGroup = activeGroups[commitFailureIndex]!
+    const failedIds = new Set(failedGroup.operations.map((operation) => operation.id))
+    outcomes = outcomes.map((outcome) =>
+      failedIds.has(outcome.operationId) && outcome.status !== 'unknown'
+        ? { ...outcome, status: 'conflicted' as const, reason: commitError.reason }
+        : outcome,
+    )
+  }
+  if (recovery.status === 'unknown') {
     outcomes = outcomes.map((outcome) => ({
       ...outcome,
       status: 'unknown',
@@ -517,10 +542,13 @@ export async function applyPlanWithRuntime(
       'FINAL_STATE_OBSERVED',
     ),
   )
-  const finalOriginalStateKnown = outcomes.every(
-    (outcome) => outcome.reason === 'COMMIT_FAILED_REVERTED' || outcome.reason === 'RUN_ABORTED',
+  const finalStateKnown = outcomes.every(
+    (outcome) =>
+      outcome.reason === 'COMMIT_FAILED_REVERTED' ||
+      outcome.reason === 'RUN_ABORTED' ||
+      (outcome.status === 'conflicted' && isPreconditionConflict(outcome.reason)),
   )
-  if (recovery === 'completed' && finalOriginalStateKnown) {
+  if (recovery.status === 'completed' && finalStateKnown) {
     const released = finalizeCleanup(lock, journal, activeGroups)
     phases.push(
       phase('cleanup', released ? 'passed' : 'unknown', released ? 'CLEAN' : 'CLEANUP_INCOMPLETE'),
@@ -534,19 +562,25 @@ export async function applyPlanWithRuntime(
           reason: 'CLEANUP_INCOMPLETE',
         })),
         phases,
-        withManagerRecovery(recoveryAfterCleanup(lock, false, journal), managerPhaseExecution),
+        withManagerRecovery(
+          { ...recovery, ...recoveryAfterCleanup(lock, false, journal) },
+          managerPhaseExecution,
+        ),
       )
     }
     return createResult(
       plan,
       outcomes,
       phases,
-      withManagerRecovery({ status: 'completed' }, managerPhaseExecution),
+      withManagerRecovery(recovery, managerPhaseExecution),
     )
   }
 
-  if (recovery === 'completed') {
-    recovery = outcomes.some((outcome) => outcome.status === 'unknown') ? 'unknown' : 'partial'
+  if (recovery.status === 'completed') {
+    recovery = {
+      ...recovery,
+      status: outcomes.some((outcome) => outcome.status === 'unknown') ? 'unknown' : 'partial',
+    }
   }
 
   journal.value.state = 'failed'
@@ -560,7 +594,7 @@ export async function applyPlanWithRuntime(
     phases,
     withManagerRecovery(
       {
-        status: recovery,
+        ...recovery,
         journalId: lock.owner.runId,
       },
       managerPhaseExecution,
@@ -638,13 +672,27 @@ function withManagerRecovery(
   return {
     ...recovery,
     status,
-    ...(execution.restoredPaths.length === 0 ? {} : { restoredPaths: execution.restoredPaths }),
-    ...(execution.unrecoveredPaths.length === 0
+    ...((recovery.restoredPaths?.length ?? 0) + execution.restoredPaths.length === 0
       ? {}
-      : { unrecoveredPaths: execution.unrecoveredPaths }),
-    ...(execution.externalEffects.length === 0
+      : {
+          restoredPaths: [
+            ...new Set([...(recovery.restoredPaths ?? []), ...execution.restoredPaths]),
+          ],
+        }),
+    ...((recovery.unrecoveredPaths?.length ?? 0) + execution.unrecoveredPaths.length === 0
       ? {}
-      : { externalEffects: execution.externalEffects }),
+      : {
+          unrecoveredPaths: [
+            ...new Set([...(recovery.unrecoveredPaths ?? []), ...execution.unrecoveredPaths]),
+          ],
+        }),
+    ...((recovery.externalEffects?.length ?? 0) + execution.externalEffects.length === 0
+      ? {}
+      : {
+          externalEffects: [
+            ...new Set([...(recovery.externalEffects ?? []), ...execution.externalEffects]),
+          ],
+        }),
   }
 }
 
@@ -1073,7 +1121,7 @@ function recoverTargets(
   lock: ApplyLock,
   journal: JournalHandle,
   runtime: ApplyRuntime,
-): 'completed' | 'partial' | 'unknown' {
+): LocalRecoveryResult {
   journal.value.state = 'recovering'
   try {
     persistJournal(journal)
@@ -1137,11 +1185,23 @@ function recoverTargets(
     try {
       persistJournal(journal)
     } catch {
-      return 'unknown'
+      return recoveryResult(groups, 'unknown')
     }
-    return 'completed'
+    return recoveryResult(groups, 'completed')
   }
-  return unknown ? 'unknown' : 'partial'
+  return recoveryResult(groups, unknown ? 'unknown' : 'partial')
+}
+
+function recoveryResult(
+  groups: readonly TargetGroup[],
+  status: LocalRecoveryResult['status'],
+): LocalRecoveryResult {
+  const attempted = groups.filter((group) => group.replacementAttempted)
+  return {
+    status,
+    restoredPaths: attempted.filter((group) => group.restored).map((group) => group.file),
+    unrecoveredPaths: attempted.filter((group) => !group.restored).map((group) => group.file),
+  }
 }
 
 function observeFailedRun(root: string, groups: TargetGroup[]): ApplyOperationResult[] {

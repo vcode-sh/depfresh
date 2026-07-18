@@ -99,13 +99,15 @@ passive registry presence are not safety or verification results.
 
 Write mode ends with one receipt grouped by repository-relative physical target, status, and
 reason. Repeated occurrences with the same physical cause do not produce repeated warnings. For
-example, a 2.0.x run that applied earlier package files before a later root preflight block reports:
+example, a command whose later target becomes stale after an earlier per-file replacement reports:
 
 ```text
-Partial result · 35 updates applied across 13 files; 1 file blocked
-package.json · 41 updates not attempted
-Preflight could not confirm Git state (VCS_UNAVAILABLE / VCS_OUTPUT_LIMIT_EXCEEDED)
-Exit 2 · inspect the changed files, fix the Git evidence problem, then rerun
+Partial result · 0 updates applied across 0 files; 1 update reverted across 1 file; 1 file blocked
+package.json · 1 update reverted
+Write reverted (COMMIT_FAILED_REVERTED)
+packages/package.json · 1 update not attempted
+Write conflicted (SOURCE_CHANGED)
+Exit 2 · inspect the changed files and correct each blocked target before rerunning
 ```
 
 `applied` means the requested occurrence value was observed after replacement. `reverted` means the
@@ -116,16 +118,21 @@ final state could not be confirmed. `VCS_UNAVAILABLE` is the compatibility outco
 preflight whose evidence could not be confirmed. The human receipt may add its narrower sanitized
 cause, such as `VCS_OUTPUT_LIMIT_EXCEEDED`.
 
-The 2.0.x compatibility flow still processes package writes sequentially. This receipt groups the
-observed results; it does not claim command-level preflight or repository-wide atomicity. A partial,
-failed, or unknown write exits with code `2`. Inspect the changed files before rerunning a partial
-write. `Safety block · no files were changed` appears only when no applied or reverted outcome
-exists and every blocked group proves replacement was not attempted. The receipt's `Exit` line uses
-the final normal command exit code, including strict resolution or post-write failures; it is not
-inferred from write outcomes alone. Guidance says to fix the Git evidence problem only when every
-local blocking group is `VCS_UNAVAILABLE` and no strict resolution, global write, or strict
-post-write failure also causes the final exit. Mixed local causes use blocked-target guidance. When
-one of those non-local causes also exists, the position-neutral guidance is
+One local write command collects its selected physical targets, preflights all of them, and uses one
+lock and journal lifecycle. Every individual file replacement is an atomic same-directory rename;
+the repository as a whole is not an atomic transaction. A failure after one replacement starts
+best-effort recovery, and incomplete recovery or final observation remains `unknown`. A partial,
+failed, or unknown write exits with code `2`.
+
+Inspect changed files before rerunning a partial write. `Safety block · no files were changed`
+appears only when no applied or reverted outcome exists, exact command evidence proves every
+blocking group was not attempted, and no journal, recovery path, external effect, or cleanup
+uncertainty remains. The receipt's `Exit` line uses the final normal command exit code, including
+strict resolution or post-write failures; it is not inferred from write outcomes alone. Guidance
+says to fix the Git evidence problem only when every local blocking group is `VCS_UNAVAILABLE` and
+no strict resolution, global write, or strict post-write failure also causes the final exit. Mixed
+local causes use blocked-target guidance. When one of those non-local causes also exists, the
+position-neutral guidance is
 `Exit 2 · review all reported errors and correct each blocked target before rerunning`; for a
 partial write it also tells the operator to review the changed files. Each receipt group retains
 its exact local status and cause.

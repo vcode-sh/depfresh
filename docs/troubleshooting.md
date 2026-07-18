@@ -38,11 +38,10 @@ If you selected nothing (or hit Ctrl+C), nothing gets written.
 
 ## "Partial result" or `VCS_UNAVAILABLE`
 
-Legacy 2.0.x check writes process package targets sequentially. If earlier files were observed at
-their requested values and a later physical target cannot confirm Git preflight evidence, the final
-receipt is partial, groups every affected occurrence under that one target, and exits with code `2`.
-`VCS_UNAVAILABLE` is an `unknown` outcome, not a write failure; a narrower sanitized cause such as
-`VCS_OUTPUT_LIMIT_EXCEEDED` explains why Git evidence was unavailable.
+Local check writes collect and preflight every selected physical target before the first
+replacement. `VCS_UNAVAILABLE` is an `unknown` outcome, not a write failure; a narrower sanitized
+cause such as `VCS_OUTPUT_LIMIT_EXCEEDED` explains why Git evidence was unavailable. A clean
+preflight block changes no selected file and exits with code `2`.
 
 A reverted outcome also produces `Partial result` and exit code `2`: recovery observed the original
 value, so the requested update was not retained. The headline reports both reverted operations and
@@ -57,8 +56,9 @@ uses position-neutral multi-cause guidance such as
 `Exit 2 · review all reported errors and correct each blocked target before rerunning` rather than
 claiming Git is the only blocker. A preflight-only receipt may say
 `Safety block · no files were changed` only when no outcome was applied or reverted and every
-blocked target proves replacement was not attempted. The 2.0.x grouped receipt does not claim
-command-level atomicity.
+blocked target proves replacement was not attempted and no recovery uncertainty remains. Each file
+replacement is atomic, but the repository is not one atomic transaction; recovery across files is
+best effort.
 
 Global write failures have their own sanitized stdout section, for example:
 
@@ -167,6 +167,10 @@ The active owner is recorded at `.depfresh/apply.lock/owner.json`; durable run e
 with repository-relative paths at `.depfresh/runs/<run-id>/journal.json`. Never delete a live,
 foreign-host, malformed, unreadable, or otherwise unknown owner. Stop every apply process before
 inspecting a confirmed dead run.
+
+An interrupt such as `SIGTERM` may arrive after a file replacement. The process exits immediately
+and intentionally leaves the owned lock, journal, and same-directory backups. A later write remains
+blocked with `RECOVERY_REQUIRED`; it does not guess which prior run is safe to recover or clean.
 
 For a dead crashed run, verify each same-directory backup against the journal's original hash,
 atomically restore it over the target, and verify the final target bytes and occurrences. Remove

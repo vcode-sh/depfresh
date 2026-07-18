@@ -226,6 +226,111 @@ describe('shipped contract schemas', () => {
     ).toBe(false)
   })
 
+  it('accepts only exact later precondition conflicts after an earlier completed recovery', () => {
+    const reverted = {
+      operationId: 'operation-reverted',
+      occurrenceId: 'occurrence-reverted',
+      sourceFileId: 'source-reverted',
+      file: 'package.json',
+      path: ['dependencies', 'alpha'],
+      name: 'alpha',
+      expectedValue: '1.0.0',
+      requestedValue: '2.0.0',
+      observedValue: '1.0.0',
+      observedByteHash: 'b'.repeat(64),
+      status: 'reverted' as const,
+      reason: 'COMMIT_FAILED_REVERTED',
+    }
+    const conflicted = {
+      operationId: 'operation-conflicted',
+      occurrenceId: 'occurrence-conflicted',
+      sourceFileId: 'source-conflicted',
+      file: 'packages/b/package.json',
+      path: ['dependencies', 'beta'],
+      name: 'beta',
+      expectedValue: '1.0.0',
+      requestedValue: '2.0.0',
+      status: 'conflicted' as const,
+      reason: 'SOURCE_CHANGED',
+    }
+    const result = {
+      contract: 'depfresh.apply' as const,
+      schemaVersion: 1 as const,
+      toolVersion: '1.2.0',
+      planFingerprint: 'a'.repeat(64),
+      repositoryIdentity: 'repository:fixture',
+      status: 'reverted' as const,
+      operations: [reverted, conflicted],
+      phases: [
+        { name: 'commit' as const, status: 'failed' as const, reason: 'SOURCE_CHANGED' },
+        { name: 'recovery' as const, status: 'passed' as const, reason: 'RECOVERY_COMPLETED' },
+        { name: 'inspect' as const, status: 'passed' as const, reason: 'FINAL_STATE_OBSERVED' },
+        { name: 'cleanup' as const, status: 'passed' as const, reason: 'CLEAN' },
+      ],
+      summary: {
+        planned: 2,
+        applied: 0,
+        skipped: 0,
+        conflicted: 1,
+        reverted: 1,
+        failed: 0,
+        unknown: 0,
+      },
+      recovery: {
+        status: 'completed' as const,
+        restoredPaths: ['package.json'],
+        unrecoveredPaths: [],
+      },
+      requiredCapabilities: ['filesystem-read' as const, 'file-write' as const],
+    }
+
+    expect(validateApplyResult(result)).toBe(true)
+    expect(
+      validateApplyResult({
+        ...result,
+        operations: [{ ...conflicted, reason: 'ARBITRARY_CONFLICT' }],
+        status: 'conflicted',
+        summary: { ...result.summary, planned: 1, reverted: 0 },
+      }),
+    ).toBe(false)
+    expect(
+      validateApplyResult({
+        ...result,
+        operations: [reverted, { ...conflicted, reason: 'EXPECTED_VALUE_MISMATCH' }],
+      }),
+    ).toBe(false)
+    for (const missingPhase of ['commit', 'recovery', 'inspect', 'cleanup'] as const) {
+      expect(
+        validateApplyResult({
+          ...result,
+          phases: result.phases.filter((phase) => phase.name !== missingPhase),
+        }),
+      ).toBe(false)
+    }
+    for (const changedPhase of [
+      { name: 'commit', status: 'passed', reason: 'SOURCE_CHANGED' },
+      { name: 'commit', status: 'failed', reason: 'ARBITRARY_CONFLICT' },
+      { name: 'recovery', status: 'failed', reason: 'RECOVERY_INCOMPLETE' },
+      { name: 'inspect', status: 'unknown', reason: 'FINAL_STATE_OBSERVED' },
+      { name: 'cleanup', status: 'unknown', reason: 'CLEANUP_INCOMPLETE' },
+    ] as const) {
+      expect(
+        validateApplyResult({
+          ...result,
+          phases: result.phases.map((phase) =>
+            phase.name === changedPhase.name ? changedPhase : phase,
+          ),
+        }),
+      ).toBe(false)
+    }
+    expect(
+      validateApplyResult({
+        ...result,
+        operations: [reverted, { ...conflicted, reason: 'STAGED_SOURCE_CHANGED' }],
+      }),
+    ).toBe(false)
+  })
+
   it('rejects artifact evidence without an exact completed npm install and verifier command', () => {
     const forged = {
       contract: 'depfresh.apply',

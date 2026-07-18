@@ -18,19 +18,40 @@ export interface WriteReceiptInput {
   outcomes: WriteOutcome[]
   diagnostics: LegacyWriteDiagnostic[]
   cwd: string
+  commandEvidence?: CommandWriteReceiptEvidence
+}
+
+export interface CommandWriteReceiptEvidence {
+  operations: Array<{
+    file: string
+    path: string[]
+    status: WriteOutcomeStatus
+    reason: string
+    replacementAttempted: boolean
+  }>
+  recovery: CommandRecoveryEvidence
+  cleanupUncertain: boolean
+}
+
+interface CommandRecoveryEvidence {
+  status: 'not-needed' | 'completed' | 'partial' | 'unknown'
+  journalId?: string
+  restoredPaths?: string[]
+  unrecoveredPaths?: string[]
+  externalEffects?: string[]
 }
 
 export interface WriteReceiptDetail {
   name: string
   path: string[]
   status: WriteOutcomeStatus
-  reason: WriteOutcomeReason
+  reason: string
 }
 
 export interface WriteReceiptGroup {
   file: string
   status: WriteOutcomeStatus
-  reason: WriteOutcomeReason
+  reason: string
   diagnostic?: string
   occurrences: number
   replacementAttempted: boolean | null
@@ -78,21 +99,25 @@ const PROVEN_ATTEMPTED_REASONS: ReadonlySet<WriteOutcomeReason> = new Set([
 ])
 
 export function buildWriteReceipt(input: WriteReceiptInput): WriteReceipt {
-  const operations = summarizeWriteOutcomes(input.outcomes)
+  const receiptOutcomes = reconcileReceiptOutcomes(input)
+  const operations = summarizeWriteOutcomes(
+    receiptOutcomes.map(({ outcome, status }) => ({ ...outcome, status })),
+  )
   const diagnostics = groupDiagnostics(input.diagnostics)
   const groupedOutcomes = new Map<string, WriteReceiptGroup>()
   const outcomesByFile = new Map<string, WriteOutcome[]>()
 
-  for (const outcome of input.outcomes) {
+  for (const receiptOutcome of receiptOutcomes) {
+    const { outcome, status, reason } = receiptOutcome
     const target = normalizeTarget(outcome.occurrence.file, input.cwd)
     const fileOutcomes = outcomesByFile.get(target.identity) ?? []
-    fileOutcomes.push(outcome)
+    fileOutcomes.push({ ...outcome, status })
     outcomesByFile.set(target.identity, fileOutcomes)
 
-    if (outcome.status === 'applied') continue
+    if (status === 'applied') continue
 
-    const key = `${target.identity}\u0000${outcome.status}\u0000${outcome.reason}`
-    const detail = sanitizeDetail(outcome)
+    const key = `${target.identity}\u0000${status}\u0000${reason}`
+    const detail = sanitizeDetail(receiptOutcome)
     const existing = groupedOutcomes.get(key)
     if (existing) {
       existing.occurrences += 1
@@ -102,11 +127,11 @@ export function buildWriteReceipt(input: WriteReceiptInput): WriteReceipt {
 
     groupedOutcomes.set(key, {
       file: target.display,
-      status: outcome.status,
-      reason: sanitizeTerminalText(outcome.reason) as WriteOutcomeReason,
+      status,
+      reason: sanitizeTerminalText(reason),
       ...(diagnostics.get(target.identity) ? { diagnostic: diagnostics.get(target.identity) } : {}),
       occurrences: 1,
-      replacementAttempted: replacementAttempted(outcome),
+      replacementAttempted: receiptOutcome.replacementAttempted,
       details: [detail],
     })
   }
@@ -118,7 +143,8 @@ export function buildWriteReceipt(input: WriteReceiptInput): WriteReceipt {
     operations.applied === 0 &&
     operations.reverted === 0 &&
     blockingGroups.length > 0 &&
-    blockingGroups.every((group) => group.replacementAttempted === false)
+    blockingGroups.every((group) => group.replacementAttempted === false) &&
+    !hasRecoveryUncertainty(input.commandEvidence, receiptOutcomes)
 
   return {
     verdict: receiptVerdict(operations, noFilesChanged),
@@ -158,12 +184,100 @@ function normalizeTarget(file: string, cwd: string): { identity: string; display
   return { identity: absolute, display: sanitizeTerminalText(path || '.') }
 }
 
-function sanitizeDetail(outcome: WriteOutcome): WriteReceiptDetail {
+interface ReceiptOutcome {
+  outcome: WriteOutcome
+  status: WriteOutcomeStatus
+  reason: string
+  replacementAttempted: boolean | null
+}
+
+function reconcileReceiptOutcomes(input: WriteReceiptInput): ReceiptOutcome[] {
+  if (!input.commandEvidence) {
+    return input.outcomes.map((outcome) => ({
+      outcome,
+      status: outcome.status,
+      reason: outcome.reason,
+      replacementAttempted: replacementAttempted(outcome),
+    }))
+  }
+  const evidenceByKey = new Map<string, CommandWriteReceiptEvidence['operations'][number]>()
+  for (const operation of input.commandEvidence.operations) {
+    const target = normalizeTarget(operation.file, input.cwd)
+    if (target.display === '[outside repository]' || !safeOccurrencePath(operation.path)) {
+      throw new Error('command receipt evidence does not reconcile')
+    }
+    const key = physicalKey(target.identity, operation.path)
+    if (evidenceByKey.has(key)) throw new Error('command receipt evidence does not reconcile')
+    evidenceByKey.set(key, operation)
+  }
+  const matched = new Set<string>()
+  const reconciled = input.outcomes.map((outcome) => {
+    const target = normalizeTarget(outcome.occurrence.file, input.cwd)
+    if (target.display === '[outside repository]' || !safeOccurrencePath(outcome.occurrence.path)) {
+      throw new Error('command receipt evidence does not reconcile')
+    }
+    const key = physicalKey(target.identity, outcome.occurrence.path)
+    const evidence = evidenceByKey.get(key)
+    if (!evidence) throw new Error('command receipt evidence does not reconcile')
+    matched.add(key)
+    return {
+      outcome,
+      status: evidence.status,
+      reason: evidence.reason,
+      replacementAttempted: evidence.replacementAttempted,
+    }
+  })
+  if (matched.size !== evidenceByKey.size) {
+    throw new Error('command receipt evidence does not reconcile')
+  }
+  return reconciled
+}
+
+function safeOccurrencePath(path: readonly string[]): boolean {
+  return path.length > 0 && path.every((part) => part.length > 0 && !part.includes('\u0000'))
+}
+
+function physicalKey(identity: string, path: readonly string[]): string {
+  return `${identity}\u0000${JSON.stringify(path)}`
+}
+
+function hasRecoveryUncertainty(
+  evidence: CommandWriteReceiptEvidence | undefined,
+  outcomes: readonly ReceiptOutcome[],
+): boolean {
+  if (!evidence) return false
+  const { recovery } = evidence
+  if (evidence.cleanupUncertain) return true
+  const retained =
+    recovery.journalId !== undefined ||
+    (recovery.restoredPaths?.length ?? 0) > 0 ||
+    (recovery.unrecoveredPaths?.length ?? 0) > 0 ||
+    (recovery.externalEffects?.length ?? 0) > 0
+  if (retained || recovery.status === 'completed' || recovery.status === 'partial') return true
+  if (recovery.status !== 'unknown') return false
+  const cleanReasons = new Set([
+    'VCS_UNAVAILABLE',
+    'SOURCE_CHANGED',
+    'STAGED_SOURCE_CHANGED',
+    'BACKUP_SOURCE_CHANGED',
+  ])
+  const blocking = outcomes.filter(({ status }) => isBlockingStatus(status))
+  return !(
+    blocking.length > 0 &&
+    blocking.every(
+      ({ reason, replacementAttempted }) =>
+        replacementAttempted === false && cleanReasons.has(reason),
+    )
+  )
+}
+
+function sanitizeDetail(receipt: ReceiptOutcome): WriteReceiptDetail {
+  const { outcome } = receipt
   return {
     name: sanitizeTerminalText(outcome.name),
     path: outcome.occurrence.path.map((part) => sanitizeTerminalText(part)),
-    status: sanitizeTerminalText(outcome.status) as WriteOutcomeStatus,
-    reason: sanitizeTerminalText(outcome.reason) as WriteOutcomeReason,
+    status: receipt.status,
+    reason: sanitizeTerminalText(receipt.reason),
   }
 }
 

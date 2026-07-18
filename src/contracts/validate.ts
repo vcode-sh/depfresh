@@ -31,6 +31,15 @@ const planV1Validator = ajv.compile(planResultSchema) as ValidateFunction<PlanRe
 const planV2Validator = ajv.compile(planResultV2Schema) as ValidateFunction<PlanResultV2>
 const applyValidator = ajv.compile(applyResultSchema) as ValidateFunction<ApplyResult>
 const errorValidator = ajv.compile(commandErrorSchema) as ValidateFunction<MachineCommandError>
+const COMPLETED_RECOVERY_CONFLICT_REASONS: ReadonlySet<string> = new Set([
+  'SOURCE_CHANGED',
+  'STAGED_SOURCE_CHANGED',
+  'BACKUP_SOURCE_CHANGED',
+])
+
+function isCompletedRecoveryConflictReason(value: string): boolean {
+  return COMPLETED_RECOVERY_CONFLICT_REASONS.has(value)
+}
 
 export class ContractValidationError extends Error {
   readonly code = 'ERR_CONTRACT_VALIDATION'
@@ -231,22 +240,49 @@ function hasValidApplySemantics(result: ApplyResult): boolean {
   }
   if (
     result.recovery.status === 'completed' &&
-    result.operations.some(
+    (result.operations.some(
       (operation) =>
         operation.status === 'applied' ||
         operation.status === 'skipped' ||
-        operation.status === 'conflicted' ||
         operation.status === 'unknown',
-    )
+    ) ||
+      (result.operations.some((operation) => operation.status === 'conflicted') &&
+        !(
+          result.operations.some((operation) => operation.status === 'reverted') &&
+          result.operations
+            .filter((operation) => operation.status === 'conflicted')
+            .every((operation) => isCompletedRecoveryConflictReason(operation.reason))
+        )))
   ) {
     return false
   }
   const recoveryPhase = result.phases.find((entry) => entry.name === 'recovery')
+  const completedConflictRecovery =
+    result.recovery.status === 'completed' &&
+    result.operations.some((operation) => operation.status === 'conflicted')
+  if (completedConflictRecovery) {
+    const commitPhase = result.phases.find((entry) => entry.name === 'commit')
+    const inspectPhase = result.phases.find((entry) => entry.name === 'inspect')
+    const cleanupPhase = result.phases.find((entry) => entry.name === 'cleanup')
+    if (
+      commitPhase?.status !== 'failed' ||
+      !isCompletedRecoveryConflictReason(commitPhase.reason) ||
+      result.operations
+        .filter((operation) => operation.status === 'conflicted')
+        .some((operation) => operation.reason !== commitPhase.reason) ||
+      recoveryPhase?.status !== 'passed' ||
+      inspectPhase?.status !== 'passed' ||
+      cleanupPhase?.status !== 'passed'
+    ) {
+      return false
+    }
+  }
   if (
-    recoveryPhase &&
-    ((result.recovery.status === 'completed' && recoveryPhase.status !== 'passed') ||
-      (result.recovery.status === 'unknown' && recoveryPhase.status !== 'unknown') ||
-      (result.recovery.status === 'partial' && recoveryPhase.status !== 'failed'))
+    (result.recovery.status === 'completed' && !recoveryPhase) ||
+    (recoveryPhase &&
+      ((result.recovery.status === 'completed' && recoveryPhase.status !== 'passed') ||
+        (result.recovery.status === 'unknown' && recoveryPhase.status !== 'unknown') ||
+        (result.recovery.status === 'partial' && recoveryPhase.status !== 'failed')))
   ) {
     return false
   }

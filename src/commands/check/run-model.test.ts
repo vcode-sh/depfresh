@@ -696,6 +696,70 @@ describe('check run model', () => {
     expect(state.recovery.status).toBe('completed')
   })
 
+  it('accepts an exact not-attempted later conflict after an earlier completed recovery', () => {
+    let state = completePhase(selectedInventoryState(2, 2), 'preflight')
+    state = completePhase(state, 'stage')
+    state = completePhase(state, 'apply', 'failed')
+    state = reduceCheckRun(state, {
+      type: 'recovery-recorded',
+      executed: true,
+      status: 'completed',
+      restoredPaths: ['package-0.json'],
+      unrecoveredPaths: [],
+    })
+    state = completePhase(state, 'recover')
+    state = completePhase(state, 'observe')
+    const [first, second] = state.targets
+
+    state = results(
+      state,
+      [
+        operationResult(first!.operationIds[0]!, 'reverted'),
+        {
+          ...operationResult(second!.operationIds[0]!, 'blocked'),
+          reason: 'SOURCE_CHANGED',
+        },
+      ],
+      [targetResult(first!, 'reverted'), targetResult(second!, 'blocked')],
+    )
+
+    expect(state.results.totals).toMatchObject({ reverted: 1, blocked: 1, notAttempted: 1 })
+  })
+
+  it.each([
+    { name: 'attempted conflict', notAttempted: false, reason: 'SOURCE_CHANGED' },
+    { name: 'arbitrary conflict', notAttempted: true, reason: 'EXPECTED_VALUE_MISMATCH' },
+  ])('rejects completed recovery with $name', ({ notAttempted, reason }) => {
+    let state = completePhase(selectedInventoryState(2, 2), 'preflight')
+    state = completePhase(state, 'stage')
+    state = completePhase(state, 'apply', 'failed')
+    state = reduceCheckRun(state, {
+      type: 'recovery-recorded',
+      executed: true,
+      status: 'completed',
+      restoredPaths: ['package-0.json'],
+      unrecoveredPaths: [],
+    })
+    state = completePhase(state, 'recover')
+    state = completePhase(state, 'observe')
+    const [first, second] = state.targets
+
+    expect(() =>
+      results(
+        state,
+        [
+          operationResult(first!.operationIds[0]!, 'reverted'),
+          {
+            ...operationResult(second!.operationIds[0]!, 'blocked'),
+            notAttempted,
+            reason,
+          },
+        ],
+        [targetResult(first!, 'reverted'), { ...targetResult(second!, 'blocked'), notAttempted }],
+      ),
+    ).toThrow()
+  })
+
   it('accepts a known failed result on a matching failed recovery branch', () => {
     let state = completePhase(selectedState(), 'preflight')
     state = completePhase(state, 'stage')

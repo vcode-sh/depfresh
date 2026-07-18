@@ -4,6 +4,18 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Semver
 
 ## Unreleased
 
+### Changed
+
+- **Command-level local write safety** -- normal local check writes now prepare and preflight every
+  selected physical target before the first replacement, then use one lock and journal lifecycle.
+  Human receipts consume exact private operation and replacement-attempt evidence, distinguish
+  clean safety blocks from retained recovery uncertainty, and keep public JSON and callback
+  contracts unchanged. Recovery reports exact restored and unrecovered repository-relative paths;
+  interrupted or incompletely observed runs retain evidence and remain unknown. File replacement
+  is atomic per file. This authoritative local command apply supersedes the 2.0.2
+  package-sequential path while preserving per-file-only atomicity: the repository is not an atomic
+  transaction, and recovery remains best effort.
+
 ## [2.0.2] - 2026-07-18
 
 ### Fixed

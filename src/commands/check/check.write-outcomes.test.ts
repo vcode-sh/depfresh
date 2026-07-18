@@ -239,6 +239,141 @@ describe('observed write outcome reporting', () => {
     expect(output).toContain('Exit 2 · inspect the changed files before rerunning')
   })
 
+  it('renders exact private command reason and attempt evidence instead of legacy heuristics', async () => {
+    const pkg = makePkg('exact-receipt')
+    const dep = makeResolved({ name: 'stale', currentVersion: '1.0.0', targetVersion: '2.0.0' })
+    mocks.loadPackagesMock.mockResolvedValue([pkg])
+    mocks.resolvePackageMock.mockResolvedValue([dep])
+    const outcomes: WriteOutcome[] = [
+      {
+        name: 'stale',
+        occurrence: { file: pkg.filepath, path: ['dependencies', 'stale'] },
+        expectedValue: '1.0.0',
+        requestedValue: '2.0.0',
+        status: 'failed',
+        reason: 'WRITE_FAILED',
+      },
+    ]
+    mocks.commandWriteMock.mockImplementation(async (root, selections) => {
+      const result = createCommandResultWithOutcomes(
+        root,
+        selections,
+        [{ packageIndex: 0, outcomes }],
+        [],
+        false,
+      )
+      if (result.status !== 'executed') throw new Error('expected executed command result')
+      result.applyResult.operations[0]!.status = 'conflicted'
+      result.applyResult.operations[0]!.reason = 'SOURCE_CHANGED'
+      return result
+    })
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+
+    const { check } = await import('./index')
+    const exitCode = await check({ ...baseOptions, output: 'table', loglevel: 'info', write: true })
+    const output = logSpy.mock.calls.flat().map(String).join('\n')
+
+    expect(exitCode).toBe(2)
+    expect(output).toContain('Safety block · no files were changed')
+    expect(output).toContain('SOURCE_CHANGED')
+    expect(output).not.toContain('WRITE_FAILED')
+  })
+
+  it.each(['failed', 'unknown'] as const)(
+    'does not claim a no-files-changed safety block when cleanup is %s',
+    async (cleanupStatus) => {
+      const pkg = makePkg(`cleanup-${cleanupStatus}`)
+      const dep = makeResolved({
+        name: 'stale',
+        currentVersion: '1.0.0',
+        targetVersion: '2.0.0',
+      })
+      mocks.loadPackagesMock.mockResolvedValue([pkg])
+      mocks.resolvePackageMock.mockResolvedValue([dep])
+      const outcomes: WriteOutcome[] = [
+        {
+          name: 'stale',
+          occurrence: { file: pkg.filepath, path: ['dependencies', 'stale'] },
+          expectedValue: '1.0.0',
+          requestedValue: '2.0.0',
+          status: 'unknown',
+          reason: 'VCS_UNAVAILABLE',
+        },
+      ]
+      mocks.commandWriteMock.mockImplementation(async (root, selections) => {
+        const result = createCommandResultWithOutcomes(
+          root,
+          selections,
+          [{ packageIndex: 0, outcomes }],
+          [],
+          false,
+        )
+        if (result.status !== 'executed') throw new Error('expected executed command result')
+        const cleanup = result.applyResult.phases.find((phase) => phase.name === 'cleanup')
+        if (!cleanup) throw new Error('expected cleanup phase')
+        cleanup.status = cleanupStatus
+        cleanup.reason = 'CLEANUP_INCOMPLETE'
+        return result
+      })
+      const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+      const { check } = await import('./index')
+      const exitCode = await check({
+        ...baseOptions,
+        output: 'table',
+        loglevel: 'info',
+        write: true,
+      })
+      const output = [...logSpy.mock.calls, ...warnSpy.mock.calls].flat().map(String).join('\n')
+
+      expect(exitCode).toBe(2)
+      expect(output).toContain('Unknown result')
+      expect(output).not.toContain('Safety block · no files were changed')
+    },
+  )
+
+  it('fails closed when command receipt operations do not reconcile to projected outcomes', async () => {
+    const pkg = makePkg('mismatched-receipt')
+    const dep = makeResolved({ name: 'stale', currentVersion: '1.0.0', targetVersion: '2.0.0' })
+    mocks.loadPackagesMock.mockResolvedValue([pkg])
+    mocks.resolvePackageMock.mockResolvedValue([dep])
+    const outcomes: WriteOutcome[] = [
+      {
+        name: 'stale',
+        occurrence: { file: pkg.filepath, path: ['dependencies', 'stale'] },
+        expectedValue: '1.0.0',
+        requestedValue: '2.0.0',
+        status: 'conflicted',
+        reason: 'EXPECTED_VALUE_MISMATCH',
+      },
+    ]
+    mocks.commandWriteMock.mockImplementation(async (root, selections) => {
+      const result = createCommandResultWithOutcomes(
+        root,
+        selections,
+        [{ packageIndex: 0, outcomes }],
+        [],
+        false,
+      )
+      if (result.status !== 'executed') throw new Error('expected executed command result')
+      result.applyResult.operations[0]!.file = 'different/package.json'
+      result.attempts[0]!.targetPath = 'different/package.json'
+      return result
+    })
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    const { check } = await import('./index')
+    const exitCode = await check({ ...baseOptions, output: 'table', loglevel: 'info', write: true })
+    const output = [...logSpy.mock.calls, ...errorSpy.mock.calls].flat().map(String).join('\n')
+
+    expect(exitCode).toBe(2)
+    expect(output).toContain('command receipt operations do not reconcile')
+    expect(output).not.toContain('Complete ·')
+    expect(output).not.toContain('Safety block ·')
+  })
+
   it('renders the strict resolution exit after an otherwise complete write', async () => {
     const pkg = makePkg('resolution-app')
     mocks.loadPackagesMock.mockResolvedValue([pkg])
@@ -393,8 +528,8 @@ describe('observed write outcome reporting', () => {
                 file: selection.pkg.filepath,
                 path: ['dependencies', change.name],
               },
-              expectedValue: '1.0.0',
-              requestedValue: '2.0.0',
+              expectedValue: change.currentVersion,
+              requestedValue: change.targetVersion,
               status: 'unknown' as const,
               reason: 'VCS_UNAVAILABLE' as const,
             })),

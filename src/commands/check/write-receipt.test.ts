@@ -124,6 +124,115 @@ describe('buildWriteReceipt', () => {
     expect(afterRecovery.noFilesChanged).toBe(false)
   })
 
+  it('uses exact command status and attempt evidence for a clean stale-source block', () => {
+    const receipt = buildWriteReceipt({
+      outcomes: [outcome(join(root, 'package.json'), 0, 'failed', 'WRITE_FAILED')],
+      diagnostics: [],
+      cwd: root,
+      commandEvidence: {
+        operations: [
+          {
+            file: 'package.json',
+            path: ['dependencies', 'dependency-0'],
+            status: 'conflicted',
+            reason: 'SOURCE_CHANGED',
+            replacementAttempted: false,
+          },
+        ],
+        recovery: { status: 'not-needed' },
+        cleanupUncertain: false,
+      },
+    })
+
+    expect(receipt).toMatchObject({ verdict: 'safety-block', noFilesChanged: true })
+    expect(receipt.groups).toMatchObject([
+      {
+        file: 'package.json',
+        status: 'conflicted',
+        reason: 'SOURCE_CHANGED',
+        replacementAttempted: false,
+      },
+    ])
+  })
+
+  it('never calls retained recovery evidence a no-files-changed safety block', () => {
+    const receipt = buildWriteReceipt({
+      outcomes: [outcome(join(root, 'package.json'), 0, 'failed', 'WRITE_FAILED')],
+      diagnostics: [],
+      cwd: root,
+      commandEvidence: {
+        operations: [
+          {
+            file: 'package.json',
+            path: ['dependencies', 'dependency-0'],
+            status: 'unknown',
+            reason: 'RECOVERY_REQUIRED',
+            replacementAttempted: false,
+          },
+        ],
+        recovery: {
+          status: 'unknown',
+          journalId: 'retained-run',
+          unrecoveredPaths: ['package.json'],
+        },
+        cleanupUncertain: true,
+      },
+    })
+
+    expect(receipt).toMatchObject({ verdict: 'unknown', noFilesChanged: false })
+    expect(receipt.groups[0]).toMatchObject({
+      status: 'unknown',
+      reason: 'RECOVERY_REQUIRED',
+      replacementAttempted: false,
+    })
+  })
+
+  it('fails closed when private command evidence does not reconcile by file and path', () => {
+    expect(() =>
+      buildWriteReceipt({
+        outcomes: [outcome(join(root, 'package.json'), 0, 'failed', 'WRITE_FAILED')],
+        diagnostics: [],
+        cwd: root,
+        commandEvidence: {
+          operations: [
+            {
+              file: 'other.json',
+              path: ['dependencies', 'dependency-0'],
+              status: 'conflicted',
+              reason: 'SOURCE_CHANGED',
+              replacementAttempted: false,
+            },
+          ],
+          recovery: { status: 'not-needed' },
+          cleanupUncertain: false,
+        },
+      }),
+    ).toThrow('command receipt evidence does not reconcile')
+  })
+
+  it('rejects a safety claim when exact command cleanup is unknown', () => {
+    const receipt = buildWriteReceipt({
+      outcomes: [outcome(join(root, 'package.json'), 0, 'unknown', 'VCS_UNAVAILABLE')],
+      diagnostics: [],
+      cwd: root,
+      commandEvidence: {
+        operations: [
+          {
+            file: 'package.json',
+            path: ['dependencies', 'dependency-0'],
+            status: 'unknown',
+            reason: 'VCS_UNAVAILABLE',
+            replacementAttempted: false,
+          },
+        ],
+        recovery: { status: 'unknown' },
+        cleanupUncertain: true,
+      },
+    })
+
+    expect(receipt).toMatchObject({ verdict: 'unknown', noFilesChanged: false })
+  })
+
   it('treats a reverted-only result as partial and reports recovery totals', () => {
     const receipt = buildWriteReceipt({
       outcomes: [

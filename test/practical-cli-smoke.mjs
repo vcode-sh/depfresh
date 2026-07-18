@@ -2,22 +2,26 @@
 
 import assert from 'node:assert/strict'
 import { execFileSync, spawn } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import {
   chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   realpathSync,
+  statSync,
   writeFileSync,
 } from 'node:fs'
 import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
-import { delimiter, join } from 'node:path'
+import { delimiter, join, relative } from 'node:path'
 
 const CHECK_SELECTOR = '--check'
 const PIPE_RECEIPT_CHECK = 'piped write receipt stays complete and ordered on stdout'
-const selectableChecks = new Set([PIPE_RECEIPT_CHECK])
+const COMMAND_TRANSACTION_CHECK = 'command transaction preflights every recursive target'
+const selectableChecks = new Set([PIPE_RECEIPT_CHECK, COMMAND_TRANSACTION_CHECK])
 const selectedCheck = parseCheckSelector(process.argv.slice(2))
 
 function parseCheckSelector(args) {
@@ -164,6 +168,33 @@ const registryUrl = `http://127.0.0.1:${address.port}/`
 
 function writeJson(filepath, value) {
   writeFileSync(filepath, `${JSON.stringify(value, null, 2)}\n`, 'utf8')
+}
+
+function discoverTargetManifests(root) {
+  const found = []
+  const visit = (directory) => {
+    for (const entry of readdirSync(directory).sort()) {
+      if (entry === '.git' || entry === '.depfresh' || entry === 'node_modules') continue
+      const path = join(directory, entry)
+      const stats = statSync(path)
+      if (stats.isDirectory()) visit(path)
+      else if (stats.isFile() && entry === 'package.json') found.push(relative(root, path))
+    }
+  }
+  visit(root)
+  return found.sort()
+}
+
+function hashTargetManifests(root, expectedPaths) {
+  assert.deepEqual(discoverTargetManifests(root), expectedPaths)
+  return Object.fromEntries(
+    expectedPaths.map((path) => [
+      path,
+      createHash('sha256')
+        .update(readFileSync(join(root, path)))
+        .digest('hex'),
+    ]),
+  )
 }
 
 function createCatalogSelectionFixture(name) {
@@ -791,6 +822,106 @@ process.exit(result.status ?? 1)
   assert.ok(!result.stdout.includes(repo), 'Receipt exposed an absolute target path on stdout')
   assert.ok(!result.stderr.includes(repo), 'Receipt exposed an absolute target path on stderr')
   assert.deepEqual(readFileSync(join(repo, 'package.json')), manifestBefore)
+})
+
+await record(COMMAND_TRANSACTION_CHECK, async () => {
+  const expectedManifests = ['package.json', 'packages/a/package.json', 'packages/b/package.json']
+  const createFixture = (name) => {
+    const repo = join(tmpRoot, name)
+    mkdirSync(join(repo, 'packages', 'a'), { recursive: true })
+    mkdirSync(join(repo, 'packages', 'b'), { recursive: true })
+    writeJson(join(repo, 'package.json'), {
+      name: `${name}-root`,
+      private: true,
+      workspaces: ['packages/*'],
+      dependencies: { alpha: '^1.0.0' },
+    })
+    writeJson(join(repo, 'packages', 'a', 'package.json'), {
+      name: `${name}-a`,
+      private: true,
+      dependencies: { beta: '^1.0.0' },
+    })
+    writeJson(join(repo, 'packages', 'b', 'package.json'), {
+      name: `${name}-b`,
+      private: true,
+      dependencies: { gamma: '^1.0.0' },
+    })
+    writeFileSync(join(repo, '.npmrc'), `registry=${registryUrl}\n`, 'utf8')
+    assert.deepEqual(discoverTargetManifests(repo), expectedManifests)
+    return repo
+  }
+
+  const blockedRepo = createFixture('command-transaction-blocked')
+  const git = findExecutable('git')
+  runGit(git, blockedRepo, 'init', '--quiet')
+  runGit(git, blockedRepo, 'config', 'user.email', 'smoke@example.invalid')
+  runGit(git, blockedRepo, 'config', 'user.name', 'Smoke Test')
+  runGit(git, blockedRepo, 'add', '--', ...expectedManifests)
+  runGit(git, blockedRepo, 'commit', '--quiet', '-m', 'fixture')
+  const before = hashTargetManifests(blockedRepo, expectedManifests)
+  const wrapperBin = join(blockedRepo, 'git-wrapper')
+  const counter = join(blockedRepo, 'ls-files-count')
+  mkdirSync(wrapperBin)
+  const wrapper = join(wrapperBin, process.platform === 'win32' ? 'git.cmd' : 'git')
+  writeFileSync(
+    wrapper,
+    `#!/usr/bin/env node
+const { existsSync, readFileSync, writeFileSync, writeSync } = require('node:fs')
+const { spawnSync } = require('node:child_process')
+const args = process.argv.slice(2)
+const counter = ${JSON.stringify(counter)}
+let count = existsSync(counter) ? Number(readFileSync(counter, 'utf8')) : 0
+if (args.includes('ls-files')) {
+  count += 1
+  writeFileSync(counter, String(count))
+  if (count === 3) {
+    writeSync(1, Buffer.alloc(2 * 1024 * 1024, 97))
+    process.exit(0)
+  }
+}
+const result = spawnSync(${JSON.stringify(git)}, args, { stdio: 'inherit' })
+process.exit(result.status ?? 1)
+`,
+  )
+  chmodSync(wrapper, 0o755)
+
+  const blocked = await runCli(
+    ['--cwd', blockedRepo, '--recursive', '--write', '--mode', 'patch'],
+    { env: { PATH: `${wrapperBin}${delimiter}${binDir}${delimiter}${process.env.PATH}` } },
+  )
+
+  assert.equal(blocked.status, 2, JSON.stringify(blocked, null, 2))
+  assert.equal(readFileSync(counter, 'utf8'), '3')
+  assert.match(blocked.stdout, /Safety block · no files were changed/u)
+  assert.deepEqual(hashTargetManifests(blockedRepo, expectedManifests), before)
+
+  const successRepo = createFixture('command-transaction-success')
+  const success = await runCli([
+    '--cwd',
+    successRepo,
+    '--recursive',
+    '--write',
+    '--mode',
+    'patch',
+    '--output',
+    'json',
+  ])
+  assert.equal(success.status, 0, JSON.stringify(success, null, 2))
+  assert.equal(
+    JSON.parse(readFileSync(join(successRepo, 'package.json'), 'utf8')).dependencies.alpha,
+    '^1.0.1',
+  )
+  assert.equal(
+    JSON.parse(readFileSync(join(successRepo, 'packages', 'a', 'package.json'), 'utf8'))
+      .dependencies.beta,
+    '^1.0.5',
+  )
+  assert.equal(
+    JSON.parse(readFileSync(join(successRepo, 'packages', 'b', 'package.json'), 'utf8'))
+      .dependencies.gamma,
+    '^1.0.2',
+  )
+  assert.equal(existsSync(join(successRepo, '.depfresh')), false)
 })
 
 await record('plan and file-only apply', async () => {

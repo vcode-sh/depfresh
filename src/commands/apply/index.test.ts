@@ -1107,7 +1107,7 @@ exit 19`,
       expect(result.status).toBe('unknown')
       expect(result.recovery).toMatchObject({
         status: 'unknown',
-        restoredPaths: ['package-lock.json'],
+        restoredPaths: ['package.json', 'package-lock.json'],
         externalEffects: ['package-manager-cache'],
       })
       const phaseNames = result.phases.map((entry) => entry.name)
@@ -2326,6 +2326,115 @@ exit 17`,
     expect(existsSync(join(root, '.depfresh'))).toBe(false)
   })
 
+  it('recovers an earlier replacement when a later target becomes stale before rename', async () => {
+    const root = temporaryRoot()
+    const first = '{"dependencies":{"alpha":"1.0.0"}}'
+    const second = '{"dependencies":{"beta":"1.0.0"}}'
+    const external = '{"dependencies":{"beta":"1.0.1"}}'
+    const firstTarget = join(root, 'package.json')
+    const secondTarget = join(root, 'packages', 'package.json')
+    writeFileSync(firstTarget, first)
+    mkdirSync(join(root, 'packages'))
+    writeFileSync(secondTarget, second)
+    const plan = makePlan([
+      {
+        file: 'package.json',
+        content: first,
+        path: ['dependencies', 'alpha'],
+        name: 'alpha',
+        expectedValue: '1.0.0',
+        requestedValue: '2.0.0',
+      },
+      {
+        file: 'packages/package.json',
+        content: second,
+        path: ['dependencies', 'beta'],
+        name: 'beta',
+        expectedValue: '1.0.0',
+        requestedValue: '2.0.0',
+      },
+    ])
+
+    const result = await applyPlanWithRuntime(plan, { cwd: root }, authority, {
+      checkpoint(name, context) {
+        if (name === 'before-replace' && context.index === 1) {
+          writeFileSync(secondTarget, external)
+        }
+      },
+    })
+
+    expect(result.status).toBe('reverted')
+    expect(result.operations.map(({ status, reason }) => ({ status, reason }))).toEqual([
+      { status: 'reverted', reason: 'COMMIT_FAILED_REVERTED' },
+      { status: 'conflicted', reason: 'SOURCE_CHANGED' },
+    ])
+    expect(result.recovery).toMatchObject({
+      status: 'completed',
+      restoredPaths: ['package.json'],
+      unrecoveredPaths: [],
+    })
+    expect(readFileSync(firstTarget, 'utf8')).toBe(first)
+    expect(readFileSync(secondTarget, 'utf8')).toBe(external)
+    expect(existsSync(join(root, '.depfresh'))).toBe(false)
+  })
+
+  it('retains evidence when a later stale target disappears during earlier recovery', async () => {
+    const root = temporaryRoot()
+    const first = '{"dependencies":{"alpha":"1.0.0"}}'
+    const second = '{"dependencies":{"beta":"1.0.0"}}'
+    const external = '{"dependencies":{"beta":"1.0.1"}}'
+    const firstTarget = join(root, 'package.json')
+    const secondTarget = join(root, 'packages', 'package.json')
+    writeFileSync(firstTarget, first)
+    mkdirSync(join(root, 'packages'))
+    writeFileSync(secondTarget, second)
+    const plan = makePlan([
+      {
+        file: 'package.json',
+        content: first,
+        path: ['dependencies', 'alpha'],
+        name: 'alpha',
+        expectedValue: '1.0.0',
+        requestedValue: '2.0.0',
+      },
+      {
+        file: 'packages/package.json',
+        content: second,
+        path: ['dependencies', 'beta'],
+        name: 'beta',
+        expectedValue: '1.0.0',
+        requestedValue: '2.0.0',
+      },
+    ])
+
+    const result = await applyPlanWithRuntime(plan, { cwd: root }, authority, {
+      checkpoint(name, context) {
+        if (name === 'before-replace' && context.index === 1) {
+          writeFileSync(secondTarget, external)
+        }
+        if (name === 'before-recover') rmSync(secondTarget)
+      },
+    })
+
+    expect(result.status).toBe('unknown')
+    expect(result.operations.map(({ status, reason }) => ({ status, reason }))).toEqual([
+      { status: 'reverted', reason: 'COMMIT_FAILED_REVERTED' },
+      { status: 'unknown', reason: 'OBSERVATION_FAILED' },
+    ])
+    expect(result.recovery).toMatchObject({
+      status: 'unknown',
+      restoredPaths: ['package.json'],
+      unrecoveredPaths: [],
+    })
+    expect(result.recovery.journalId).toBeDefined()
+    expect(readFileSync(firstTarget, 'utf8')).toBe(first)
+    expect(existsSync(secondTarget)).toBe(false)
+    expect(existsSync(join(root, '.depfresh', 'apply.lock'))).toBe(true)
+    expect(
+      existsSync(join(root, '.depfresh', 'runs', result.recovery.journalId!, 'journal.json')),
+    ).toBe(true)
+  })
+
   it('retains evidence when a zero-replacement conflict cannot clean an unowned backup', async () => {
     const root = temporaryRoot()
     const content = '{"dependencies":{"alpha":"1.0.0"}}'
@@ -3043,6 +3152,107 @@ await applyPlanWithRuntime(plan, { cwd: ${JSON.stringify(root)} }, authority, {
     renameSync(join(root, recovery.backup), target)
     expect(readFileSync(target, 'utf8')).toBe(content)
   })
+
+  it('retains a lock and relative journal when SIGTERM interrupts a replaced target', async () => {
+    const root = temporaryRoot()
+    const content = '{"dependencies":{"alpha":"1.0.0"}}'
+    const target = join(root, 'package.json')
+    const planPath = join(root, 'plan.json')
+    const childPath = join(root, 'signal-apply.mjs')
+    const marker = join(root, 'replaced')
+    writeFileSync(target, content)
+    const plan = makePlan([
+      {
+        file: 'package.json',
+        content,
+        path: ['dependencies', 'alpha'],
+        name: 'alpha',
+        expectedValue: '1.0.0',
+        requestedValue: '2.0.0',
+      },
+    ])
+    writeFileSync(planPath, JSON.stringify(plan))
+    const engineUrl = pathToFileURL(fileURLToPath(new URL('./engine.ts', import.meta.url))).href
+    const signalsUrl = pathToFileURL(
+      fileURLToPath(new URL('../../cli/signals.ts', import.meta.url)),
+    ).href
+    writeFileSync(
+      childPath,
+      `import { readFileSync, writeFileSync } from 'node:fs'
+import ${JSON.stringify(signalsUrl)}
+import { applyPlanWithRuntime } from ${JSON.stringify(engineUrl)}
+const plan = JSON.parse(readFileSync(${JSON.stringify(planPath)}, 'utf8'))
+const authority = { write: true, install: false, update: false, execute: false, verifyCommand: false, globalWrite: false }
+await applyPlanWithRuntime(plan, { cwd: ${JSON.stringify(root)} }, authority, {
+  checkpoint(name) {
+    if (name !== 'after-replace') return
+    writeFileSync(${JSON.stringify(marker)}, 'replaced')
+    process.emit('SIGTERM', 'SIGTERM')
+  },
+})
+`,
+    )
+    const child = spawn(process.execPath, ['--import', import.meta.resolve('tsx'), childPath], {
+      cwd: root,
+      stdio: 'pipe',
+      env: { ...process.env, HOME: join(root, 'home') },
+    })
+    const childExit = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>(
+      (resolvePromise) => {
+        child.once('exit', (code, signal) => resolvePromise({ code, signal }))
+      },
+    )
+    await expect(childExit).resolves.toEqual({ code: 143, signal: null })
+    expect(readFileSync(marker, 'utf8')).toBe('replaced')
+    expect(JSON.parse(readFileSync(target, 'utf8')).dependencies.alpha).toBe('2.0.0')
+    expect(existsSync(join(root, '.depfresh', 'apply.lock', 'owner.json'))).toBe(true)
+    const runsRoot = join(root, '.depfresh', 'runs')
+    const runId = readdirSync(runsRoot)[0]!
+    const journalPath = join(runsRoot, runId, 'journal.json')
+    const journalText = readFileSync(journalPath, 'utf8')
+    expect(journalText).not.toContain(root)
+    expect(journalText).toContain('"file": "package.json"')
+
+    const blocked = await applyPlanWithRuntime(plan, { cwd: root }, authority, {
+      isProcessAlive: () => 'dead',
+    })
+    expect(blocked.status).toBe('unknown')
+    expect(blocked.operations).toMatchObject([{ status: 'unknown', reason: 'RECOVERY_REQUIRED' }])
+    expect(blocked.recovery).toMatchObject({
+      status: 'unknown',
+    })
+    expect(existsSync(journalPath)).toBe(true)
+  }, 30_000)
+
+  it('maps an operating-system SIGTERM through the real CLI handler to exit 143', async () => {
+    const root = temporaryRoot()
+    const childPath = join(root, 'idle-signal.mjs')
+    const marker = join(root, 'signal-ready')
+    const signalsUrl = pathToFileURL(
+      fileURLToPath(new URL('../../cli/signals.ts', import.meta.url)),
+    ).href
+    writeFileSync(
+      childPath,
+      `import { writeFileSync } from 'node:fs'
+import ${JSON.stringify(signalsUrl)}
+writeFileSync(${JSON.stringify(marker)}, 'ready')
+setInterval(() => {}, 1_000)
+`,
+    )
+    const child = spawn(process.execPath, ['--import', import.meta.resolve('tsx'), childPath], {
+      cwd: root,
+      stdio: 'pipe',
+    })
+    const childExit = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>(
+      (resolvePromise) => {
+        child.once('exit', (code, signal) => resolvePromise({ code, signal }))
+      },
+    )
+    await waitForFile(marker)
+
+    expect(child.kill('SIGTERM')).toBe(true)
+    await expect(childExit).resolves.toEqual({ code: 143, signal: null })
+  }, 30_000)
 
   it('blocks orphan recovery evidence for mutating and operation-free plans', async () => {
     const root = temporaryRoot()

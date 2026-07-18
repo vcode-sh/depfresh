@@ -57,7 +57,11 @@ import type {
   CheckRunTargetResult,
 } from './run-model'
 import { applyLegacyCommandWrite, applyPackageWrite, type PackageWriteResult } from './write-flow'
-import { buildWriteReceipt, formatWriteReceipt } from './write-receipt'
+import {
+  buildWriteReceipt,
+  type CommandWriteReceiptEvidence,
+  formatWriteReceipt,
+} from './write-receipt'
 
 export async function check(
   options: depfreshOptions,
@@ -306,6 +310,7 @@ export async function runCheck(
     })
 
     const resolutionStart = performance.now()
+    let commandReceiptEvidence: CommandWriteReceiptEvidence | undefined
     try {
       const pendingResolutions = new Map<PackageMeta, Promise<ResolvedDepChange[]>>()
 
@@ -370,6 +375,10 @@ export async function runCheck(
       if (!modelEmission.ok) throw modelEmission.error
       if (!completion.ok) throw completion.error
       await writeDurableAsync(progress, () => addons.afterPackagesEnd(packages))
+      commandReceiptEvidence =
+        runtimeOptions.output === 'table'
+          ? createCommandReceiptEvidence(executionRoot, applyExecution.localExecution)
+          : undefined
       if (!runtimeOptions.write) emitReadOnlySelection(runController, packages, executionRoot)
     } finally {
       progress?.done()
@@ -470,6 +479,7 @@ export async function runCheck(
               outcomes: localWriteOutcomes,
               diagnostics: writeDiagnostics,
               cwd: executionRoot,
+              ...(commandReceiptEvidence ? { commandEvidence: commandReceiptEvidence } : {}),
             }),
             {
               code: finalExitCode,
@@ -585,6 +595,75 @@ interface LocalCommandExecution {
 interface PreparedApplyExecution {
   packageResults: ReadonlyMap<PreparedPackage, PackageWriteResult>
   localExecution: LocalCommandExecution | undefined
+}
+
+function createCommandReceiptEvidence(
+  root: string,
+  execution: LocalCommandExecution | undefined,
+): CommandWriteReceiptEvidence | undefined {
+  if (execution?.result.status !== 'executed') return undefined
+  const projected = projectedChangesByPhysicalKey(root, execution)
+  const operationsById = new Map<
+    string,
+    Extract<LegacyCommandApplyResult, { status: 'executed' }>['applyResult']['operations'][number]
+  >()
+  const operationKeys = new Set<string>()
+  for (const operation of execution.result.applyResult.operations) {
+    const file = requireRepositoryPath(root, operation.file)
+    const key = physicalKey(file, operation.path)
+    if (
+      operationsById.has(operation.operationId) ||
+      operationKeys.has(key) ||
+      !projected.has(key)
+    ) {
+      throw new CheckRunInstrumentationError('command receipt operations do not reconcile')
+    }
+    operationsById.set(operation.operationId, operation)
+    operationKeys.add(key)
+  }
+  if (operationKeys.size !== projected.size) {
+    throw new CheckRunInstrumentationError('command receipt operation inventory is incomplete')
+  }
+
+  const attemptedByOperation = new Map<string, boolean>()
+  const attemptTargets = new Set<string>()
+  for (const attempt of execution.result.attempts) {
+    const target = requireRepositoryPath(root, attempt.targetPath)
+    if (attemptTargets.has(target) || attempt.operationIds.length === 0) {
+      throw new CheckRunInstrumentationError('command receipt target evidence is duplicated')
+    }
+    attemptTargets.add(target)
+    for (const operationId of attempt.operationIds) {
+      const operation = operationsById.get(operationId)
+      if (
+        !operation ||
+        requireRepositoryPath(root, operation.file) !== target ||
+        attemptedByOperation.has(operationId)
+      ) {
+        throw new CheckRunInstrumentationError(
+          'command receipt attempt evidence does not reconcile',
+        )
+      }
+      attemptedByOperation.set(operationId, attempt.replacementAttempted)
+    }
+  }
+  if (attemptedByOperation.size !== operationsById.size) {
+    throw new CheckRunInstrumentationError('command receipt attempt inventory is incomplete')
+  }
+
+  return {
+    operations: execution.result.applyResult.operations.map((operation) => ({
+      file: requireRepositoryPath(root, operation.file),
+      path: [...operation.path],
+      status: operation.status,
+      reason: sanitizeTerminalText(operation.reason),
+      replacementAttempted: attemptedByOperation.get(operation.operationId)!,
+    })),
+    recovery: execution.result.applyResult.recovery,
+    cleanupUncertain: execution.result.applyResult.phases.some(
+      (phase) => phase.name === 'cleanup' && phase.status !== 'passed',
+    ),
+  }
 }
 
 async function applyPreparedPackages(
@@ -804,6 +883,7 @@ function executedCommandInventory(
     operationModelResult(
       operation.operationId,
       operation.status,
+      operation.reason,
       attempts.get(operation.operationId),
     ),
   )
@@ -998,6 +1078,7 @@ function attemptReceipts(attempts: LegacyCommandApplyResult['attempts']): Map<st
 function operationModelResult(
   operationId: string,
   status: WriteOutcome['status'],
+  reason: string,
   replacementAttempted: boolean | undefined,
 ): CheckRunOperationResult {
   if (replacementAttempted === undefined) {
@@ -1010,6 +1091,7 @@ function operationModelResult(
     blocked: status === 'conflicted',
     notAttempted: !replacementAttempted,
     unknown: status === 'unknown',
+    reason: sanitizeTerminalText(reason),
   }
   if (result.blocked && !result.notAttempted) {
     throw new CheckRunInstrumentationError('conflicted operation was structurally attempted')
