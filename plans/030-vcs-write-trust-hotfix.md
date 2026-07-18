@@ -224,6 +224,8 @@ Expected: all pass; JSON keeps its existing top-level keys and includes the addi
 - Create: `src/commands/check/write-receipt.test.ts`
 - Modify: `src/commands/check/run-check.ts`
 - Modify: `src/commands/check/check.write-outcomes.test.ts`
+- Modify: `src/commands/check/check.global-write.test.ts`
+- Modify: `test/practical-cli-smoke.mjs`
 - Modify: `test/release-readiness.test.ts`
 - Modify: `docs/output-formats/table.md`
 - Modify: `docs/output-formats/json.md`
@@ -309,8 +311,10 @@ without editing published `2.0.0` or `2.0.1` release records.
 
 - Verify: all Plan 030 source, tests, docs, generated contracts, and package contents
 - Create: `scripts/verify-local-package.mjs`
+- Modify: `scripts/verify-packed-package.mjs`
 - Modify: `package.json`
 - Modify: `test/release-readiness.test.ts`
+- Create: `test/verify-local-package.test.ts`
 - Modify: `plans/030-vcs-write-trust-hotfix.md` with exact completion evidence only after proof
 - Modify: `plans/README.md` and `.superpowers/sdd/progress.md` only when marking the plan done
 
@@ -322,7 +326,8 @@ without editing published `2.0.0` or `2.0.1` release records.
 - [ ] **Step 1: Run focused proof three times**
 
 Run the VCS, apply legacy, write-flow, receipt, JSON, orchestration, render-overflow, and progress
-test files three consecutive times. Expected: every run exits `0` with identical test counts.
+test files plus global-write, local package-verifier timeout/cleanup, release-readiness, and the built
+CLI pipe smoke three consecutive times. Expected: every run exits `0` with identical test counts.
 
 - [ ] **Step 2: Run complete local gates**
 
