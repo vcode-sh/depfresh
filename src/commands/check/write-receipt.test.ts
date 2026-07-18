@@ -21,9 +21,23 @@ import type {
   WriteOutcomeStatus,
 } from '../../types'
 import { applyLegacyPackageWrite, type LegacyWriteDiagnostic } from '../apply/legacy'
+import type { WriteReceiptExit } from './write-receipt'
 import { buildWriteReceipt, formatWriteReceipt } from './write-receipt'
 
 const root = '/repo'
+
+function exit(
+  code: WriteReceiptExit['code'],
+  overrides: Partial<Omit<WriteReceiptExit, 'code'>> = {},
+): WriteReceiptExit {
+  return {
+    code,
+    strictResolutionFailed: false,
+    globalWriteFailed: false,
+    strictPostWriteFailed: false,
+    ...overrides,
+  }
+}
 
 function diagnostic(code: RepositoryDiagnosticCode, file: string): LegacyWriteDiagnostic {
   return {
@@ -122,7 +136,7 @@ describe('buildWriteReceipt', () => {
 
     expect(receipt.verdict).toBe('partial')
     expect(receipt.files).toMatchObject({ applied: 0, reverted: 1, blocked: 0 })
-    expect(formatWriteReceipt(receipt, 2)).toEqual([
+    expect(formatWriteReceipt(receipt, exit(2))).toEqual([
       'Partial result · 0 updates applied across 0 files; 2 updates reverted across 1 file',
       'package.json · 2 updates reverted',
       'Write reverted (WRITE_FAILED)',
@@ -142,10 +156,10 @@ describe('buildWriteReceipt', () => {
     })
 
     expect(receipt.verdict).toBe('partial')
-    expect(formatWriteReceipt(receipt, 2)[0]).toBe(
+    expect(formatWriteReceipt(receipt, exit(2))[0]).toBe(
       'Partial result · 1 update applied across 1 file; 1 update reverted across 1 file; 1 file blocked',
     )
-    expect(formatWriteReceipt(receipt, 2).at(-1)).toBe(
+    expect(formatWriteReceipt(receipt, exit(2)).at(-1)).toBe(
       'Exit 2 · inspect the changed files, fix the Git evidence problem, then rerun',
     )
   })
@@ -276,7 +290,7 @@ describe('formatWriteReceipt', () => {
       cwd: root,
     })
 
-    expect(formatWriteReceipt(complete, 2).at(-1)).toBe(
+    expect(formatWriteReceipt(complete, exit(2)).at(-1)).toBe(
       'Exit 2 · inspect the errors above before rerunning',
     )
   })
@@ -292,7 +306,7 @@ describe('formatWriteReceipt', () => {
       cwd: root,
     })
 
-    expect(formatWriteReceipt(partial, 2)).toEqual([
+    expect(formatWriteReceipt(partial, exit(2))).toEqual([
       'Partial result · 1 update applied across 1 file; 1 file blocked',
       'package.json · 2 updates not attempted',
       'Preflight could not confirm Git state (VCS_UNAVAILABLE / VCS_OUTPUT_LIMIT_EXCEEDED)',
@@ -305,7 +319,7 @@ describe('formatWriteReceipt', () => {
       cwd: root,
     })
 
-    expect(formatWriteReceipt(safetyBlock, 2)).toEqual([
+    expect(formatWriteReceipt(safetyBlock, exit(2))).toEqual([
       'Safety block · no files were changed',
       'package.json · 1 update not attempted',
       'Preflight could not confirm Git state (VCS_UNAVAILABLE / VCS_NOT_REPOSITORY)',
@@ -323,7 +337,7 @@ describe('formatWriteReceipt', () => {
       cwd: root,
     })
 
-    expect(formatWriteReceipt(mixed, 2).at(-1)).toBe(
+    expect(formatWriteReceipt(mixed, exit(2)).at(-1)).toBe(
       'Exit 2 · inspect and correct each blocked target before rerunning',
     )
 
@@ -336,8 +350,32 @@ describe('formatWriteReceipt', () => {
       diagnostics: [diagnostic('VCS_OUTPUT_LIMIT_EXCEEDED', 'package.json')],
       cwd: root,
     })
-    expect(formatWriteReceipt(mixedPartial, 2).at(-1)).toBe(
+    expect(formatWriteReceipt(mixedPartial, exit(2)).at(-1)).toBe(
       'Exit 2 · inspect the changed files and correct each blocked target before rerunning',
+    )
+  })
+
+  it('does not give Git-only guidance when a global write also blocks the exit', () => {
+    const safetyBlock = buildWriteReceipt({
+      outcomes: [outcome(join(root, 'package.json'), 0, 'unknown', 'VCS_UNAVAILABLE')],
+      diagnostics: [diagnostic('VCS_NOT_REPOSITORY', 'package.json')],
+      cwd: root,
+    })
+
+    expect(formatWriteReceipt(safetyBlock, exit(2, { globalWriteFailed: true })).at(-1)).toBe(
+      'Exit 2 · inspect the errors above and correct each blocked target before rerunning',
+    )
+  })
+
+  it('does not give Git-only guidance when strict post-write verification also blocks the exit', () => {
+    const safetyBlock = buildWriteReceipt({
+      outcomes: [outcome(join(root, 'package.json'), 0, 'unknown', 'VCS_UNAVAILABLE')],
+      diagnostics: [diagnostic('VCS_NOT_REPOSITORY', 'package.json')],
+      cwd: root,
+    })
+
+    expect(formatWriteReceipt(safetyBlock, exit(2, { strictPostWriteFailed: true })).at(-1)).toBe(
+      'Exit 2 · inspect the errors above and correct each blocked target before rerunning',
     )
   })
 })

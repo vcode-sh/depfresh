@@ -11,11 +11,13 @@ import { createResolveContext, resolvePackage } from '../../io/resolve'
 import { readInvocationSelectionReceipt, type SelectionReceipt } from '../../selection'
 import type {
   depfreshOptions,
+  GlobalApplyResult,
   InvocationAuthority,
   PackageMeta,
   ResolvedDepChange,
 } from '../../types'
 import { summarizeWriteOutcomes } from '../../types'
+import { sanitizeTerminalText } from '../../utils/format'
 import { createLogger } from '../../utils/logger'
 import { loadNpmrc } from '../../utils/npmrc'
 import { getSafeErrorDetails } from '../../utils/redact'
@@ -339,11 +341,15 @@ async function runCheck(
 
     let postWriteFailed = false
     const postWriteStart = performance.now()
-    const writeFailed =
-      executionState.conflictedUpdates > 0 ||
-      executionState.revertedUpdates > 0 ||
-      executionState.failedWrites > 0 ||
-      executionState.unknownWrites > 0
+    const localWriteFailed = executionState.writeOutcomes.some(
+      (outcome) =>
+        !outcome.occurrence.file.startsWith('global:') && isBlockingWriteStatus(outcome.status),
+    )
+    const globalWriteFailed = executionState.writeOutcomes.some(
+      (outcome) =>
+        outcome.occurrence.file.startsWith('global:') && isBlockingWriteStatus(outcome.status),
+    )
+    const writeFailed = localWriteFailed || globalWriteFailed
 
     if (authority.execute && options.execute && authority.write && didWrite && !writeFailed) {
       const executeSucceeded = await runExecute(options.execute, executionRoot, logger)
@@ -366,17 +372,20 @@ async function runCheck(
       runtimeOptions.profileReport.failedResolutions = executionState.failedResolutions
     }
 
-    const finalExitCode = resolveCheckExitCode({
+    const exitCauses: CheckExitCauses = {
       strictResolutionFailed:
         executionState.failedResolutions > 0 && options.failOnResolutionErrors,
-      writeFailed,
+      localWriteFailed,
+      globalWriteFailed,
       strictPostWriteFailed: postWriteFailed && options.strictPostWrite === true,
       failOnOutdated: hasUpdates && !options.write && options.failOnOutdated,
-    })
+    }
+    const finalExitCode = resolveCheckExitCode(exitCauses)
 
     if (options.output === 'json') {
       outputJsonEnvelope(jsonPackages, runtimeOptions, executionState, jsonErrors, selectionReceipt)
     } else {
+      renderGlobalWriteOutcomes(executionState.globalResults, logger)
       const localWriteOutcomes = executionState.writeOutcomes.filter(
         (outcome) => !outcome.occurrence.file.startsWith('global:'),
       )
@@ -388,7 +397,12 @@ async function runCheck(
               diagnostics: writeDiagnostics,
               cwd: executionRoot,
             }),
-            finalExitCode,
+            {
+              code: finalExitCode,
+              strictResolutionFailed: exitCauses.strictResolutionFailed,
+              globalWriteFailed: exitCauses.globalWriteFailed,
+              strictPostWriteFailed: exitCauses.strictPostWriteFailed,
+            },
           ),
           logger,
         )
@@ -459,14 +473,47 @@ function renderWriteReceipt(lines: string[], logger: ReturnType<typeof createLog
   if (lines.length > 0) logger.info(lines.join('\n'))
 }
 
-function resolveCheckExitCode(input: {
+function renderGlobalWriteOutcomes(
+  results: GlobalApplyResult[],
+  logger: ReturnType<typeof createLogger>,
+): void {
+  const items = results.flatMap((result) =>
+    result.items.filter((item) => item.status !== 'applied'),
+  )
+  if (items.length === 0) return
+  const lines = [
+    'Global write outcomes',
+    ...items.map((item) =>
+      [item.manager, item.name, item.status, item.reason].map(sanitizeTerminalText).join(' · '),
+    ),
+  ]
+  logger.info(lines.join('\n'))
+}
+
+interface CheckExitCauses {
   strictResolutionFailed: boolean
-  writeFailed: boolean
+  localWriteFailed: boolean
+  globalWriteFailed: boolean
   strictPostWriteFailed: boolean
   failOnOutdated: boolean
-}): 0 | 1 | 2 {
-  if (input.strictResolutionFailed || input.writeFailed || input.strictPostWriteFailed) return 2
+}
+
+function resolveCheckExitCode(input: CheckExitCauses): 0 | 1 | 2 {
+  if (
+    input.strictResolutionFailed ||
+    input.localWriteFailed ||
+    input.globalWriteFailed ||
+    input.strictPostWriteFailed
+  ) {
+    return 2
+  }
   return input.failOnOutdated ? 1 : 0
+}
+
+function isBlockingWriteStatus(status: string): boolean {
+  return (
+    status === 'conflicted' || status === 'reverted' || status === 'failed' || status === 'unknown'
+  )
 }
 
 function renderSelectionReceipt(receipt: SelectionReceipt): void {

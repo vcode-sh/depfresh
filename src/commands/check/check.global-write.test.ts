@@ -235,7 +235,7 @@ describe('global write dispatch', () => {
           operationId: 'operation-0',
           occurrenceId: 'occurrence-0',
           manager: 'npm',
-          name: 'typescript',
+          name: 'typescript\nforged',
           expectedVersion: '5.0.0',
           targetVersion: '6.0.0',
           status: 'unknown',
@@ -269,8 +269,13 @@ describe('global write dispatch', () => {
 
     expect(exitCode).toBe(2)
     expect(stdout).toContain('Global writes: 0 applied, 0 skipped, 0 failed, 1 unknown')
+    expect(stdout).toContain('Global write outcomes')
+    expect(stdout).toContain('npm · typescript forged · unknown · INVENTORY_TIMEOUT')
+    expect(stdout).not.toContain('typescript\nforged')
     expect(`${stdout}\n${stderr}`).not.toMatch(/(?:Complete|Partial result|Safety block).*across/u)
     expect(`${stdout}\n${stderr}`).not.toContain('global:npm ·')
+    expect(stdout).not.toMatch(/file|atomic|replacement/iu)
+    expect(stderr).not.toContain('INVENTORY_TIMEOUT')
   })
 
   it('exposes the state-machine run result in legacy JSON output', async () => {

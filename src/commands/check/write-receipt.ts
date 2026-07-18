@@ -7,6 +7,13 @@ import type { LegacyWriteDiagnostic } from '../apply/legacy'
 export type WriteReceiptVerdict = 'complete' | 'partial' | 'safety-block' | 'failed' | 'unknown'
 export type WriteReceiptExitCode = 0 | 1 | 2
 
+export interface WriteReceiptExit {
+  code: WriteReceiptExitCode
+  strictResolutionFailed: boolean
+  globalWriteFailed: boolean
+  strictPostWriteFailed: boolean
+}
+
 export interface WriteReceiptInput {
   outcomes: WriteOutcome[]
   diagnostics: LegacyWriteDiagnostic[]
@@ -122,15 +129,12 @@ export function buildWriteReceipt(input: WriteReceiptInput): WriteReceipt {
   }
 }
 
-export function formatWriteReceipt(
-  receipt: WriteReceipt,
-  exitCode: WriteReceiptExitCode,
-): string[] {
+export function formatWriteReceipt(receipt: WriteReceipt, exit: WriteReceiptExit): string[] {
   const lines = [formatHeadline(receipt)]
   for (const group of receipt.groups) {
     lines.push(formatGroup(group), formatReason(group))
   }
-  lines.push(formatExit(receipt, exitCode))
+  lines.push(formatExit(receipt, exit))
   return lines
 }
 
@@ -249,27 +253,33 @@ function formatReason(group: WriteReceiptGroup): string {
   return `Write ${group.status} (${reason})`
 }
 
-function formatExit(receipt: WriteReceipt, exitCode: WriteReceiptExitCode): string {
-  if (exitCode === 0) return 'Exit 0'
+function formatExit(receipt: WriteReceipt, exit: WriteReceiptExit): string {
+  if (exit.code === 0) return 'Exit 0'
   const blockingGroups = receipt.groups.filter((group) => isBlockingStatus(group.status))
   const onlyVcsUnavailable =
     blockingGroups.length > 0 && blockingGroups.every((group) => group.reason === 'VCS_UNAVAILABLE')
+  const hasNonLocalExitCause =
+    exit.strictResolutionFailed || exit.globalWriteFailed || exit.strictPostWriteFailed
+  if (hasNonLocalExitCause && receipt.verdict !== 'complete') {
+    const changedFiles = receipt.verdict === 'partial' ? ' and the changed files' : ''
+    return `Exit ${exit.code} · inspect the errors above${changedFiles} and correct each blocked target before rerunning`
+  }
   if (receipt.verdict === 'partial') {
     if (onlyVcsUnavailable) {
-      return `Exit ${exitCode} · inspect the changed files, fix the Git evidence problem, then rerun`
+      return `Exit ${exit.code} · inspect the changed files, fix the Git evidence problem, then rerun`
     }
     if (blockingGroups.length > 0) {
-      return `Exit ${exitCode} · inspect the changed files and correct each blocked target before rerunning`
+      return `Exit ${exit.code} · inspect the changed files and correct each blocked target before rerunning`
     }
-    return `Exit ${exitCode} · inspect the changed files before rerunning`
+    return `Exit ${exit.code} · inspect the changed files before rerunning`
   }
   if (receipt.verdict === 'complete') {
-    return `Exit ${exitCode} · inspect the errors above before rerunning`
+    return `Exit ${exit.code} · inspect the errors above before rerunning`
   }
   if (onlyVcsUnavailable) {
-    return `Exit ${exitCode} · fix the Git evidence problem, then rerun`
+    return `Exit ${exit.code} · fix the Git evidence problem, then rerun`
   }
-  return `Exit ${exitCode} · inspect and correct each blocked target before rerunning`
+  return `Exit ${exit.code} · inspect and correct each blocked target before rerunning`
 }
 
 function count(value: number, singular: string): string {

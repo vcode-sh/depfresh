@@ -252,6 +252,64 @@ describe('observed write outcome reporting', () => {
     expect(output).not.toContain('Exit 0')
   })
 
+  it('does not give Git-only guidance when strict resolution also blocks a VCS safety block', async () => {
+    const pkg = makePkg('combined-block-app')
+    mocks.loadPackagesMock.mockResolvedValue([pkg])
+    mocks.resolvePackageMock.mockResolvedValue([
+      makeResolved({ name: 'blocked', currentVersion: '1.0.0', targetVersion: '2.0.0' }),
+      makeResolved({
+        name: 'missing',
+        currentVersion: '1.0.0',
+        targetVersion: '1.0.0',
+        diff: 'error',
+      }),
+    ])
+    mocks.writePackageMock.mockReturnValue({
+      outcomes: [
+        {
+          name: 'blocked',
+          occurrence: { file: pkg.filepath, path: ['dependencies', 'blocked'] },
+          expectedValue: '1.0.0',
+          requestedValue: '2.0.0',
+          status: 'unknown',
+          reason: 'VCS_UNAVAILABLE',
+        },
+      ],
+      diagnostics: [
+        {
+          code: 'VCS_OUTPUT_LIMIT_EXCEEDED',
+          target: { identity: pkg.filepath, display: 'combined-block-app/package.json' },
+        },
+      ],
+    })
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    const { check } = await import('./index')
+    const exitCode = await check({
+      ...baseOptions,
+      output: 'table',
+      loglevel: 'info',
+      write: true,
+      failOnResolutionErrors: true,
+    })
+    const stdout = logSpy.mock.calls.flat().map(String).join('\n')
+    const stderr = warnSpy.mock.calls.flat().map(String).join('\n')
+    const receiptBlocks = logSpy.mock.calls
+      .flat()
+      .map(String)
+      .filter((value) => value.includes('Safety block ·'))
+
+    expect(exitCode).toBe(2)
+    expect(receiptBlocks).toHaveLength(1)
+    expect(stdout).toContain('Safety block · no files were changed')
+    expect(stdout).toContain(
+      'Exit 2 · inspect the errors above and correct each blocked target before rerunning',
+    )
+    expect(stdout).not.toContain('Exit 2 · fix the Git evidence problem, then rerun')
+    expect(stderr).not.toMatch(/Safety block|Preflight could not confirm Git state|Exit 2/u)
+  })
+
   it('renders the strict post-write exit after an otherwise complete write', async () => {
     const pkg = makePkg('post-write-app')
     mocks.loadPackagesMock.mockResolvedValue([pkg])
