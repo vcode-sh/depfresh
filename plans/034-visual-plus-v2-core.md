@@ -592,11 +592,18 @@ next and owns exclusive route construction plus real signal integration.
 
 **Files:**
 
+- Create: `src/commands/check/visual-plus/integration.ts`
+- Create: `src/commands/check/visual-plus/integration.test.ts`
+- Create: `src/cli/signals.test.ts`
+- Modify: `src/cli/index.ts`
+- Modify: `src/cli/signals.ts`
 - Modify: `src/commands/check/run-check.ts`
 - Modify: `src/commands/check/render/index.ts`
 - Modify: `src/commands/check/write-flow.ts`
 - Modify: `src/commands/apply/legacy-plan.ts`
 - Modify: `src/commands/apply/legacy-plan.test.ts`
+- Modify: `src/commands/check/test-helpers.ts`
+- Modify: `src/commands/check/check.command-apply.integration.test.ts`
 - Modify: `src/commands/check/run-check.model.test.ts`
 - Modify: `src/commands/check/run-check.orchestration.test.ts`
 - Modify: `src/commands/check/check.edge-cases.test.ts`
@@ -609,22 +616,182 @@ next and owns exclusive route construction plus real signal integration.
 - Consumes: authoritative run controller and Visual+ renderer.
 - Produces: default CLI table output with unchanged machine/library surfaces.
 
-Before enabling Visual+, expose one package-private, read-only selection-evidence seam from
-`createLegacyPlan()`. For write runs, `applyLegacyCommandWrite()` invokes its injected observer
-synchronously after exact plan construction and before VCS preflight or any replacement. For
-read-only runs, build the same plan evidence without invoking apply. The evidence contains stable
-operation IDs, package-index owner groups, exact physical target paths including catalog owners,
-resolved age/compatibility metadata, and target membership. It grants no authority, performs no
-mutation, and is not a public library/schema surface. Emit the run-model selection and
-`VisualPlusChangeMetadata` from this one evidence object; do not emit a manifest approximation and
-do not reconstruct physical targets after apply. If exact evidence does not reconcile, fail closed
-before Visual+ claims a target or result.
+Task 4 uses this exact route predicate:
+
+```ts
+const visualPlusEligible =
+  renderProgress &&
+  options.output === 'table' &&
+  options.loglevel !== 'silent' &&
+  !options.interactive &&
+  !options.global &&
+  !options.globalAll &&
+  !options.beforePackageWrite &&
+  !options.addons?.some((addon) => addon.beforePackageWrite !== undefined)
+```
+
+`renderProgress` is the existing CLI/library boundary: `checkFromCli()` passes `true`; direct
+library `check()` passes `false`. Both `info` and `debug` table CLI runs are eligible. JSON, silent,
+library, explicit interactive, global, global-all, and invocations with a direct or addon
+`beforePackageWrite` hook are excluded and retain their current bytes, callbacks, cursor owners,
+and result semantics. The current lifecycle exposes no authoritative outcome for a vetoed selected
+change, so Task 4 must not invent a Visual+ skipped result or hide a vetoed row. Focused route tests
+cover full, partial, and shared-target veto cases and prove they remain on the unchanged legacy
+path with no additional mutation.
+
+Immediately after option validation, an eligible route detects capabilities once, captures one
+finite nonnegative integer `Date.now()` for release-age projection, creates the run controller with
+the monotonic `performance.now()` clock, and starts Visual+ before package loading. An invalid wall
+clock is an instrumentation error before renderer start. Task 4 startup metadata is intentionally
+truthful and minimal:
+
+```ts
+const startupRun: VisualPlusRunMetadata = {
+  workspaceScope: 'unknown',
+  packageManager: { status: 'unknown', sources: [] },
+}
+```
+
+Do not infer or later replace repository, workspace, or manager facts from package counts,
+filenames, lockfile order, or executor state. The production writer calls only
+`process.stdout.write(chunk)`. The production scheduler uses one `setTimeout(callback, 50)`, calls
+`unref()`, and returns an idempotent cancel closure. It never uses an interval. `onError` retains
+the first renderer failure without logging reentrantly; orchestration checks and throws that error
+before selection, apply, and finalization. The catch path disposes Visual+, emits the existing
+sanitized error once, and never fabricates a final receipt.
+
+The real CLI passes a package-private terminal lifecycle into `checkFromCli()` from
+`src/cli/index.ts`; direct `checkFromCli()` tests may omit it:
+
+```ts
+export interface CliTerminalLifecycle {
+  registerSignalCleanup(cleanup: () => void): () => void
+}
+```
+
+`src/cli/signals.ts` implements registration with idempotent unregister. `SIGINT` and `SIGTERM`
+snapshot and remove registered cleanups, invoke each at most once while swallowing cleanup errors,
+then preserve the existing cursor restore and immediate exit `130`/`143`. The normal `exit` handler
+continues to restore the cursor. Only an eligible real CLI run registers `renderer.dispose`; it
+unregisters in `finally`. Library code never imports or installs CLI signal handlers, and the
+renderer owns no process listener.
+
+#### Authoritative selection evidence
+
+`createLegacyPlan()` produces a deeply copied and frozen package-private evidence result after
+operation IDs are assigned:
+
+```ts
+export type LegacySelectionEvidenceResult =
+  | { status: 'ready'; evidence: LegacySelectionEvidence }
+  | {
+      status: 'unavailable'
+      reason: 'UNSUPPORTED_WRITE_SOURCE' | 'UNBOUND_OPERATION' | 'INCONSISTENT_SELECTION_EVIDENCE'
+    }
+
+export interface LegacySelectionEvidence {
+  readonly operations: readonly {
+    readonly operationId: string
+    readonly packageIndex: number
+    readonly changeIndex: number
+    readonly ownerLabel: string
+    readonly physicalTarget: string
+    readonly occurrencePath: readonly string[]
+    readonly name: string
+    readonly current: string
+    readonly target: string
+    readonly diff: 'major' | 'minor' | 'patch'
+    readonly publishedAt?: string
+    readonly nodeCompatible?: boolean
+    readonly nodeCompat?: string
+    readonly catalog?: { readonly name: string; readonly sourcePath: string }
+  }[]
+  readonly targets: readonly {
+    readonly path: string
+    readonly operationIds: readonly string[]
+  }[]
+}
+```
+
+Evidence contains no `PackageMeta`, `ResolvedDepChange`, plan, projection, or mutable aliases.
+Operations retain plan physical order, followed by blocked physical operations in stable key order;
+targets sort by exact contained repository-relative path and retain operation membership order.
+Manifest operations omit `catalog`. Catalog operations retain the exact matched catalog name and
+repository-relative source path, and `catalog.sourcePath` must equal `physicalTarget`.
+
+One physical operation may have multiple consumer projections. Its canonical renderer owner is the
+lowest `packageIndex`, then lowest `changeIndex`; owner group ID is `package:<packageIndex>`, order
+is the package index, and label is the package name only when
+`sanitizeTerminalText(name).trim()` is nonempty, otherwise the exact contained
+repository-relative package source path. Store the sanitized nonempty label. Both
+`CheckRunChange.owner` and `VisualPlusChangeMetadata.ownerGroup.physicalTarget` map to the evidence
+`physicalTarget`; the metadata owner group is exactly
+`{ id: package:<packageIndex>, order: packageIndex, label: ownerLabel }`. Every duplicate projection
+must agree on name, physical current/target values, diff,
+`publishedAt`, `nodeCompatible`, `nodeCompat`, and catalog identity. Disagreement yields
+`INCONSISTENT_SELECTION_EVIDENCE`; unsafe, unsupported, or unbound physical truth yields the other
+unavailable reasons. Legacy non-Visual callers retain their existing blocked-result behavior, but
+the Visual+ route treats unavailable evidence as an instrumentation error, disposes, reports the
+sanitized error, and exits `2` before claiming a target or applying a file.
+
+`applyLegacyCommandWrite(root, selections, authority, observer?)` invokes its optional observer
+synchronously with the frozen evidence result immediately after `createLegacyPlan()` and before
+the blocked-result branch, the apply engine's VCS preflight, or any replacement. Plan construction
+may already collect its existing read-only Git evidence. An observer throw aborts with no
+apply side effect. For read-only runs, construct the same `LegacyCommandSelection[]` after package
+preparation from every non-global `prepared.selected`, regardless of `writeApproved`, and call
+`createLegacyPlan()` once without invoking apply. Remove the approximate `emitReadOnlySelection()`
+IDs and manifest targets.
+
+`visual-plus/integration.ts` is pure. It consumes ready evidence plus the fixed startup wall clock
+and produces one reconciled set of ordered `CheckRunChange`, `CheckRunTarget`, and
+`VisualPlusChangeMetadata`. Missing, malformed, or future `publishedAt` becomes `ageMs: null`;
+otherwise age is the finite nonnegative clock difference. `nodeCompatible: true/false` maps to
+compatible/incompatible; missing maps to unknown; optional `nodeCompat` is sanitized detail.
+Run-model selection and Visual+ review must consume this same object. After write apply,
+phase/result projection must reconcile against the already emitted operation IDs and targets and
+must not emit or reconstruct selection again.
+
+#### Output and finalization order
+
+On the Visual+ route, construct exactly one of Visual+ or legacy progress, never both. Use the
+chosen owner as the sync/async durable-output arbiter. Explicit selection/discovery reports,
+resolution-error details, addon output, requested profile output, and post-write command output
+remain visible exactly once through suspension. Suppress only the legacy change table, up-to-date
+rows, checked summary, old local write receipt, status warning, and tips on the Visual+ route.
+Global renderers remain excluded. The non-TTY structured-output hint remains on stderr after the
+complete Visual+ receipt so it cannot split or obscure stdout evidence.
+
+For write runs, the plan observer emits controller selection and `writeReview()` before preflight.
+For read-only runs, emit the same selection and review immediately after preparation. Errors that
+cannot be represented by the current pure sections, including individual resolution failures,
+remain durable sanitized detail lines rather than being hidden. The command controller emits all
+phases/results and `run-completed` with the final exit decision before renderer finalization.
+
+Build the canonical local `WriteReceipt` once. Excluded routes render it exactly as before. A
+nonempty Visual+ write finalizes with that same canonical object, evidence operation IDs/targets,
+and authoritative snapshot recovery. Read-only and zero-selection finalization follow the Task 3
+contract without invented receipt evidence. If an exception occurs after selection but before a
+canonical receipt exists, dispose and use the existing sanitized error path; never emit terminal
+success, transaction, or fallback receipt bytes. Await every `suspendAsync()` before finalization,
+then finalize once, unregister signal cleanup in `finally`, and allow no later frame.
+
+Implement Task 4 in two reviewed slices: first the frozen legacy selection-evidence seam and pure
+integration projection, then the CLI route/output/signal migration. Do not start the route slice
+until the evidence slice has focused tests and independent review.
 
 - [ ] **Step 1: Write default-output RED journeys**
 
 Assert normal `checkFromCli(... output: 'table')` instantiates Visual+, while JSON, silent, direct
 library `check()`, and explicit interactive selection preserve their documented paths. Assert each
-change row is emitted once, not once by old render and once by Visual+.
+change row is emitted once, not once by old render and once by Visual+. Characterize `info` and
+`debug` eligibility; global/global-all exclusion; no-package/no-update; fixed-clock ages; catalog and
+shared-target membership; read-only exit `0`/`1`; write success/block/revert/unknown; strict and
+non-strict resolution/post-write errors; addon/profile output; non-TTY ordering; renderer failure;
+and real signal cleanup. Prove direct/addon `beforePackageWrite` hooks, including full, partial, and
+shared-target vetoes, select the unchanged legacy route; observer-before-preflight; observer-throw
+zero mutation; canonical receipt reuse; no selection reconstruction; one timer/cursor owner; no
+ANSI in JSON; no bytes in silent; library callback compatibility; and interactive TUI ownership.
 
 - [ ] **Step 2: Run integration RED tests**
 
