@@ -242,8 +242,13 @@ findings.
 **Files:**
 
 - Modify: `src/commands/check/run-check.ts`
+- Modify: `src/commands/check/test-helpers.ts`
 - Modify: `src/commands/check/run-check.orchestration.test.ts`
 - Modify: `src/commands/check/run-check.model.test.ts`
+- Modify: `src/commands/check/check.core-flow.test.ts`
+- Modify: `src/commands/check/check.callbacks.test.ts`
+- Modify: `src/commands/check/check.addons.test.ts`
+- Modify: `src/commands/check/check.interactive-selection.test.ts`
 - Modify: `src/commands/check/check.write-outcomes.test.ts`
 - Modify: `src/commands/check/check.flags.install.test.ts`
 - Modify: `src/commands/check/check.flags.update.test.ts`
@@ -266,6 +271,9 @@ RED evidence, then change the final expectation to byte-identical targets under 
 
 For 15 prepared owner groups, assert one local adapter call, one plan, 14 unique targets, projected
 callbacks in package order, one final run result, and no post-write action after block/unknown.
+Extend the shared test helper with a distinct command-adapter mock. Keep the legacy package-writer
+mock for compatibility tests; never route production command apply through the old writer to satisfy
+test interception.
 
 - [ ] **Step 3: Run RED orchestration tests**
 
