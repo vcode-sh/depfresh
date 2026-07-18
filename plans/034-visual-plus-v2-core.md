@@ -780,7 +780,7 @@ Implement Task 4 in two reviewed slices: first the frozen legacy selection-evide
 integration projection, then the CLI route/output/signal migration. Do not start the route slice
 until the evidence slice has focused tests and independent review.
 
-- [ ] **Step 1: Write default-output RED journeys**
+- [x] **Step 1: Write default-output RED journeys**
 
 Assert normal `checkFromCli(... output: 'table')` instantiates Visual+, while JSON, silent, direct
 library `check()`, and explicit interactive selection preserve their documented paths. Assert each
@@ -793,12 +793,12 @@ shared-target vetoes, select the unchanged legacy route; observer-before-preflig
 zero mutation; canonical receipt reuse; no selection reconstruction; one timer/cursor owner; no
 ANSI in JSON; no bytes in silent; library callback compatibility; and interactive TUI ownership.
 
-- [ ] **Step 2: Run integration RED tests**
+- [x] **Step 2: Run integration RED tests**
 
 Run the orchestration/edge/JSON/interactive suites. Expected: FAIL because current tables and
 progress are still written directly.
 
-- [ ] **Step 3: Route human output through one renderer**
+- [x] **Step 3: Route human output through one renderer**
 
 Subscribe Visual+ at command start, emit durable review after resolution/selection, update the
 single command transaction rail during apply, and finalize target outcomes after the exit decision
@@ -806,16 +806,31 @@ is known. Suppress old table, summary, per-write warning, and progress output on
 route. Never invent a per-target live phase; targets have exact pending/final result states while
 the command rail owns the active phase.
 
-- [ ] **Step 4: Preserve fallbacks and cleanup**
+- [x] **Step 4: Preserve fallbacks and cleanup**
 
 Plain modes use the same pure sections sequentially. Catch/finally and signals dispose once. JSON
 must contain no ANSI/human lines; silent must remain silent; non-TTY writes the existing structured
 output hint only if it does not obscure the final receipt.
 
-- [ ] **Step 5: Run GREEN integration tests**
+- [x] **Step 5: Run GREEN integration tests**
 
 Expected: all focused suites pass; complete rows/targets/receipt appear once; JSON bytes and library
 callback behavior remain compatible.
+
+**Completion evidence (2026-07-18):** The exact eligible route now starts Visual+ after validation
+with one fixed wall clock, capability snapshot, monotonic controller, stdout writer, unreferenced
+scheduler, and CLI-only signal cleanup. JSON, silent, library, interactive, global/global-all, and
+direct/addon `beforePackageWrite` routes retain legacy behavior. Frozen `createLegacyPlan()`
+evidence drives read-only/write review before apply; result projection reconciles only authoritative
+operation IDs and targets, and Visual+-only physical receipt reconciliation deduplicates shared
+owner projections without changing package, JSON, or callback accounting. Resolver, callback, and
+debug output is contained by one continuous suspension; canonical receipts finalize after
+`run-completed`; renderer errors fail without a fabricated receipt; and `progress.ts` plus its tests
+remain byte-identical. TDD route, signal, and output journeys covered microtask gaps, shared
+operations, vetoes, signals, failures, and fallback ownership. The final independent specification
+and quality reviews reported no Critical, Important, or Minor findings. Fresh aggregate verification
+passed 59 files and 832 tests, typecheck, focused Biome, and the diff check. Implementation commits:
+`eacf8e9`, `be1ee9e`.
 
 ### Task 5: Core renderer verification gate
 
