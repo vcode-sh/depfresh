@@ -23,6 +23,16 @@ interface PorcelainEntry {
   originalPath?: string
 }
 
+type TrackedTargetResult =
+  | { ok: true; paths: Set<string> }
+  | {
+      ok: false
+      code: 'VCS_EXECUTABLE_MISSING' | 'VCS_OUTPUT_LIMIT_EXCEEDED' | 'VCS_PROBE_FAILED'
+    }
+
+const MAX_GIT_OUTPUT_BYTES = 1024 * 1024
+const MAX_GIT_ARGUMENT_BYTES = 64 * 1024
+
 export function collectVcsEvidence(
   root: string,
   targetPaths: readonly string[],
@@ -136,8 +146,10 @@ export function collectVcsEvidence(
   })
   const explicitTargets = new Set(targetPaths)
   const cleanTargets = new Set(options.cleanTargetPaths ?? targetPaths)
-  const trackedTargets = collectTrackedTargets(binary, common, env, canonicalRoot, gitRoot)
-  if (!trackedTargets) return unavailableVcs('VCS_PROBE_FAILED', diagnosticPath)
+  const trackedTargets = collectTrackedTargets(binary, common, env, canonicalRoot, gitRoot, [
+    ...cleanTargets,
+  ])
+  if (!trackedTargets.ok) return unavailableVcs(trackedTargets.code, diagnosticPath)
   const ignoredTargets = collectIgnoredTargets(binary, common, env, canonicalRoot, gitRoot, [
     ...cleanTargets,
   ])
@@ -167,7 +179,7 @@ export function collectVcsEvidence(
   for (const path of cleanTargets) {
     if (dirtyTargets.has(path)) continue
     if (ignoredTargets.has(path)) targetFiles.push({ path, state: 'ignored' })
-    else if (trackedTargets.has(path)) targetFiles.push({ path, state: 'clean' })
+    else if (trackedTargets.paths.has(path)) targetFiles.push({ path, state: 'clean' })
   }
 
   targetFiles.sort(compareTargetStates)
@@ -246,7 +258,8 @@ function collectIgnoredTargets(
   const gitPaths = targetPaths.flatMap((path) => {
     const gitPath = relative(gitRoot, resolve(root, path))
     if (gitPath === '..' || gitPath.startsWith(`..${sep}`) || isAbsolute(gitPath)) return []
-    return [gitPath.split(sep).join('/')]
+    const normalizedPath = gitPath.split(sep).join('/')
+    return [normalizedPath.startsWith(':') ? `./${normalizedPath}` : normalizedPath]
   })
   if (gitPaths.length === 0) return new Set()
   const result = spawnSync(binary, [...common, 'check-ignore', '-z', '--stdin'], {
@@ -280,23 +293,72 @@ function collectTrackedTargets(
   env: NodeJS.ProcessEnv,
   root: string,
   gitRoot: string,
-): Set<string> | undefined {
-  const result = spawnSync(binary, [...common, 'ls-files', '-z', '--cached', '--full-name'], {
-    cwd: root,
-    env,
-    encoding: 'buffer',
-  })
-  if (result.error || result.status !== 0 || !Buffer.isBuffer(result.stdout)) return undefined
-  return new Set(
-    result.stdout
-      .toString('utf-8')
-      .split('\0')
-      .flatMap((path) => {
-        if (!path) return []
-        const repositoryPath = gitPathToRepositoryPath(root, gitRoot, path)
-        return repositoryPath ? [repositoryPath] : []
+  targetPaths: string[],
+): TrackedTargetResult {
+  const pathspecs = [
+    ...new Set(
+      targetPaths.flatMap((path) => {
+        const gitPath = relative(gitRoot, resolve(root, path))
+        if (gitPath === '..' || gitPath.startsWith(`..${sep}`) || isAbsolute(gitPath)) return []
+        return [`:(top,literal)${gitPath.split(sep).join('/')}`]
       }),
-  )
+    ),
+  ]
+  if (pathspecs.length === 0) return { ok: true, paths: new Set() }
+
+  const batches: string[][] = []
+  let batch: string[] = []
+  let batchBytes = 0
+  for (const pathspec of pathspecs) {
+    const argumentBytes = Buffer.byteLength(pathspec, 'utf-8') + 1
+    if (argumentBytes > MAX_GIT_ARGUMENT_BYTES) return { ok: false, code: 'VCS_PROBE_FAILED' }
+    if (batch.length > 0 && batchBytes + argumentBytes > MAX_GIT_ARGUMENT_BYTES) {
+      batches.push(batch)
+      batch = []
+      batchBytes = 0
+    }
+    batch.push(pathspec)
+    batchBytes += argumentBytes
+  }
+  if (batch.length > 0) batches.push(batch)
+
+  const paths = new Set<string>()
+  for (const targetBatch of batches) {
+    const result = spawnSync(
+      binary,
+      [...common, 'ls-files', '-z', '--cached', '--full-name', '--', ...targetBatch],
+      {
+        cwd: root,
+        env,
+        encoding: 'buffer',
+        maxBuffer: MAX_GIT_OUTPUT_BYTES,
+      },
+    )
+    if (result.error) {
+      if (isMissingExecutable(result.error)) {
+        return { ok: false, code: 'VCS_EXECUTABLE_MISSING' }
+      }
+      return {
+        ok: false,
+        code: isOutputLimitExceeded(result.error)
+          ? 'VCS_OUTPUT_LIMIT_EXCEEDED'
+          : 'VCS_PROBE_FAILED',
+      }
+    }
+    if (result.status !== 0 || !Buffer.isBuffer(result.stdout)) {
+      return { ok: false, code: 'VCS_PROBE_FAILED' }
+    }
+    for (const path of result.stdout.toString('utf-8').split('\0')) {
+      if (!path) continue
+      const repositoryPath = gitPathToRepositoryPath(root, gitRoot, path)
+      if (repositoryPath) paths.add(repositoryPath)
+    }
+  }
+  return { ok: true, paths }
+}
+
+function isOutputLimitExceeded(error: Error): boolean {
+  return 'code' in error && error.code === 'ENOBUFS'
 }
 
 function parsePorcelain(output: Buffer): PorcelainEntry[] {

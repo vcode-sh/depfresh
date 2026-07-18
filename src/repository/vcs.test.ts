@@ -43,6 +43,20 @@ function runGit(cwd: string, ...args: string[]): string {
   })
 }
 
+function addSyntheticTrackedPaths(root: string, paths: string[]): void {
+  const blob = runGit(root, 'rev-parse', 'HEAD:package.json').trimEnd()
+  const indexInfo = paths.map((path) => `100644 ${blob}\t${path}\n`).join('')
+  execFileSync('git', ['update-index', '--index-info'], {
+    cwd: root,
+    input: indexInfo,
+    env: process.env,
+  })
+  for (let index = 0; index < paths.length; index += 200) {
+    runGit(root, 'update-index', '--skip-worktree', '--', ...paths.slice(index, index + 200))
+  }
+  runGit(root, 'commit', '--quiet', '-m', 'large tracked index')
+}
+
 function initialize(root: string): void {
   runGit(root, 'init', '--quiet', '--initial-branch=main')
   write(join(root, 'package.json'), '{"name":"root"}\n')
@@ -99,6 +113,139 @@ afterEach(() => {
 })
 
 describe('read-only repository VCS evidence', () => {
+  it('classifies an exact clean target when the tracked index exceeds the output limit', () => {
+    const root = temporaryRoot()
+    initialize(root)
+    runGit(root, 'add', '--', 'package.json')
+    runGit(root, 'commit', '--quiet', '-m', 'base')
+    const syntheticPaths = Array.from({ length: 4_700 }, (_, index) => {
+      const suffix = `${String(index).padStart(4, '0')}-${'x'.repeat(210)}.json`
+      return `large-index/${suffix}`
+    })
+    addSyntheticTrackedPaths(root, syntheticPaths)
+    const trackedOutput = execFileSync('git', ['ls-files', '-z'], {
+      cwd: root,
+      encoding: 'buffer',
+      maxBuffer: 2 * 1024 * 1024,
+    })
+    const repositoryIndexPath = indexPath(root)
+    const indexBefore = readFileSync(repositoryIndexPath)
+    const packageBefore = readFileSync(join(root, 'package.json'))
+
+    expect(trackedOutput.byteLength).toBeGreaterThan(1024 * 1024)
+
+    const evidence = collectVcsEvidence(root, ['package.json'])
+
+    expect(evidence).toMatchObject({
+      status: 'confirmed',
+      targetFiles: [{ path: 'package.json', state: 'clean' }],
+    })
+    expect(readFileSync(repositoryIndexPath)).toEqual(indexBefore)
+    expect(readFileSync(join(root, 'package.json'))).toEqual(packageBefore)
+  })
+
+  it('treats hostile exact targets literally and classifies only requested files', () => {
+    const root = temporaryRoot()
+    initialize(root)
+    const targets = ['-dash.json', ':(glob)*.json', 'żółć-東京.json', 'line\nbreak.json']
+    for (const target of [...targets, 'unrequested.json']) {
+      write(join(root, target), `${target}\n`)
+    }
+    runGit(root, 'add', '--all')
+    runGit(root, 'commit', '--quiet', '-m', 'hostile targets')
+    const repositoryIndexPath = indexPath(root)
+    const indexBefore = readFileSync(repositoryIndexPath)
+
+    const evidence = collectVcsEvidence(root, targets)
+
+    expect(evidence).toMatchObject({ status: 'confirmed' })
+    expect(evidence.targetFiles).toEqual(
+      targets
+        .map((path) => ({ path, state: 'clean' }))
+        .sort((left, right) => left.path.localeCompare(right.path)),
+    )
+    expect(readFileSync(repositoryIndexPath)).toEqual(indexBefore)
+  })
+
+  it('splits tracked target probes below the deterministic argument-byte limit', () => {
+    const root = temporaryRoot()
+    initialize(root)
+    runGit(root, 'add', '--', 'package.json')
+    runGit(root, 'commit', '--quiet', '-m', 'base')
+    const invocationLog = join(root, 'ls-files-invocations.log')
+    const gitWrapper = join(root, 'git-wrapper.mjs')
+    write(
+      gitWrapper,
+      `#!/usr/bin/env node
+import { appendFileSync } from 'node:fs'
+import { spawnSync } from 'node:child_process'
+
+const args = process.argv.slice(2)
+const commandIndex = args.indexOf('ls-files')
+if (commandIndex !== -1) {
+  const separatorIndex = args.lastIndexOf('--')
+  const targets = separatorIndex === -1 ? [] : args.slice(separatorIndex + 1)
+  const argumentBytes = targets.reduce((total, target) => total + Buffer.byteLength(target) + 1, 0)
+  appendFileSync(${JSON.stringify(invocationLog)}, String(argumentBytes) + '\\n')
+  if (argumentBytes > 64 * 1024) process.exit(91)
+}
+
+const result = spawnSync('git', args, { stdio: 'inherit' })
+process.exit(result.status ?? 1)
+`,
+    )
+    chmodSync(gitWrapper, 0o755)
+    const targets = [
+      'package.json',
+      ...Array.from(
+        { length: 1_100 },
+        (_, index) => `missing/${String(index).padStart(4, '0')}-${'x'.repeat(60)}.json`,
+      ),
+    ]
+
+    const evidence = collectVcsEvidence(root, targets, { gitBinary: gitWrapper })
+
+    expect(evidence).toMatchObject({
+      status: 'confirmed',
+      targetFiles: [{ path: 'package.json', state: 'clean' }],
+    })
+    const invocationBytes = readFileSync(invocationLog, 'utf-8').trimEnd().split('\n').map(Number)
+    expect(invocationBytes.length).toBeGreaterThan(1)
+    expect(invocationBytes.every((bytes) => bytes <= 64 * 1024)).toBe(true)
+  })
+
+  it('reports a bounded diagnostic when exact tracked output exceeds the limit', () => {
+    const root = temporaryRoot()
+    initialize(root)
+    runGit(root, 'add', '--', 'package.json')
+    runGit(root, 'commit', '--quiet', '-m', 'base')
+    const gitWrapper = join(root, 'oversized-git-wrapper.mjs')
+    write(
+      gitWrapper,
+      `#!/usr/bin/env node
+import { spawnSync } from 'node:child_process'
+
+const args = process.argv.slice(2)
+if (args.includes('ls-files')) {
+  process.stdout.write(Buffer.alloc(2 * 1024 * 1024, 97))
+} else {
+  const result = spawnSync('git', args, { stdio: 'inherit' })
+  process.exit(result.status ?? 1)
+}
+`,
+    )
+    chmodSync(gitWrapper, 0o755)
+    const indexBefore = readFileSync(indexPath(root))
+
+    const evidence = collectVcsEvidence(root, ['package.json'], { gitBinary: gitWrapper })
+
+    expect(evidence).toMatchObject({ status: 'unavailable', targetFiles: [] })
+    expect(evidence.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
+      'VCS_OUTPUT_LIMIT_EXCEEDED',
+    ])
+    expect(readFileSync(indexPath(root))).toEqual(indexBefore)
+  })
+
   it('distinguishes a non-repository, missing Git binary, and shallow repository', async () => {
     const plain = temporaryRoot()
     write(join(plain, 'package.json'), '{"name":"plain"}\n')
