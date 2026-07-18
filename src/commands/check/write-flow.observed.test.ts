@@ -14,6 +14,11 @@ import { applyPackageWrite } from './write-flow'
 
 const createGlobalApplyPlanMock = vi.hoisted(() => vi.fn())
 const applyGlobalPlanMock = vi.hoisted(() => vi.fn())
+const collectVcsEvidenceMock = vi.hoisted(() => vi.fn())
+
+vi.mock('../../repository/vcs', () => ({
+  collectVcsEvidence: collectVcsEvidenceMock,
+}))
 
 vi.mock('../../io/global', () => ({
   getGlobalWriteTargets: vi.fn((pkg: PackageMeta, name: string) => {
@@ -84,6 +89,12 @@ describe('applyPackageWrite observed outcome accounting', () => {
   beforeEach(() => {
     tmpDir = mkdtempSync(join(tmpdir(), 'depfresh-write-flow-observed-'))
     vi.clearAllMocks()
+    collectVcsEvidenceMock.mockReturnValue({
+      status: 'unavailable',
+      targetFiles: [],
+      unrelatedDirtyPaths: [],
+      diagnostics: [{ code: 'VCS_NOT_REPOSITORY', path: '.' }],
+    })
     createGlobalApplyPlanMock.mockImplementation((requests: unknown[]) => ({ requests }))
   })
 
@@ -129,6 +140,40 @@ describe('applyPackageWrite observed outcome accounting', () => {
     })
     expect(parsed.dependencies.first).toBe('1.0.0')
     expect(parsed.dependencies.second).toBe('1.5.0')
+  })
+
+  it('retains the exact diagnostic for an unavailable VCS preflight', async () => {
+    const filepath = join(tmpDir, 'package.json')
+    writeFileSync(filepath, '{"dependencies":{"shared":"1.0.0"}}\n')
+    collectVcsEvidenceMock.mockReturnValue({
+      status: 'unavailable',
+      targetFiles: [],
+      unrelatedDirtyPaths: [],
+      diagnostics: [{ code: 'VCS_OUTPUT_LIMIT_EXCEEDED', path: 'package.json' }],
+    })
+    const pkg: PackageMeta = {
+      name: 'fixture',
+      type: 'package.json',
+      filepath,
+      deps: [],
+      resolved: [],
+      raw: {},
+      indent: '  ',
+    }
+
+    const result = await applyPackageWrite(
+      pkg,
+      [makeChange()],
+      options,
+      authority,
+      createLogger('silent'),
+    )
+
+    expect(result.outcomes[0]).toMatchObject({ status: 'unknown', reason: 'VCS_UNAVAILABLE' })
+    expect(result.diagnostics).toEqual([
+      { code: 'VCS_OUTPUT_LIMIT_EXCEEDED', path: 'package.json' },
+    ])
+    expect(readFileSync(filepath, 'utf8')).toBe('{"dependencies":{"shared":"1.0.0"}}\n')
   })
 
   it('reports mixed global manager states individually without claiming a transaction', async () => {

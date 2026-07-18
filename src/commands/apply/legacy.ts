@@ -7,6 +7,7 @@ import {
   createRepositoryFingerprint,
   hashExactBytes,
 } from '../../contracts/fingerprint'
+import { sanitizeContractText } from '../../contracts/sanitize'
 import type { PlanResult } from '../../contracts/schemas'
 import { assertPlanResult } from '../../contracts/validate'
 import {
@@ -20,10 +21,29 @@ import type {
   CatalogSource,
   InvocationAuthority,
   PackageMeta,
+  RepositoryDiagnosticCode,
   ResolvedDepChange,
   WriteOutcome,
 } from '../../types'
 import { apply } from './index'
+
+export interface LegacyWriteDiagnostic {
+  code: RepositoryDiagnosticCode
+  path: string
+}
+
+export interface LegacyPackageApplyResult {
+  outcomes: WriteOutcome[]
+  diagnostics: LegacyWriteDiagnostic[]
+}
+
+const LEGACY_VCS_DIAGNOSTIC_CODES: ReadonlySet<string> = new Set([
+  'VCS_EXECUTABLE_MISSING',
+  'VCS_NOT_REPOSITORY',
+  'VCS_OUTPUT_LIMIT_EXCEEDED',
+  'VCS_PROBE_FAILED',
+  'VCS_PROBE_DISABLED',
+] satisfies RepositoryDiagnosticCode[])
 
 interface LegacyOperationInput {
   filepath: string
@@ -38,22 +58,25 @@ export async function applyLegacyPackageWrite(
   changes: ResolvedDepChange[],
   _loglevel: 'silent' | 'info' | 'debug',
   authority: InvocationAuthority,
-): Promise<WriteOutcome[]> {
+): Promise<LegacyPackageApplyResult> {
   const collected = collectInputs(pkg, changes)
-  if (!collected.ok) return collected.outcomes
+  if (!collected.ok) return { outcomes: collected.outcomes, diagnostics: [] }
   const { inputs } = collected
   const root = commonRoot(inputs.map((input) => input.filepath))
   const plan = createLegacyPlan(root, inputs)
   const result = await apply(plan, { cwd: root }, authority)
-  return result.operations.map((operation) => ({
-    name: operation.name,
-    occurrence: { file: resolve(root, operation.file), path: [...operation.path] },
-    expectedValue: operation.expectedValue,
-    requestedValue: operation.requestedValue,
-    ...(operation.observedValue === undefined ? {} : { observedValue: operation.observedValue }),
-    status: operation.status,
-    reason: toLegacyReason(operation.reason),
-  }))
+  return {
+    outcomes: result.operations.map((operation) => ({
+      name: operation.name,
+      occurrence: { file: resolve(root, operation.file), path: [...operation.path] },
+      expectedValue: operation.expectedValue,
+      requestedValue: operation.requestedValue,
+      ...(operation.observedValue === undefined ? {} : { observedValue: operation.observedValue }),
+      status: operation.status,
+      reason: toLegacyReason(operation.reason),
+    })),
+    diagnostics: toLegacyDiagnostics(plan.vcs.diagnostics),
+  }
 }
 
 function collectInputs(
@@ -314,9 +337,23 @@ function toLegacyReason(reason: string): WriteOutcome['reason'] {
     'READ_FAILED',
     'PARSE_FAILED',
     'WRITE_FAILED',
+    'VCS_UNAVAILABLE',
     'OBSERVATION_FAILED',
   ]
   return known.includes(reason as WriteOutcome['reason'])
     ? (reason as WriteOutcome['reason'])
     : 'WRITE_FAILED'
+}
+
+function toLegacyDiagnostics(
+  diagnostics: PlanResult['vcs']['diagnostics'],
+): LegacyWriteDiagnostic[] {
+  return diagnostics.flatMap((diagnostic) => {
+    if (!isLegacyVcsDiagnosticCode(diagnostic.code)) return []
+    return [{ code: diagnostic.code, path: sanitizeContractText(diagnostic.path) }]
+  })
+}
+
+function isLegacyVcsDiagnosticCode(code: string): code is RepositoryDiagnosticCode {
+  return LEGACY_VCS_DIAGNOSTIC_CODES.has(code)
 }

@@ -13,17 +13,21 @@ import type {
 } from '../../types'
 import { summarizeWriteOutcomes } from '../../types'
 import type { Logger } from '../../utils/logger'
-import { applyLegacyPackageWrite } from '../apply/legacy'
+import { applyLegacyPackageWrite, type LegacyWriteDiagnostic } from '../apply/legacy'
 
 export interface PackageWriteResult extends WriteOutcomeSummary {
   outcomes: WriteOutcome[]
+  diagnostics: LegacyWriteDiagnostic[]
   didWrite: boolean
   globalResult?: GlobalApplyResult
 }
 
-function resultFromOutcomes(outcomes: WriteOutcome[]): PackageWriteResult {
+function resultFromOutcomes(
+  outcomes: WriteOutcome[],
+  diagnostics: LegacyWriteDiagnostic[] = [],
+): PackageWriteResult {
   const summary = summarizeWriteOutcomes(outcomes)
-  return { ...summary, outcomes, didWrite: summary.applied > 0 }
+  return { ...summary, outcomes, diagnostics, didWrite: summary.applied > 0 }
 }
 
 export async function verifyAndWrite(
@@ -79,9 +83,8 @@ export async function applyPackageWrite(
     return applyGlobalWrites(pkg, changes, options, authority, logger)
   }
 
-  return resultFromOutcomes(
-    await applyLegacyPackageWrite(pkg, changes, options.loglevel, authority),
-  )
+  const result = await applyLegacyPackageWrite(pkg, changes, options.loglevel, authority)
+  return resultFromOutcomes(result.outcomes, result.diagnostics)
 }
 
 async function applyGlobalWrites(

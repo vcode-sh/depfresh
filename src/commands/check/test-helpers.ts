@@ -206,8 +206,8 @@ export async function setupMocks(): Promise<CheckMocks> {
   const occurrenceModule = await import('../../io/write/occurrence')
   const writePackageMock = physicalWriteMock
 
-  writePackageMock.mockImplementation((pkg: PackageMeta, changes: ResolvedDepChange[]) =>
-    changes.map((change) => ({
+  writePackageMock.mockImplementation((pkg: PackageMeta, changes: ResolvedDepChange[]) => ({
+    outcomes: changes.map((change) => ({
       name: change.name,
       occurrence: { file: pkg.filepath, path: [change.source, ...change.parents, change.name] },
       expectedValue: change.rawVersion ?? change.currentVersion,
@@ -216,15 +216,16 @@ export async function setupMocks(): Promise<CheckMocks> {
       status: 'applied',
       reason: 'APPLIED',
     })),
-  )
+    diagnostics: [],
+  }))
   ;(occurrenceModule.observeFileOccurrence as ReturnType<typeof vi.fn>).mockImplementation(() => {
     const lastResult = writePackageMock.mock.results.at(-1)?.value as
-      | Array<{ expectedValue: string }>
+      | { outcomes: Array<{ expectedValue: string }> }
       | undefined
     return {
       known: true,
-      version: lastResult?.[0]?.expectedValue,
-      value: lastResult?.[0]?.expectedValue,
+      version: lastResult?.outcomes[0]?.expectedValue,
+      value: lastResult?.outcomes[0]?.expectedValue,
     }
   })
 

@@ -1923,6 +1923,36 @@ exit 17`,
     expect(readFileSync(join(root, 'package.json'), 'utf8')).toBe(first)
   })
 
+  it('preserves unavailable VCS preflight as an unknown operation', async () => {
+    const root = temporaryRoot('depfresh-apply-vcs-unavailable-')
+    const content = '{"dependencies":{"alpha":"1.0.0"}}\n'
+    writeFileSync(join(root, 'package.json'), content)
+    const plan = makePlan(
+      [
+        {
+          file: 'package.json',
+          content,
+          path: ['dependencies', 'alpha'],
+          name: 'alpha',
+          expectedValue: '1.0.0',
+          requestedValue: '2.0.0',
+        },
+      ],
+      {
+        status: 'unavailable',
+        targetFiles: [],
+        unrelatedDirtyPaths: [],
+        diagnostics: [{ code: 'VCS_OUTPUT_LIMIT_EXCEEDED', path: 'package.json' }],
+      },
+    )
+
+    const result = await apply(plan, { cwd: root }, authority)
+
+    expect(result.status).toBe('unknown')
+    expect(result.operations[0]).toMatchObject({ status: 'unknown', reason: 'VCS_UNAVAILABLE' })
+    expect(readFileSync(join(root, 'package.json'), 'utf8')).toBe(content)
+  })
+
   it('blocks a dirty target but ignores and preserves unrelated dirt', async () => {
     const cleanRoot = temporaryRoot('depfresh-apply-unrelated-')
     const content = '{"dependencies":{"alpha":"1.0.0"}}\n'

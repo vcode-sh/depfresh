@@ -15,6 +15,7 @@ export type WriteOutcomeReason =
   | 'READ_FAILED'
   | 'PARSE_FAILED'
   | 'WRITE_FAILED'
+  | 'VCS_UNAVAILABLE'
   | 'OBSERVATION_FAILED'
   | 'VERIFICATION_FAILED'
   | 'RESTORE_FAILED'
