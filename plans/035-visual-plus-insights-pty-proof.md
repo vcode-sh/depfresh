@@ -237,7 +237,7 @@ export interface MajorBlastRadius {
   duplicate-occurrence, conflicting-source, unsafe-path, mixed-age, mixed-compatibility, and
   deep-freeze assertions.
 
-- [ ] **Step 1: Write insight RED tests**
+- [x] **Step 1: Write insight RED tests**
 
 Build the deterministic synthetic fixture above. Assert exact topology, `3/37/36` distribution,
 `6 + 14*5` owner impact, 14 physical targets, `18/39` shared identities/occurrences, catalog-owner
@@ -256,13 +256,13 @@ export interface VisualPlusInsights {
 }
 ```
 
-- [ ] **Step 2: Run insight RED tests**
+- [x] **Step 2: Run insight RED tests**
 
 Run: `pnpm exec vitest run src/commands/check/visual-plus/insights.test.ts`
 
 Expected: FAIL because the insight builder does not exist.
 
-- [ ] **Step 3: Retain exact relationship inputs in the run model**
+- [x] **Step 3: Retain exact relationship inputs in the run model**
 
 First extend `LegacySelectionEvidenceOperation`, then project it through
 `VisualPlusSelectionProjection`, and finally retain it in optional `CheckRunChange.insight`. Add the
@@ -272,7 +272,7 @@ the full cross-field coherence matrix, source-ID/path bijection, catalog ID form
 assignment, transitional metadata equality, and a byte-for-byte regression for every existing
 public JSON result. Do not expose absolute paths or add JSON/schema fields.
 
-- [ ] **Step 4: Implement deterministic insight builders**
+- [x] **Step 4: Implement deterministic insight builders**
 
 Validate and deep-freeze the authoritative evidence before grouping. Group shared surfaces by exact
 dependency ID and distinct physical occurrence key, owners by owner ID, and majors by exact
@@ -280,7 +280,7 @@ dependency ID/current/target. Use the ordering and aggregation rules above. Comp
 from selected operations while retaining numeric labels. Never infer identity, age, catalog
 ownership, or runtime compatibility from display metadata.
 
-- [ ] **Step 5: Run insight GREEN tests**
+- [x] **Step 5: Run insight GREEN tests**
 
 Run insight and run-model tests, typecheck, and focused Biome. Expected: exact fixture counts and
 stable order pass.

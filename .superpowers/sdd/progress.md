@@ -154,3 +154,13 @@ focused matrix passed three times at 16 files and 281 tests. Isolated full cover
 and 1,976 tests; schema, typecheck, Biome over 337 files, build, 35-check smoke, 14-check demo, 102
 release tests, 56-file packed verification, three stable declaration builds, and final independent
 C0/I0/M0 reviews all passed. Plan 034 is DONE; Plan 035 is next.
+Plan 035 Task 1: complete through d56d282 after the reviewed relationship contract in 5706631 and
+lossless evidence chain in cc09845. One shared package-private validator now preserves exact
+dependency, source, manifest/catalog owner, occurrence, age, compatibility, and canonical owner
+order evidence from legacy selection through the immutable run snapshot and Visual+ boundary,
+without public JSON/schema drift. The pure builder derives the exact 66/616/612/76/14 topology,
+3/37/36 distribution, 15 owner impacts, 18 shared identities/39 occurrences, and two major cards
+from copied authoritative evidence. RED/GREEN waves closed missing insight, metadata divergence,
+validator drift, catalog ownership, fixture topology, ordering, collision, mixed-evidence, and
+alias-freeze gaps. Final focused gates passed 208/208 tests with typecheck, Biome, diff checks, and
+independent spec plus quality reviews at C0/I0/M0. Task 2 functional map rendering is next.
