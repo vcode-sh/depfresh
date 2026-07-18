@@ -38,6 +38,7 @@ export interface CheckRunCounts {
   readonly packages: number
   readonly declared: number
   readonly eligible: number
+  readonly unresolved: number
   readonly updates: number
   readonly operations: number
   readonly targets: number
@@ -73,6 +74,35 @@ export interface CheckRunResultTotals {
   readonly unknown: number
 }
 
+export type CheckRunOperationOutcome =
+  | 'applied'
+  | 'blocked'
+  | 'not-attempted'
+  | 'failed'
+  | 'reverted'
+  | 'unknown'
+
+export interface CheckRunOperationResult {
+  readonly operationId: string
+  readonly outcome: CheckRunOperationOutcome
+  readonly blocked: boolean
+  readonly notAttempted: boolean
+  readonly unknown: boolean
+}
+
+export interface CheckRunTargetResult {
+  readonly path: string
+  readonly operationIds: readonly string[]
+  readonly outcome: CheckRunOperationOutcome
+}
+
+export interface CheckRunResults {
+  readonly operations: readonly CheckRunOperationResult[]
+  readonly targets: readonly CheckRunTargetResult[]
+  readonly totals: CheckRunResultTotals
+  readonly targetTotals: CheckRunResultTotals
+}
+
 export interface CheckRunRecovery {
   readonly status: CheckRunRecoveryStatus
   readonly journalId?: string
@@ -95,7 +125,7 @@ export interface CheckRunSnapshot {
   readonly changes: readonly CheckRunChange[]
   readonly targets: readonly CheckRunTarget[]
   readonly diagnostics: readonly CheckRunDiagnostic[]
-  readonly results: CheckRunResultTotals
+  readonly results: CheckRunResults
   readonly recovery: CheckRunRecovery
   readonly elapsedMs: number | null
   readonly exitCode: 0 | 1 | 2 | null
@@ -118,6 +148,7 @@ export type CheckRunEvent =
   | {
       readonly type: 'resolution-completed'
       readonly eligible: number
+      readonly unresolved: number
       readonly updates: number
       readonly status?: CheckRunTerminalPhaseStatus
     }
@@ -125,8 +156,8 @@ export type CheckRunEvent =
       readonly type: 'selection-completed'
       readonly operations: number
       readonly targets: number
-      readonly changes?: readonly CheckRunChange[]
-      readonly selectedTargets?: readonly CheckRunTarget[]
+      readonly changes: readonly CheckRunChange[]
+      readonly selectedTargets: readonly CheckRunTarget[]
     }
   | {
       readonly type: 'phase-completed'
@@ -140,7 +171,8 @@ export type CheckRunEvent =
     }
   | {
       readonly type: 'results-recorded'
-      readonly totals: CheckRunResultTotals
+      readonly operations: readonly CheckRunOperationResult[]
+      readonly targets: readonly CheckRunTargetResult[]
     }
   | {
       readonly type: 'recovery-recorded'
@@ -171,6 +203,8 @@ const PHASE_NAMES = [
   'complete',
 ] as const satisfies readonly CheckRunPhaseName[]
 
+const PHASE_NAME_SET = new Set<CheckRunPhaseName>(PHASE_NAMES)
+
 const TERMINAL_PHASE_STATUSES = new Set<CheckRunTerminalPhaseStatus>([
   'passed',
   'skipped',
@@ -178,6 +212,24 @@ const TERMINAL_PHASE_STATUSES = new Set<CheckRunTerminalPhaseStatus>([
   'failed',
   'unknown',
 ])
+
+const OPERATION_OUTCOMES = new Set<CheckRunOperationOutcome>([
+  'applied',
+  'blocked',
+  'not-attempted',
+  'failed',
+  'reverted',
+  'unknown',
+])
+
+const RECOVERY_STATUSES = new Set<CheckRunRecoveryStatus>([
+  'not-needed',
+  'completed',
+  'partial',
+  'unknown',
+])
+
+const CHANGE_DIFFS = new Set<CheckRunChange['diff']>(['major', 'minor', 'patch', 'none', 'unknown'])
 
 const BAD_STATUS_RANK: Readonly<Record<CheckRunFinalStatus, number>> = {
   passed: 0,
@@ -208,7 +260,7 @@ export function createCheckRunState(options: {
     changes: [],
     targets: [],
     diagnostics: [],
-    results: emptyResults(),
+    results: emptyRunResults(),
     recovery: {
       status: 'not-needed',
       restoredPaths: [],
@@ -267,23 +319,32 @@ function completeResolution(
   state: CheckRunSnapshot,
   event: Extract<CheckRunEvent, { type: 'resolution-completed' }>,
 ): CheckRunSnapshot {
+  const inspected = activateResolution(state.phases)
   assertCount('eligible', event.eligible)
+  assertCount('unresolved', event.unresolved)
   assertCount('updates', event.updates)
   assertNotReduced('eligible', state.counts.eligible, event.eligible)
+  assertNotReduced('unresolved', state.counts.unresolved, event.unresolved)
   assertNotReduced('updates', state.counts.updates, event.updates)
   if (event.eligible > state.counts.declared) {
-    throw new CheckRunInvariantError('eligible count cannot exceed declared count')
+    throw new CheckRunInvariantError('eligible count cannot exceed declared occurrences')
   }
-  if (event.updates > event.eligible) {
-    throw new CheckRunInvariantError('updates count cannot exceed eligible count')
+  if (event.updates + event.unresolved > event.eligible) {
+    throw new CheckRunInvariantError(
+      'updates and unresolved counts cannot exceed eligible occurrences',
+    )
   }
   const status = event.status ?? 'passed'
   assertTerminalStatus(status)
-  const inspected = activateResolution(state.phases)
   const phases = completeAndAdvance(inspected, 'resolve', status, state.write)
   return acceptedTerminal(state, event, {
     phases,
-    counts: { ...state.counts, eligible: event.eligible, updates: event.updates },
+    counts: {
+      ...state.counts,
+      eligible: event.eligible,
+      unresolved: event.unresolved,
+      updates: event.updates,
+    },
   })
 }
 
@@ -316,8 +377,8 @@ function completeSelection(
   return acceptedTerminal(state, event, {
     phases,
     counts: { ...state.counts, operations: event.operations, targets: event.targets },
-    changes: inventory?.changes ?? state.changes,
-    targets: inventory?.targets ?? state.targets,
+    changes: inventory.changes,
+    targets: inventory.targets,
   })
 }
 
@@ -325,12 +386,35 @@ function completePhase(
   state: CheckRunSnapshot,
   event: Extract<CheckRunEvent, { type: 'phase-completed' }>,
 ): CheckRunSnapshot {
+  assertPhaseName(event.phase)
   assertTerminalStatus(event.status)
   if (event.phase === 'complete') {
     throw new CheckRunInvariantError('complete phase requires run-completed')
   }
+  if (
+    event.status === 'passed' &&
+    (event.phase === 'discover' || event.phase === 'resolve' || event.phase === 'review')
+  ) {
+    throw new CheckRunInvariantError(`${event.phase} success requires ${factEvent(event.phase)}`)
+  }
+  if (event.phase === 'resolve' && phaseStatus(state.phases, 'inspect') === 'active') {
+    const phases = setPhaseStatus(
+      setPhaseStatus(state.phases, 'inspect', 'skipped'),
+      'resolve',
+      'active',
+    )
+    return acceptedTerminal(state, event, {
+      phases: completeAndAdvance(phases, 'resolve', event.status, state.write),
+    })
+  }
   const phases = completeAndAdvance(state.phases, event.phase, event.status, state.write)
   return acceptedTerminal(state, event, { phases })
+}
+
+function factEvent(phase: 'discover' | 'resolve' | 'review'): string {
+  if (phase === 'discover') return 'packages-discovered'
+  if (phase === 'resolve') return 'resolution-completed'
+  return 'selection-completed'
 }
 
 function recordResults(
@@ -340,8 +424,8 @@ function recordResults(
   if (phaseStatus(state.phases, 'complete') !== 'active') {
     throw new CheckRunInvariantError('results can only be recorded during complete')
   }
-  assertResults(event.totals, state.counts.operations)
-  return acceptedTerminal(state, event, { results: { ...event.totals } })
+  const results = copyAndValidateResults(state, event)
+  return acceptedTerminal(state, event, { results })
 }
 
 function recordRecovery(
@@ -360,6 +444,7 @@ function completeRun(
 ): CheckRunSnapshot {
   assertCount('elapsed milliseconds', event.elapsedMs)
   assertEventId(event.eventId)
+  if (event.status !== undefined) assertFinalStatus(event.status)
   assertPhase(state.phases, 'complete', 'active')
   if (!hasTerminalEvent(state, 'results-recorded')) {
     throw new CheckRunInvariantError('results must be recorded before completion')
@@ -396,8 +481,16 @@ function completeAndAdvance(
       ? setPhaseStatus(completed, 'inspect', 'active')
       : finishWithoutMutation(completed, ['inspect', 'resolve', 'review', ...writePhases()])
   }
-  if (phase === 'inspect') return setPhaseStatus(completed, 'resolve', 'active')
-  if (phase === 'resolve') return setPhaseStatus(completed, 'review', 'active')
+  if (phase === 'inspect') {
+    return status === 'passed'
+      ? setPhaseStatus(completed, 'resolve', 'active')
+      : finishWithoutMutation(completed, ['resolve', 'review', ...writePhases()])
+  }
+  if (phase === 'resolve') {
+    return status === 'passed'
+      ? setPhaseStatus(completed, 'review', 'active')
+      : finishWithoutMutation(completed, ['review', ...writePhases()])
+  }
   if (phase === 'review') {
     return status === 'passed'
       ? advanceFromReview(completed, write)
@@ -449,10 +542,9 @@ function finishWithoutMutation(
 function copyAndValidateInventory(event: Extract<CheckRunEvent, { type: 'selection-completed' }>): {
   readonly changes: readonly CheckRunChange[]
   readonly targets: readonly CheckRunTarget[]
-} | null {
-  if (event.changes === undefined && event.selectedTargets === undefined) return null
-  if (event.changes === undefined || event.selectedTargets === undefined) {
-    throw new CheckRunInvariantError('changes and selected targets must be supplied together')
+} {
+  if (!(Array.isArray(event.changes) && Array.isArray(event.selectedTargets))) {
+    throw new CheckRunInvariantError('complete selection inventories are required')
   }
   if (event.changes.length !== event.operations) {
     throw new CheckRunInvariantError('change inventory must reconcile to selected operations')
@@ -501,6 +593,9 @@ function copyChanges(changes: readonly CheckRunChange[]): readonly CheckRunChang
     assertRelativePath(change.owner)
     assertSafeText('current dependency value', change.current)
     assertSafeText('target dependency value', change.target)
+    if (!CHANGE_DIFFS.has(change.diff)) {
+      throw new CheckRunInvariantError('invalid dependency difference')
+    }
     if (change.ageMs !== undefined) assertCount('change age milliseconds', change.ageMs)
     return { ...change }
   })
@@ -517,12 +612,187 @@ function copyTargets(targets: readonly CheckRunTarget[]): readonly CheckRunTarge
   })
 }
 
+function copyAndValidateResults(
+  state: CheckRunSnapshot,
+  event: Extract<CheckRunEvent, { type: 'results-recorded' }>,
+): CheckRunResults {
+  const operations = event.operations.map((result) => copyOperationResult(result, state.write))
+  assertUnique(
+    operations.map((result) => result.operationId),
+    'operation result identifiers',
+  )
+  if (event.operations.length !== state.counts.operations) {
+    throw new CheckRunInvariantError('operation results must reconcile to selected operations')
+  }
+  if (event.targets.length !== state.counts.targets) {
+    throw new CheckRunInvariantError(
+      'physical target results must reconcile to selected physical targets',
+    )
+  }
+
+  const selectedOperations = new Set(state.changes.map((selected) => selected.id))
+  for (const result of operations) {
+    if (!selectedOperations.has(result.operationId)) {
+      throw new CheckRunInvariantError('operation result is not selected')
+    }
+  }
+  const selectedTargets = new Map(state.targets.map((selected) => [selected.path, selected]))
+  const targets = event.targets.map((result) => copyTargetResult(result))
+  assertUnique(
+    targets.map((result) => result.path),
+    'physical target result paths',
+  )
+  const operationsById = new Map(operations.map((result) => [result.operationId, result]))
+  for (const result of targets) {
+    const selected = selectedTargets.get(result.path)
+    if (!selected) throw new CheckRunInvariantError('physical target result is not selected')
+    if (!sameStrings(result.operationIds, selected.operationIds)) {
+      throw new CheckRunInvariantError('physical target operation membership differs')
+    }
+    assertTargetOutcomeCoherence(result, operationsById)
+  }
+
+  const totals = deriveOperationTotals(operations)
+  assertResultPhaseCoherence(state, totals)
+  return {
+    operations,
+    targets,
+    totals,
+    targetTotals: deriveTargetTotals(targets),
+  }
+}
+
+function copyOperationResult(
+  result: CheckRunOperationResult,
+  write: boolean,
+): CheckRunOperationResult {
+  assertSafeIdentifier('operation result identifier', result.operationId)
+  assertOutcome(result.outcome)
+  assertBoolean('blocked receipt', result.blocked)
+  assertBoolean('not-attempted receipt', result.notAttempted)
+  assertBoolean('unknown receipt', result.unknown)
+  if (result.outcome === 'applied') {
+    if (result.unknown) {
+      throw new CheckRunInvariantError('applied operation cannot also be unknown')
+    }
+    if (result.blocked || result.notAttempted) {
+      throw new CheckRunInvariantError('applied operation cannot retain a safety receipt')
+    }
+    if (!write) throw new CheckRunInvariantError('read-only runs cannot report applied results')
+  }
+  if (result.outcome === 'reverted' || result.outcome === 'failed') {
+    if (result.blocked || result.notAttempted || result.unknown) {
+      throw new CheckRunInvariantError('known final operation cannot retain a safety receipt')
+    }
+  }
+  if (result.outcome === 'blocked' && !result.blocked) {
+    throw new CheckRunInvariantError('blocked operation requires a blocked receipt')
+  }
+  if (result.outcome === 'not-attempted' && !result.notAttempted) {
+    throw new CheckRunInvariantError('not-attempted operation requires its receipt')
+  }
+  if (result.outcome === 'unknown' && !result.unknown) {
+    throw new CheckRunInvariantError('unknown operation requires an unknown receipt')
+  }
+  if (result.blocked && !result.notAttempted) {
+    throw new CheckRunInvariantError('blocked receipt requires not-attempted truth')
+  }
+  return { ...result }
+}
+
+function copyTargetResult(result: CheckRunTargetResult): CheckRunTargetResult {
+  assertRelativePath(result.path)
+  assertOutcome(result.outcome)
+  const operationIds = result.operationIds.map((operationId) => {
+    assertSafeIdentifier('physical target operation identifier', operationId)
+    return operationId
+  })
+  assertUnique(operationIds, 'physical target operation identifiers')
+  return { ...result, operationIds }
+}
+
+function assertTargetOutcomeCoherence(
+  targetResult: CheckRunTargetResult,
+  operationsById: ReadonlyMap<string, CheckRunOperationResult>,
+): void {
+  const operations = targetResult.operationIds.map((operationId) => {
+    const operation = operationsById.get(operationId)
+    if (!operation) throw new CheckRunInvariantError('physical target references a missing result')
+    return operation
+  })
+  if (targetResult.outcome === 'applied' || targetResult.outcome === 'reverted') {
+    if (operations.some((operation) => operation.outcome !== targetResult.outcome)) {
+      throw new CheckRunInvariantError('successful physical target outcome differs from operations')
+    }
+  }
+  if (targetResult.outcome === 'failed') {
+    if (operations.some((operation) => operation.outcome !== 'failed')) {
+      throw new CheckRunInvariantError('failed physical target differs from operations')
+    }
+  }
+  if (targetResult.outcome === 'blocked') {
+    if (operations.some((operation) => !operation.blocked)) {
+      throw new CheckRunInvariantError('blocked physical target differs from operations')
+    }
+  }
+  if (targetResult.outcome === 'unknown') {
+    if (operations.some((operation) => !operation.unknown)) {
+      throw new CheckRunInvariantError('unknown physical target differs from operations')
+    }
+  }
+  if (targetResult.outcome === 'not-attempted' && operations.some((item) => !item.notAttempted)) {
+    throw new CheckRunInvariantError('not-attempted physical target differs from operations')
+  }
+}
+
+function assertResultPhaseCoherence(state: CheckRunSnapshot, totals: CheckRunResultTotals): void {
+  if (
+    phaseStatus(state.phases, 'apply') === 'skipped' &&
+    (totals.applied > 0 || totals.reverted > 0 || totals.failed > 0)
+  ) {
+    throw new CheckRunInvariantError('skipped apply cannot report mutation outcomes')
+  }
+}
+
+function deriveOperationTotals(
+  operations: readonly CheckRunOperationResult[],
+): CheckRunResultTotals {
+  const totals = emptyResults()
+  for (const operation of operations) {
+    if (operation.outcome === 'applied') totals.applied += 1
+    if (operation.outcome === 'failed') totals.failed += 1
+    if (operation.outcome === 'reverted') totals.reverted += 1
+    if (operation.blocked) totals.blocked += 1
+    if (operation.notAttempted) totals.notAttempted += 1
+    if (operation.unknown) totals.unknown += 1
+  }
+  return totals
+}
+
+function deriveTargetTotals(targets: readonly CheckRunTargetResult[]): CheckRunResultTotals {
+  const totals = emptyResults()
+  for (const targetResult of targets) {
+    if (targetResult.outcome === 'applied') totals.applied += 1
+    if (targetResult.outcome === 'blocked') totals.blocked += 1
+    if (targetResult.outcome === 'not-attempted') totals.notAttempted += 1
+    if (targetResult.outcome === 'failed') totals.failed += 1
+    if (targetResult.outcome === 'reverted') totals.reverted += 1
+    if (targetResult.outcome === 'unknown') totals.unknown += 1
+  }
+  return totals
+}
+
+function sameStrings(left: readonly string[], right: readonly string[]): boolean {
+  return left.length === right.length && left.every((value, index) => value === right[index])
+}
+
 function copyDiagnostics(
   diagnostics: readonly CheckRunDiagnostic[],
 ): readonly CheckRunDiagnostic[] {
   return diagnostics.map((diagnostic) => {
+    assertSafeText('diagnostic code', diagnostic.code)
     if (!/^[A-Z][A-Z0-9_]*$/.test(diagnostic.code)) {
-      throw new CheckRunInvariantError(`invalid diagnostic code ${diagnostic.code}`)
+      throw new CheckRunInvariantError('invalid diagnostic code')
     }
     if (diagnostic.path !== undefined) assertRelativePath(diagnostic.path)
     if (diagnostic.detail !== undefined) assertSafeText('diagnostic detail', diagnostic.detail)
@@ -534,6 +804,7 @@ function copyRecovery(
   state: CheckRunSnapshot,
   event: Extract<CheckRunEvent, { type: 'recovery-recorded' }>,
 ): CheckRunRecovery {
+  assertRecoveryStatus(event.status)
   if (event.status === 'not-needed') {
     throw new CheckRunInvariantError('active recovery cannot be recorded as not-needed')
   }
@@ -570,22 +841,31 @@ function copyRecovery(
 }
 
 function emptyCounts(): CheckRunCounts {
-  return { packages: 0, declared: 0, eligible: 0, updates: 0, operations: 0, targets: 0 }
+  return {
+    packages: 0,
+    declared: 0,
+    eligible: 0,
+    unresolved: 0,
+    updates: 0,
+    operations: 0,
+    targets: 0,
+  }
 }
 
-function emptyResults(): CheckRunResultTotals {
+type MutableResultTotals = {
+  -readonly [Key in keyof CheckRunResultTotals]: CheckRunResultTotals[Key]
+}
+
+function emptyResults(): MutableResultTotals {
   return { applied: 0, blocked: 0, notAttempted: 0, failed: 0, reverted: 0, unknown: 0 }
 }
 
-function assertResults(totals: CheckRunResultTotals, operations: number): void {
-  for (const [name, value] of Object.entries(totals)) {
-    assertCount(name, value)
-    if (value > operations) {
-      throw new CheckRunInvariantError(`${name} total cannot exceed selected operations`)
-    }
-  }
-  if (totals.applied + totals.blocked + totals.failed + totals.reverted > operations) {
-    throw new CheckRunInvariantError('exclusive result totals exceed selected operations')
+function emptyRunResults(): CheckRunResults {
+  return {
+    operations: [],
+    targets: [],
+    totals: emptyResults(),
+    targetTotals: emptyResults(),
   }
 }
 
@@ -598,10 +878,20 @@ function finalStatus(
     if (phase.status === 'blocked' || phase.status === 'failed' || phase.status === 'unknown') {
       status = worseStatus(status, phase.status)
     }
+    if (
+      phase.status === 'skipped' &&
+      (phase.name === 'discover' || phase.name === 'resolve' || phase.name === 'review')
+    ) {
+      status = worseStatus(status, 'unknown')
+    }
   }
-  if (state.results.blocked > 0) status = worseStatus(status, 'blocked')
-  if (state.results.failed > 0) status = worseStatus(status, 'failed')
-  if (state.results.unknown > 0) status = worseStatus(status, 'unknown')
+  if (state.results.totals.blocked > 0) status = worseStatus(status, 'blocked')
+  if (state.results.totals.failed > 0) status = worseStatus(status, 'failed')
+  if (state.results.totals.unknown > 0) status = worseStatus(status, 'unknown')
+  if (state.write && state.results.totals.notAttempted > 0) {
+    status = worseStatus(status, 'blocked')
+  }
+  if (state.results.totals.reverted > 0) status = worseStatus(status, 'failed')
   if (state.recovery.status === 'partial') status = worseStatus(status, 'failed')
   if (state.recovery.status === 'unknown') status = worseStatus(status, 'unknown')
   if (event.exitCode === 2 && status === 'passed') status = 'failed'
@@ -644,7 +934,35 @@ function setPhaseStatus(
 
 function assertTerminalStatus(status: CheckRunPhaseStatus): void {
   if (!TERMINAL_PHASE_STATUSES.has(status as CheckRunTerminalPhaseStatus)) {
-    throw new CheckRunInvariantError(`invalid terminal phase status ${status}`)
+    throw new CheckRunInvariantError('invalid terminal phase status')
+  }
+}
+
+function assertPhaseName(phase: CheckRunPhaseName): void {
+  if (!PHASE_NAME_SET.has(phase)) throw new CheckRunInvariantError('invalid phase name')
+}
+
+function assertFinalStatus(status: CheckRunFinalStatus): void {
+  if (status !== 'passed' && status !== 'blocked' && status !== 'failed' && status !== 'unknown') {
+    throw new CheckRunInvariantError('invalid final status')
+  }
+}
+
+function assertRecoveryStatus(status: CheckRunRecoveryStatus): void {
+  if (!RECOVERY_STATUSES.has(status)) {
+    throw new CheckRunInvariantError('invalid recovery status')
+  }
+}
+
+function assertOutcome(outcome: CheckRunOperationOutcome): void {
+  if (!OPERATION_OUTCOMES.has(outcome)) {
+    throw new CheckRunInvariantError('invalid operation outcome')
+  }
+}
+
+function assertBoolean(name: string, value: boolean): void {
+  if (typeof value !== 'boolean') {
+    throw new CheckRunInvariantError(`${name} must be boolean`)
   }
 }
 
@@ -712,7 +1030,7 @@ function terminalDuplicate(state: CheckRunSnapshot, event: CheckRunEvent): boole
   const previous = state.terminalEvents.find((entry) => entry.id === eventId)
   if (!previous) return false
   if (previous.signature === JSON.stringify(event)) return true
-  throw new CheckRunInvariantError(`terminal event ${eventId} payload differs`)
+  throw new CheckRunInvariantError('terminal event payload differs')
 }
 
 function terminalEventId(event: CheckRunEvent): string | undefined {
