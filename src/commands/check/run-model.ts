@@ -751,10 +751,20 @@ function assertTargetOutcomeCoherence(
   ) {
     throw new CheckRunInvariantError('physical target receipt dimensions differ from operations')
   }
-  if (targetResult.outcome === 'applied' || targetResult.outcome === 'reverted') {
-    if (operations.some((operation) => operation.outcome !== targetResult.outcome)) {
-      throw new CheckRunInvariantError('successful physical target outcome differs from operations')
-    }
+  if (
+    targetResult.outcome === 'applied' &&
+    operations.some((operation) => operation.outcome !== 'applied')
+  ) {
+    throw new CheckRunInvariantError('applied physical target outcome differs from operations')
+  }
+  if (
+    targetResult.outcome === 'reverted' &&
+    (!operations.some((operation) => operation.outcome === 'reverted') ||
+      operations.some(
+        (operation) => operation.outcome !== 'applied' && operation.outcome !== 'reverted',
+      ))
+  ) {
+    throw new CheckRunInvariantError('reverted physical target outcome differs from operations')
   }
   if (targetResult.outcome === 'failed') {
     if (operations.some((operation) => operation.outcome !== 'failed')) {
@@ -872,20 +882,29 @@ function assertResultPhaseCoherence(
   if (state.recovery.status === 'completed' && recover !== 'passed') {
     throw new CheckRunInvariantError('completed recovery requires a passed recovery phase')
   }
-  if (state.recovery.status === 'partial' && recover !== 'failed' && recover !== 'unknown') {
-    throw new CheckRunInvariantError('partial recovery requires failed or unknown phase truth')
+  if (state.recovery.status === 'partial' && recover !== 'failed') {
+    throw new CheckRunInvariantError('partial recovery requires a failed recovery phase')
   }
   if (state.recovery.status === 'unknown' && recover !== 'unknown') {
     throw new CheckRunInvariantError('unknown recovery requires an unknown recovery phase')
   }
-  if (
-    state.recovery.status === 'completed' &&
-    (totals.applied > 0 || targets.some((target) => target.outcome === 'applied'))
-  ) {
-    throw new CheckRunInvariantError('completed recovery cannot retain applied results')
-  }
-  if (state.recovery.status === 'partial' && totals.failed + totals.unknown === 0) {
-    throw new CheckRunInvariantError('partial recovery requires failed or unknown results')
+  if (state.recovery.status === 'completed') {
+    if (totals.applied > 0 || targets.some((target) => target.outcome === 'applied')) {
+      throw new CheckRunInvariantError('completed recovery cannot retain applied results')
+    }
+    if (
+      totals.blocked > 0 ||
+      totals.notAttempted > 0 ||
+      totals.unknown > 0 ||
+      targets.some(
+        (target) =>
+          target.outcome === 'blocked' ||
+          target.outcome === 'not-attempted' ||
+          target.outcome === 'unknown',
+      )
+    ) {
+      throw new CheckRunInvariantError('completed recovery cannot retain forbidden results')
+    }
   }
   if (observe === 'unknown' && totals.unknown === 0) {
     throw new CheckRunInvariantError('unknown observation requires unknown results')

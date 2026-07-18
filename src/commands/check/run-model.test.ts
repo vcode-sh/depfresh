@@ -205,6 +205,45 @@ const recoveryCompatibilityCases: readonly RecoveryCompatibilityCase[] = [
     expectedError: 'completed recovery cannot retain applied results',
   },
   {
+    name: 'completed recovery rejects the internal skipped analogue',
+    applyStatus: 'failed',
+    recoveryStatus: 'passed',
+    observeStatus: 'passed',
+    recovery: {
+      status: 'completed',
+      restoredPaths: ['package-lock.json'],
+      unrecoveredPaths: [],
+    },
+    outcomes: ['not-attempted'],
+    expectedError: 'completed recovery cannot retain forbidden results',
+  },
+  {
+    name: 'completed recovery rejects the internal conflicted analogue',
+    applyStatus: 'blocked',
+    recoveryStatus: 'passed',
+    observeStatus: 'passed',
+    recovery: {
+      status: 'completed',
+      restoredPaths: ['package-lock.json'],
+      unrecoveredPaths: [],
+    },
+    outcomes: ['blocked'],
+    expectedError: 'completed recovery cannot retain forbidden results',
+  },
+  {
+    name: 'completed recovery rejects unknown outcomes',
+    applyStatus: 'unknown',
+    recoveryStatus: 'passed',
+    observeStatus: 'passed',
+    recovery: {
+      status: 'completed',
+      restoredPaths: ['package-lock.json'],
+      unrecoveredPaths: [],
+    },
+    outcomes: ['unknown'],
+    expectedError: 'completed recovery cannot retain forbidden results',
+  },
+  {
     name: 'partial recovery accepts semantic failure without an unrecovered manifest path',
     applyStatus: 'failed',
     recoveryStatus: 'failed',
@@ -215,6 +254,31 @@ const recoveryCompatibilityCases: readonly RecoveryCompatibilityCase[] = [
       unrecoveredPaths: [],
     },
     outcomes: ['reverted', 'failed'],
+  },
+  {
+    name: 'partial recovery accepts reverted-only outcomes',
+    applyStatus: 'failed',
+    recoveryStatus: 'failed',
+    observeStatus: 'passed',
+    recovery: {
+      status: 'partial',
+      restoredPaths: ['package-lock.json'],
+      unrecoveredPaths: [],
+    },
+    outcomes: ['reverted'],
+  },
+  {
+    name: 'partial recovery rejects an unknown recovery phase',
+    applyStatus: 'failed',
+    recoveryStatus: 'unknown',
+    observeStatus: 'passed',
+    recovery: {
+      status: 'partial',
+      restoredPaths: ['package-lock.json'],
+      unrecoveredPaths: [],
+    },
+    outcomes: ['reverted'],
+    expectedError: 'partial recovery requires a failed recovery phase',
   },
   {
     name: 'unknown recovery accepts restored lockfile and external-effect-only uncertainty',
@@ -584,6 +648,32 @@ describe('check run model', () => {
     expect(state.results.targets.map((result) => result.outcome)).toEqual(fixture.outcomes)
   })
 
+  it('accepts partial recovery with applied and reverted operations aggregated as reverted', () => {
+    let state = completePhase(selectedInventoryState(2, 1), 'preflight')
+    state = completePhase(state, 'stage')
+    state = completePhase(state, 'apply', 'failed')
+    state = reduceCheckRun(state, {
+      type: 'recovery-recorded',
+      status: 'partial',
+      restoredPaths: ['package-lock.json'],
+      unrecoveredPaths: [],
+    })
+    state = completePhase(state, 'recover', 'failed')
+    state = completePhase(state, 'observe', 'passed')
+    const selected = state.targets[0]!
+    state = results(
+      state,
+      [
+        operationResult(selected.operationIds[0]!, 'applied'),
+        operationResult(selected.operationIds[1]!, 'reverted'),
+      ],
+      [targetResult(selected, 'reverted')],
+    )
+
+    expect(state.results.totals).toMatchObject({ applied: 1, reverted: 1 })
+    expect(state.results.targetTotals).toMatchObject({ applied: 0, reverted: 1 })
+  })
+
   it.each([
     { restoredPaths: ['/package-lock.json'], unrecoveredPaths: [] },
     { restoredPaths: [], unrecoveredPaths: ['../package-lock.json'] },
@@ -841,7 +931,7 @@ describe('check run model', () => {
     state = completePhase(state, 'apply', 'unknown')
     state = reduceCheckRun(state, {
       type: 'recovery-recorded',
-      status: 'partial',
+      status: 'unknown',
       journalId: 'run-123',
       restoredPaths: [],
       unrecoveredPaths: ['package.json'],
