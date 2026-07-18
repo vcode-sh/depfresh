@@ -82,3 +82,10 @@ could not preserve passed commit truth across real recovery/cleanup-unknown bran
 focused correction. The review also proved that exact replacement-attempt evidence is private to the
 apply engine; Plan 033 Task 2 now explicitly owns a package-private structural evidence seam and may
 not infer attempts from outcome reasons.
+Plan 032 Task 4 and final closeout: complete through 4556a06. The current-head focused matrix passed
+three times at 185/185 tests without timer/open-handle warnings. Full coverage passed 146 files and
+1,656 tests; schemas, typecheck, lint over 314 files, build, 34-check/63-request smoke, 14-check demo,
+102 release tests, exact 56-file package verification, declaration byte comparison with public
+2.0.2, and diff/status gates passed. Final lifecycle and authority/output/API reviews reported no
+Critical, Important, or Minor findings. Plan 032 is DONE; Plan 033 is next and may activate the first
+truthful local write stream from one command-level apply plus structural replacement-attempt facts.

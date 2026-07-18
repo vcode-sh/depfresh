@@ -280,19 +280,31 @@ review reported no Critical, Important, or Minor findings.
 - Consumes: Tasks 1-3.
 - Produces: a stable internal model that Plan 033 may make authoritative.
 
-- [ ] **Step 1: Run focused tests three times**
+- [x] **Step 1: Run focused tests three times**
 
 Run all run-model/controller/orchestration/callback/addon/JSON/progress tests three times. Expected:
 identical pass counts and no timer/open-handle leaks.
 
-- [ ] **Step 2: Run complete gates**
+- [x] **Step 2: Run complete gates**
 
 Run schemas check, typecheck, lint, full coverage, build, smoke, demo, and packed verification.
 Expected: all exit `0`; public CLI bytes remain behaviorally unchanged from the Plan 031 baseline.
 
-- [ ] **Step 3: Review the model contract**
+- [x] **Step 3: Review the model contract**
 
 Require one reviewer to map every read-only/error lifecycle phase to an event and verify that the
 model can represent every apply/recovery fact Plan 033 will receive. Require another reviewer to
 verify no authority/output/API drift and that write/global invocations emit no incomplete model
 stream. Stop Plan 033 if any required local transaction fact cannot be represented.
+
+**Final completion evidence (2026-07-18):** Plan 032 is DONE through `4556a06`. The exact focused
+11-file matrix passed three times at 185/185 tests with no timer or open-handle warnings. Full
+coverage passed 1,656/1,656 tests across 146 files; schemas, typecheck, lint over 314 files, build,
+34-check/63-request smoke, 14-check demo, 102 release tests, exact 56-file packed verification, and
+diff checks all passed on Node `24.15.0`. Four built declaration files are byte-identical to public
+`depfresh@2.0.2`. Final corrections kept model injection private, preserved passed commit truth
+across executed recovery and non-executed cleanup uncertainty, and retained structural
+not-attempted receipts for untouched late-abort targets. Independent lifecycle and drift reviews
+reported no Critical, Important, or Minor findings. Plan 033 may now make the local write model
+authoritative using its package-private structural replacement-attempt evidence seam; global
+invocations remain outside the repository-relative target model.
