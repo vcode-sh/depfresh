@@ -105,7 +105,7 @@ example, a 2.0.x run that applied earlier package files before a later root pref
 Partial result · 35 updates applied across 13 files; 1 file blocked
 package.json · 41 updates not attempted
 Preflight could not confirm Git state (VCS_UNAVAILABLE / VCS_OUTPUT_LIMIT_EXCEEDED)
-Exit 2 · inspect the changed files before rerunning
+Exit 2 · inspect the changed files, fix the Git evidence problem, then rerun
 ```
 
 `applied` means the requested occurrence value was observed after replacement. `reverted` means the
@@ -122,7 +122,14 @@ failed, or unknown write exits with code `2`. Inspect the changed files before r
 write. `Safety block · no files were changed` appears only when no applied or reverted outcome
 exists and every blocked group proves replacement was not attempted. The receipt's `Exit` line uses
 the final normal command exit code, including strict resolution or post-write failures; it is not
-inferred from write outcomes alone.
+inferred from write outcomes alone. Guidance says to fix the Git evidence problem only when every
+blocking group is `VCS_UNAVAILABLE`. Mixed or non-VCS blocks instead say to inspect and correct each
+blocked target, whose receipt group retains its exact status and cause. Global package-manager
+outcomes keep their separate state-machine summary and are never counted as physical files.
+
+The complete receipt is one ordered durable stdout block: headline, physical groups and reasons,
+then final exit guidance. Receipt fragments are never split across stdout and stderr, including in
+CI and pipes.
 
 ## Contextual Tips
 

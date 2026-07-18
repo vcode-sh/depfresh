@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import assert from 'node:assert/strict'
-import { spawn } from 'node:child_process'
+import { execFileSync, spawn } from 'node:child_process'
 import {
   chmodSync,
   existsSync,
@@ -13,7 +13,7 @@ import {
 } from 'node:fs'
 import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { delimiter, join } from 'node:path'
 
 const repoRoot = new URL('..', import.meta.url).pathname.replace(/\/$/, '')
 const cliPath = join(repoRoot, 'dist', 'cli.mjs')
@@ -25,9 +25,10 @@ const binDir = join(tmpRoot, 'bin')
 const singleRepo = join(tmpRoot, 'single-app')
 const workspaceRoot = join(tmpRoot, 'workspace')
 const emptyRepo = join(tmpRoot, 'empty')
+const vcsOverflowBin = join(tmpRoot, 'vcs-overflow-bin')
 const logFile = join(tmpRoot, 'pm.log')
 
-for (const dir of [homeDir, binDir, singleRepo, workspaceRoot, emptyRepo]) {
+for (const dir of [homeDir, binDir, singleRepo, workspaceRoot, emptyRepo, vcsOverflowBin]) {
   mkdirSync(dir, { recursive: true })
 }
 writeFileSync(logFile, '', 'utf8')
@@ -166,6 +167,18 @@ function writeExecutable(name, content) {
   const filepath = join(binDir, name)
   writeFileSync(filepath, content, 'utf8')
   chmodSync(filepath, 0o755)
+}
+
+function findExecutable(name) {
+  for (const directory of (process.env.PATH ?? '').split(delimiter)) {
+    const candidate = join(directory, process.platform === 'win32' ? `${name}.exe` : name)
+    if (existsSync(candidate)) return realpathSync(candidate)
+  }
+  throw new Error(`Missing smoke-test executable: ${name}`)
+}
+
+function runGit(git, cwd, ...args) {
+  execFileSync(git, args, { cwd, stdio: 'ignore' })
 }
 
 function createPmScript(name) {
@@ -686,6 +699,62 @@ await record('write updates manifest', async () => {
   assert.equal(manifest.dependencies.alpha, '^1.1.0')
 })
 
+await record('piped write receipt stays complete and ordered on stdout', async () => {
+  const repo = join(tmpRoot, 'receipt-repo')
+  mkdirSync(repo, { recursive: true })
+  writeJson(join(repo, 'package.json'), {
+    name: 'receipt-repo',
+    private: true,
+    dependencies: { gamma: '1.0.0' },
+  })
+  writeFileSync(join(repo, '.npmrc'), `registry=${registryUrl}\n`, 'utf8')
+  const git = findExecutable('git')
+  runGit(git, repo, 'init', '--quiet')
+  runGit(git, repo, 'config', 'user.email', 'smoke@example.invalid')
+  runGit(git, repo, 'config', 'user.name', 'Smoke Test')
+  runGit(git, repo, 'add', '--', 'package.json')
+  runGit(git, repo, 'commit', '--quiet', '-m', 'fixture')
+
+  const wrapper = join(vcsOverflowBin, process.platform === 'win32' ? 'git.cmd' : 'git')
+  writeFileSync(
+    wrapper,
+    `#!/usr/bin/env node
+const { spawnSync } = require('node:child_process')
+const { writeSync } = require('node:fs')
+const args = process.argv.slice(2)
+if (args.includes('ls-files')) {
+  writeSync(1, Buffer.alloc(2 * 1024 * 1024, 97))
+  process.exit(0)
+}
+const result = spawnSync(${JSON.stringify(git)}, args, { stdio: 'inherit' })
+process.exit(result.status ?? 1)
+`,
+  )
+  chmodSync(wrapper, 0o755)
+  const manifestBefore = readFileSync(join(repo, 'package.json'))
+  const result = await runCli(['--cwd', repo, '--write', '--mode', 'patch', '--include-locked'], {
+    env: { PATH: `${vcsOverflowBin}${delimiter}${binDir}${delimiter}${process.env.PATH}` },
+  })
+
+  assert.equal(result.status, 2, JSON.stringify(result, null, 2))
+  const orderedReceipt = [
+    'Safety block · no files were changed',
+    'package.json · 1 update not attempted',
+    'Preflight could not confirm Git state (VCS_UNAVAILABLE / VCS_OUTPUT_LIMIT_EXCEEDED)',
+    'Exit 2 · fix the Git evidence problem, then rerun',
+  ]
+  let previousIndex = -1
+  for (const fragment of orderedReceipt) {
+    const index = result.stdout.indexOf(fragment)
+    assert.ok(index > previousIndex, `Missing or unordered stdout receipt fragment: ${fragment}`)
+    previousIndex = index
+    assert.ok(!result.stderr.includes(fragment), `Receipt fragment leaked to stderr: ${fragment}`)
+  }
+  assert.ok(!result.stdout.includes(repo), 'Receipt exposed an absolute target path on stdout')
+  assert.ok(!result.stderr.includes(repo), 'Receipt exposed an absolute target path on stderr')
+  assert.deepEqual(readFileSync(join(repo, 'package.json')), manifestBefore)
+})
+
 await record('plan and file-only apply', async () => {
   const repo = join(tmpRoot, 'file-apply-repo')
   mkdirSync(repo, { recursive: true })
@@ -836,6 +905,10 @@ await record('global-all write', async () => {
     'latest',
   ])
   assert.equal(result.status, 0, JSON.stringify(result, null, 2))
+  assert.match(result.stdout, /Global writes: 2 applied, 0 skipped, 0 failed, 0 unknown/u)
+  assert.doesNotMatch(result.stdout, /(?:Complete|Partial result|Safety block).*across/u)
+  assert.ok(!result.stdout.includes('global:npm ·'))
+  assert.ok(!result.stdout.includes('global:pnpm ·'))
 
   const entries = readFileSync(logFile, 'utf8')
     .trim()

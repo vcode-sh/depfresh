@@ -197,6 +197,82 @@ describe('global write dispatch', () => {
     expect(mocks.writePackageMock).not.toHaveBeenCalled()
   })
 
+  it('keeps global non-success truth out of the physical-file receipt', async () => {
+    const pkg: PackageMeta = {
+      name: 'Global packages',
+      type: 'global',
+      filepath: 'global:npm',
+      deps: [
+        {
+          name: 'typescript',
+          currentVersion: '5.0.0',
+          source: 'dependencies',
+          update: true,
+          parents: [],
+        },
+      ],
+      resolved: [],
+      raw: { versionsByDependency: { typescript: { npm: '5.0.0' } } },
+      indent: '  ',
+    }
+    mocks.loadPackagesMock.mockResolvedValue([pkg])
+    mocks.resolvePackageMock.mockResolvedValue([
+      makeResolved({
+        name: 'typescript',
+        diff: 'major',
+        currentVersion: '5.0.0',
+        targetVersion: '6.0.0',
+      }),
+    ])
+    mocks.applyGlobalPlanMock.mockResolvedValue({
+      contract: 'depfresh.global-apply',
+      schemaVersion: 1,
+      toolVersion: '2.0.1',
+      planFingerprint: 'a'.repeat(64),
+      status: 'unknown',
+      items: [
+        {
+          operationId: 'operation-0',
+          occurrenceId: 'occurrence-0',
+          manager: 'npm',
+          name: 'typescript',
+          expectedVersion: '5.0.0',
+          targetVersion: '6.0.0',
+          status: 'unknown',
+          reason: 'INVENTORY_TIMEOUT',
+        },
+      ],
+      commands: [],
+      summary: {
+        planned: 1,
+        applied: 0,
+        skipped: 0,
+        conflicted: 0,
+        failed: 0,
+        unknown: 1,
+      },
+      requiredCapabilities: ['global-write', 'process-execute'],
+      rollback: 'not-supported',
+    })
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    const { check } = await import('./index')
+    const exitCode = await check({
+      ...baseOptions,
+      write: true,
+      global: true,
+      loglevel: 'info',
+    })
+    const stdout = logSpy.mock.calls.flat().map(String).join('\n')
+    const stderr = warnSpy.mock.calls.flat().map(String).join('\n')
+
+    expect(exitCode).toBe(2)
+    expect(stdout).toContain('Global writes: 0 applied, 0 skipped, 0 failed, 1 unknown')
+    expect(`${stdout}\n${stderr}`).not.toMatch(/(?:Complete|Partial result|Safety block).*across/u)
+    expect(`${stdout}\n${stderr}`).not.toContain('global:npm ·')
+  })
+
   it('exposes the state-machine run result in legacy JSON output', async () => {
     const pkg: PackageMeta = {
       name: 'Global packages',

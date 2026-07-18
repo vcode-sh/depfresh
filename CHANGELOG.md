@@ -12,7 +12,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Semver
   command-level atomicity; and keeps incomplete writes on exit code `2` with instructions to inspect
   changed files before rerunning. Reverted outcomes are partial with exact recovery counts, and the
   displayed exit now comes from the final command result so strict resolution or post-write failures
-  cannot print `Exit 0`. The legacy JSON envelope and schema version remain unchanged.
+  cannot print `Exit 0`. The complete receipt is emitted as one ordered stdout block, global-manager
+  outcomes remain separate from physical-file counts, exact Git diagnostics bind to their canonical
+  targets, and local package verification processes have fixed deadlines with owned-temp cleanup.
+  The legacy JSON envelope and schema version remain unchanged.
 
 ## [2.0.1] - 2026-07-17
 

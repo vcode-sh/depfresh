@@ -13,7 +13,20 @@ import { tmpdir } from 'node:os'
 import { basename, dirname, join, resolve } from 'node:path'
 import { extractSinglePackEntry } from './pack-manifest.mjs'
 
+class PackageVerificationError extends Error {}
+
+process.once('uncaughtException', (error) => {
+  const message =
+    error instanceof PackageVerificationError
+      ? sanitizeFailureMessage(error.message)
+      : 'Packed package verification failed'
+  process.stderr.write(`${message}\n`)
+  process.exitCode = 1
+})
+
 const PUBLIC_REGISTRY = 'https://registry.npmjs.org/'
+const MAX_COMMAND_OUTPUT_BYTES = 1024 * 1024
+const PACKED_COMMAND_TIMEOUT_MS = 120_000
 const manifestArgument = process.argv[2]
 const installSpecIndex = process.argv.indexOf('--install-spec')
 const explicitInstallSpec = installSpecIndex < 0 ? undefined : process.argv[installSpecIndex + 1]
@@ -184,6 +197,10 @@ try {
       cwd,
       encoding: 'utf8',
       env: isolatedEnvironment(home, cache, emptyUserConfig, emptyGlobalConfig),
+      killSignal: 'SIGKILL',
+      maxBuffer: MAX_COMMAND_OUTPUT_BYTES,
+      shell: false,
+      timeout: PACKED_COMMAND_TIMEOUT_MS,
     })
     if (result.error || result.status !== expectedStatus || result.stderr !== '') {
       fail(`Packed ${label} selection command failed`)
@@ -407,7 +424,14 @@ function isolatedEnvironment(home, cache, userconfig, globalconfig) {
 }
 
 function run(command, args, options) {
-  const result = spawnSync(command, args, { ...options, encoding: 'utf8' })
+  const result = spawnSync(command, args, {
+    ...options,
+    encoding: 'utf8',
+    killSignal: 'SIGKILL',
+    maxBuffer: MAX_COMMAND_OUTPUT_BYTES,
+    shell: false,
+    timeout: PACKED_COMMAND_TIMEOUT_MS,
+  })
   if (result.error || result.status !== 0) {
     fail(`Verification command failed: ${basename(command)}`)
   }
@@ -419,6 +443,11 @@ function isRecord(value) {
 }
 
 function fail(message) {
-  process.stderr.write(`${message}\n`)
-  process.exit(1)
+  throw new PackageVerificationError(message)
+}
+
+function sanitizeFailureMessage(message) {
+  return message
+    .replace(/[\u0000-\u001F\u007F-\u009F\u200B-\u200F\u202A-\u202E\u2066-\u2069\uFEFF]/gu, ' ')
+    .slice(0, 500)
 }

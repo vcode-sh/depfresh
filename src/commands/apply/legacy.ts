@@ -29,7 +29,10 @@ import { apply } from './index'
 
 export interface LegacyWriteDiagnostic {
   code: RepositoryDiagnosticCode
-  path: string
+  target: {
+    identity: string
+    display: string
+  }
 }
 
 export interface LegacyPackageApplyResult {
@@ -75,7 +78,7 @@ export async function applyLegacyPackageWrite(
       status: operation.status,
       reason: toLegacyReason(operation.reason),
     })),
-    diagnostics: toLegacyDiagnostics(plan.vcs.diagnostics),
+    diagnostics: toLegacyDiagnostics(plan.vcs.diagnostics, result.operations, root),
   }
 }
 
@@ -347,11 +350,31 @@ function toLegacyReason(reason: string): WriteOutcome['reason'] {
 
 function toLegacyDiagnostics(
   diagnostics: PlanResult['vcs']['diagnostics'],
+  operations: Array<{ file: string; reason: string }>,
+  root: string,
 ): LegacyWriteDiagnostic[] {
-  return diagnostics.flatMap((diagnostic) => {
-    if (!isLegacyVcsDiagnosticCode(diagnostic.code)) return []
-    return [{ code: diagnostic.code, path: sanitizeContractText(diagnostic.path) }]
-  })
+  const unavailableTargets = [
+    ...new Set(
+      operations
+        .filter((operation) => operation.reason === 'VCS_UNAVAILABLE')
+        .map((operation) => operation.file),
+    ),
+  ]
+  const projected = new Map<string, LegacyWriteDiagnostic>()
+  for (const diagnostic of diagnostics) {
+    if (!isLegacyVcsDiagnosticCode(diagnostic.code)) continue
+    for (const file of unavailableTargets) {
+      const identity = resolve(root, file)
+      projected.set(`${diagnostic.code}\0${identity}`, {
+        code: diagnostic.code,
+        target: {
+          identity,
+          display: sanitizeContractText(file),
+        },
+      })
+    }
+  }
+  return [...projected.values()]
 }
 
 function isLegacyVcsDiagnosticCode(code: string): code is RepositoryDiagnosticCode {

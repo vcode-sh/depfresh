@@ -278,7 +278,7 @@ physical target, then exact totals. For the shipped 2.0.x partial path, use copy
 Partial result · 35 updates applied across 13 files; 1 file blocked
 package.json · 41 updates not attempted
 Preflight could not confirm Git state (VCS_UNAVAILABLE / VCS_OUTPUT_LIMIT_EXCEEDED)
-Exit 2 · inspect the changed files before rerunning
+Exit 2 · inspect the changed files, fix the Git evidence problem, then rerun
 ```
 
 Use `Safety block · no files were changed` only when zero outcomes are applied/reverted and every

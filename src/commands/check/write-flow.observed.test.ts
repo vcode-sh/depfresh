@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -171,7 +171,10 @@ describe('applyPackageWrite observed outcome accounting', () => {
 
     expect(result.outcomes[0]).toMatchObject({ status: 'unknown', reason: 'VCS_UNAVAILABLE' })
     expect(result.diagnostics).toEqual([
-      { code: 'VCS_OUTPUT_LIMIT_EXCEEDED', path: 'package.json' },
+      {
+        code: 'VCS_OUTPUT_LIMIT_EXCEEDED',
+        target: { identity: realpathSync.native(filepath), display: 'package.json' },
+      },
     ])
     expect(readFileSync(filepath, 'utf8')).toBe('{"dependencies":{"shared":"1.0.0"}}\n')
   })

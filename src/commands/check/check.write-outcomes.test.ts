@@ -165,7 +165,12 @@ describe('observed write outcome reporting', () => {
           reason: 'VCS_UNAVAILABLE',
         },
       ],
-      diagnostics: [{ code: 'VCS_OUTPUT_LIMIT_EXCEEDED', path: 'package.json' }],
+      diagnostics: [
+        {
+          code: 'VCS_OUTPUT_LIMIT_EXCEEDED',
+          target: { identity: pkg.filepath, display: 'package.json' },
+        },
+      ],
     })
     const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
 
@@ -301,7 +306,12 @@ describe('observed write outcome reporting', () => {
       })),
       diagnostics:
         pkg.name === 'root'
-          ? [{ code: 'VCS_OUTPUT_LIMIT_EXCEEDED' as const, path: 'package.json' }]
+          ? [
+              {
+                code: 'VCS_OUTPUT_LIMIT_EXCEEDED' as const,
+                target: { identity: pkg.filepath, display: 'package.json' },
+              },
+            ]
           : [],
     }))
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
@@ -317,7 +327,29 @@ describe('observed write outcome reporting', () => {
     expect(output).toContain(
       'Preflight could not confirm Git state (VCS_UNAVAILABLE / VCS_OUTPUT_LIMIT_EXCEEDED)',
     )
-    expect(output).toContain('Exit 2 · inspect the changed files before rerunning')
+    expect(output).toContain(
+      'Exit 2 · inspect the changed files, fix the Git evidence problem, then rerun',
+    )
     expect(output).not.toContain('Write unknown:')
+
+    const receiptBlocks = logSpy.mock.calls
+      .flat()
+      .map(String)
+      .filter((value) => value.includes('Partial result ·'))
+    expect(receiptBlocks).toHaveLength(1)
+    const receiptBlock = receiptBlocks[0]!
+    expect(receiptBlock.indexOf('Partial result ·')).toBeLessThan(
+      receiptBlock.indexOf('package.json · 41 updates not attempted'),
+    )
+    expect(receiptBlock.indexOf('package.json · 41 updates not attempted')).toBeLessThan(
+      receiptBlock.indexOf('Preflight could not confirm Git state'),
+    )
+    expect(receiptBlock.indexOf('Preflight could not confirm Git state')).toBeLessThan(
+      receiptBlock.indexOf('Exit 2 ·'),
+    )
+    const stderr = warnSpy.mock.calls.flat().map(String).join('\n')
+    expect(stderr).not.toMatch(
+      /Partial result|package\.json · 41|Preflight could not confirm Git state|Exit 2/u,
+    )
   })
 })

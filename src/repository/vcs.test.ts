@@ -170,7 +170,8 @@ describe('read-only repository VCS evidence', () => {
   it('splits tracked target probes below the deterministic argument-byte limit', () => {
     const root = temporaryRoot()
     initialize(root)
-    runGit(root, 'add', '--', 'package.json')
+    write(join(root, 'last-batch.json'), '{"name":"last"}\n')
+    runGit(root, 'add', '--', 'package.json', 'last-batch.json')
     runGit(root, 'commit', '--quiet', '-m', 'base')
     const invocationLog = join(root, 'ls-files-invocations.log')
     const gitWrapper = join(root, 'git-wrapper.mjs')
@@ -186,7 +187,7 @@ if (commandIndex !== -1) {
   const separatorIndex = args.lastIndexOf('--')
   const targets = separatorIndex === -1 ? [] : args.slice(separatorIndex + 1)
   const argumentBytes = targets.reduce((total, target) => total + Buffer.byteLength(target) + 1, 0)
-  appendFileSync(${JSON.stringify(invocationLog)}, String(argumentBytes) + '\\n')
+  appendFileSync(${JSON.stringify(invocationLog)}, JSON.stringify({ argumentBytes, targets }) + '\\n')
   if (argumentBytes > 64 * 1024) process.exit(91)
 }
 
@@ -201,17 +202,32 @@ process.exit(result.status ?? 1)
         { length: 1_100 },
         (_, index) => `missing/${String(index).padStart(4, '0')}-${'x'.repeat(60)}.json`,
       ),
+      'last-batch.json',
     ]
 
     const evidence = collectVcsEvidence(root, targets, { gitBinary: gitWrapper })
 
     expect(evidence).toMatchObject({
       status: 'confirmed',
-      targetFiles: [{ path: 'package.json', state: 'clean' }],
+      targetFiles: [
+        { path: 'last-batch.json', state: 'clean' },
+        { path: 'package.json', state: 'clean' },
+      ],
     })
-    const invocationBytes = readFileSync(invocationLog, 'utf-8').trimEnd().split('\n').map(Number)
-    expect(invocationBytes.length).toBeGreaterThan(1)
-    expect(invocationBytes.every((bytes) => bytes <= 64 * 1024)).toBe(true)
+    const invocations = readFileSync(invocationLog, 'utf-8')
+      .trimEnd()
+      .split('\n')
+      .map(
+        (line) =>
+          JSON.parse(line) as {
+            argumentBytes: number
+            targets: string[]
+          },
+      )
+    expect(invocations.length).toBeGreaterThan(1)
+    expect(invocations.every(({ argumentBytes }) => argumentBytes <= 64 * 1024)).toBe(true)
+    expect(invocations[0]?.targets).toContain(':(top,literal)package.json')
+    expect(invocations.at(-1)?.targets).toContain(':(top,literal)last-batch.json')
   })
 
   it('reports a bounded diagnostic when exact tracked output exceeds the limit', () => {

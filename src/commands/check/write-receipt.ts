@@ -72,7 +72,7 @@ const PROVEN_ATTEMPTED_REASONS: ReadonlySet<WriteOutcomeReason> = new Set([
 
 export function buildWriteReceipt(input: WriteReceiptInput): WriteReceipt {
   const operations = summarizeWriteOutcomes(input.outcomes)
-  const diagnostics = groupDiagnostics(input.diagnostics, input.cwd)
+  const diagnostics = groupDiagnostics(input.diagnostics)
   const groupedOutcomes = new Map<string, WriteReceiptGroup>()
   const outcomesByFile = new Map<string, WriteOutcome[]>()
 
@@ -134,12 +134,11 @@ export function formatWriteReceipt(
   return lines
 }
 
-function groupDiagnostics(diagnostics: LegacyWriteDiagnostic[], cwd: string): Map<string, string> {
+function groupDiagnostics(diagnostics: LegacyWriteDiagnostic[]): Map<string, string> {
   const grouped = new Map<string, string>()
   for (const diagnostic of diagnostics) {
-    const target = normalizeTarget(diagnostic.path, cwd)
-    if (!grouped.has(target.identity)) {
-      grouped.set(target.identity, sanitizeTerminalText(diagnostic.code))
+    if (!grouped.has(diagnostic.target.identity)) {
+      grouped.set(diagnostic.target.identity, sanitizeTerminalText(diagnostic.code))
     }
   }
   return grouped
@@ -252,16 +251,25 @@ function formatReason(group: WriteReceiptGroup): string {
 
 function formatExit(receipt: WriteReceipt, exitCode: WriteReceiptExitCode): string {
   if (exitCode === 0) return 'Exit 0'
+  const blockingGroups = receipt.groups.filter((group) => isBlockingStatus(group.status))
+  const onlyVcsUnavailable =
+    blockingGroups.length > 0 && blockingGroups.every((group) => group.reason === 'VCS_UNAVAILABLE')
   if (receipt.verdict === 'partial') {
+    if (onlyVcsUnavailable) {
+      return `Exit ${exitCode} · inspect the changed files, fix the Git evidence problem, then rerun`
+    }
+    if (blockingGroups.length > 0) {
+      return `Exit ${exitCode} · inspect the changed files and correct each blocked target before rerunning`
+    }
     return `Exit ${exitCode} · inspect the changed files before rerunning`
-  }
-  if (receipt.verdict === 'safety-block') {
-    return `Exit ${exitCode} · fix the preflight evidence, then rerun`
   }
   if (receipt.verdict === 'complete') {
     return `Exit ${exitCode} · inspect the errors above before rerunning`
   }
-  return `Exit ${exitCode} · inspect the target files before rerunning`
+  if (onlyVcsUnavailable) {
+    return `Exit ${exitCode} · fix the Git evidence problem, then rerun`
+  }
+  return `Exit ${exitCode} · inspect and correct each blocked target before rerunning`
 }
 
 function count(value: number, singular: string): string {

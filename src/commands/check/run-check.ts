@@ -376,18 +376,23 @@ async function runCheck(
 
     if (options.output === 'json') {
       outputJsonEnvelope(jsonPackages, runtimeOptions, executionState, jsonErrors, selectionReceipt)
-    } else if (executionState.plannedUpdates > 0) {
-      renderWriteReceipt(
-        formatWriteReceipt(
-          buildWriteReceipt({
-            outcomes: executionState.writeOutcomes,
-            diagnostics: writeDiagnostics,
-            cwd: executionRoot,
-          }),
-          finalExitCode,
-        ),
-        logger,
+    } else {
+      const localWriteOutcomes = executionState.writeOutcomes.filter(
+        (outcome) => !outcome.occurrence.file.startsWith('global:'),
       )
+      if (localWriteOutcomes.length > 0) {
+        renderWriteReceipt(
+          formatWriteReceipt(
+            buildWriteReceipt({
+              outcomes: localWriteOutcomes,
+              diagnostics: writeDiagnostics,
+              cwd: executionRoot,
+            }),
+            finalExitCode,
+          ),
+          logger,
+        )
+      }
     }
 
     if (!hasUpdates && executionState.failedResolutions === 0) {
@@ -451,15 +456,7 @@ function writeDurableAsync<T>(progress: CheckProgress | null, write: () => Promi
 }
 
 function renderWriteReceipt(lines: string[], logger: ReturnType<typeof createLogger>): void {
-  const headline = lines[0]
-  const exit = lines.at(-1)
-  if (headline) logger.info(headline)
-  for (let index = 1; index < lines.length - 1; index += 2) {
-    const group = lines[index]
-    const reason = lines[index + 1]
-    if (group) logger.warn(reason ? `${group}\n${reason}` : group)
-  }
-  if (exit && exit !== headline) logger.info(exit)
+  if (lines.length > 0) logger.info(lines.join('\n'))
 }
 
 function resolveCheckExitCode(input: {
