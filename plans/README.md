@@ -57,7 +57,7 @@ may grant side effects. Unknown state is never reported as success.
 | [027](./027-wun-demo-release-proof.md) | WUN-shaped demo and release proof | P1 | M | 026 | DONE |
 | [028](./028-first-class-workspace-catalog-exclusions.md) | First-class workspace and catalog exclusions | P1 | L | 017, 018, 019, 024, 026, 027 | DONE |
 | [029](./029-v2.0.1-release.md) | Publish and prove depfresh 2.0.1 | P1 | M | 028 | DONE |
-| [030](./030-vcs-write-trust-hotfix.md) | VCS write trust hotfix | P0 | M | 029 | TODO |
+| [030](./030-vcs-write-trust-hotfix.md) | VCS write trust hotfix | P0 | M | 029 | DONE |
 | [031](./031-v2.0.2-release.md) | Publish and prove depfresh 2.0.2 | P0 | M | 030 | TODO |
 | [032](./032-check-run-model.md) | Renderer-neutral check run model | P1 | M | 031 | TODO |
 | [033](./033-command-level-local-apply.md) | Command-level local apply | P0 | L | 032 | TODO |
@@ -229,6 +229,13 @@ Plan 030 owns the narrow `2.0.2` correctness/trust hotfix: exact-target bounded 
 additive `VCS_UNAVAILABLE` legacy reason, one grouped physical-target receipt, and explicit
 documentation of the remaining package-by-package limitation. Plan 031 owns the separate immutable
 `2.0.2` release proof and must complete before the architectural work begins.
+
+Plan 030 completed at `0c8594a`. Exact-target Git batches, preserved VCS preflight diagnostics,
+grouped physical receipts, separate sanitized global blocker details, multi-cause exit guidance,
+the self-packing local verifier, oversized-index replay, complete local gates, and independent
+code/docs approvals all passed. No JSON or schema contract changed, and the package remains
+`2.0.1`. Plan 031 is now the next executable plan; hosted publication still requires separate
+push/tag/publish authority.
 
 Plan 032 introduces the renderer-neutral lifecycle model with zero public-output or authority drift.
 Plan 033 then makes one command-level local plan/apply authoritative, preflighting every selected
