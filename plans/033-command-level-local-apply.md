@@ -463,6 +463,12 @@ evidence and the intentionally deferred mixed no-change plus completed-recovery 
 
 - Modify: `plans/033-command-level-local-apply.md` with exact completion evidence only after proof
 - Modify: `plans/README.md` and `.superpowers/sdd/progress.md` only when marking done
+- Modify: `build.config.ts`, `package.json`, and
+  `scripts/verify-declaration-stability.mjs` for deterministic declaration generation and proof
+- Modify: `src/commands/apply/legacy-plan.ts` and
+  `src/commands/apply/legacy-plan.test.ts` for complete blocked attempt evidence
+- Modify: `src/commands/check/run-check.ts` and
+  `src/commands/check/run-check.orchestration.test.ts` for multi-operation blocked targets
 
 **Interfaces:**
 
@@ -484,3 +490,13 @@ Expected: all exit `0` and target/Git state assertions remain green.
 
 One reviewer audits authority, stale/recovery, deduplication, and callback semantics; another audits
 JSON/result reconciliation and documentation. Plan 034 cannot start while either has findings.
+
+- [ ] **Step 4: Resolve final-review findings before replay**
+
+Serialize only the declaration Rollup traversal so repeated clean builds preserve the exact public
+`2.0.2` declaration bytes. Add a durable repeated-build verifier covering all four declarations.
+Retain deterministic private operation IDs and target-scoped `replacementAttempted: false` evidence
+for every contained ambiguous physical occurrence, including multiple operations sharing one
+target. Keep outside or unreconciled projections on the existing fail-closed unbound path. Run the
+new RED tests before implementation, then replay Steps 1-3 and require both reviewers to report no
+findings.
