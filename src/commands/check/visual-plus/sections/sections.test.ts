@@ -24,15 +24,20 @@ import {
   type VisualPlusSectionInput,
   type VisualPlusWriteReceiptEvidence,
 } from '../input'
+import { buildVisualPlusInsights } from '../insights'
 import { createVisualPlusTheme, wrapVisualPlusText } from '../theme'
 import { renderVisualPlusChanges } from './changes'
+import { renderVisualPlusDistribution } from './distribution'
 import { renderVisualPlusHeader } from './header'
+import { renderVisualPlusImpact } from './impact'
 import {
   renderVisualPlusLifecycle,
   renderVisualPlusLifecycleHeading,
   renderVisualPlusLifecyclePhase,
 } from './lifecycle'
 import { renderVisualPlusReceipt } from './receipt'
+import { renderVisualPlusRisk } from './risk'
+import { renderVisualPlusShared } from './shared'
 import { renderVisualPlusTopology } from './topology'
 import { renderVisualPlusTransaction } from './transaction'
 
@@ -380,10 +385,15 @@ function fixture(
 }
 
 function allSections(input: VisualPlusSectionInput): readonly string[] {
+  const insights = buildVisualPlusInsights(input.snapshot)
   return [
     ...renderVisualPlusHeader(input),
     ...renderVisualPlusLifecycle(input),
-    ...renderVisualPlusTopology(input),
+    ...renderVisualPlusTopology(insights, input.capabilities),
+    ...renderVisualPlusDistribution(insights, input.capabilities),
+    ...renderVisualPlusRisk(insights, input.capabilities),
+    ...renderVisualPlusImpact(insights, input.capabilities),
+    ...renderVisualPlusShared(insights, input.capabilities),
     ...renderVisualPlusChanges(input),
     ...renderVisualPlusTransaction(input),
     ...renderVisualPlusReceipt(input),
@@ -747,6 +757,8 @@ describe('Visual+ pure sections', () => {
     const input = createVisualPlusSectionInput(fixture())
     const lines = allSections(input).map(stripAnsi)
     const output = lines.join('\n')
+    const changeOutput = renderVisualPlusChanges(input).map(stripAnsi).join('\n')
+    const transactionLines = renderVisualPlusTransaction(input).map(stripAnsi)
 
     expect(lines.slice(0, 4)).toEqual([
       'Check · major · write',
@@ -754,18 +766,33 @@ describe('Visual+ pure sections', () => {
       'Package manager observed · pnpm 10.33.0 · package.json',
       'Lifecycle',
     ])
-    expect(output).toContain(
-      '66 packages -> 616 declared -> 612 eligible -> 76 updates -> 14 files',
-    )
+    expect(output).toContain('Distribution')
+    expect(output).toContain('Risk focus')
+    expect(output).toContain('Owner impact')
+    expect(output).toContain('Shared dependencies')
+    expect(output).toContain('66 packages → 616 declared → 612 eligible → 76 updates → 14 files')
+    const reviewHeadings = [
+      'Repository topology',
+      'Distribution',
+      'Risk focus',
+      'Owner impact',
+      'Shared dependencies',
+      'Complete change list',
+    ]
+    const positions = reviewHeadings.map((heading) => output.indexOf(heading))
+    expect(positions).toEqual([...positions].sort((left, right) => left - right))
     for (let group = 0; group < 15; group += 1) {
       const count = group === 0 ? 6 : 5
       for (let item = 0; item < count; item += 1) {
-        expect(output.match(new RegExp(`dependency-${group}-${item}(?![0-9])`, 'gu'))).toHaveLength(
-          1,
-        )
+        expect(
+          changeOutput.match(new RegExp(`dependency-${group}-${item}(?![0-9])`, 'gu')),
+        ).toHaveLength(1)
+        expect(
+          changeOutput.match(new RegExp(`operation-${group}-${item}(?![0-9])`, 'gu')),
+        ).toHaveLength(1)
       }
     }
-    expect(lines.filter((line) => line.startsWith('Target '))).toHaveLength(14)
+    expect(transactionLines.filter((line) => line.startsWith('Target '))).toHaveLength(14)
     const review = renderVisualPlusChanges(input).map(stripAnsi).join('')
     for (const change of input.snapshot.changes) {
       expect(review.match(new RegExp(`Operation ID ${change.id}(?![0-9])`, 'gu'))).toHaveLength(1)
@@ -869,6 +896,11 @@ describe('Visual+ pure sections', () => {
       lines
         .join('\n')
         .replaceAll(' · ', ' - ')
+        .replaceAll(' | ', ' - ')
+        .replaceAll(' → ', ' -> ')
+        .replaceAll('├ ', '- ')
+        .replace(/[█░#]+/gu, '')
+        .replace(/(?<=- )\.+/gu, '')
         .replace(/[✓✗◆?↩○·] /gu, '')
         .replace(/\[[+!*?<>.-]\] /gu, '')
     expect(semantic(plain)).toBe(semantic(color))

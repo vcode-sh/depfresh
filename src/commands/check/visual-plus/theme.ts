@@ -23,6 +23,19 @@ export interface VisualPlusTheme {
   readonly encodeWideGrapheme: (value: string) => string
 }
 
+export interface VisualPlusMapLine {
+  readonly value: string
+  readonly style?: 'heading' | 'emphasis' | 'muted'
+}
+
+export interface VisualPlusMapSymbols {
+  readonly arrow: string
+  readonly barFilled: string
+  readonly barEmpty: string
+  readonly connector: string
+  readonly separator: string
+}
+
 const STATUS_LABELS: Readonly<Record<VisualPlusSemanticStatus, string>> = {
   pending: 'pending',
   active: 'active',
@@ -88,6 +101,30 @@ export function visualPlusSectionLines(
   validateVisualPlusSectionInput(input)
   const theme = createVisualPlusTheme(input.capabilities)
   return logicalLines.flatMap((line) => wrapVisualPlusText(line, input.capabilities.width, theme))
+}
+
+export function visualPlusMapLines(
+  capabilities: VisualPlusCapabilities,
+  logicalLines: readonly VisualPlusMapLine[],
+): readonly string[] {
+  const theme = createVisualPlusTheme(capabilities)
+  return logicalLines.flatMap((line) => {
+    const style = line.style === undefined ? undefined : theme[line.style]
+    return style
+      ? wrapVisualPlusStyledText(line.value, capabilities.width, theme, style)
+      : wrapVisualPlusText(line.value, capabilities.width, theme)
+  })
+}
+
+export function visualPlusMapSymbols(capabilities: VisualPlusCapabilities): VisualPlusMapSymbols {
+  const ascii = capabilities.layout === 'plain' || !capabilities.unicode
+  return {
+    arrow: ascii ? ' -> ' : ' → ',
+    barFilled: ascii ? '#' : '█',
+    barEmpty: ascii ? '.' : '░',
+    connector: capabilities.width < 16 ? '' : ascii ? '-' : '├',
+    separator: ascii ? ' | ' : ' · ',
+  }
 }
 
 export function formatVisualPlusAge(ageMs: number | null): string {

@@ -5,6 +5,7 @@ import type { CheckRunPhaseName, CheckRunPhaseStatus, CheckRunSnapshot } from '.
 import type { VisualPlusCapabilities } from './capabilities'
 import type { VisualPlusRunMetadata, VisualPlusSectionInput } from './input'
 import { createVisualPlusRenderer, type VisualPlusScheduler } from './renderer'
+import { createVisualPlusFixtureInput, createVisualPlusFixtureSnapshot } from './test-fixture'
 
 const phaseNames = [
   'discover',
@@ -511,11 +512,96 @@ describe('Visual+ live renderer', () => {
     )
 
     expect(view.output().match(/Repository topology/g)).toHaveLength(1)
+    expect(view.output().match(/Distribution/g)).toHaveLength(1)
+    expect(view.output().match(/Risk focus/g)).toHaveLength(1)
+    expect(view.output().match(/Owner impact/g)).toHaveLength(1)
+    expect(view.output().match(/Shared dependencies/g)).toHaveLength(1)
     expect(view.output().match(/Complete change list/g)).toHaveLength(1)
+    const reviewHeadings = [
+      'Repository topology',
+      'Distribution',
+      'Risk focus',
+      'Owner impact',
+      'Shared dependencies',
+      'Complete change list',
+    ]
+    expect(reviewHeadings.map((heading) => view.output().indexOf(heading))).toEqual(
+      [...reviewHeadings].map((heading) => view.output().indexOf(heading)).sort((a, b) => a - b),
+    )
     expect(view.output().match(/complete - \[\+\] passed/g)).toHaveLength(1)
     expect(view.output().match(/Apply transaction/g)).toHaveLength(1)
     expect(view.output().match(/Complete - 1 update applied across 1 file/g)).toHaveLength(1)
     expect(source.unsubscribeCount()).toBe(1)
+  })
+
+  it('renders the full map hierarchy before all 76 unchanged change rows', () => {
+    const reviewCapabilities: VisualPlusCapabilities = {
+      ...capable,
+      interactive: false,
+      motion: false,
+      cursorControl: false,
+      width: 118,
+      layout: 'plain',
+    }
+    const initial = snapshot({
+      counts: {
+        packages: 66,
+        declared: 616,
+        eligible: 612,
+        unresolved: 0,
+        updates: 99,
+        operations: 0,
+        targets: 0,
+      },
+    })
+    const source = fakeController(initial)
+    const view = harness(reviewCapabilities)
+    view.renderer.start(source.controller, run)
+    const selected = createVisualPlusFixtureSnapshot()
+    source.push(selected)
+    view.renderer.writeReview({ ...createVisualPlusFixtureInput(reviewCapabilities), run })
+
+    const output = view.output()
+    const headings = [
+      'Repository topology',
+      'Distribution',
+      'Risk focus',
+      'Owner impact',
+      'Shared dependencies',
+      'Complete change list',
+    ]
+    const positions = headings.map((heading) => output.indexOf(heading))
+    expect(positions.every((position) => position >= 0)).toBe(true)
+    expect(positions).toEqual([...positions].sort((left, right) => left - right))
+    expect(output.match(/Operation ID operation-\d+-\d+/gu)).toHaveLength(76)
+  })
+
+  it('classifies insight failures as contract errors before any review bytes', () => {
+    const initial = snapshot({
+      counts: {
+        packages: 66,
+        declared: 616,
+        eligible: 612,
+        unresolved: 0,
+        updates: 99,
+        operations: 0,
+        targets: 0,
+      },
+    })
+    const source = fakeController(initial)
+    const view = harness()
+    view.renderer.start(source.controller, run)
+    const selected = structuredClone(createVisualPlusFixtureSnapshot())
+    ;(selected.changes[0] as { diff: string }).diff = 'unknown'
+    source.push(selected)
+    const review = createVisualPlusFixtureInput(capable)
+
+    expect(() => view.renderer.writeReview({ ...review, snapshot: selected, run })).toThrow(
+      /Visual\+ insights/u,
+    )
+    expect(view.output()).not.toContain('Repository topology')
+    expect(view.output()).not.toContain('Complete change list')
+    expect(view.errors).toEqual([])
   })
 
   it('emits the exact zero-selection finalization transcript and leaves no live frame', () => {

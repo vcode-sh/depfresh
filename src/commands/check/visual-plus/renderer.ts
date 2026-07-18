@@ -9,13 +9,18 @@ import {
   type VisualPlusRunMetadata,
   type VisualPlusSectionInput,
 } from './input'
+import { buildVisualPlusInsights, VisualPlusInsightError } from './insights'
 import { renderVisualPlusChanges } from './sections/changes'
+import { renderVisualPlusDistribution } from './sections/distribution'
 import { renderVisualPlusHeader } from './sections/header'
+import { renderVisualPlusImpact } from './sections/impact'
 import {
   renderVisualPlusLifecycleHeading,
   renderVisualPlusLifecyclePhase,
 } from './sections/lifecycle'
 import { renderVisualPlusReceipt } from './sections/receipt'
+import { renderVisualPlusRisk } from './sections/risk'
+import { renderVisualPlusShared } from './sections/shared'
 import { renderVisualPlusTopology } from './sections/topology'
 import { renderVisualPlusTransaction } from './sections/transaction'
 
@@ -239,7 +244,9 @@ export function createVisualPlusRenderer(
   }
 
   const isContractError = (error: unknown): boolean =>
-    error instanceof VisualPlusRendererContractError || error instanceof VisualPlusInputError
+    error instanceof VisualPlusRendererContractError ||
+    error instanceof VisualPlusInputError ||
+    error instanceof VisualPlusInsightError
 
   const explicitFailure = (error: unknown): never => {
     if (isContractError(error)) {
@@ -522,11 +529,22 @@ export function createVisualPlusRenderer(
     }
     const input = validateInput(source)
     if (input.writeReceipt !== undefined) contractFailure('review cannot contain a write receipt')
+    const insights = (() => {
+      try {
+        return buildVisualPlusInsights(input.snapshot)
+      } catch (error) {
+        return explicitFailure(error)
+      }
+    })()
     try {
       cancelPending()
       if (latestSnapshot) appendTerminalFacts(latestSnapshot)
       clearFrame()
-      writeDurableLines(renderVisualPlusTopology(input))
+      writeDurableLines(renderVisualPlusTopology(insights, capabilities))
+      writeDurableLines(renderVisualPlusDistribution(insights, capabilities))
+      writeDurableLines(renderVisualPlusRisk(insights, capabilities))
+      writeDurableLines(renderVisualPlusImpact(insights, capabilities))
+      writeDurableLines(renderVisualPlusShared(insights, capabilities))
       writeDurableLines(renderVisualPlusChanges(input))
       reviewInput = input
       state = 'review-written'
