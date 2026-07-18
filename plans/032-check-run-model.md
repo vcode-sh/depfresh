@@ -142,7 +142,7 @@ changed.
 - Consumes: `CheckRunEvent` and a monotonic `now(): number` dependency.
 - Produces: `createCheckRunController(options): CheckRunController`.
 
-- [ ] **Step 1: Write controller RED tests**
+- [x] **Step 1: Write controller RED tests**
 
 Assert observer ordering, stable snapshot delivery, single finalization, observer failure isolation,
 and exact elapsed time from an injected clock.
@@ -155,22 +155,29 @@ export interface CheckRunController {
 }
 ```
 
-- [ ] **Step 2: Run the controller RED test**
+- [x] **Step 2: Run the controller RED test**
 
 Run: `pnpm exec vitest run src/commands/check/run-controller.test.ts`
 
 Expected: FAIL because the module does not exist.
 
-- [ ] **Step 3: Implement the controller without I/O**
+- [x] **Step 3: Implement the controller without I/O**
 
 The controller owns only state, sequence, timing, and observers. It never writes to stdout/stderr,
 starts timers, reads environment variables, invokes callbacks, or changes `process.exitCode`.
 Unsubscribe is idempotent. An observer exception is retained as a sanitized internal diagnostic and
 cannot prevent later observers or command cleanup.
 
-- [ ] **Step 4: Run controller GREEN tests**
+- [x] **Step 4: Run controller GREEN tests**
 
 Run both new test files, typecheck, and focused Biome. Expected: all pass with no warnings.
+
+**Completion evidence (2026-07-18):** The internal controller was implemented through `8b6262b`.
+Controller and reducer tests pass 66/66, with typecheck, focused Biome, and diff checks green. It
+retains exact raw terminal-event identity while deriving visible elapsed time from the injected
+monotonic clock, isolates sanitized observer failures without reopening reducer state, and has no
+I/O, environment, timer, process-exit, callback, or public-surface dependency. Independent review
+reported no Critical, Important, or Minor findings.
 
 ### Task 3: Instrument current orchestration without behavior drift
 

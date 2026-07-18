@@ -57,3 +57,9 @@ typecheck, Biome, and diff gates pass. Independent review exhaustively checked a
 outcome combinations against the apply-validator recovery contract with zero mismatches and no
 Critical, Important, or Minor findings. Task 2 is next; no controller or orchestration wiring has
 started.
+Plan 032 Task 2: complete through 8b6262b. The internal controller owns immutable state projection,
+monotonic injected-clock timing, ordered observer delivery, independent idempotent subscriptions,
+and sanitized observer-failure diagnostics without I/O or reducer mutation. Controller/model tests
+pass 66/66 with typecheck, Biome, and diff checks green. Re-review found no Critical, Important, or
+Minor issues. Task 3 orchestration instrumentation is next; existing renderers and write paths remain
+authoritative.
