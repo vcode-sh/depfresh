@@ -58,7 +58,7 @@ may grant side effects. Unknown state is never reported as success.
 | [028](./028-first-class-workspace-catalog-exclusions.md) | First-class workspace and catalog exclusions | P1 | L | 017, 018, 019, 024, 026, 027 | DONE |
 | [029](./029-v2.0.1-release.md) | Publish and prove depfresh 2.0.1 | P1 | M | 028 | DONE |
 | [030](./030-vcs-write-trust-hotfix.md) | VCS write trust hotfix | P0 | M | 029 | DONE |
-| [031](./031-v2.0.2-release.md) | Publish and prove depfresh 2.0.2 | P0 | M | 030 | IN PROGRESS |
+| [031](./031-v2.0.2-release.md) | Publish and prove depfresh 2.0.2 | P0 | M | 030 | DONE |
 | [032](./032-check-run-model.md) | Renderer-neutral check run model | P1 | M | 031 | TODO |
 | [033](./033-command-level-local-apply.md) | Command-level local apply | P0 | L | 032 | TODO |
 | [034](./034-visual-plus-v2-core.md) | Visual+ v2 core terminal renderer | P1 | L | 033 | TODO |
@@ -233,15 +233,19 @@ documentation of the remaining package-by-package limitation. Plan 031 owns the 
 Plan 030 completed at `0c8594a`. Exact-target Git batches, preserved VCS preflight diagnostics,
 grouped physical receipts, separate sanitized global blocker details, multi-cause exit guidance,
 the self-packing local verifier, oversized-index replay, complete local gates, and independent
-code/docs approvals all passed. No JSON or schema contract changed, and the package remains
-`2.0.1`. Plan 031 is now the next executable plan; hosted publication still requires separate
+code/docs approvals all passed. No JSON or schema contract changed. At that checkpoint the package
+remained `2.0.1`, Plan 031 was next, and hosted publication still required separate
 push/tag/publish authority.
 
-Plan 031 Tasks 1 and 2 completed locally through `d6915cd`. The internally consistent `2.0.2`
-candidate passed the exact isolated workflow, package verifier, installed CLI check, and built plus
-installed oversized-index replays. Independent spec/evidence reviews reproduced the artifact
-identity and reported no findings. Plan 031 remains IN PROGRESS at the hosted boundary: `main` has
-not been pushed, `v2.0.2` has not been created, and no package or GitHub release has been published.
+Plan 031 completed from release commit `45ac1d4`, hosted main run `29631547257`, annotated tag
+object `7bfa63b`, and Release run `29631713748`. npm exposes `latest=2.0.2`; Actions artifact
+`8425727523`, npm downloads, and GitHub asset `481177182` are byte-identical. Exact npm `11.12.0`
+verified the public install, package signature, publish attestation, and SLSA provenance with no
+invalid or missing signatures. The public installed CLI passed the oversized-index replay without
+Git index mutation or write ambiguity, and the SLSA subject binds the package SHA-512 digest to the
+tag, workflow, commit, run, and GitHub-hosted builder. GitHub exposes a non-draft,
+non-prerelease release. No floating `v2` tag or manual publish was created. Plan 032 is now the next
+executable plan and has not started.
 
 Plan 032 introduces the renderer-neutral lifecycle model with zero public-output or authority drift.
 Plan 033 then makes one command-level local plan/apply authoritative, preflighting every selected

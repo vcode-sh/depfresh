@@ -31,14 +31,22 @@ the built pipe selector passed one check/one request three times. Full gates pas
 tests with coverage, 34-check smoke, 14-check demo, build, schemas, typecheck, Biome, and exact
 56-file package verification. The 1,368,035-byte tracked-index replay applied the exact target
 without ENOBUFS or Git index mutation. Final code and docs/terminal re-reviews reported no findings.
-Plan 031 is next for the local 2.0.2 release candidate; push, tag, publish, and hosted proof remain
-outside current authority.
+Plan 031 is complete; Plan 032 is the next executable plan and has not started.
 Plan 031 Task 1: complete in bc6548c. The version-coupled 2.0.2 candidate changed exactly the 13
 owned release surfaces; focused 28/28 and release 102/102 tests, schemas, typecheck, and Biome
 passed. Independent spec and quality reviews approved Task 2 with no release-blocking findings.
 Plan 031 Task 2: complete in d6915cd. Exact isolated local gates passed 102 release tests, 1,559
 coverage tests across 143 files, 34 smoke checks/63 requests, 14 demo checks, exact 56-file package
 verification, installed CLI 2.0.2, and built plus installed 1,368,035-byte oversized-index replays.
-Two independent reviews reproduced the artifact identity with no findings. Plan 031 is IN PROGRESS
-at the hosted boundary; push, tag, npm publication, GitHub release, and public provenance proof are
-not authorized or completed.
+Two independent reviews reproduced the artifact identity with no findings.
+Plan 031 Task 3: complete from release commit 45ac1d4. Hosted main run 29631547257 passed before
+annotated tag object 7bfa63b was created; Release run 29631713748 completed exact artifact
+verification, trusted OIDC publication, public-package verification, and curated GitHub release.
+Plan 031 Task 4: complete. npm latest is 2.0.2; Actions artifact 8425727523, npm downloads, and
+GitHub asset 481177182 are byte-identical at SHA-256
+51ce49b65fef3801aa9dd6efeba469f17760a9e71f4d0294d52339450ff4c5af. Exact npm 11.12.0
+verified the public install, CLI, schemas, exports, skills, package signature, publish attestation,
+and SLSA provenance with empty invalid/missing sets. The public installed CLI passed the
+1,368,031-byte oversized-index replay without Git index mutation or write ambiguity. The SLSA
+subject binds the package SHA-512 digest to tag v2.0.2, the release workflow, commit 45ac1d4, run
+29631713748, and the GitHub-hosted builder. Plan 031 is DONE; Plan 032 is next and has not started.
