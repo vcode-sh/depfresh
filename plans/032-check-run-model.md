@@ -4,12 +4,15 @@
 > (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use
 > checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Introduce one deterministic, renderer-neutral model of the complete check lifecycle
-without changing write orchestration or default terminal bytes yet.
+**Goal:** Introduce one deterministic, renderer-neutral model of the complete check lifecycle and
+wire every lifecycle fact that current orchestration exposes truthfully, without changing write
+orchestration or default terminal bytes yet.
 
 **Architecture:** A pure reducer turns typed check events into immutable snapshots. `run-check.ts`
-emits events at existing orchestration seams while the current progress, table, JSON, addon, and
-write paths remain authoritative. Later plans consume the same snapshot instead of reconstructing
+emits complete read-only and error event streams at existing orchestration seams while the current
+progress, table, JSON, addon, and write paths remain authoritative. Current package-level writes do
+not expose a truthful command transaction, so Plan 033 activates write-mode events from its one real
+command-level apply result. Later renderers consume the same snapshot instead of reconstructing
 state from logger strings.
 
 **Tech Stack:** TypeScript, Node `24.15.0`, Vitest, Biome, pnpm `10.33.0`.
@@ -32,6 +35,14 @@ Before editing, run `git status --short`, verify public `2.0.2`, and compare eve
 with the Plan 031 completion commit. Stop if the model requires a public API/JSON/schema change,
 cannot represent an approved lifecycle/result state, changes terminal bytes or callback/write order,
 duplicates authority decisions, or overlaps unrelated concurrent edits.
+
+**Resolved stop condition (2026-07-18):** A read-only seam audit proved that current package-level
+writes can apply an earlier target before a later preflight block, hide interactive selection and
+catalog ownership inside package processing, and discard exact recovery evidence in the legacy
+compatibility projection. Emitting one aggregate write rail here would invent transaction facts.
+The approved correction is to wire complete read-only/error streams in this plan and defer all
+write-mode event emission to Plan 033, which first collects every selection and calls one
+command-level apply lifecycle.
 
 ---
 
@@ -179,7 +190,7 @@ monotonic clock, isolates sanitized observer failures without reopening reducer 
 I/O, environment, timer, process-exit, callback, or public-surface dependency. Independent review
 reported no Critical, Important, or Minor findings.
 
-### Task 3: Instrument current orchestration without behavior drift
+### Task 3: Instrument observable read-only orchestration without behavior drift
 
 **Files:**
 
@@ -194,18 +205,21 @@ reported no Critical, Important, or Minor findings.
 
 - Consumes: `CheckRunController` through a private optional dependency of `runCheck()` used by
   tests and later renderers.
-- Produces: one complete event stream alongside current behavior.
+- Produces: one complete event stream for read-only and error journeys alongside current behavior.
+  Write-mode injection remains deliberately inactive until Plan 033 owns one command-level apply.
 
 - [ ] **Step 1: Characterize current output and callback order**
 
 Capture table stdout/stderr, JSON bytes excluding the existing timestamp, addon callback order,
 write mock calls, progress writes, and exit codes for read-only, write-success, partial write,
-resolution error, no-package, and thrown-error cases.
+resolution error, no-package, and thrown-error cases. The two write cases prove unchanged legacy
+behavior and that no incomplete or invented model stream is emitted.
 
 - [ ] **Step 2: Write failing event-stream tests**
 
-Inject a recording controller and require ordered phase/count events. A write case must include
-preflight/apply/observe facts derived from current results without claiming one command-level apply.
+Inject a recording controller and require ordered phase/count/result/final events for read-only,
+resolution-error, no-package, and thrown-error journeys. Inject it into write-success and partial
+write cases and require no model events; Plan 033 replaces this explicit boundary.
 
 - [ ] **Step 3: Run the new RED test**
 
@@ -215,10 +229,12 @@ Expected: FAIL because `runCheck()` does not emit model events.
 
 - [ ] **Step 4: Emit events at verified seams**
 
-Add events immediately after package discovery, repository inspection start/end, resolution
-completion, selection/write decisions, observed package write results, post-write actions, and
-final exit selection. Use existing computed counts; do not rescan packages or parse rendered text.
-In `catch`/`finally`, resolve every active phase to failed/unknown before finalization.
+For read-only invocations, add events immediately after package discovery, repository inspection
+start/end, resolution completion, selection completion, and final exit selection. Use existing
+computed counts; do not rescan packages or parse rendered text. Treat ordinary per-occurrence
+resolution errors as unresolved facts rather than a failed aggregate resolve phase. In `catch` and
+`finally`, resolve every active phase to failed or unknown before finalization. Do not attach the
+controller to any write invocation in this plan.
 
 - [ ] **Step 5: Prove zero public behavior drift**
 
@@ -230,6 +246,8 @@ pnpm exec vitest run src/commands/check/run-check.model.test.ts \
   src/commands/check/check.callbacks.test.ts \
   src/commands/check/check.addons.test.ts \
   src/commands/check/check.json-output.test.ts \
+  src/commands/check/check.core-flow.test.ts \
+  src/commands/check/check.write-outcomes.test.ts \
   src/commands/check/progress.test.ts
 ```
 
@@ -259,5 +277,7 @@ Expected: all exit `0`; public CLI bytes remain behaviorally unchanged from the 
 
 - [ ] **Step 3: Review the model contract**
 
-Require one reviewer to map every design lifecycle phase to an event and another to verify no
-authority/output/API drift. Stop Plan 033 if any required transaction fact cannot be represented.
+Require one reviewer to map every read-only/error lifecycle phase to an event and verify that the
+model can represent every apply/recovery fact Plan 033 will receive. Require another reviewer to
+verify no authority/output/API drift and that write invocations emit no incomplete model stream.
+Stop Plan 033 if any required transaction fact cannot be represented.

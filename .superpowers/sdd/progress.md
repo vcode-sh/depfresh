@@ -63,3 +63,9 @@ and sanitized observer-failure diagnostics without I/O or reducer mutation. Cont
 pass 66/66 with typecheck, Biome, and diff checks green. Re-review found no Critical, Important, or
 Minor issues. Task 3 orchestration instrumentation is next; existing renderers and write paths remain
 authoritative.
+Plan 032 Task 3 drift decision: a read-only seam audit proved the current package-level legacy write
+path cannot emit one truthful command transaction because interactive/catalog facts are hidden,
+earlier targets may apply before a later preflight block, and exact recovery evidence is projected
+away. The approved correction is to instrument complete read-only/error streams in Plan 032 while
+keeping write-mode model emission inactive. Plan 033 owns the first write stream after it collects
+all selections and invokes one command-level apply.
