@@ -15,6 +15,34 @@ import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
 import { delimiter, join } from 'node:path'
 
+const CHECK_SELECTOR = '--check'
+const PIPE_RECEIPT_CHECK = 'piped write receipt stays complete and ordered on stdout'
+const selectableChecks = new Set([PIPE_RECEIPT_CHECK])
+const selectedCheck = parseCheckSelector(process.argv.slice(2))
+
+function parseCheckSelector(args) {
+  let selected
+  for (let index = 0; index < args.length; index += 1) {
+    const argument = args[index]
+    if (argument !== CHECK_SELECTOR) {
+      throw new Error(`Unknown practical smoke selector argument: ${JSON.stringify(argument)}`)
+    }
+    if (selected !== undefined) {
+      throw new Error('Practical smoke check selector may be provided only once')
+    }
+    const name = args[index + 1]
+    if (!name || name === CHECK_SELECTOR) {
+      throw new Error('Practical smoke check selector requires an exact check name')
+    }
+    selected = name
+    index += 1
+  }
+  if (selected !== undefined && !selectableChecks.has(selected)) {
+    throw new Error(`Unknown practical smoke check: ${JSON.stringify(selected)}`)
+  }
+  return selected
+}
+
 const repoRoot = new URL('..', import.meta.url).pathname.replace(/\/$/, '')
 const cliPath = join(repoRoot, 'dist', 'cli.mjs')
 const pkgVersion = JSON.parse(readFileSync(join(repoRoot, 'package.json'), 'utf8')).version
@@ -28,7 +56,10 @@ const emptyRepo = join(tmpRoot, 'empty')
 const vcsOverflowBin = join(tmpRoot, 'vcs-overflow-bin')
 const logFile = join(tmpRoot, 'pm.log')
 
-for (const dir of [homeDir, binDir, singleRepo, workspaceRoot, emptyRepo, vcsOverflowBin]) {
+const fixtureDirectories = selectedCheck
+  ? [homeDir, binDir, vcsOverflowBin]
+  : [homeDir, binDir, singleRepo, workspaceRoot, emptyRepo, vcsOverflowBin]
+for (const dir of fixtureDirectories) {
   mkdirSync(dir, { recursive: true })
 }
 writeFileSync(logFile, '', 'utf8')
@@ -285,48 +316,52 @@ process.exit(0)
 `
 }
 
-writeExecutable('npm', createPmScript('npm'))
-writeExecutable('pnpm', createPmScript('pnpm'))
-writeExecutable('bun', createPmScript('bun'))
-writeExecutable('ok-cmd', '#!/bin/sh\nexit 0\n')
-writeExecutable('fail-cmd', '#!/bin/sh\nexit 1\n')
+if (selectedCheck === undefined) setupFullSmokeFixtures()
 
-writeJson(join(singleRepo, 'package.json'), {
-  name: 'single-app',
-  private: true,
-  packageManager: 'pnpm@10.33.0',
-  dependencies: {
-    alpha: '^1.0.0',
-    beta: '~1.0.0',
-    gamma: '1.0.0',
-  },
-  devDependencies: {
-    delta: '^1.0.0',
-  },
-})
-writeFileSync(join(singleRepo, '.npmrc'), `registry=${registryUrl}\n`, 'utf8')
+function setupFullSmokeFixtures() {
+  writeExecutable('npm', createPmScript('npm'))
+  writeExecutable('pnpm', createPmScript('pnpm'))
+  writeExecutable('bun', createPmScript('bun'))
+  writeExecutable('ok-cmd', '#!/bin/sh\nexit 0\n')
+  writeExecutable('fail-cmd', '#!/bin/sh\nexit 1\n')
 
-writeJson(join(workspaceRoot, 'package.json'), {
-  name: 'workspace-root',
-  private: true,
-  packageManager: 'pnpm@10.33.0',
-})
-writeFileSync(
-  join(workspaceRoot, 'pnpm-workspace.yaml'),
-  `packages:\n  - "packages/*"\ncatalog:\n  beta: ^1.0.0\ncatalogs:\n  "mobile,v2":\n    gamma: 1.0.0\n`,
-  'utf8',
-)
-mkdirSync(join(workspaceRoot, 'packages', 'web', 'src'), { recursive: true })
-writeJson(join(workspaceRoot, 'packages', 'web', 'package.json'), {
-  name: 'web',
-  private: true,
-  dependencies: {
-    alpha: '^1.0.0',
-    beta: 'catalog:',
-    gamma: 'catalog:mobile,v2',
-  },
-})
-writeFileSync(join(workspaceRoot, '.npmrc'), `registry=${registryUrl}\n`, 'utf8')
+  writeJson(join(singleRepo, 'package.json'), {
+    name: 'single-app',
+    private: true,
+    packageManager: 'pnpm@10.33.0',
+    dependencies: {
+      alpha: '^1.0.0',
+      beta: '~1.0.0',
+      gamma: '1.0.0',
+    },
+    devDependencies: {
+      delta: '^1.0.0',
+    },
+  })
+  writeFileSync(join(singleRepo, '.npmrc'), `registry=${registryUrl}\n`, 'utf8')
+
+  writeJson(join(workspaceRoot, 'package.json'), {
+    name: 'workspace-root',
+    private: true,
+    packageManager: 'pnpm@10.33.0',
+  })
+  writeFileSync(
+    join(workspaceRoot, 'pnpm-workspace.yaml'),
+    `packages:\n  - "packages/*"\ncatalog:\n  beta: ^1.0.0\ncatalogs:\n  "mobile,v2":\n    gamma: 1.0.0\n`,
+    'utf8',
+  )
+  mkdirSync(join(workspaceRoot, 'packages', 'web', 'src'), { recursive: true })
+  writeJson(join(workspaceRoot, 'packages', 'web', 'package.json'), {
+    name: 'web',
+    private: true,
+    dependencies: {
+      alpha: '^1.0.0',
+      beta: 'catalog:',
+      gamma: 'catalog:mobile,v2',
+    },
+  })
+  writeFileSync(join(workspaceRoot, '.npmrc'), `registry=${registryUrl}\n`, 'utf8')
+}
 
 function stripNpmConfigEnvironment(environment) {
   return Object.fromEntries(
@@ -334,11 +369,13 @@ function stripNpmConfigEnvironment(environment) {
   )
 }
 
-assert.equal(
-  stripNpmConfigEnvironment({ NPM_CONFIG_REGISTRY: 'https://registry.npmjs.org/' })
-    .NPM_CONFIG_REGISTRY,
-  undefined,
-)
+if (selectedCheck === undefined) {
+  assert.equal(
+    stripNpmConfigEnvironment({ NPM_CONFIG_REGISTRY: 'https://registry.npmjs.org/' })
+      .NPM_CONFIG_REGISTRY,
+    undefined,
+  )
+}
 
 // Package-manager config from the parent would override the fixture-local .npmrc registry.
 const cleanEnv = stripNpmConfigEnvironment(process.env)
@@ -406,6 +443,7 @@ function parseJsonStdout(result) {
 
 const checks = []
 async function record(name, fn) {
+  if (selectedCheck !== undefined && name !== selectedCheck) return
   await fn()
   checks.push(name)
 }
@@ -699,7 +737,7 @@ await record('write updates manifest', async () => {
   assert.equal(manifest.dependencies.alpha, '^1.1.0')
 })
 
-await record('piped write receipt stays complete and ordered on stdout', async () => {
+await record(PIPE_RECEIPT_CHECK, async () => {
   const repo = join(tmpRoot, 'receipt-repo')
   mkdirSync(repo, { recursive: true })
   writeJson(join(repo, 'package.json'), {
@@ -960,6 +998,8 @@ await record('invalid json combo rejected', async () => {
   const payload = parseJsonStdout(result)
   assert.equal(payload.error.code, 'ERR_CONFIG')
 })
+
+if (selectedCheck !== undefined) assert.deepEqual(checks, [selectedCheck])
 
 // biome-ignore lint/suspicious/noConsole: intentional smoke-test summary
 console.log(
