@@ -5,7 +5,7 @@ import { visualPlusSectionLines, visualPlusSeparator } from '../theme'
 export function renderVisualPlusTransaction(input: VisualPlusSectionInput): readonly string[] {
   const results = new Map(input.snapshot.results.targets.map((result) => [result.path, result]))
   const separator = visualPlusSeparator(input.capabilities)
-  const logical = ['Apply transaction']
+  const logical = [input.snapshot.write ? 'Apply transaction' : 'Reviewed physical targets']
   for (const target of input.snapshot.targets) {
     const result = results.get(target.path)
     const status = result?.outcome ?? 'pending'

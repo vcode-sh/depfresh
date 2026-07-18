@@ -25,7 +25,11 @@ import {
 import { createVisualPlusTheme, wrapVisualPlusText } from '../theme'
 import { renderVisualPlusChanges } from './changes'
 import { renderVisualPlusHeader } from './header'
-import { renderVisualPlusLifecycle } from './lifecycle'
+import {
+  renderVisualPlusLifecycle,
+  renderVisualPlusLifecycleHeading,
+  renderVisualPlusLifecyclePhase,
+} from './lifecycle'
 import { renderVisualPlusReceipt } from './receipt'
 import { renderVisualPlusTopology } from './topology'
 import { renderVisualPlusTransaction } from './transaction'
@@ -787,6 +791,18 @@ describe('Visual+ pure sections', () => {
     ).toBe(true)
   })
 
+  it('renders standalone lifecycle headings and phases with the section wrapping contract', () => {
+    const heading = renderVisualPlusLifecycleHeading({ ...capable, color: false, width: 8 })
+    const phase = renderVisualPlusLifecyclePhase(
+      { name: 'discover', status: 'active' },
+      { ...capable, color: false, width: 8 },
+    )
+
+    expect(heading).toEqual(['Lifecycl', 'e'])
+    expect(phase.every((line) => visualLength(line) <= 8)).toBe(true)
+    expect(phase.join('')).toBe('discover · ◆ active')
+  })
+
   it('renders exact operation-ID membership under every structured transaction target', () => {
     const input = createVisualPlusSectionInput(fixture())
     const lines = renderVisualPlusTransaction(input).map(stripAnsi)
@@ -797,6 +813,20 @@ describe('Visual+ pure sections', () => {
     for (const change of input.snapshot.changes) {
       expect(transaction.match(new RegExp(`${change.id}(?![0-9])`, 'gu'))).toHaveLength(1)
     }
+  })
+
+  it('uses a neutral transaction heading for read-only physical target evidence', () => {
+    const source = fixture()
+    const input = createVisualPlusSectionInput({
+      ...source,
+      snapshot: { ...source.snapshot, write: false },
+      writeReceipt: undefined,
+    })
+    const lines = renderVisualPlusTransaction(input).map(stripAnsi)
+
+    expect(lines[0]).toBe('Reviewed physical targets')
+    expect(lines).not.toContain('Apply transaction')
+    expect(lines.filter((line) => line.startsWith('Operations '))).toHaveLength(14)
   })
 
   it('renders ambiguous manager versions and unavailable evidence sources', () => {
