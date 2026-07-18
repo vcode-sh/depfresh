@@ -95,3 +95,10 @@ legacy result-hook, after-write, after-end, idempotence, and error-precedence se
 check suite passes 440/440 tests, focused lifecycle and write/global/post-write matrices pass 48/48
 and 26/26, and typecheck/Biome/diff gates pass. Independent review found no Critical, Important, or
 Minor issues. Task 2 command-level plan construction is next.
+Plan 033 Task 2: complete in 5f8bcd0. Ordered local selections now build one deterministic immutable
+plan, deduplicate shared physical occurrences, block ambiguous values before engine entry, execute
+the ready plan once with least file authority, and project outcomes plus structural attempts by real
+operation ID. Public apply/schema/declaration/version surfaces are unchanged. Adapter 17/17,
+structural 6/6, broader 185/185, full apply 71/71, typecheck, build, schemas, Biome, and diff gates
+pass. Independent concurrency/protocol/format/containment/authority review found no Critical,
+Important, or Minor issues. Task 3 authoritative orchestration is next.

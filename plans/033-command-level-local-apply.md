@@ -147,7 +147,7 @@ review reported no Critical, Important, or Minor findings.
 - Consumes: the effective repository root and ordered local `PreparedPackage[]`.
 - Produces: `applyLegacyCommandWrite()` returning one `ApplyResult` plus exact package projections.
 
-- [ ] **Step 1: Write multi-package plan RED tests**
+- [x] **Step 1: Write multi-package plan RED tests**
 
 Build three packages with operations in two manifests and one shared Bun catalog owner. Assert one
 plan has all unique physical operations, deterministic ordering, the effective-root repository
@@ -180,19 +180,19 @@ export type LegacyCommandApplyResult =
     })
 ```
 
-- [ ] **Step 2: Run the plan RED tests**
+- [x] **Step 2: Run the plan RED tests**
 
 Run: `pnpm exec vitest run src/commands/apply/legacy-plan.test.ts`
 
 Expected: FAIL because `createLegacyPlan()` is private and accepts one package at a time.
 
-- [ ] **Step 3: Extract plan construction**
+- [x] **Step 3: Extract plan construction**
 
 Move input collection and plan construction into `legacy-plan.ts`. Require an explicit canonical
 effective root; reject any source outside it. Preserve exact source bytes, byte hashes, occurrence
 paths, formatting metadata, plan fingerprinting, VCS diagnostics, and invocation authority.
 
-- [ ] **Step 4: Deduplicate physical occurrences safely**
+- [x] **Step 4: Deduplicate physical occurrences safely**
 
 `executed` means the engine ran exactly once; it does not claim that its `ApplyResult` succeeded.
 Key operations by source file plus JSON/YAML path. Identical expected/requested pairs become one
@@ -201,7 +201,7 @@ produce the deterministic blocked result with `AMBIGUOUS_OCCURRENCE` outcomes fo
 all structural attempts false, no `applyResult`, and zero engine calls; never select one by package
 order or fabricate a dummy/no-op plan result.
 
-- [ ] **Step 5: Apply exactly once and project outcomes**
+- [x] **Step 5: Apply exactly once and project outcomes**
 
 Implement:
 
@@ -222,10 +222,20 @@ schema or inferring attempts from reason strings. Every selected operation and p
 map to one explicit `replacementAttempted` fact, including staging failure, zero-replacement commit
 failure, later commit abort, and recovery branches.
 
-- [ ] **Step 6: Run GREEN apply adapter tests**
+- [x] **Step 6: Run GREEN apply adapter tests**
 
 Run legacy-plan, apply, observed write-flow, catalog, JSON/YAML formatting, and line-ending tests.
 Expected: all pass; one apply call covers every local target; shared catalog writes occur once.
+
+**Completion evidence (2026-07-18):** Command-level plan construction was implemented in `5f8bcd0`.
+Ready input executes the stateless engine exactly once with least file authority; physical
+occurrences deduplicate by canonical source/path and project by real operation ID. Ambiguity returns
+the explicit blocked variant with zero engine calls and false attempts. Package-private execution
+evidence retains exact replacement attempts and apply-time VCS diagnostics without changing public
+`apply()`, schemas, declarations, dependencies, or version. Focused adapter, structural, and broader
+matrices pass 17/17, 6/6, and 185/185; full apply passes 71/71 with typecheck, build, schemas, Biome,
+and diff checks green. Independent adversarial review reported no Critical, Important, or Minor
+findings.
 
 ### Task 3: Make the command-level apply authoritative
 
