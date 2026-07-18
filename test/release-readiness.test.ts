@@ -172,6 +172,25 @@ describe('2.0.1 release readiness', () => {
     expect(builtJavaScript).toMatch(/activeProgress\.onRepositoryInspectionStart\(\)/u)
   })
 
+  it('uses a self-contained local package gate while hosted workflows retain manifests', () => {
+    const packageJson = JSON.parse(read('package.json')) as {
+      scripts?: Record<string, string>
+    }
+    const ci = read('.github/workflows/ci.yml')
+    const release = read('.github/workflows/release.yml')
+    const explicitVerifier = 'node scripts/verify-packed-package.mjs artifacts/pack.json'
+    const explicitPack =
+      'npm pack --json --ignore-scripts --pack-destination artifacts > artifacts/pack.json'
+
+    expect(packageJson.scripts?.['verify:package']).toBe('node scripts/verify-local-package.mjs')
+    expect(ci).toContain(explicitPack)
+    expect(ci).toContain(explicitVerifier)
+    expect(release).toContain(explicitPack)
+    expect(release).toContain(explicitVerifier)
+    expect(ci).not.toContain('scripts/verify-local-package.mjs')
+    expect(release).not.toContain('scripts/verify-local-package.mjs')
+  })
+
   it('runs the complete release gate before publishing the exact verified tarball', () => {
     const release = read('.github/workflows/release.yml')
     for (const gate of [
