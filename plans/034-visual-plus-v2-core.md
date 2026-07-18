@@ -405,8 +405,11 @@ or Minor findings.
 - Create: `src/commands/check/visual-plus/renderer.ts`
 - Create: `src/commands/check/visual-plus/renderer.test.ts`
 - Create: `src/commands/check/visual-plus/index.ts`
-- Modify: `src/commands/check/progress.ts`
-- Modify: `src/commands/check/progress.test.ts`
+- Modify: `src/commands/check/visual-plus/sections/lifecycle.ts`
+- Modify: `src/commands/check/visual-plus/sections/transaction.ts`
+- Modify: `src/commands/check/visual-plus/sections/sections.test.ts`
+- Verify unchanged: `src/commands/check/progress.ts`
+- Verify unchanged: `src/commands/check/progress.test.ts`
 
 **Interfaces:**
 
@@ -414,17 +417,76 @@ or Minor findings.
   receipt evidence, output writer, and injected scheduler.
 - Produces: `createVisualPlusRenderer(options): VisualPlusRenderer`.
 
+Task 3 uses these exact package-private contracts:
+
+```ts
+export interface VisualPlusOutputWriter {
+  write(chunk: string): void
+}
+
+export interface VisualPlusScheduler {
+  schedule(callback: () => void, delayMs: number): () => void
+}
+
+export interface CreateVisualPlusRendererOptions {
+  capabilities: VisualPlusCapabilities
+  writer: VisualPlusOutputWriter
+  scheduler: VisualPlusScheduler
+  onError(error: unknown): void
+}
+```
+
+The production scheduler used in Task 4 must create an unreferenced timeout and return an
+idempotent cancel function. The renderer never reads `process`, `console`, logger state, terminal
+width, or environment state, never writes stderr, and never owns process signal listeners. All
+durable and live bytes use the same synchronous stdout writer so ordering is observable. Each
+durable line is written with exactly one trailing `\n`. Stream buffering and backpressure remain
+the injected writer's responsibility.
+
+`schedule()` receives exactly `50` ms and may be called only when no callback is pending. Startup
+feedback is synchronous; later snapshots coalesce to the newest snapshot in the one pending
+callback, so updates render at most 20 times per second. Cancellation invalidates the callback even
+if an adversarial scheduler invokes it later. Plain/non-motion modes never call `schedule()`.
+
+The renderer is `idle -> live -> review-written -> finalized`, with `failed` and `disposed` terminal
+states. `start()` subscribes exactly once and safely handles the controller's synchronous initial
+notification. It requires the initial snapshot to have zero selected operations, targets, and
+results; a late start fails before output. A repeated start fails before output. `writeReview()` and
+`finalize()` each accept one validated deep-frozen input. Identical retries are no-ops; divergent
+retries fail closed. Nonempty finalization requires a prior review. Zero-selection early
+finalization may omit review. `dispose()` is idempotent.
+
+The renderer observer catches all writer, scheduler, and render failures because controller
+observers do not propagate errors. It cancels, clears only its live region, unsubscribes, calls
+`onError()` once, ignores any error thrown by `onError()`, and schedules no more work. A synchronous
+initial observer failure is rethrown by `start()` after subscription cleanup. A failure from an
+explicit renderer method is rethrown after cleanup. A failure from a user-supplied suspension
+callback tears down and rethrows the original callback error without calling `onError()`.
+All internal writer, scheduler, or render failures, synchronous or asynchronous, call `onError()`
+once; failures reached through an explicit method additionally rethrow the original error. Cleanup
+and `onError()` failures never replace that first error. Contract and usage errors, including late
+or repeated start, illegal state calls, divergent retries, and stale or foreign input, clean up and
+rethrow without calling `onError()`. User suspension callback failures also do not call `onError()`.
+
 - [ ] **Step 1: Write renderer lifecycle RED tests**
 
-Assert feedback within 100 ms, one active indicator, timer throttling, durable suspension, stable
-phase resolution, no frames after finalize/error/signal, idempotent cleanup, and no cursor bytes in
-plain modes.
+Assert synchronous feedback (and therefore feedback within 100 ms), one active indicator, one
+pending 50 ms callback, burst coalescing, durable nested sync/async suspension, stable phase
+resolution, no frames after finalize/error/termination disposal, idempotent cleanup, and no timer
+or cursor bytes in plain modes. Include golden raw-byte transcripts for zero/one/multiple wrapped
+lines, growth, shrinkage, suspend/resume, narrow width, finalization, adversarial post-cancel
+callbacks, and writer/scheduler failure. Add stale/foreign controller snapshot and
+finalize-during-async-suspension REDs; both fail before transaction, receipt, or success bytes. Add
+a capable reduced-motion case with color and wide layout: SGR is allowed, while timers, carriage
+returns, erase, movement, hide, and show bytes remain absent.
 
 ```ts
 export interface VisualPlusRenderer {
   start(controller: CheckRunController, run: VisualPlusRunMetadata): void
   writeReview(input: VisualPlusSectionInput): void
   finalize(input: VisualPlusSectionInput): void
+  suspend<T>(write: () => T): T
+  suspendAsync<T>(write: () => Promise<T>): Promise<T>
   dispose(): void
 }
 ```
@@ -432,6 +494,55 @@ export interface VisualPlusRenderer {
 `start()` may render only lifecycle and already supplied run facts. `writeReview()` is called only
 after exact change metadata and pre-apply physical targets reconcile. `finalize()` receives the
 same immutable selection plus canonical write-receipt evidence when `snapshot.write` is true.
+
+Section ownership is exact. `start()` validates the zero-selection startup snapshot, writes the
+header and one `Lifecycle` heading durably, and then owns only the current lifecycle phase as a live
+region. Each newly terminal phase is cleared from the live region and appended durably exactly
+once in canonical phase order; pending phases are never written. `writeReview()` first validates
+and freezes the full input, requires capability equality and full equality to the latest subscribed
+controller snapshot, then flushes the latest lifecycle state, suspends the live region, and writes
+topology plus the complete change list once. It does not write transaction or receipt rows.
+`finalize()` first cancels pending callbacks and,
+before flushing or clearing lifecycle state, requires the review/final `input.snapshot` to be
+semantically equal to the latest snapshot delivered by the subscribed controller. It also validates
+semantic equality of run metadata, ordered operation metadata, snapshot changes, and target
+membership against the review input. Only after every validation succeeds does it flush and clear,
+write the final physical-target transaction once for every nonempty read-only or write run, write
+the final receipt once, cancel, and unsubscribe. `transaction.ts` uses the existing `Apply
+transaction` heading for write runs and the neutral `Reviewed physical targets` heading for
+read-only runs without changing its target rows. Snapshot equality covers the full ordered
+`CheckRunSnapshot` contract, not only its selection. Every review/final input must also contain
+capabilities field-equal to the immutable startup `options.capabilities`; width, layout, color,
+Unicode, motion, or cursor-control drift fails before section bytes. Equality is field equality in
+the contract's canonical array order, not object identity. A mismatch or invalid final receipt
+tears down before any transaction, command-success lifecycle, or receipt bytes.
+
+The observer never commits the terminal `complete` lifecycle row when `snapshot.exitCode` is
+non-null. It retains that command verdict until `finalize()` validates the authoritative final
+input. Other phase rows are factual lifecycle evidence and may resolve normally. Successful
+finalization then appends `complete` exactly once before the transaction and receipt; failed
+validation clears only any owned live frame and emits no command-success lifecycle row.
+
+Add a pure lifecycle-phase helper to `sections/lifecycle.ts` so incremental rows retain Task 2
+wrapping, sanitization, color, Unicode, and ASCII behavior without fabricating a full section input.
+Capable cursor mode uses the current raw frame protocol: write each owned line as
+`\r\x1B[2K<line>\n`; before replacement or clearing, move up by the exact owned physical-line
+count, erase that many lines, and return to the top. Frames may grow or shrink and may erase only
+owned lines. The renderer never hides or shows the cursor. Plain/non-motion mode is append-only: it
+writes a lifecycle row only when the phase/status bytes change, creates no timer, and emits no
+carriage return or cursor-control erase, movement, hide, or show bytes. ANSI SGR styling remains
+allowed whenever the immutable capability has `color: true`, including a capable reduced-motion
+terminal; constrained plain capabilities remain colorless under Task 1.
+
+Outermost `suspend()`/`suspendAsync()` cancels the pending callback, flushes terminal lifecycle
+facts, clears the owned live frame, runs or awaits the durable callback, and redraws only the newest
+active phase when the renderer is still live. Nested suspension is depth-counted and performs no
+extra clear/redraw. Finalize, dispose, renderer failure, and callback failure cancel before teardown
+and never redraw. Suspension is legal only in `live` or `review-written`; outside those states it
+fails before invoking the callback. `writeReview()` and `finalize()` fail closed while a user
+suspension is active. `dispose()` ends renderer ownership during an outstanding asynchronous
+suspension but cannot suppress later bytes written by that caller-owned callback. Task 4 must await
+every `suspendAsync()` before finalization, and route-level tests must prove that ordering.
 
 - [ ] **Step 2: Run renderer RED tests**
 
@@ -445,10 +556,18 @@ Reuse the current 50 ms maximum refresh cadence. Redraw only lifecycle lines, cl
 renderer owns, and suspend/resolve the live region before any durable section. On non-motion modes,
 write a phase only when state changes. Never replay accumulated frames.
 
-- [ ] **Step 4: Retire duplicate progress ownership**
+- [ ] **Step 4: Preserve compatibility ownership until route migration**
 
-Make `progress.ts` a compatibility wrapper or remove its private cursor loop after all callers move.
-There must be exactly one timer and cursor owner. Preserve current cleanup behavior during errors.
+Task 3 is standalone and dormant. Keep `progress.ts` behavior and bytes unchanged while its callers
+still exist. Task 4 must construct exactly one of legacy progress or Visual+ for a route, disable
+legacy progress on the Visual+ route, and then decide whether extracting a shared primitive is
+useful. JSON, silent, library, interactive, global, and global-all routes retain their current
+owners. Real signal-to-renderer disposal is also a Task 4 integration responsibility; Task 3 proves
+the termination contract through `dispose()` and adds no renderer-owned process listener.
+
+Width is the immutable startup capability width from Task 1 for all Task 3 frames. Resize-aware
+rendering is deferred unless a later plan explicitly adds an injected width source; the renderer
+must not privately reread `process.stdout.columns`.
 
 - [ ] **Step 5: Run renderer GREEN tests**
 
