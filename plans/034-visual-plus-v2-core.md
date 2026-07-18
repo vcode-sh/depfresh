@@ -95,7 +95,7 @@ Unicode remains available in CI and pipes; only `TERM=dumb` forces ASCII. A capa
 `narrow` below 60 columns, `medium` from 60 through 99, and `wide` from 100 columns. Reduced motion
 changes only `motion` and `cursorControl`; `NO_COLOR` changes only `color`.
 
-- [ ] **Step 1: Write capability RED tests**
+- [x] **Step 1: Write capability RED tests**
 
 Cover capable color TTY, `NO_COLOR`, reduced motion, widths 8/10/40/60/80/118, zero/undefined
 columns, `TERM=dumb`, CI, and non-TTY pipe.
@@ -112,13 +112,13 @@ export interface VisualPlusCapabilities {
 }
 ```
 
-- [ ] **Step 2: Run capability RED tests**
+- [x] **Step 2: Run capability RED tests**
 
 Run: `pnpm exec vitest run src/commands/check/visual-plus/capabilities.test.ts`
 
 Expected: FAIL because the module does not exist.
 
-- [ ] **Step 3: Implement one startup decision**
+- [x] **Step 3: Implement one startup decision**
 
 Detect capabilities once per run. Use deterministic layout thresholds proved by snapshots, not
 terminal brand detection. `TERM=dumb` forces ASCII/plain/no motion; non-TTY and CI force
@@ -127,10 +127,18 @@ plain/no-motion/no cursor; `NO_COLOR` changes only color; zero columns use width
 Task 1 additions to `render-layout.ts` must be pure and additive. Do not change existing
 `getTerminalWidth()`, `fitCell()`, column sizing, truncation, table bytes, or callers before Task 4.
 
-- [ ] **Step 4: Run capability GREEN tests**
+- [x] **Step 4: Run capability GREEN tests**
 
 Run the new test plus current `progress.test.ts`, `render-overflow.test.ts`, and typecheck.
 Expected: all pass and existing width utilities remain compatible.
+
+**Completion evidence (2026-07-18):** The pure capability contract was implemented in `8a5d011`.
+The RED run failed because `./capabilities` did not exist. The final focused matrix passed 49/49
+tests across capabilities, progress, and overflow; typecheck, focused Biome, and diff checks also
+passed. Width normalization, layout boundaries, CI, `TERM=dumb`, `NO_COLOR`, both TTY streams,
+Unicode, reduced motion, and cursor behavior have exact boundary coverage. Existing layout helpers
+and callers remain unchanged; the new layout helpers are pure and additive. Independent spec and
+quality reviews reported no Critical, Important, or Minor findings.
 
 ### Task 2: Pure lifecycle, topology, row, target, and receipt sections
 

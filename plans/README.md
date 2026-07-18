@@ -61,7 +61,7 @@ may grant side effects. Unknown state is never reported as success.
 | [031](./031-v2.0.2-release.md) | Publish and prove depfresh 2.0.2 | P0 | M | 030 | DONE |
 | [032](./032-check-run-model.md) | Renderer-neutral check run model | P1 | M | 031 | DONE |
 | [033](./033-command-level-local-apply.md) | Command-level local apply | P0 | L | 032 | DONE |
-| [034](./034-visual-plus-v2-core.md) | Visual+ v2 core terminal renderer | P1 | L | 033 | TODO |
+| [034](./034-visual-plus-v2-core.md) | Visual+ v2 core terminal renderer | P1 | L | 033 | IN PROGRESS |
 | [035](./035-visual-plus-insights-pty-proof.md) | Visual+ insights and PTY proof | P1 | L | 034 | TODO |
 | [036](./036-v2.1.0-release.md) | Publish and prove depfresh 2.1.0 | P1 | M | 035 | TODO |
 
@@ -257,9 +257,12 @@ preflights every selected physical target before the first replacement, and reta
 structural attempts plus best-effort recovery evidence. The final 397-test focused matrix passed
 three times, full coverage passed 149 files and 1,775 tests, all static/build/smoke/demo/release and
 56-file package gates passed, and repeated declaration builds exactly matched public `2.0.2`.
-Independent authority/model and public-contract reviews reported no findings. Plan 034 is now next
-and replaces fragmented table/progress output with the inline, complete, copyable
-Visual+ v2 renderer. Plan 035 adds topology, severity, impact, shared-surface, and major-risk
+Independent authority/model and public-contract reviews reported no findings. Plan 034 is in
+progress: Task 1 added the pure, deterministic capability contract in `8a5d011`, with 49/49 focused
+tests, static gates, and two clean independent reviews. Task 2 is next and will add pure lifecycle,
+topology, change-row, transaction, and receipt sections. Plan 034 replaces fragmented table/progress
+output with the inline, complete, copyable Visual+ v2 renderer. Plan 035 adds topology, severity,
+impact, shared-surface, and major-risk
 visualizations plus full built-CLI PTY/fallback proof against the deterministic 66-package,
 616-declaration, 76-update, 14-target acceptance fixture. Plan 036 owns the immutable `2.1.0`
 release and public installed-product replay. Full-screen Focus TUI/OpenTUI is explicitly outside

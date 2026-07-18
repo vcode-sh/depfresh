@@ -119,3 +119,8 @@ files and 1,775 tests. Schemas, typecheck, lint over 319 files, build, 35-check/
 14-check demo, 102 release tests, exact 56-file package verification, package dry-run, repeated
 public declaration byte checks, and final C0/I0/M0 reviews all passed. Plan 033 is DONE; Plan 034 is
 next.
+Plan 034 Task 1: complete in 8a5d011. The pure startup capability detector now defines exact width,
+layout, CI, dumb-terminal, NO_COLOR, dual-stream TTY, Unicode, reduced-motion, and cursor truth.
+Focused capability/progress/overflow proof passes 49/49 tests with typecheck, Biome, and diff gates
+green. Existing render-layout behavior and callers remain unchanged, and independent spec plus code
+quality reviews reported no Critical, Important, or Minor findings. Task 2 pure sections are next.
