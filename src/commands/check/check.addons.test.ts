@@ -22,13 +22,29 @@ describe('addons', () => {
     mocks.loadPackagesMock.mockResolvedValue([pkg])
     mocks.resolvePackageMock.mockResolvedValue(resolved)
 
-    const setup = vi.fn()
-    const afterPackagesLoaded = vi.fn()
-    const beforePackageStart = vi.fn()
-    const beforePackageWrite = vi.fn(() => true)
-    const afterPackageWrite = vi.fn()
-    const afterPackageEnd = vi.fn()
-    const afterPackagesEnd = vi.fn()
+    const order: string[] = []
+    const setup = vi.fn(() => {
+      order.push('setup')
+    })
+    const afterPackagesLoaded = vi.fn(() => {
+      order.push('afterPackagesLoaded')
+    })
+    const beforePackageStart = vi.fn(() => {
+      order.push('beforePackageStart')
+    })
+    const beforePackageWrite = vi.fn(() => {
+      order.push('beforePackageWrite')
+      return true
+    })
+    const afterPackageWrite = vi.fn(() => {
+      order.push('afterPackageWrite')
+    })
+    const afterPackageEnd = vi.fn(() => {
+      order.push('afterPackageEnd')
+    })
+    const afterPackagesEnd = vi.fn(() => {
+      order.push('afterPackagesEnd')
+    })
 
     const addon: depfreshAddon = {
       name: 'test-addon',
@@ -53,6 +69,21 @@ describe('addons', () => {
     expect(afterPackageEnd).toHaveBeenCalledTimes(1)
     expect(afterPackagesEnd).toHaveBeenCalledTimes(1)
     expect(mocks.writePackageMock).toHaveBeenCalledTimes(1)
+    expect(order).toEqual([
+      'setup',
+      'afterPackagesLoaded',
+      'beforePackageStart',
+      'beforePackageWrite',
+      'afterPackageWrite',
+      'afterPackageEnd',
+      'afterPackagesEnd',
+    ])
+    expect(beforePackageWrite.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.writePackageMock.mock.invocationCallOrder[0]!,
+    )
+    expect(mocks.writePackageMock.mock.invocationCallOrder[0]).toBeLessThan(
+      afterPackageWrite.mock.invocationCallOrder[0]!,
+    )
   })
 
   it('skips write when addon beforePackageWrite returns false', async () => {

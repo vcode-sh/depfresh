@@ -1,3 +1,4 @@
+import { relative, sep } from 'node:path'
 import { performance } from 'node:perf_hooks'
 import c from 'ansis'
 import { createAddonLifecycle } from '../../addons'
@@ -38,6 +39,13 @@ import { renderUpToDate, runExecute } from './post-write-actions'
 import { type ProcessPackageHooks, processPackage } from './process-package'
 import { type CheckProgress, createCheckProgress } from './progress'
 import { renderResolutionErrors, renderTable } from './render'
+import { type CheckRunController, createCheckRunController } from './run-controller'
+import type {
+  CheckRunChange,
+  CheckRunOperationResult,
+  CheckRunTarget,
+  CheckRunTargetResult,
+} from './run-model'
 import { buildWriteReceipt, formatWriteReceipt } from './write-receipt'
 
 export async function check(
@@ -60,9 +68,14 @@ async function runCheck(
   requestedAuthority: InvocationAuthority,
   renderProgress: boolean,
   invocationSelection?: InvocationScopeExclusions,
+  injectedRunController?: CheckRunController,
 ): Promise<number> {
   const authority = snapshotInvocationAuthority(requestedAuthority)
   const totalStart = performance.now()
+  const runController = shouldModelRun(options)
+    ? (injectedRunController ??
+      createCheckRunController({ mode: options.mode, write: false, now: () => performance.now() }))
+    : undefined
   const logLevel = options.output === 'json' ? 'silent' : options.loglevel
   const addonOptions: depfreshOptions = {
     ...options,
@@ -110,6 +123,8 @@ async function runCheck(
       : hasSelection
         ? await loadPackages(runtimeOptions, undefined, invocationSelection)
         : await loadPackages(runtimeOptions)
+    const declaredDependencies = packages.reduce((sum, pkg) => sum + pkg.deps.length, 0)
+    emitDiscoveryAndInspection(runController, packages.length, declaredDependencies)
     selectionReceipt = readInvocationSelectionReceipt(runtimeOptions)
     const discoveryMs = performance.now() - discoveryStart
     progress?.onPackagesReady(packages)
@@ -138,6 +153,20 @@ async function runCheck(
     }
 
     if (packages.length === 0) {
+      runController?.emit({
+        type: 'resolution-completed',
+        eligible: 0,
+        unresolved: 0,
+        updates: 0,
+        status: 'passed',
+      })
+      runController?.emit({
+        type: 'selection-completed',
+        operations: 0,
+        targets: 0,
+        changes: [],
+        selectedTargets: [],
+      })
       progress?.done()
       if (runtimeOptions.profile) {
         runtimeOptions.profileReport = {
@@ -159,7 +188,9 @@ async function runCheck(
       if (options.output === 'json') {
         outputJsonEnvelope([], runtimeOptions, executionState, [], selectionReceipt)
       }
-      return options.failOnNoPackages ? 2 : 0
+      const noPackagesExitCode = options.failOnNoPackages ? 2 : 0
+      finalizeReadOnlyRun(runController, noPackagesExitCode)
+      return noPackagesExitCode
     }
 
     await writeDurableAsync(progress, () => addons.afterPackagesLoaded(packages))
@@ -278,6 +309,8 @@ async function runCheck(
           if (pending) completedResolutions.set(pkg, await pending)
         }),
       )
+      const resolutionFacts = readResolutionFacts(completedResolutions, totalDependencies)
+      emitResolution(runController, resolutionFacts)
       progress?.onRenderingStart()
       for (const pkg of packages) {
         const processCurrentPackage = () =>
@@ -297,6 +330,12 @@ async function runCheck(
         progress?.onPackageRendered()
       }
       await writeDurableAsync(progress, () => addons.afterPackagesEnd(packages))
+      emitReadOnlySelection(
+        runController,
+        packages,
+        executionRoot,
+        runController?.snapshot().counts.updates ?? 0,
+      )
     } finally {
       progress?.done()
       const stats = cache.stats()
@@ -319,7 +358,6 @@ async function runCheck(
     }
 
     if (progress && options.output === 'table') {
-      const declaredDependencies = packages.reduce((sum, pkg) => sum + pkg.deps.length, 0)
       const skippedDependencies = Math.max(0, declaredDependencies - totalDependencies)
       const pinnedDependencies = packages.reduce(
         (sum, pkg) =>
@@ -433,10 +471,14 @@ async function runCheck(
     }
 
     if (executionState.failedResolutions > 0 && options.failOnResolutionErrors) {
+      finalizeReadOnlyRun(runController, finalExitCode)
       return finalExitCode
     }
 
-    if (writeFailed) return finalExitCode
+    if (writeFailed) {
+      finalizeReadOnlyRun(runController, finalExitCode)
+      return finalExitCode
+    }
 
     if (
       runtimeOptions.profile &&
@@ -447,12 +489,15 @@ async function runCheck(
     }
 
     if (postWriteFailed && options.strictPostWrite) {
+      finalizeReadOnlyRun(runController, finalExitCode)
       return finalExitCode
     }
 
+    finalizeReadOnlyRun(runController, finalExitCode)
     return finalExitCode
   } catch (error) {
     progress?.done()
+    failReadOnlyRun(runController)
     if (options.output === 'json') {
       outputJsonError(error, { cwd: options.cwd, mode: options.mode })
     } else {
@@ -460,6 +505,147 @@ async function runCheck(
     }
     return 2
   }
+}
+
+function shouldModelRun(options: depfreshOptions): boolean {
+  return !(options.write || options.global || options.globalAll)
+}
+
+function emitDiscoveryAndInspection(
+  controller: CheckRunController | undefined,
+  packages: number,
+  declared: number,
+): void {
+  if (!controller) return
+  controller.emit({ type: 'packages-discovered', packages, declared })
+  controller.emit({ type: 'repository-inspection-started' })
+  controller.emit({ type: 'repository-inspection-completed', status: 'passed' })
+}
+
+function emitResolution(
+  controller: CheckRunController | undefined,
+  facts: Readonly<{ eligible: number; unresolved: number; updates: number }>,
+): void {
+  if (!controller) return
+  controller.emit({ type: 'resolution-completed', ...facts, status: 'passed' })
+}
+
+function readResolutionFacts(
+  completed: ReadonlyMap<PackageMeta, ResolvedDepChange[]>,
+  expectedEligible: number,
+): { eligible: number; unresolved: number; updates: number } {
+  let unresolved = 0
+  let updates = 0
+  for (const changes of completed.values()) {
+    for (const change of changes) {
+      if (change.diff === 'error') unresolved += 1
+      else if (change.diff !== 'none') updates += 1
+    }
+  }
+  const eligible = expectedEligible
+  const retainedUnresolved = Math.min(unresolved, eligible)
+  const retainedUpdates = Math.min(updates, eligible - retainedUnresolved)
+  return { eligible, unresolved: retainedUnresolved, updates: retainedUpdates }
+}
+
+function emitReadOnlySelection(
+  controller: CheckRunController | undefined,
+  packages: PackageMeta[],
+  root: string,
+  maximumChanges: number,
+): void {
+  if (!controller) return
+  const changes: CheckRunChange[] = []
+  const targetsByPath = new Map<string, string[]>()
+
+  for (const [packageIndex, pkg] of packages.entries()) {
+    const owner = repositoryRelativePath(root, pkg.filepath)
+    for (const [changeIndex, change] of pkg.resolved.entries()) {
+      if (change.diff === 'none' || change.diff === 'error') continue
+      if (changes.length >= maximumChanges) continue
+      const id = `change:${packageIndex}:${changeIndex}`
+      changes.push({
+        id,
+        name: sanitizeTerminalText(change.name),
+        owner,
+        current: sanitizeTerminalText(change.rawVersion ?? change.currentVersion),
+        target: sanitizeTerminalText(change.targetVersion),
+        diff: change.diff,
+      })
+      const operationIds = targetsByPath.get(owner)
+      if (operationIds) operationIds.push(id)
+      else targetsByPath.set(owner, [id])
+    }
+  }
+
+  const selectedTargets: CheckRunTarget[] = [...targetsByPath].map(([path, operationIds]) => ({
+    path,
+    operationIds,
+  }))
+  controller.emit({
+    type: 'selection-completed',
+    operations: changes.length,
+    targets: selectedTargets.length,
+    changes,
+    selectedTargets,
+  })
+}
+
+function repositoryRelativePath(root: string, filepath: string): string {
+  return relative(root, filepath).split(sep).map(encodeURIComponent).join('/')
+}
+
+function finalizeReadOnlyRun(
+  controller: CheckRunController | undefined,
+  exitCode: 0 | 1 | 2,
+): void {
+  if (!controller || controller.snapshot().exitCode !== null) return
+  const { operations, targets } = readOnlyResults(controller)
+  controller.emit({ type: 'results-recorded', operations, targets })
+  controller.emit({
+    type: 'run-completed',
+    eventId: 'run-completed',
+    elapsedMs: 0,
+    exitCode,
+  })
+}
+
+function failReadOnlyRun(controller: CheckRunController | undefined): void {
+  if (!controller || controller.snapshot().exitCode !== null) return
+  const activePhase = controller
+    .snapshot()
+    .phases.find((phase) => phase.status === 'active' && phase.name !== 'complete')
+  if (activePhase) {
+    controller.emit({ type: 'phase-completed', phase: activePhase.name, status: 'failed' })
+  }
+  controller.emit({
+    type: 'diagnostics-recorded',
+    diagnostics: [{ code: 'CHECK_RUN_FAILED' }],
+  })
+  finalizeReadOnlyRun(controller, 2)
+}
+
+function readOnlyResults(controller: CheckRunController): {
+  operations: CheckRunOperationResult[]
+  targets: CheckRunTargetResult[]
+} {
+  const snapshot = controller.snapshot()
+  const operations = snapshot.changes.map((change) => ({
+    operationId: change.id,
+    outcome: 'not-attempted' as const,
+    blocked: false,
+    notAttempted: true,
+    unknown: false,
+  }))
+  const targets = snapshot.targets.map((target) => ({
+    path: target.path,
+    operationIds: target.operationIds,
+    outcome: 'not-attempted' as const,
+    blocked: false,
+    notAttempted: true,
+    unknown: false,
+  }))
+  return { operations, targets }
 }
 
 function writeDurable<T>(progress: CheckProgress | null, write: () => T): T {

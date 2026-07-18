@@ -272,6 +272,57 @@ describe('run-check orchestration paths', () => {
     }
   })
 
+  it('keeps redirected table stdout, stderr, and cursor bytes stable', async () => {
+    const update = makeResolved({
+      name: 'needs-update',
+      currentVersion: '^1.0.0',
+      targetVersion: '^2.0.0',
+      diff: 'major',
+    })
+    const pkg = makePkg('table-app', [update])
+    mocks.loadPackagesMock.mockResolvedValue([pkg])
+    mocks.resolvePackageMock.mockResolvedValue([update])
+    setStdoutTTY(false)
+    const stdoutWriteSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    try {
+      const { check } = await import('./index')
+      const exitCode = await check({ ...baseOptions, output: 'table', loglevel: 'info' })
+
+      expect(exitCode).toBe(0)
+      expect({
+        stdout: stdoutWriteSpy.mock.calls.map((call) => String(call[0])),
+        logs: logSpy.mock.calls.map((call) => call.map(String)),
+        errors: errorSpy.mock.calls.map((call) => call.map(String)),
+      }).toEqual({
+        stdout: [],
+        logs: [
+          [],
+          ['table-app'],
+          [],
+          ['  dependencies'],
+          ['    name          current -> target  diff        age'],
+          ['    ------------------------------------------------'],
+          ['    needs-update  ^1.0.0  -> ^2.0.0  major          '],
+          [],
+          ['  1 major  (1 total)'],
+          [],
+          ['i', 'Tip: Run `depfresh major` to check for major updates'],
+          ['i', 'Tip: Add `-w` to write changes to package files'],
+        ],
+        errors: [
+          ['Tip: Use --output json for structured output. Run --help-json for CLI capabilities.'],
+        ],
+      })
+    } finally {
+      stdoutWriteSpy.mockRestore()
+      logSpy.mockRestore()
+      errorSpy.mockRestore()
+    }
+  })
+
   it('does not claim repository-evidence inspection for global CLI discovery', async () => {
     const packages = makeMixedPackages()
     mocks.loadPackagesMock.mockImplementation(
