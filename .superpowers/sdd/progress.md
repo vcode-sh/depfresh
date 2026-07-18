@@ -33,3 +33,6 @@ tests with coverage, 34-check smoke, 14-check demo, build, schemas, typecheck, B
 without ENOBUFS or Git index mutation. Final code and docs/terminal re-reviews reported no findings.
 Plan 031 is next for the local 2.0.2 release candidate; push, tag, publish, and hosted proof remain
 outside current authority.
+Plan 031 Task 1: complete in bc6548c. The version-coupled 2.0.2 candidate changed exactly the 13
+owned release surfaces; focused 28/28 and release 102/102 tests, schemas, typecheck, and Biome
+passed. Independent spec and quality reviews approved Task 2 with no release-blocking findings.
