@@ -188,14 +188,23 @@ describe('command-level legacy plan', () => {
     writeFileSync(manifestPath, '{"dependencies":{"shared":"1.0.0"}}\n')
     const pkg = manifest(manifestPath, 'root')
 
-    const result = await applyLegacyCommandWrite(
-      root,
-      [
-        { packageIndex: 0, pkg, changes: [change('shared', '1.0.0', '2.0.0')] },
-        { packageIndex: 1, pkg, changes: [change('shared', '1.0.0', '3.0.0')] },
-      ],
-      authority,
-    )
+    const selections = [
+      { packageIndex: 0, pkg, changes: [change('shared', '1.0.0', '2.0.0')] },
+      { packageIndex: 1, pkg, changes: [change('shared', '1.0.0', '3.0.0')] },
+    ]
+    const construction = createLegacyPlan(root, selections)
+    const reversed = createLegacyPlan(root, [...selections].reverse())
+    const result = await applyLegacyCommandWrite(root, selections, authority)
+
+    expect(construction.plan.operations).toEqual([])
+    expect(construction.projections.map((projection) => projection.operationId)).toEqual([
+      expect.stringMatching(/^operation-/u),
+      construction.projections[0]?.operationId,
+    ])
+    expect(reversed.projections.map((projection) => projection.operationId)).toEqual([
+      construction.projections[0]?.operationId,
+      construction.projections[0]?.operationId,
+    ])
 
     expect(result.packages.map((entry) => entry.outcomes[0])).toMatchObject([
       { status: 'conflicted', reason: 'AMBIGUOUS_OCCURRENCE' },
@@ -203,8 +212,69 @@ describe('command-level legacy plan', () => {
     ])
     expect(result.status).toBe('blocked')
     expect('applyResult' in result).toBe(false)
-    expect(result.attempts).toEqual([])
+    expect(result.attempts).toEqual([
+      {
+        targetPath: 'package.json',
+        operationIds: [construction.projections[0]?.operationId],
+        replacementAttempted: false,
+      },
+    ])
     expect(readFileSync(manifestPath, 'utf8')).toBe('{"dependencies":{"shared":"1.0.0"}}\n')
+  })
+
+  it('retains every blocked physical operation when one target has mixed requests', async () => {
+    const root = temporaryRoot()
+    const manifestPath = join(root, 'package.json')
+    const initial = '{"dependencies":{"alpha":"1.0.0","beta":"1.0.0","gamma":"1.0.0"}}\n'
+    writeFileSync(manifestPath, initial)
+    const pkg = manifest(manifestPath, 'root')
+    const selections = [
+      {
+        packageIndex: 0,
+        pkg,
+        changes: [
+          change('alpha', '1.0.0', '2.0.0'),
+          change('beta', '1.0.0', '2.0.0'),
+          change('gamma', '1.0.0', '2.0.0'),
+        ],
+      },
+      {
+        packageIndex: 1,
+        pkg,
+        changes: [change('alpha', '1.0.0', '3.0.0'), change('beta', '1.0.0', '3.0.0')],
+      },
+    ]
+    const construction = createLegacyPlan(root, selections)
+    const result = await applyLegacyCommandWrite(root, selections, authority)
+    const operationIds = new Map(
+      construction.projections.map((projection) => [
+        projection.change.name,
+        projection.operationId,
+      ]),
+    )
+
+    expect(construction.plan.operations.map((operation) => operation.name)).toEqual(['gamma'])
+    expect(construction.projections.map((projection) => projection.operationId)).toEqual([
+      operationIds.get('alpha'),
+      operationIds.get('beta'),
+      construction.plan.operations[0]?.id,
+      operationIds.get('alpha'),
+      operationIds.get('beta'),
+    ])
+    expect(new Set(operationIds.values()).size).toBe(3)
+    expect(result.status).toBe('blocked')
+    expect(result.attempts).toEqual([
+      {
+        targetPath: 'package.json',
+        operationIds: [
+          operationIds.get('alpha'),
+          operationIds.get('beta'),
+          operationIds.get('gamma'),
+        ],
+        replacementAttempted: false,
+      },
+    ])
+    expect(readFileSync(manifestPath, 'utf8')).toBe(initial)
   })
 
   it('rejects a target outside the explicit effective root without mutation', async () => {
@@ -356,7 +426,7 @@ describe('command-level legacy plan', () => {
     expect(result.attempts).toMatchObject([
       {
         targetPath: 'package.json',
-        operationIds: [expect.any(String)],
+        operationIds: [expect.any(String), expect.any(String)],
         replacementAttempted: false,
       },
     ])

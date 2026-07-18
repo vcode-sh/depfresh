@@ -12,6 +12,11 @@ export default defineBuildConfig({
   ],
   declaration: true,
   clean: true,
+  hooks: {
+    'rollup:dts:options': (_context, options) => {
+      options.maxParallelFileOps = 1
+    },
+  },
   rollup: {
     emitCJS: false,
     inlineDependencies: true,

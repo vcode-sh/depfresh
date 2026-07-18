@@ -18,7 +18,7 @@ import { createServer, type Server } from 'node:http'
 import { tmpdir } from 'node:os'
 import { delimiter, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { hashExactBytes } from '../../contracts/fingerprint'
 import type { ApplyResult } from '../../contracts/schemas'
 import type {
@@ -29,6 +29,21 @@ import type {
 } from '../../types'
 import { DEFAULT_OPTIONS } from '../../types'
 import type { ApplyRuntime } from '../apply/types'
+
+// This suite is a real integration boundary. Some focused check suites register process-global
+// mocks through test-helpers.ts, so reset every production dependency they replace before imports.
+vi.unmock('../../io/packages')
+vi.unmock('../../io/resolve')
+vi.unmock('../../io/write')
+vi.unmock('../../io/write/occurrence')
+vi.unmock('../apply/legacy')
+vi.unmock('../apply/legacy-plan')
+vi.unmock('../../cache/index')
+vi.unmock('../../utils/npmrc')
+vi.unmock('node:child_process')
+vi.unmock('node:fs')
+vi.unmock('../../io/global')
+vi.unmock('../global-apply')
 
 const applyRuntime = vi.hoisted(() => ({
   overrides: undefined as Partial<ApplyRuntime> | undefined,
@@ -96,6 +111,29 @@ describe('command-level check apply integration', () => {
   let originalHome: string | undefined
   let originalNpmConfig: string | undefined
   let originalPath: string | undefined
+
+  beforeAll(async () => {
+    const [{ loadPackages }, { resolvePackage }, { createSqliteCache }, { loadNpmrc }, legacyPlan] =
+      await Promise.all([
+        import('../../io/packages'),
+        import('../../io/resolve'),
+        import('../../cache/index'),
+        import('../../utils/npmrc'),
+        import('../apply/legacy-plan'),
+      ])
+
+    for (const productionFunction of [
+      loadPackages,
+      resolvePackage,
+      createSqliteCache,
+      loadNpmrc,
+      legacyPlan.applyLegacyCommandWrite,
+      existsSync,
+      spawn,
+    ]) {
+      expect(vi.isMockFunction(productionFunction)).toBe(false)
+    }
+  })
 
   beforeEach(async () => {
     applyRuntime.overrides = undefined

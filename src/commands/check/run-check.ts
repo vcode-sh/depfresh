@@ -927,31 +927,41 @@ function blockedCommandInventory(
     if (
       !attempt ||
       attempt.replacementAttempted ||
-      entries.length !== 1 ||
-      attempt.operationIds.length !== 1
+      entries.length === 0 ||
+      attempt.operationIds.length !== entries.length
     ) {
       return undefined
     }
-    const operationId = attempt.operationIds[0]!
-    if (!isSafeModelIdentifier(operationId) || operationIds.has(operationId)) return undefined
-    operationIds.add(operationId)
-    const entry = entries[0]!
-    changes.push({
-      id: operationId,
-      name: sanitizeTerminalText(entry.outcome.name),
-      owner: path,
-      current: sanitizeTerminalText(entry.outcome.expectedValue),
-      target: sanitizeTerminalText(entry.outcome.requestedValue),
-      diff: projectedDiff(entry.changes),
-    })
-    targets.push({ path, operationIds: [operationId] })
-    operations.push({
-      operationId,
-      outcome: 'blocked',
-      blocked: true,
-      notAttempted: true,
-      unknown: false,
-    })
+    const targetOperationIds: string[] = []
+    const orderedEntries = [...entries].sort((left, right) => compareModelText(left.key, right.key))
+    for (const [index, entry] of orderedEntries.entries()) {
+      const operationId = attempt.operationIds[index]
+      if (
+        operationId === undefined ||
+        !isSafeModelIdentifier(operationId) ||
+        operationIds.has(operationId)
+      ) {
+        return undefined
+      }
+      operationIds.add(operationId)
+      targetOperationIds.push(operationId)
+      changes.push({
+        id: operationId,
+        name: sanitizeTerminalText(entry.outcome.name),
+        owner: path,
+        current: sanitizeTerminalText(entry.outcome.expectedValue),
+        target: sanitizeTerminalText(entry.outcome.requestedValue),
+        diff: projectedDiff(entry.changes),
+      })
+      operations.push({
+        operationId,
+        outcome: 'blocked',
+        blocked: true,
+        notAttempted: true,
+        unknown: false,
+      })
+    }
+    targets.push({ path, operationIds: targetOperationIds })
   }
   return {
     changes,
@@ -977,12 +987,15 @@ function projectedPhysicalChanges(
 ):
   | {
       byKey: Map<string, ResolvedDepChange[]>
-      byTarget: Map<string, Array<{ outcome: WriteOutcome; changes: ResolvedDepChange[] }>>
+      byTarget: Map<
+        string,
+        Array<{ key: string; outcome: WriteOutcome; changes: ResolvedDepChange[] }>
+      >
     }
   | undefined {
   const packages = new Map(execution.result.packages.map((entry) => [entry.packageIndex, entry]))
   const byKey = new Map<string, ResolvedDepChange[]>()
-  const outcomeByKey = new Map<string, WriteOutcome>()
+  const outcomesByKey = new Map<string, WriteOutcome[]>()
   for (const selection of execution.selections) {
     const projected = packages.get(selection.packageIndex)
     if (!projected || projected.outcomes.length !== selection.changes.length) return undefined
@@ -993,25 +1006,42 @@ function projectedPhysicalChanges(
       if (!(file && isSafePhysicalPath(outcome.occurrence.path))) return undefined
       const key = physicalKey(file, outcome.occurrence.path)
       const existing = byKey.get(key)
-      if (existing) existing.push(change)
-      else {
+      if (existing) {
+        existing.push(change)
+        outcomesByKey.get(key)?.push(outcome)
+      } else {
         byKey.set(key, [change])
-        outcomeByKey.set(key, outcome)
+        outcomesByKey.set(key, [outcome])
       }
     }
   }
-  const byTarget = new Map<string, Array<{ outcome: WriteOutcome; changes: ResolvedDepChange[] }>>()
+  const byTarget = new Map<
+    string,
+    Array<{ key: string; outcome: WriteOutcome; changes: ResolvedDepChange[] }>
+  >()
   for (const [key, changes] of byKey) {
-    const outcome = outcomeByKey.get(key)
+    const outcome = stableProjectedOutcome(outcomesByKey.get(key))
     if (!outcome) return undefined
     const file = safeRepositoryPath(root, outcome.occurrence.file)
     if (!file) return undefined
     const entries = byTarget.get(file)
-    const entry = { outcome, changes }
+    const entry = { key, outcome, changes }
     if (entries) entries.push(entry)
     else byTarget.set(file, [entry])
   }
   return { byKey, byTarget }
+}
+
+function stableProjectedOutcome(
+  outcomes: readonly WriteOutcome[] | undefined,
+): WriteOutcome | undefined {
+  if (!outcomes || outcomes.length === 0) return undefined
+  return [...outcomes].sort((left, right) =>
+    compareModelText(
+      JSON.stringify([left.expectedValue, left.requestedValue]),
+      JSON.stringify([right.expectedValue, right.requestedValue]),
+    ),
+  )[0]
 }
 
 function projectionMatches(change: ResolvedDepChange, outcome: WriteOutcome): boolean {

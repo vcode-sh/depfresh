@@ -77,6 +77,7 @@
     "test:demo": "node test/wun-demo-proof.mjs",
     "test:smoke": "node test/practical-cli-smoke.mjs",
     "test:release": "vitest run test/release-readiness.test.ts test/github-action.test.ts test/official-workflow.test.ts test/package-assets.test.ts test/packaged-skill.test.ts",
+    "verify:declarations": "node scripts/verify-declaration-stability.mjs",
     "verify:package": "node scripts/verify-local-package.mjs",
     "prepublishOnly": "pnpm run build",
     "schemas:generate": "tsx scripts/generate-contract-schemas.ts",

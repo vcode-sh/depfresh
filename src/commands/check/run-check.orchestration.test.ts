@@ -426,6 +426,293 @@ describe('run-check orchestration paths', () => {
     }
   })
 
+  it.each([
+    {
+      name: 'one ambiguous occurrence',
+      changes: [
+        [makeResolved({ name: 'alpha', rawVersion: '1.0.0', targetVersion: '2.0.0' })],
+        [makeResolved({ name: 'alpha', rawVersion: '1.0.0', targetVersion: '3.0.0' })],
+      ],
+      operations: 1,
+    },
+    {
+      name: 'two ambiguous occurrences and one distinct occurrence',
+      changes: [
+        [
+          makeResolved({ name: 'alpha', rawVersion: '1.0.0', targetVersion: '2.0.0' }),
+          makeResolved({ name: 'beta', rawVersion: '1.0.0', targetVersion: '2.0.0' }),
+          makeResolved({ name: 'gamma', rawVersion: '1.0.0', targetVersion: '2.0.0' }),
+        ],
+        [
+          makeResolved({ name: 'alpha', rawVersion: '1.0.0', targetVersion: '3.0.0' }),
+          makeResolved({ name: 'beta', rawVersion: '1.0.0', targetVersion: '3.0.0' }),
+        ],
+      ],
+      operations: 3,
+    },
+  ])('binds $name from the real adapter into one blocked target', async (scenario) => {
+    const root = realpathSync.native(mkdtempSync(join(tmpdir(), 'depfresh-command-blocked-')))
+    try {
+      const manifestPath = join(root, 'package.json')
+      const dependencies = Object.fromEntries(
+        scenario.changes.flat().map((entry) => [entry.name, '1.0.0']),
+      )
+      writeFileSync(manifestPath, `${JSON.stringify({ dependencies })}\n`)
+      const packages = scenario.changes.map((changes, index) => {
+        const pkg = makePkg(`owner-${index}`, changes)
+        pkg.filepath = manifestPath
+        pkg.resolved = changes
+        pkg.raw = { name: pkg.name, dependencies }
+        return pkg
+      })
+      const actualFs = await vi.importActual<typeof import('node:fs')>('node:fs')
+      const commandAdapter =
+        await vi.importActual<typeof import('../apply/legacy-plan')>('../apply/legacy-plan')
+      mocks.existsSyncMock.mockImplementation(actualFs.existsSync)
+      mocks.commandWriteMock.mockImplementation(commandAdapter.applyLegacyCommandWrite)
+      mocks.loadPackagesMock.mockImplementation(
+        async (
+          _options: depfreshOptions,
+          observer?: { onPackagesDiscovered(pkgs: PackageMeta[]): void },
+        ) => {
+          observer?.onPackagesDiscovered(packages)
+          return packages
+        },
+      )
+      mocks.resolvePackageMock.mockImplementation(async (pkg: PackageMeta) => pkg.resolved)
+      const options = {
+        ...baseOptions,
+        cwd: root,
+        effectiveRoot: root,
+        output: 'json' as const,
+        write: true,
+      }
+      const controller = createCheckRunController({ mode: 'default', write: true, now: () => 0 })
+      const events: CheckRunEvent[] = []
+      const recordingController = {
+        ...controller,
+        emit(event: CheckRunEvent): void {
+          events.push(event)
+          controller.emit(event)
+        },
+      }
+      vi.spyOn(console, 'log').mockImplementation(() => {})
+
+      const { runCheck } = await import('./run-check')
+      const exitCode = await runCheck(
+        options,
+        createInvocationAuthority(options),
+        false,
+        undefined,
+        recordingController,
+      )
+
+      expect(exitCode).toBe(2)
+      expect(events).not.toContainEqual(
+        expect.objectContaining({
+          type: 'diagnostics-recorded',
+          diagnostics: [{ code: 'CHECK_RUN_SELECTION_UNBOUND' }],
+        }),
+      )
+      expect(controller.snapshot()).toMatchObject({
+        exitCode: 2,
+        counts: { operations: scenario.operations, targets: 1 },
+        results: {
+          totals: { blocked: scenario.operations, notAttempted: scenario.operations },
+          targetTotals: { blocked: 1, notAttempted: 1 },
+        },
+      })
+      expect(events).toContainEqual(
+        expect.objectContaining({
+          type: 'selection-completed',
+          operations: scenario.operations,
+          targets: 1,
+        }),
+      )
+      const selection = events.find((event) => event.type === 'selection-completed')
+      expect(selection?.selectedTargets).toEqual([
+        {
+          path: 'package.json',
+          operationIds: expect.any(Array),
+        },
+      ])
+      expect(selection?.selectedTargets[0]?.operationIds).toHaveLength(scenario.operations)
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('keeps the real blocked selection stable when conflicting package order reverses', async () => {
+    const root = realpathSync.native(mkdtempSync(join(tmpdir(), 'depfresh-command-order-')))
+    try {
+      const manifestPath = join(root, 'package.json')
+      const dependencies = { alpha: '1.0.0' }
+      writeFileSync(manifestPath, `${JSON.stringify({ dependencies })}\n`)
+      const changes = [
+        makeResolved({
+          name: 'alpha',
+          currentVersion: '1.0.0',
+          rawVersion: '1.0.0',
+          targetVersion: '2.0.0',
+        }),
+        makeResolved({
+          name: 'alpha',
+          currentVersion: '1.0.0',
+          rawVersion: '1.0.0',
+          targetVersion: '3.0.0',
+        }),
+      ]
+      const packages = changes.map((entry, index) => {
+        const pkg = makePkg(`owner-${index}`, [entry])
+        pkg.filepath = manifestPath
+        pkg.resolved = [entry]
+        pkg.raw = { name: pkg.name, dependencies }
+        return pkg
+      })
+      const actualFs = await vi.importActual<typeof import('node:fs')>('node:fs')
+      const commandAdapter =
+        await vi.importActual<typeof import('../apply/legacy-plan')>('../apply/legacy-plan')
+      mocks.existsSyncMock.mockImplementation(actualFs.existsSync)
+      mocks.commandWriteMock.mockImplementation(commandAdapter.applyLegacyCommandWrite)
+      vi.spyOn(console, 'log').mockImplementation(() => {})
+
+      const captureSelection = async (orderedPackages: PackageMeta[]): Promise<CheckRunEvent> => {
+        mocks.loadPackagesMock.mockImplementation(
+          async (
+            _options: depfreshOptions,
+            observer?: { onPackagesDiscovered(pkgs: PackageMeta[]): void },
+          ) => {
+            observer?.onPackagesDiscovered(orderedPackages)
+            return orderedPackages
+          },
+        )
+        mocks.resolvePackageMock.mockImplementation(async (pkg: PackageMeta) => pkg.resolved)
+        const options = {
+          ...baseOptions,
+          cwd: root,
+          effectiveRoot: root,
+          output: 'json' as const,
+          write: true,
+        }
+        const controller = createCheckRunController({ mode: 'default', write: true, now: () => 0 })
+        const events: CheckRunEvent[] = []
+        const recordingController = {
+          ...controller,
+          emit(event: CheckRunEvent): void {
+            events.push(event)
+            controller.emit(event)
+          },
+        }
+        const { runCheck } = await import('./run-check')
+        const exitCode = await runCheck(
+          options,
+          createInvocationAuthority(options),
+          false,
+          undefined,
+          recordingController,
+        )
+        expect(exitCode).toBe(2)
+        const selection = events.find((event) => event.type === 'selection-completed')
+        if (!selection) throw new Error('Expected the blocked selection event')
+        return selection
+      }
+
+      const original = await captureSelection(packages)
+      const reversed = await captureSelection([...packages].reverse())
+
+      expect(reversed).toEqual(original)
+      expect(original).toMatchObject({
+        type: 'selection-completed',
+        operations: 1,
+        targets: 1,
+        changes: [{ name: 'alpha', current: '1.0.0', target: '2.0.0' }],
+        selectedTargets: [{ path: 'package.json', operationIds: [expect.any(String)] }],
+      })
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('keeps a real outside-root projection on the fail-closed unbound path', async () => {
+    const root = realpathSync.native(mkdtempSync(join(tmpdir(), 'depfresh-command-root-')))
+    const outside = realpathSync.native(mkdtempSync(join(tmpdir(), 'depfresh-command-outside-')))
+    try {
+      const outsidePath = join(outside, 'package.json')
+      writeFileSync(outsidePath, '{"dependencies":{"alpha":"1.0.0"}}\n')
+      const update = makeResolved({
+        name: 'alpha',
+        currentVersion: '1.0.0',
+        rawVersion: '1.0.0',
+        targetVersion: '2.0.0',
+      })
+      const pkg = makePkg('outside', [update])
+      pkg.filepath = outsidePath
+      pkg.resolved = [update]
+      pkg.raw = { name: pkg.name, dependencies: { alpha: '1.0.0' } }
+      const actualFs = await vi.importActual<typeof import('node:fs')>('node:fs')
+      const commandAdapter =
+        await vi.importActual<typeof import('../apply/legacy-plan')>('../apply/legacy-plan')
+      mocks.existsSyncMock.mockImplementation(actualFs.existsSync)
+      mocks.commandWriteMock.mockImplementation(commandAdapter.applyLegacyCommandWrite)
+      mocks.loadPackagesMock.mockImplementation(
+        async (
+          _options: depfreshOptions,
+          observer?: { onPackagesDiscovered(pkgs: PackageMeta[]): void },
+        ) => {
+          observer?.onPackagesDiscovered([pkg])
+          return [pkg]
+        },
+      )
+      mocks.resolvePackageMock.mockResolvedValue([update])
+      const options = {
+        ...baseOptions,
+        cwd: root,
+        effectiveRoot: root,
+        output: 'json' as const,
+        write: true,
+      }
+      const controller = createCheckRunController({ mode: 'default', write: true, now: () => 0 })
+      const events: CheckRunEvent[] = []
+      const recordingController = {
+        ...controller,
+        emit(event: CheckRunEvent): void {
+          events.push(event)
+          controller.emit(event)
+        },
+      }
+      vi.spyOn(console, 'log').mockImplementation(() => {})
+
+      const { runCheck } = await import('./run-check')
+      const exitCode = await runCheck(
+        options,
+        createInvocationAuthority(options),
+        false,
+        undefined,
+        recordingController,
+      )
+
+      expect(exitCode).toBe(2)
+      expect(events).not.toContainEqual(expect.objectContaining({ type: 'selection-completed' }))
+      expect(events).toContainEqual({
+        type: 'diagnostics-recorded',
+        diagnostics: [{ code: 'CHECK_RUN_SELECTION_UNBOUND' }],
+      })
+      expect(events).toContainEqual({
+        type: 'phase-completed',
+        phase: 'review',
+        status: 'unknown',
+      })
+      expect(controller.snapshot()).toMatchObject({
+        exitCode: 2,
+        counts: { operations: 0, targets: 0 },
+        results: { operations: [], targets: [] },
+      })
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+      rmSync(outside, { recursive: true, force: true })
+    }
+  })
+
   it('applies 15 prepared owner groups through one 14-target command lifecycle', async () => {
     const shared = makeResolved({ name: 'shared', currentVersion: '1.0.0', targetVersion: '2.0.0' })
     const packages = Array.from({ length: 14 }, (_, index) =>

@@ -166,6 +166,7 @@ export function createLegacyPlan(
 
   let hasConflict = false
   const physicalInputs: LegacyOperationInput[] = []
+  const blockedOperationIds = new Map<string, string>()
   for (const [physicalKey, candidates] of [...inputs].sort(([left], [right]) =>
     compareText(left, right),
   )) {
@@ -176,6 +177,7 @@ export function createLegacyPlan(
     )
     if (valuePairs.size > 1) {
       hasConflict = true
+      blockedOperationIds.set(physicalKey, createBlockedOperationId(physicalKey, valuePairs))
       for (const projection of projections) {
         if (projection.physicalKey !== physicalKey) continue
         projection.blockedOutcome = outcomeFromProjection(
@@ -198,7 +200,10 @@ export function createLegacyPlan(
   )
   for (const projection of projections) {
     if (projection.physicalKey) {
-      projection.operationId = operationIds.get(projection.physicalKey) ?? projection.operationId
+      projection.operationId =
+        operationIds.get(projection.physicalKey) ??
+        blockedOperationIds.get(projection.physicalKey) ??
+        projection.operationId
     }
   }
 
@@ -258,7 +263,7 @@ export async function applyLegacyCommandWrite(
     })
   }
   const construction = createLegacyPlan(root, selections)
-  const blockedAttempts = createAttemptEvidence(construction.plan)
+  const blockedAttempts = createAttemptEvidence(root, construction.projections)
 
   if (construction.blocked) {
     return {
@@ -611,21 +616,41 @@ function projectBlockedPackages(
 }
 
 function createAttemptEvidence(
-  plan: PlanResult,
+  root: string,
+  projections: readonly LegacyProjection[],
 ): Map<string, LegacyCommandResultBase['attempts'][number]> {
   const attempts = new Map<string, LegacyCommandResultBase['attempts'][number]>()
-  for (const operation of plan.operations) {
-    const attempt = attempts.get(operation.file)
-    if (attempt) attempt.operationIds.push(operation.id)
+  const seen = new Set<string>()
+  const ordered = projections
+    .filter(
+      (projection): projection is LegacyProjection & { physicalKey: string; operationId: string } =>
+        projection.physicalKey !== undefined && projection.operationId !== undefined,
+    )
+    .sort((left, right) => compareText(left.physicalKey, right.physicalKey))
+  for (const projection of ordered) {
+    if (seen.has(projection.operationId)) continue
+    seen.add(projection.operationId)
+    const targetPath = repositoryRelative(root, projection.occurrence.file)
+    const attempt = attempts.get(targetPath)
+    if (attempt) attempt.operationIds.push(projection.operationId)
     else {
-      attempts.set(operation.file, {
-        targetPath: operation.file,
-        operationIds: [operation.id],
+      attempts.set(targetPath, {
+        targetPath,
+        operationIds: [projection.operationId],
         replacementAttempted: false,
       })
     }
   }
   return attempts
+}
+
+function createBlockedOperationId(physicalKey: string, valuePairs: ReadonlySet<string>): string {
+  const evidence = canonicalJson({
+    kind: 'legacy-blocked-operation',
+    physicalKey,
+    valuePairs: [...valuePairs].sort(compareText),
+  })
+  return `operation-${hashExactBytes(evidence).slice(0, 24)}`
 }
 
 function sortedAttempts(
