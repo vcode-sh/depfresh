@@ -790,22 +790,11 @@ function assertResultPhaseCoherence(
   const blockedPhase = [preflight, stage, apply].includes('blocked')
   const unknownPhase = [preflight, stage, apply, observe, recover].includes('unknown')
   const failedPhase = [preflight, stage, apply, observe, recover].includes('failed')
+  const recoveryRecorded = hasTerminalEvent(state, 'recovery-recorded')
 
   if (totals.reverted > 0) {
-    const recoveryRecorded = hasTerminalEvent(state, 'recovery-recorded')
-    if (
-      apply === 'passed' ||
-      apply === 'skipped' ||
-      state.recovery.status !== 'completed' ||
-      recover !== 'passed' ||
-      observe !== 'passed' ||
-      !recoveryRecorded
-    ) {
-      throw new CheckRunInvariantError('reverted results require completed recovery')
-    }
-    const restored = new Set(state.recovery.restoredPaths)
-    if (targets.some((target) => target.outcome === 'reverted' && !restored.has(target.path))) {
-      throw new CheckRunInvariantError('reverted target requires restored-path evidence')
+    if (apply === 'passed' || apply === 'skipped' || recover === 'skipped' || !recoveryRecorded) {
+      throw new CheckRunInvariantError('reverted results require a real recovery branch')
     }
   }
 
@@ -852,7 +841,7 @@ function assertResultPhaseCoherence(
     }
   }
 
-  if (totals.applied > 0) {
+  if (totals.applied > 0 && (recover === 'skipped' || !recoveryRecorded)) {
     throw new CheckRunInvariantError('applied results require passed apply and observe')
   }
 
@@ -872,7 +861,6 @@ function assertResultPhaseCoherence(
     throw new CheckRunInvariantError('unknown results require an unknown lifecycle branch')
   }
 
-  const recoveryRecorded = hasTerminalEvent(state, 'recovery-recorded')
   if (recover === 'skipped') {
     if (state.recovery.status !== 'not-needed' || recoveryRecorded) {
       throw new CheckRunInvariantError('skipped recovery cannot retain recovery evidence')
@@ -890,6 +878,7 @@ function assertResultPhaseCoherence(
   if (state.recovery.status === 'unknown' && recover !== 'unknown') {
     throw new CheckRunInvariantError('unknown recovery requires an unknown recovery phase')
   }
+  if (recoveryRecorded) assertRecoveryTargetCoherence(state.recovery, targets)
   if (state.recovery.status === 'partial' && totals.failed + totals.unknown === 0) {
     throw new CheckRunInvariantError('partial recovery requires failed or unknown results')
   }
@@ -901,6 +890,43 @@ function assertResultPhaseCoherence(
   }
   if (observe === 'failed' && totals.failed + totals.unknown === 0) {
     throw new CheckRunInvariantError('failed observation requires failed or unknown results')
+  }
+}
+
+function assertRecoveryTargetCoherence(
+  recovery: CheckRunRecovery,
+  targets: readonly CheckRunTargetResult[],
+): void {
+  const restored = new Set(recovery.restoredPaths)
+  const unrecovered = new Set(recovery.unrecoveredPaths)
+
+  // Recovery path receipts are exact physical-target evidence, not command-wide guesses.
+  for (const target of targets) {
+    if (target.outcome === 'reverted' && !restored.has(target.path)) {
+      throw new CheckRunInvariantError('reverted target requires restored-path evidence')
+    }
+    if (restored.has(target.path) && target.outcome !== 'reverted') {
+      throw new CheckRunInvariantError('restored path requires a reverted target result')
+    }
+    if (unrecovered.has(target.path) && !['failed', 'unknown'].includes(target.outcome)) {
+      throw new CheckRunInvariantError('unrecovered path requires failed or unknown target truth')
+    }
+    if (
+      (target.outcome === 'failed' || target.outcome === 'unknown') &&
+      !unrecovered.has(target.path)
+    ) {
+      throw new CheckRunInvariantError(
+        'failed or unknown target requires unrecovered-path evidence',
+      )
+    }
+  }
+
+  const targetPaths = new Set(targets.map((target) => target.path))
+  if ([...restored].some((path) => !targetPaths.has(path))) {
+    throw new CheckRunInvariantError('restored path requires a reverted target result')
+  }
+  if ([...unrecovered].some((path) => !targetPaths.has(path))) {
+    throw new CheckRunInvariantError('unrecovered path requires failed or unknown target truth')
   }
 }
 
@@ -968,6 +994,9 @@ function copyRecovery(
   }
   if (event.status === 'completed' && unrecoveredPaths.length > 0) {
     throw new CheckRunInvariantError('completed recovery cannot retain unrecovered paths')
+  }
+  if (event.status !== 'completed' && unrecoveredPaths.length === 0) {
+    throw new CheckRunInvariantError('incomplete recovery requires unrecovered path evidence')
   }
   if (state.targets.length > 0) {
     const selectedPaths = new Set(state.targets.map((target) => target.path))
