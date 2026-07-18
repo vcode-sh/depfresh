@@ -15,16 +15,16 @@ needed.
 
 ```bash
 # Bun
-bunx depfresh@2.0.1
+bunx depfresh@2.0.2
 
 # pnpm
-pnpm dlx depfresh@2.0.1
+pnpm dlx depfresh@2.0.2
 
 # npm
-npm exec --yes --package=depfresh@2.0.1 -- depfresh
+npm exec --yes --package=depfresh@2.0.2 -- depfresh
 
 # Yarn
-yarn dlx depfresh@2.0.1
+yarn dlx depfresh@2.0.2
 ```
 
 Node.js 24.15.0 or newer is required.
@@ -32,7 +32,7 @@ Node.js 24.15.0 or newer is required.
 For a team or CI, pin depfresh in the project instead:
 
 ```bash
-pnpm add -D --save-exact depfresh@2.0.1
+pnpm add -D --save-exact depfresh@2.0.2
 pnpm exec depfresh
 ```
 
@@ -172,6 +172,7 @@ is limited to the public npm registry and does not inherit project npm configura
 - [Output contracts](docs/output-formats/README.md)
 - [GitHub Action and integrations](docs/integrations/README.md)
 - [Troubleshooting](docs/troubleshooting.md)
+- [2.0.2 release notes](docs/releases/v2.0.2.md)
 - [2.0.1 release notes](docs/releases/v2.0.1.md)
 - [2.0.0 release notes](docs/releases/v2.0.0.md)
 

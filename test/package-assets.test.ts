@@ -9,6 +9,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const packageJson = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as {
   exports: Record<string, string | Record<string, string>>
   files: string[]
+  version: string
 }
 
 const publicAssets = [
@@ -26,6 +27,10 @@ const publicAssets = [
 ]
 
 describe('published workflow assets', () => {
+  it('pins the publishable package manifest to the 2.0.2 release candidate', () => {
+    expect(packageJson.version).toBe('2.0.2')
+  })
+
   it('allowlists dist and skills without publishing plans or scratch state', () => {
     expect(packageJson.files).toEqual(['dist', 'skills'])
     expect(packageJson.files).not.toEqual(expect.arrayContaining(['plans', '.superpowers', 'src']))
@@ -70,7 +75,7 @@ describe('published workflow assets', () => {
 })
 
 describe('npm pack manifest compatibility', () => {
-  const entry = { name: 'depfresh', version: '2.0.1' }
+  const entry = { name: 'depfresh', version: '2.0.2' }
 
   it('accepts the npm 11 single-package array format', () => {
     expect(extractSinglePackEntry([entry])).toBe(entry)

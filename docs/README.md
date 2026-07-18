@@ -47,5 +47,8 @@ Everything I know about depfresh is in here, split into files so you can pretend
 
 - **[Troubleshooting](./troubleshooting.md)** -- Common issues, workspace gotchas, and known limitations. The page you'll find via Google at 2 AM after everything breaks. I've been there. The kettle's already on.
 
+- **[2.0.2 Release Notes](./releases/v2.0.2.md)** -- Exact-target Git evidence and truthful
+  grouped legacy write receipts.
+
 - **[2.0.1 Release Notes](./releases/v2.0.1.md)** -- Exact workspace/catalog invocation
   exclusions, versioned machine contracts, and release verification.

@@ -1,6 +1,6 @@
 {
   "name": "depfresh",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "description": "Evidence-backed dependency inspection, planning, and updates for JavaScript projects.",
   "type": "module",
   "license": "MIT",

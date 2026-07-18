@@ -4,6 +4,8 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Semver
 
 ## Unreleased
 
+## [2.0.2] - 2026-07-18
+
 ### Fixed
 
 - **Truthful grouped legacy write receipts** -- table output now groups repeated non-success
@@ -741,7 +743,8 @@ First release. Wrote it from scratch because waiting for PRs to get merged in ta
 - TTY detection. No spinners in your CI logs. `NO_COLOR` respected.
 - 54 tests. More than some production apps I've seen.
 
-[Unreleased]: https://github.com/vcode-sh/depfresh/compare/v2.0.1...HEAD
+[Unreleased]: https://github.com/vcode-sh/depfresh/compare/v2.0.2...HEAD
+[2.0.2]: https://github.com/vcode-sh/depfresh/compare/v2.0.1...v2.0.2
 [2.0.1]: https://github.com/vcode-sh/depfresh/compare/v2.0.0...v2.0.1
 [2.0.0]: https://github.com/vcode-sh/depfresh/releases/tag/v2.0.0
 [1.0.0]: https://github.com/vcode-sh/depfresh/releases/tag/v1.0.0
