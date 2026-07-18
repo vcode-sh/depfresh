@@ -287,6 +287,27 @@ describe('loadPackages', () => {
     }
   })
 
+  it('preserves the exact default package-count log when an observer requests it', async () => {
+    writeFileSync(
+      join(tmpDir, 'package.json'),
+      JSON.stringify({ name: 'root', dependencies: { lodash: '^4.17.21' } }, null, 2),
+    )
+    const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+
+    await loadPackages({ ...baseOptions, cwd: tmpDir, loglevel: 'info' })
+    const defaultCalls = consoleSpy.mock.calls.map((call) => [...call])
+    consoleSpy.mockClear()
+    const onPackagesDiscovered = vi.fn()
+
+    await loadPackages(
+      { ...baseOptions, cwd: tmpDir, loglevel: 'info' },
+      { onPackagesDiscovered, preserveDefaultLog: true },
+    )
+
+    expect(onPackagesDiscovered).toHaveBeenCalledWith([expect.objectContaining({ name: 'root' })])
+    expect(consoleSpy.mock.calls).toEqual(defaultCalls)
+  })
+
   it('does not suspend progress for suppressed debug diagnostics at info level', async () => {
     writeFileSync(join(tmpDir, 'package.json'), JSON.stringify({ name: 'root' }, null, 2))
     let durableWrites = 0

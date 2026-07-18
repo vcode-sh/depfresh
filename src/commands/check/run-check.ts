@@ -7,6 +7,7 @@ import type { InvocationScopeExclusions } from '../../cli/scope-exclusions'
 import { hasInvocationScopeExclusions } from '../../cli/scope-exclusions'
 import { createInvocationAuthority, snapshotInvocationAuthority } from '../../invocation-authority'
 import { loadPackages } from '../../io/packages'
+import type { PackageLoadObserver } from '../../io/packages/discovery'
 import { resolveDiscoveryContext } from '../../io/packages/root-detection'
 import { createResolveContext, resolvePackage } from '../../io/resolve'
 import { readInvocationSelectionReceipt, type SelectionReceipt } from '../../selection'
@@ -39,7 +40,7 @@ import { renderUpToDate, runExecute } from './post-write-actions'
 import { type ProcessPackageHooks, processPackage } from './process-package'
 import { type CheckProgress, createCheckProgress } from './progress'
 import { renderResolutionErrors, renderTable } from './render'
-import { type CheckRunController, createCheckRunController } from './run-controller'
+import type { CheckRunController } from './run-controller'
 import type {
   CheckRunChange,
   CheckRunOperationResult,
@@ -63,7 +64,7 @@ export async function checkFromCli(
   return runCheck(options, requestedAuthority, true, invocationSelection)
 }
 
-async function runCheck(
+export async function runCheck(
   options: depfreshOptions,
   requestedAuthority: InvocationAuthority,
   renderProgress: boolean,
@@ -72,10 +73,7 @@ async function runCheck(
 ): Promise<number> {
   const authority = snapshotInvocationAuthority(requestedAuthority)
   const totalStart = performance.now()
-  const runController = shouldModelRun(options)
-    ? (injectedRunController ??
-      createCheckRunController({ mode: options.mode, write: false, now: () => performance.now() }))
-    : undefined
+  const runController = shouldModelRun(options) ? injectedRunController : undefined
   const logLevel = options.output === 'json' ? 'silent' : options.loglevel
   const addonOptions: depfreshOptions = {
     ...options,
@@ -105,26 +103,41 @@ async function runCheck(
     const hasSelection = Boolean(
       invocationSelection && hasInvocationScopeExclusions(invocationSelection),
     )
-    const progressObserver = activeProgress
-      ? {
-          onPackagesDiscovered: (discoveredPackages: PackageMeta[]) => {
-            activeProgress.onPackagesDiscovered(discoveredPackages)
-            if (!(runtimeOptions.global || runtimeOptions.globalAll)) {
-              activeProgress.onRepositoryInspectionStart()
-            }
-          },
-          writeDurable: <T>(write: () => T) => activeProgress.suspend(write),
-        }
-      : undefined
-    const packages = activeProgress
+    const packageObserver: PackageLoadObserver | undefined =
+      activeProgress || runController
+        ? {
+            onPackagesDiscovered: (discoveredPackages: PackageMeta[]) => {
+              activeProgress?.onPackagesDiscovered(discoveredPackages)
+              if (runController) {
+                const discoveredDeclarations = discoveredPackages.reduce(
+                  (sum, pkg) => sum + pkg.deps.length,
+                  0,
+                )
+                runController.emit({
+                  type: 'packages-discovered',
+                  packages: discoveredPackages.length,
+                  declared: discoveredDeclarations,
+                })
+                runController.emit({ type: 'repository-inspection-started' })
+              }
+              if (activeProgress && !(runtimeOptions.global || runtimeOptions.globalAll)) {
+                activeProgress.onRepositoryInspectionStart()
+              }
+            },
+            ...(activeProgress
+              ? { writeDurable: <T>(write: () => T): T => activeProgress.suspend(write) }
+              : { preserveDefaultLog: true }),
+          }
+        : undefined
+    const packages = packageObserver
       ? hasSelection
-        ? await loadPackages(runtimeOptions, progressObserver, invocationSelection)
-        : await loadPackages(runtimeOptions, progressObserver)
+        ? await loadPackages(runtimeOptions, packageObserver, invocationSelection)
+        : await loadPackages(runtimeOptions, packageObserver)
       : hasSelection
         ? await loadPackages(runtimeOptions, undefined, invocationSelection)
         : await loadPackages(runtimeOptions)
     const declaredDependencies = packages.reduce((sum, pkg) => sum + pkg.deps.length, 0)
-    emitDiscoveryAndInspection(runController, packages.length, declaredDependencies)
+    runController?.emit({ type: 'repository-inspection-completed', status: 'passed' })
     selectionReceipt = readInvocationSelectionReceipt(runtimeOptions)
     const discoveryMs = performance.now() - discoveryStart
     progress?.onPackagesReady(packages)
@@ -309,8 +322,10 @@ async function runCheck(
           if (pending) completedResolutions.set(pkg, await pending)
         }),
       )
-      const resolutionFacts = readResolutionFacts(completedResolutions, totalDependencies)
-      emitResolution(runController, resolutionFacts)
+      if (runController) {
+        const resolutionFacts = readResolutionFacts(completedResolutions, totalDependencies)
+        emitResolution(runController, resolutionFacts)
+      }
       progress?.onRenderingStart()
       for (const pkg of packages) {
         const processCurrentPackage = () =>
@@ -330,12 +345,7 @@ async function runCheck(
         progress?.onPackageRendered()
       }
       await writeDurableAsync(progress, () => addons.afterPackagesEnd(packages))
-      emitReadOnlySelection(
-        runController,
-        packages,
-        executionRoot,
-        runController?.snapshot().counts.updates ?? 0,
-      )
+      emitReadOnlySelection(runController, packages, executionRoot)
     } finally {
       progress?.done()
       const stats = cache.stats()
@@ -497,7 +507,10 @@ async function runCheck(
     return finalExitCode
   } catch (error) {
     progress?.done()
-    failReadOnlyRun(runController)
+    tryFailReadOnlyRun(
+      runController,
+      error instanceof CheckRunInstrumentationError ? 'CHECK_RUN_INVARIANT' : 'CHECK_RUN_FAILED',
+    )
     if (options.output === 'json') {
       outputJsonError(error, { cwd: options.cwd, mode: options.mode })
     } else {
@@ -509,17 +522,6 @@ async function runCheck(
 
 function shouldModelRun(options: depfreshOptions): boolean {
   return !(options.write || options.global || options.globalAll)
-}
-
-function emitDiscoveryAndInspection(
-  controller: CheckRunController | undefined,
-  packages: number,
-  declared: number,
-): void {
-  if (!controller) return
-  controller.emit({ type: 'packages-discovered', packages, declared })
-  controller.emit({ type: 'repository-inspection-started' })
-  controller.emit({ type: 'repository-inspection-completed', status: 'passed' })
 }
 
 function emitResolution(
@@ -543,16 +545,16 @@ function readResolutionFacts(
     }
   }
   const eligible = expectedEligible
-  const retainedUnresolved = Math.min(unresolved, eligible)
-  const retainedUpdates = Math.min(updates, eligible - retainedUnresolved)
-  return { eligible, unresolved: retainedUnresolved, updates: retainedUpdates }
+  if (updates + unresolved > eligible) {
+    throw new CheckRunInstrumentationError('resolved facts exceed eligible occurrences')
+  }
+  return { eligible, unresolved, updates }
 }
 
 function emitReadOnlySelection(
   controller: CheckRunController | undefined,
   packages: PackageMeta[],
   root: string,
-  maximumChanges: number,
 ): void {
   if (!controller) return
   const changes: CheckRunChange[] = []
@@ -562,7 +564,6 @@ function emitReadOnlySelection(
     const owner = repositoryRelativePath(root, pkg.filepath)
     for (const [changeIndex, change] of pkg.resolved.entries()) {
       if (change.diff === 'none' || change.diff === 'error') continue
-      if (changes.length >= maximumChanges) continue
       const id = `change:${packageIndex}:${changeIndex}`
       changes.push({
         id,
@@ -582,6 +583,9 @@ function emitReadOnlySelection(
     path,
     operationIds,
   }))
+  if (changes.length !== controller.snapshot().counts.updates) {
+    throw new CheckRunInstrumentationError('selected inventory differs from resolved updates')
+  }
   controller.emit({
     type: 'selection-completed',
     operations: changes.length,
@@ -610,7 +614,10 @@ function finalizeReadOnlyRun(
   })
 }
 
-function failReadOnlyRun(controller: CheckRunController | undefined): void {
+function failReadOnlyRun(
+  controller: CheckRunController | undefined,
+  diagnosticCode: 'CHECK_RUN_FAILED' | 'CHECK_RUN_INVARIANT',
+): void {
   if (!controller || controller.snapshot().exitCode !== null) return
   const activePhase = controller
     .snapshot()
@@ -620,9 +627,26 @@ function failReadOnlyRun(controller: CheckRunController | undefined): void {
   }
   controller.emit({
     type: 'diagnostics-recorded',
-    diagnostics: [{ code: 'CHECK_RUN_FAILED' }],
+    diagnostics: [{ code: diagnosticCode }],
   })
   finalizeReadOnlyRun(controller, 2)
+}
+
+function tryFailReadOnlyRun(
+  controller: CheckRunController | undefined,
+  diagnosticCode: 'CHECK_RUN_FAILED' | 'CHECK_RUN_INVARIANT',
+): void {
+  try {
+    failReadOnlyRun(controller, diagnosticCode)
+  } catch {
+    // Model cleanup must not replace the command error already being handled.
+  }
+}
+
+class CheckRunInstrumentationError extends Error {
+  constructor(message: string) {
+    super(`Check run instrumentation invariant: ${message}`)
+  }
 }
 
 function readOnlyResults(controller: CheckRunController): {
