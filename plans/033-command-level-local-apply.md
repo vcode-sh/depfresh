@@ -311,6 +311,14 @@ nor recovery: retain the failed/unknown apply fact, skip both model phases, and 
 blocked/failed/unknown plus structural not-attempted receipts. Never invent inspect or recovery to
 advance the reducer.
 
+The same zero-mutation rule applies before commit. A lock or stage block/failure/unknown result may
+skip apply, recovery, and observation while retaining exact blocked/failed/unknown operations plus
+structural not-attempted evidence. The non-success lifecycle phase supplies the terminal reason;
+this is not permission to attach failed results to an arbitrary skipped lifecycle. If cleanup is
+unknown after one of these early exits, record its real non-executed recovery/cleanup evidence and
+external effects while keeping the recovery phase skipped. No zero-mutation branch may report an
+applied or reverted operation.
+
 An all-no-change result is different: lock/stage and apply are skipped, but the engine still records
 a passed inspect phase. Use a fact-bearing no-mutation stage transition that skips apply/recovery and
 activates observe, then retain exact neutral skipped operations and structural not-attempted truth.
