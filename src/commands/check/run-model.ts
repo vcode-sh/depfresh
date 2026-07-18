@@ -447,7 +447,7 @@ function completeRun(
   state: CheckRunSnapshot,
   event: Extract<CheckRunEvent, { type: 'run-completed' }>,
 ): CheckRunSnapshot {
-  assertCount('elapsed milliseconds', event.elapsedMs)
+  assertDuration(event.elapsedMs)
   assertEventId(event.eventId)
   if (event.status !== undefined) assertFinalStatus(event.status)
   assertPhase(state.phases, 'complete', 'active')
@@ -1128,6 +1128,12 @@ function assertBoolean(name: string, value: boolean): void {
 function assertCount(name: string, value: number): void {
   if (!Number.isSafeInteger(value) || value < 0) {
     throw new CheckRunInvariantError(`${name} count must be a non-negative safe integer`)
+  }
+}
+
+function assertDuration(value: number): void {
+  if (!Number.isFinite(value) || value < 0) {
+    throw new CheckRunInvariantError('elapsed milliseconds must be a non-negative finite number')
   }
 }
 
