@@ -416,7 +416,7 @@ clean `SOURCE_CHANGED` and `VCS_UNAVAILABLE` preflight blocks may qualify, while
 external effects never qualify. Preserve projected legacy outcomes for callbacks and public JSON;
 the exact command evidence is private to the human receipt.
 
-- [ ] **Step 1: Add integration fault checkpoints**
+- [x] **Step 1: Add integration fault checkpoints**
 
 Cover stale before first replacement, stale before a later rename, observation failure, completed
 recovery, partial recovery, unknown recovery, orphan journal, and signal interruption. Assert exact
@@ -428,22 +428,34 @@ exact changed/original target bytes and retained owned lock, relative journal, a
 a fresh authoritative check and require exact `RECOVERY_REQUIRED`, an unknown receipt, exit 2, and
 no further mutation or cleanup. Same-run cancellation/recovery is outside this plan.
 
-- [ ] **Step 2: Run the integration RED/GREEN loop**
+- [x] **Step 2: Run the integration RED/GREEN loop**
 
 Run `pnpm exec vitest run src/commands/check/check.command-apply.integration.test.ts` after each
 fault case. Expected final state: all cases pass with no success claim for partial/unknown recovery.
 
-- [ ] **Step 3: Add built-CLI command transaction proof**
+- [x] **Step 3: Add built-CLI command transaction proof**
 
 Extend the disposable practical smoke fixture with at least three target manifests and a late
 preflight block. Compare recursive target hashes before/after. Expected: zero changes on preflight
 block and all requested values observed on success.
 
-- [ ] **Step 4: Document exact atomicity**
+- [x] **Step 4: Document exact atomicity**
 
 State that all targets are preflighted before replacement, each file replacement is atomic, the
 repository is not an atomic transaction, recovery is best effort, and incomplete observation is
 unknown. Add only `Unreleased` notes.
+
+**Completion evidence (2026-07-18):** Recovery and interruption proof was implemented in
+`28d530f`. The focused 13-suite matrix passes 227/227 tests, the command check suite passes 517/517,
+and the full practical smoke passes 35 checks with 69 registry requests. The matrix covers exact
+stale-first/stale-later, completed/partial/unknown recovery, final-observation identity loss, orphan
+journal, deterministic after-replacement interruption, real operating-system SIGTERM exit 143, and
+fresh authoritative recovery blocking. Human receipts consume private exact operation/attempt
+evidence while public JSON, callbacks, schemas, version, and declarations remain unchanged. Lint,
+typecheck, build, schema, and diff checks pass; all four built declarations byte-match public
+`depfresh@2.0.2`. Independent review reported no Critical, Important, or Minor findings. Detailed
+evidence and the intentionally deferred mixed no-change plus completed-recovery contract are in
+`.superpowers/sdd/plan033-task-4-report.md`.
 
 ### Task 5: Command apply verification gate
 
