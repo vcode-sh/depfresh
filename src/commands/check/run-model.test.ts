@@ -760,6 +760,7 @@ describe('check run model', () => {
         type: 'apply-completed',
         status: 'passed',
         recoveryRequired: true,
+        observationRequired: true,
       })
       expect(state.phases.find((phase) => phase.name === 'apply')?.status).toBe('passed')
       expect(state.phases.find((phase) => phase.name === 'recover')?.status).toBe('active')
@@ -793,6 +794,7 @@ describe('check run model', () => {
       type: 'apply-completed',
       status: 'failed',
       recoveryRequired: true,
+      observationRequired: true,
     })
     state = reduceCheckRun(state, {
       type: 'recovery-recorded',
@@ -853,6 +855,7 @@ describe('check run model', () => {
       type: 'apply-completed',
       status: 'passed',
       recoveryRequired: true,
+      observationRequired: true,
     })
     state = reduceCheckRun(state, {
       type: 'recovery-recorded',
@@ -915,6 +918,7 @@ describe('check run model', () => {
       type: 'apply-completed',
       status: 'passed',
       recoveryRequired: false,
+      observationRequired: true,
     })
     state = completePhase(state, 'observe')
     const cleanupEvidence = {
@@ -949,14 +953,229 @@ describe('check run model', () => {
     })
   })
 
+  it('retains a clean precommit conflict without inventing observation or recovery', () => {
+    let state = reduceCheckRun(startExactApply(), {
+      type: 'apply-completed',
+      status: 'failed',
+      recoveryRequired: false,
+      observationRequired: false,
+    })
+
+    expect(state.phases).toEqual(
+      expect.arrayContaining([
+        { name: 'apply', status: 'failed' },
+        { name: 'recover', status: 'skipped' },
+        { name: 'observe', status: 'skipped' },
+        { name: 'complete', status: 'active' },
+      ]),
+    )
+    state = results(
+      state,
+      [{ ...operationResult(change.id, 'blocked'), notAttempted: true }],
+      [{ ...physicalTarget('blocked'), notAttempted: true }],
+    )
+    expect(state.recovery.status).toBe('not-needed')
+    state = reduceCheckRun(state, {
+      type: 'run-completed',
+      eventId: 'complete:precommit-conflict',
+      elapsedMs: 2,
+      exitCode: 2,
+    })
+
+    expect(state.phases.find((phase) => phase.name === 'complete')?.status).toBe('failed')
+    expect(state.results.totals).toMatchObject({ blocked: 1, notAttempted: 1 })
+  })
+
+  it.each([
+    { status: 'failed' as const, outcome: 'failed' as const, finalStatus: 'failed' as const },
+    { status: 'unknown' as const, outcome: 'unknown' as const, finalStatus: 'unknown' as const },
+  ])(
+    'retains zero-attempt $outcome truth without observation or recovery',
+    ({ status, outcome, finalStatus }) => {
+      let state = reduceCheckRun(startExactApply(), {
+        type: 'apply-completed',
+        status,
+        recoveryRequired: false,
+        observationRequired: false,
+      })
+      state = results(
+        state,
+        [{ ...operationResult(change.id, outcome), notAttempted: true }],
+        [{ ...physicalTarget(outcome), notAttempted: true }],
+      )
+      state = reduceCheckRun(state, {
+        type: 'run-completed',
+        eventId: `complete:zero-attempt-${outcome}`,
+        elapsedMs: 2,
+        exitCode: 2,
+      })
+
+      expect(state.phases.find((phase) => phase.name === 'complete')?.status).toBe(finalStatus)
+      expect(state.results.totals).toMatchObject({ notAttempted: 1, [outcome]: 1 })
+    },
+  )
+
+  it.each([
+    {
+      name: 'passed apply without observation',
+      status: 'passed' as const,
+      recoveryRequired: false,
+      expectedError: 'passed apply requires final observation',
+    },
+    {
+      name: 'recovery without observation',
+      status: 'failed' as const,
+      recoveryRequired: true,
+      expectedError: 'recovery requires final observation',
+    },
+  ])('rejects $name', ({ status, recoveryRequired, expectedError }) => {
+    expect(() =>
+      reduceCheckRun(startExactApply(), {
+        type: 'apply-completed',
+        status,
+        recoveryRequired,
+        observationRequired: false,
+      }),
+    ).toThrow(expectedError)
+  })
+
+  it.each(['applied', 'reverted'] as const)(
+    'rejects a %s outcome when final observation did not exist',
+    (outcome) => {
+      const state = reduceCheckRun(startExactApply(), {
+        type: 'apply-completed',
+        status: 'failed',
+        recoveryRequired: false,
+        observationRequired: false,
+      })
+
+      expect(() =>
+        results(state, [operationResult(change.id, outcome)], [physicalTarget(outcome)]),
+      ).toThrow('no-observation apply cannot report mutation outcomes')
+    },
+  )
+
+  it.each(['failed', 'unknown'] as const)(
+    'rejects attempted %s truth when final observation did not exist',
+    (outcome) => {
+      const state = reduceCheckRun(startExactApply(), {
+        type: 'apply-completed',
+        status: outcome,
+        recoveryRequired: false,
+        observationRequired: false,
+      })
+
+      expect(() =>
+        results(state, [operationResult(change.id, outcome)], [physicalTarget(outcome)]),
+      ).toThrow('no-observation apply requires structurally not-attempted results')
+    },
+  )
+
+  it.each([
+    {
+      name: 'blocked stage',
+      phaseStatus: 'blocked' as const,
+      outcome: 'blocked' as const,
+      finalStatus: 'blocked' as const,
+    },
+    {
+      name: 'failed stage',
+      phaseStatus: 'failed' as const,
+      outcome: 'failed' as const,
+      finalStatus: 'failed' as const,
+    },
+    {
+      name: 'failed lock conflict',
+      phaseStatus: 'failed' as const,
+      outcome: 'blocked' as const,
+      finalStatus: 'failed' as const,
+    },
+    {
+      name: 'unknown stage',
+      phaseStatus: 'unknown' as const,
+      outcome: 'unknown' as const,
+      finalStatus: 'unknown' as const,
+    },
+  ])('retains exact zero-attempt truth after $name', ({ phaseStatus, outcome, finalStatus }) => {
+    let state = completePhase(selectedState(), 'preflight')
+    state = completePhase(state, 'stage', phaseStatus)
+    state = results(
+      state,
+      [{ ...operationResult(change.id, outcome), notAttempted: true }],
+      [{ ...physicalTarget(outcome), notAttempted: true }],
+    )
+    state = reduceCheckRun(state, {
+      type: 'run-completed',
+      eventId: `complete:early-${phaseStatus}-${outcome}`,
+      elapsedMs: 2,
+      exitCode: 2,
+    })
+
+    expect(state.phases.find((phase) => phase.name === 'apply')?.status).toBe('skipped')
+    expect(state.phases.find((phase) => phase.name === 'observe')?.status).toBe('skipped')
+    expect(state.phases.find((phase) => phase.name === 'complete')?.status).toBe(finalStatus)
+    expect(state.results.totals).toMatchObject({ notAttempted: 1, [outcome]: 1 })
+  })
+
+  it('retains real unknown cleanup evidence after an early zero-mutation exit', () => {
+    let state = completePhase(selectedState(), 'preflight')
+    state = completePhase(state, 'stage', 'failed')
+    state = reduceCheckRun(state, {
+      type: 'recovery-recorded',
+      executed: false,
+      status: 'unknown',
+      journalId: 'early-cleanup',
+      restoredPaths: [],
+      unrecoveredPaths: [],
+      externalEffects: ['temporary-file-cleanup'],
+    })
+    state = results(
+      state,
+      [{ ...operationResult(change.id, 'failed'), notAttempted: true }],
+      [{ ...physicalTarget('failed'), notAttempted: true }],
+    )
+    state = reduceCheckRun(state, {
+      type: 'run-completed',
+      eventId: 'complete:early-cleanup-unknown',
+      elapsedMs: 2,
+      exitCode: 2,
+    })
+
+    expect(state.phases.find((phase) => phase.name === 'recover')?.status).toBe('skipped')
+    expect(state.phases.find((phase) => phase.name === 'complete')?.status).toBe('unknown')
+    expect(state.results.totals).toMatchObject({ failed: 1, unknown: 0, notAttempted: 1 })
+    expect(state.recovery).toMatchObject({
+      executed: false,
+      status: 'unknown',
+      journalId: 'early-cleanup',
+      externalEffects: ['temporary-file-cleanup'],
+    })
+  })
+
+  it.each(['applied', 'reverted'] as const)(
+    'rejects early zero-mutation %s outcomes',
+    (outcome) => {
+      let state = completePhase(selectedState(), 'preflight')
+      state = completePhase(state, 'stage', 'failed')
+
+      expect(() =>
+        results(state, [operationResult(change.id, outcome)], [physicalTarget(outcome)]),
+      ).toThrow('zero-mutation lifecycle cannot report mutation outcomes')
+    },
+  )
+
   it('keeps the exact passed apply path when recovery is not required', () => {
     const applyCompleted = {
       type: 'apply-completed',
       status: 'passed',
       recoveryRequired: false,
+      observationRequired: true,
     } as const
     let state = reduceCheckRun(startExactApply(), applyCompleted)
     expect(reduceCheckRun(state, applyCompleted)).toBe(state)
+    expect(() => reduceCheckRun(state, { ...applyCompleted, observationRequired: false })).toThrow(
+      'terminal event payload differs',
+    )
     expect(() => reduceCheckRun(state, { ...applyCompleted, recoveryRequired: true })).toThrow(
       'terminal event payload differs',
     )
@@ -980,6 +1199,7 @@ describe('check run model', () => {
         type: 'apply-completed',
         status: 'passed',
         recoveryRequired: false,
+        observationRequired: true,
       })
       noRecovery = completePhase(noRecovery, 'observe')
 
@@ -1064,7 +1284,25 @@ describe('check run model', () => {
 
   it('keeps an all-no-change target skipped and structurally unattempted without worsening truth', () => {
     let state = completePhase(selectedInventoryState(2, 1), 'preflight')
-    state = completePhase(state, 'stage', 'skipped')
+    const stageCompleted = {
+      type: 'stage-completed',
+      status: 'skipped',
+      observationRequired: true,
+    } as const
+    state = reduceCheckRun(state, stageCompleted)
+    expect(reduceCheckRun(state, stageCompleted)).toBe(state)
+    expect(() => reduceCheckRun(state, { ...stageCompleted, observationRequired: false })).toThrow(
+      'terminal event payload differs',
+    )
+    expect(state.phases).toEqual(
+      expect.arrayContaining([
+        { name: 'stage', status: 'skipped' },
+        { name: 'apply', status: 'skipped' },
+        { name: 'recover', status: 'skipped' },
+        { name: 'observe', status: 'active' },
+      ]),
+    )
+    state = completePhase(state, 'observe')
     const selected = state.targets[0]!
     state = results(
       state,
@@ -1084,6 +1322,18 @@ describe('check run model', () => {
     expect(state.results.totals).toMatchObject({ skipped: 2, notAttempted: 2, mixed: 0 })
     expect(state.results.targetTotals).toMatchObject({ skipped: 1, notAttempted: 1, mixed: 0 })
     expect(state.phases.find((phase) => phase.name === 'complete')?.status).toBe('passed')
+  })
+
+  it('rejects mutation outcomes after an observed no-mutation stage', () => {
+    let state = completePhase(selectedState(), 'preflight')
+    state = reduceCheckRun(state, {
+      type: 'stage-completed',
+      status: 'skipped',
+      observationRequired: true,
+    })
+    state = completePhase(state, 'observe')
+
+    expect(() => results(state)).toThrow('skipped apply cannot report mutation outcomes')
   })
 
   it('retains reverted and failed outcomes on one recovered physical target', () => {

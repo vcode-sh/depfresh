@@ -177,9 +177,15 @@ export type CheckRunEvent =
       readonly status: CheckRunTerminalPhaseStatus
     }
   | {
+      readonly type: 'stage-completed'
+      readonly status: Extract<CheckRunTerminalPhaseStatus, 'skipped'>
+      readonly observationRequired: boolean
+    }
+  | {
       readonly type: 'apply-completed'
       readonly status: CheckRunTerminalPhaseStatus
       readonly recoveryRequired: boolean
+      readonly observationRequired: boolean
     }
   | {
       readonly type: 'diagnostics-recorded'
@@ -310,6 +316,7 @@ export function reduceCheckRun(state: CheckRunSnapshot, event: CheckRunEvent): C
   }
   if (event.type === 'resolution-completed') return completeResolution(state, event)
   if (event.type === 'selection-completed') return completeSelection(state, event)
+  if (event.type === 'stage-completed') return completeExactStage(state, event)
   if (event.type === 'apply-completed') return completeExactApply(state, event)
   if (event.type === 'phase-completed') return completePhase(state, event)
   if (event.type === 'diagnostics-recorded') {
@@ -439,16 +446,42 @@ function completeExactApply(
 ): CheckRunSnapshot {
   assertTerminalStatus(event.status)
   assertBoolean('recovery-required receipt', event.recoveryRequired)
+  assertBoolean('observation-required receipt', event.observationRequired)
   if (event.status === 'blocked' || event.status === 'skipped') {
     throw new CheckRunInvariantError('exact apply status must be passed, failed, or unknown')
+  }
+  if (event.recoveryRequired && !event.observationRequired) {
+    throw new CheckRunInvariantError('recovery requires final observation')
+  }
+  if (event.status === 'passed' && !event.observationRequired) {
+    throw new CheckRunInvariantError('passed apply requires final observation')
   }
   assertPhase(state.phases, 'apply', 'active')
   let phases = setPhaseStatus(state.phases, 'apply', event.status)
   if (event.recoveryRequired) {
     phases = setPhaseStatus(phases, 'recover', 'active')
-  } else {
+  } else if (event.observationRequired) {
     phases = setPhaseStatus(setPhaseStatus(phases, 'recover', 'skipped'), 'observe', 'active')
+  } else {
+    phases = finishWithoutMutation(phases, ['recover', 'observe'])
   }
+  return acceptedTerminal(state, event, { phases })
+}
+
+function completeExactStage(
+  state: CheckRunSnapshot,
+  event: Extract<CheckRunEvent, { type: 'stage-completed' }>,
+): CheckRunSnapshot {
+  assertBoolean('observation-required receipt', event.observationRequired)
+  if (event.status !== 'skipped') {
+    throw new CheckRunInvariantError('exact no-mutation stage status must be skipped')
+  }
+  assertPhase(state.phases, 'stage', 'active')
+  let phases = setPhaseStatus(state.phases, 'stage', 'skipped')
+  phases = setPhaseStatus(setPhaseStatus(phases, 'apply', 'skipped'), 'recover', 'skipped')
+  phases = event.observationRequired
+    ? setPhaseStatus(phases, 'observe', 'active')
+    : finishWithoutMutation(phases, ['observe'])
   return acceptedTerminal(state, event, { phases })
 }
 
@@ -826,6 +859,50 @@ function assertResultPhaseCoherence(
   const unknownPhase = [preflight, stage, apply, observe, recover].includes('unknown')
   const failedPhase = [preflight, stage, apply, observe, recover].includes('failed')
   const recoveryRecorded = hasTerminalEvent(state, 'recovery-recorded')
+  const retainedCleanupUnknown =
+    recoveryRecorded &&
+    !state.recovery.executed &&
+    state.recovery.status === 'unknown' &&
+    recover === 'skipped'
+  const noObservationApplyFailure =
+    (apply === 'failed' || apply === 'unknown') &&
+    preflight === 'passed' &&
+    stage === 'passed' &&
+    observe === 'skipped' &&
+    recover === 'skipped'
+  const noObservationEarlyFailure =
+    apply === 'skipped' &&
+    preflight === 'passed' &&
+    (stage === 'blocked' || stage === 'failed' || stage === 'unknown') &&
+    observe === 'skipped' &&
+    recover === 'skipped'
+  const zeroMutationFailure = noObservationApplyFailure || noObservationEarlyFailure
+  const zeroMutationLabel = noObservationApplyFailure
+    ? 'no-observation apply'
+    : 'zero-mutation lifecycle'
+
+  if (zeroMutationFailure) {
+    if (totals.applied > 0 || totals.reverted > 0) {
+      throw new CheckRunInvariantError(`${zeroMutationLabel} cannot report mutation outcomes`)
+    }
+    if (totals.notAttempted !== selected) {
+      throw new CheckRunInvariantError(
+        `${zeroMutationLabel} requires structurally not-attempted results`,
+      )
+    }
+    if (
+      operations.some(
+        (operation) =>
+          operation.outcome !== 'blocked' &&
+          operation.outcome !== 'failed' &&
+          operation.outcome !== 'unknown',
+      )
+    ) {
+      throw new CheckRunInvariantError(
+        `${zeroMutationLabel} requires blocked, failed, or unknown results`,
+      )
+    }
+  }
 
   if (totals.reverted > 0) {
     if (apply === 'skipped' || recover === 'skipped' || !recoveryRecorded) {
@@ -856,7 +933,7 @@ function assertResultPhaseCoherence(
     }
   }
 
-  if (apply === 'skipped') {
+  if (apply === 'skipped' && !zeroMutationFailure) {
     if (totals.applied > 0 || totals.reverted > 0 || totals.failed > 0) {
       throw new CheckRunInvariantError('skipped apply cannot report mutation outcomes')
     }
@@ -886,7 +963,7 @@ function assertResultPhaseCoherence(
     throw new CheckRunInvariantError('applied results require passed apply and observe')
   }
 
-  if (totals.blocked > 0 && !blockedPhase) {
+  if (totals.blocked > 0 && !blockedPhase && !zeroMutationFailure) {
     throw new CheckRunInvariantError('blocked results require a blocked mutation phase')
   }
   if (totals.failed > 0 && !failedPhase && state.recovery.status !== 'partial') {
@@ -903,8 +980,6 @@ function assertResultPhaseCoherence(
   }
 
   if (recover === 'skipped') {
-    const retainedCleanupUnknown =
-      recoveryRecorded && !state.recovery.executed && state.recovery.status === 'unknown'
     if (
       state.recovery.executed ||
       (!retainedCleanupUnknown && state.recovery.status !== 'not-needed')
@@ -934,7 +1009,7 @@ function assertResultPhaseCoherence(
       'partial recovery requires a reverted, failed, or unknown result',
     )
   }
-  if (state.recovery.status === 'unknown' && recover !== 'unknown') {
+  if (state.recovery.status === 'unknown' && recover !== 'unknown' && !retainedCleanupUnknown) {
     throw new CheckRunInvariantError('unknown recovery requires an unknown recovery phase')
   }
   if (state.recovery.status === 'completed') {
@@ -1276,6 +1351,7 @@ function terminalEventId(event: CheckRunEvent): string | undefined {
   if (event.type === 'repository-inspection-completed') return 'repository-inspection-completed'
   if (event.type === 'resolution-completed') return 'resolution-completed'
   if (event.type === 'selection-completed') return 'selection-completed'
+  if (event.type === 'stage-completed') return 'stage-completed'
   if (event.type === 'apply-completed') return 'apply-completed'
   if (event.type === 'phase-completed') return event.eventId ?? `phase-completed:${event.phase}`
   if (event.type === 'results-recorded') return 'results-recorded'
