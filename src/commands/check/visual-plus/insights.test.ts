@@ -91,8 +91,8 @@ describe('buildVisualPlusInsights', () => {
     const nanoid = result.majors.find((card) => card.name === 'nanoid')!
 
     expect(react).toMatchObject({
-      current: '^15',
-      target: '^17',
+      current: '^15.0.0',
+      target: '^17.0.0',
       age: { state: 'known', ageMs: VISUAL_PLUS_MAJOR_AGE_MS },
       compatibility: { compatible: 0, incompatible: 0, unknown: 2 },
     })

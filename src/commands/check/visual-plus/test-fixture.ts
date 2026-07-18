@@ -114,10 +114,10 @@ function fixtureInventory(): { changes: CheckRunChange[]; targets: CheckRunTarge
       const diff = major ? 'major' : nonMajor < 37 ? 'minor' : 'patch'
       if (!major) nonMajor += 1
       const current =
-        rawName === 'react-dropzone' ? '^15' : rawName === 'nanoid' ? '^5.1.16' : '^1.0.0'
+        rawName === 'react-dropzone' ? '^15.0.0' : rawName === 'nanoid' ? '^5.1.16' : '^1.0.0'
       const target =
         rawName === 'react-dropzone'
-          ? '^17'
+          ? '^17.0.0'
           : rawName === 'nanoid'
             ? '^6.0.0'
             : diff === 'minor'

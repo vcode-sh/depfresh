@@ -110,7 +110,7 @@ describe('Visual+ relationship maps', () => {
     expect(output).toContain('Minor 37')
     expect(output).toContain('Patch 36')
     expect(output).toContain('react-dropzone')
-    expect(output).toContain('^15 → ^17')
+    expect(output).toContain('^15.0.0 → ^17.0.0')
     expect(output).toContain('Occurrences 2')
     expect(output).toContain('nanoid')
     expect(output).toContain('^5.1.16 → ^6.0.0')
