@@ -298,6 +298,12 @@ local blocked/failed/unknown result does not suppress separately authorized glob
 adapter throw does. These cleanup rules prevent already-applied outcomes from disappearing behind a
 later callback failure.
 
+Run-model projection is not a cleanup owner. If projection or controller dispatch fails after the
+adapter returns, retain that error as the primary failure, still attempt every prepared package
+completion in package order, omit `afterPackagesEnd`, and then rethrow the retained model error. If
+model emission succeeds, the first package-order completion rejection remains primary. Tests must
+cover both precedence branches so instrumentation cannot bypass or replace mandatory cleanup.
+
 - [ ] **Step 5: Drive the run model from the real apply result**
 
 Map apply phases `preflight`, `stage`, `commit`, `inspect`, and `recovery` to the renderer-neutral
