@@ -1282,6 +1282,51 @@ describe('check run model', () => {
     })
   })
 
+  it('rejects generic skipped-stage closure for selected operations', () => {
+    const state = completePhase(selectedState(), 'preflight')
+
+    expect(() => completePhase(state, 'stage', 'skipped')).toThrow(
+      'selected no-mutation stage requires fact-bearing observation',
+    )
+  })
+
+  it('rejects an exact selected no-mutation stage without final observation', () => {
+    const state = completePhase(selectedState(), 'preflight')
+
+    expect(() =>
+      reduceCheckRun(state, {
+        type: 'stage-completed',
+        status: 'skipped',
+        observationRequired: false,
+      }),
+    ).toThrow('selected no-mutation stage requires final observation')
+  })
+
+  it.each(['generic', 'fact-bearing'] as const)(
+    'retains the $mode skipped-stage closure for a zero-operation selection',
+    (mode) => {
+      let state = completePhase(selectedInventoryState(0, 0), 'preflight')
+      state =
+        mode === 'generic'
+          ? completePhase(state, 'stage', 'skipped')
+          : reduceCheckRun(state, {
+              type: 'stage-completed',
+              status: 'skipped',
+              observationRequired: false,
+            })
+      state = results(state, [], [])
+      state = reduceCheckRun(state, {
+        type: 'run-completed',
+        eventId: `complete:zero-operation-${mode}`,
+        elapsedMs: 1,
+        exitCode: 0,
+      })
+
+      expect(state.phases.find((phase) => phase.name === 'observe')?.status).toBe('skipped')
+      expect(state.phases.find((phase) => phase.name === 'complete')?.status).toBe('passed')
+    },
+  )
+
   it('keeps an all-no-change target skipped and structurally unattempted without worsening truth', () => {
     let state = completePhase(selectedInventoryState(2, 1), 'preflight')
     const stageCompleted = {

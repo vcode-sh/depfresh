@@ -436,6 +436,10 @@ function completePhase(
       phases: completeAndAdvance(phases, 'resolve', event.status, state.write),
     })
   }
+  if (event.phase === 'stage' && event.status === 'skipped' && state.counts.operations > 0) {
+    assertPhase(state.phases, 'stage', 'active')
+    throw new CheckRunInvariantError('selected no-mutation stage requires fact-bearing observation')
+  }
   const phases = completeAndAdvance(state.phases, event.phase, event.status, state.write)
   return acceptedTerminal(state, event, { phases })
 }
@@ -477,6 +481,9 @@ function completeExactStage(
     throw new CheckRunInvariantError('exact no-mutation stage status must be skipped')
   }
   assertPhase(state.phases, 'stage', 'active')
+  if (state.counts.operations > 0 && !event.observationRequired) {
+    throw new CheckRunInvariantError('selected no-mutation stage requires final observation')
+  }
   let phases = setPhaseStatus(state.phases, 'stage', 'skipped')
   phases = setPhaseStatus(setPhaseStatus(phases, 'apply', 'skipped'), 'recover', 'skipped')
   phases = event.observationRequired
