@@ -93,15 +93,24 @@ describe('addons', () => {
       makeResolved({ diff: 'patch', targetVersion: '^1.0.1' }),
     ])
 
+    const afterPackageWrite = vi.fn()
+    const afterPackageEnd = vi.fn()
+    const afterPackagesEnd = vi.fn()
     const addon: depfreshAddon = {
       name: 'skip-write',
       beforePackageWrite: () => false,
+      afterPackageWrite,
+      afterPackageEnd,
+      afterPackagesEnd,
     }
 
     const { check } = await import('./index')
     await check({ ...baseOptions, write: true, addons: [addon] })
 
     expect(mocks.writePackageMock).not.toHaveBeenCalled()
+    expect(afterPackageWrite).not.toHaveBeenCalled()
+    expect(afterPackageEnd).toHaveBeenCalledTimes(1)
+    expect(afterPackagesEnd).toHaveBeenCalledTimes(1)
   })
 
   it('returns exit code 2 when addon setup throws', async () => {

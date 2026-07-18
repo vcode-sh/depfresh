@@ -1,5 +1,4 @@
 import type { createSqliteCache } from '../../cache/index'
-import { resolvePackage } from '../../io/resolve'
 import type {
   depfreshOptions,
   InvocationAuthority,
@@ -8,7 +7,7 @@ import type {
 } from '../../types'
 import type { Logger } from '../../utils/logger'
 import type { loadNpmrc } from '../../utils/npmrc'
-import { selectInteractiveUpdates } from './post-write-actions'
+import { completePreparedPackage, preparePackage } from './package-preparation'
 import { applyPackageWrite, type PackageWriteResult } from './write-flow'
 
 export interface ProcessPackageHooks {
@@ -37,54 +36,30 @@ export async function processPackage(
   preResolved?: Promise<ResolvedDepChange[]> | ResolvedDepChange[],
   skipBeforePackageStart = false,
 ): Promise<void> {
-  if (!skipBeforePackageStart) {
-    await hooks.beforePackageStart(pkg)
-  }
+  const prepared = await preparePackage(
+    pkg,
+    options,
+    authority,
+    hooks,
+    preResolved,
+    skipBeforePackageStart,
+  )
+
+  let writeResult: PackageWriteResult | undefined
   try {
-    pkg.resolved = preResolved
-      ? await preResolved
-      : await resolvePackage(
-          pkg,
-          options,
-          hooks.cache,
-          hooks.npmrc,
-          hooks.workspacePackageNames,
-          hooks.onDependencyProcessed,
-        )
-
-    const errorDeps = pkg.resolved.filter((d) => d.diff === 'error')
-    if (errorDeps.length > 0) {
-      hooks.onErrorDeps(errorDeps)
+    if (prepared.writeApproved) {
+      writeResult = await applyPackageWrite(
+        prepared.pkg,
+        prepared.selected,
+        options,
+        authority,
+        hooks.logger,
+      )
     }
-
-    const updates = pkg.resolved.filter((d) => d.diff !== 'none' && d.diff !== 'error')
-    if (updates.length === 0) {
-      if (errorDeps.length === 0) {
-        hooks.onAllModeNoUpdates()
-      }
-      return
-    }
-
-    hooks.onHasUpdates(updates)
-
-    const selected = options.interactive
-      ? await selectInteractiveUpdates(updates, options.explain)
-      : updates
-
-    if (!(options.write && authority.write) || selected.length === 0) return
-
-    const shouldWrite = await hooks.beforePackageWrite(pkg, selected)
-    if (!shouldWrite) return
-
-    const writeResult = await applyPackageWrite(pkg, selected, options, authority, hooks.logger)
-    hooks.onPlannedUpdates(writeResult.planned)
-    hooks.onWriteResult(writeResult)
-
-    if (writeResult.didWrite) {
-      hooks.onDidWrite()
-    }
-    await hooks.afterPackageWrite(pkg, selected)
-  } finally {
-    await hooks.afterPackageEnd(pkg)
+  } catch (error) {
+    await completePreparedPackage(prepared, undefined, hooks)
+    throw error
   }
+
+  await completePreparedPackage(prepared, writeResult, hooks)
 }

@@ -224,4 +224,28 @@ describe('check', () => {
     expect(mocks.writePackageMock).not.toHaveBeenCalled()
     expect(afterPackageWrite).not.toHaveBeenCalled()
   })
+
+  it('ends the package once and omits write-result hooks when the writer throws', async () => {
+    const pkg = makePkg('my-app')
+    mocks.loadPackagesMock.mockResolvedValue([pkg])
+    mocks.resolvePackageMock.mockResolvedValue([
+      makeResolved({ diff: 'patch', targetVersion: '^1.0.1' }),
+    ])
+    mocks.writePackageMock.mockRejectedValueOnce(new Error('writer failed'))
+    const afterPackageWrite = vi.fn()
+    const afterPackageEnd = vi.fn()
+
+    const { check } = await import('./index')
+    const result = await check({
+      ...baseOptions,
+      write: true,
+      afterPackageWrite,
+      afterPackageEnd,
+    })
+
+    expect(result).toBe(2)
+    expect(afterPackageWrite).not.toHaveBeenCalled()
+    expect(afterPackageEnd).toHaveBeenCalledTimes(1)
+    expect(afterPackageEnd).toHaveBeenCalledWith(pkg)
+  })
 })

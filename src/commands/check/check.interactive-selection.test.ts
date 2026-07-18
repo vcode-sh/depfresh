@@ -94,6 +94,7 @@ describe('interactive selection integration', () => {
     mocks.resolvePackageMock.mockResolvedValue(updates)
 
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+    const afterPackageWrite = vi.fn()
     let sentKeys = false
 
     vi.spyOn(process.stdout, 'write').mockImplementation((chunk: string | Uint8Array) => {
@@ -109,7 +110,12 @@ describe('interactive selection integration', () => {
     })
 
     const { check } = await import('./index')
-    const result = await check({ ...baseOptions, write: true, interactive: true })
+    const result = await check({
+      ...baseOptions,
+      write: true,
+      interactive: true,
+      afterPackageWrite,
+    })
 
     expect(result).toBe(0)
     expect(sentKeys).toBe(true)
@@ -119,6 +125,7 @@ describe('interactive selection integration', () => {
       'silent',
       expect.objectContaining({ write: true }),
     )
+    expect(afterPackageWrite).toHaveBeenCalledWith(pkg, updates)
 
     logSpy.mockRestore()
   })
@@ -144,6 +151,7 @@ describe('interactive selection integration', () => {
     mocks.resolvePackageMock.mockResolvedValue(updates)
 
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+    const afterPackageWrite = vi.fn()
     let sentKeys = false
 
     vi.spyOn(process.stdout, 'write').mockImplementation((chunk: string | Uint8Array) => {
@@ -159,7 +167,12 @@ describe('interactive selection integration', () => {
     })
 
     const { check } = await import('./index')
-    const result = await check({ ...baseOptions, write: true, interactive: true })
+    const result = await check({
+      ...baseOptions,
+      write: true,
+      interactive: true,
+      afterPackageWrite,
+    })
 
     expect(result).toBe(0)
     expect(sentKeys).toBe(true)
@@ -169,6 +182,7 @@ describe('interactive selection integration', () => {
       'silent',
       expect.objectContaining({ write: true }),
     )
+    expect(afterPackageWrite).toHaveBeenCalledWith(pkg, [updates[0]])
 
     logSpy.mockRestore()
   })
