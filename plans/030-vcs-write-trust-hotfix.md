@@ -308,6 +308,9 @@ without editing published `2.0.0` or `2.0.1` release records.
 **Files:**
 
 - Verify: all Plan 030 source, tests, docs, generated contracts, and package contents
+- Create: `scripts/verify-local-package.mjs`
+- Modify: `package.json`
+- Modify: `test/release-readiness.test.ts`
 - Modify: `plans/030-vcs-write-trust-hotfix.md` with exact completion evidence only after proof
 - Modify: `plans/README.md` and `.superpowers/sdd/progress.md` only when marking the plan done
 
@@ -335,7 +338,10 @@ pnpm verify:package
 ```
 
 Expected: every command exits `0`; Biome has zero warnings; coverage meets repository thresholds;
-the packed verifier reports no missing or unexpected contract files.
+the packed verifier reports no missing or unexpected contract files. `pnpm verify:package` must
+self-pack into a disposable directory, call the existing exact-manifest verifier, and remove only
+its own temporary files; hosted CI and release workflows retain their explicit `artifacts/pack.json`
+path.
 
 - [ ] **Step 3: Reproduce the original boundary with the built CLI**
 
