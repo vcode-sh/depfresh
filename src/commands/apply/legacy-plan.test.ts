@@ -468,4 +468,281 @@ describe('command-level legacy plan', () => {
       trailingNewline: false,
     })
   })
+
+  it('exposes deeply frozen physical selection evidence with canonical shared ownership', () => {
+    const root = temporaryRoot()
+    const firstPath = join(root, 'packages', 'a', 'package.json')
+    const secondPath = join(root, 'packages', 'b', 'package.json')
+    const catalogPath = join(root, 'package.json')
+    mkdirSync(join(root, 'packages', 'a'), { recursive: true })
+    mkdirSync(join(root, 'packages', 'b'), { recursive: true })
+    writeFileSync(firstPath, '{"dependencies":{"alpha":"1.0.0"}}\n')
+    writeFileSync(secondPath, '{"dependencies":{"beta":"1.0.0"}}\n')
+    writeFileSync(catalogPath, '{"workspaces":{"catalog":{"shared":"1.0.0"}}}\n')
+    const shared = change('shared')
+    shared.publishedAt = '2025-01-01T00:00:00.000Z'
+    shared.nodeCompatible = false
+    shared.nodeCompat = '<24'
+    const catalog: CatalogSource = {
+      type: 'bun',
+      name: 'default',
+      filepath: catalogPath,
+      deps: [
+        {
+          name: 'shared',
+          currentVersion: '1.0.0',
+          rawVersion: '1.0.0',
+          source: 'catalog',
+          update: true,
+          parents: [],
+        },
+      ],
+      raw: {},
+      indent: '  ',
+    }
+
+    const construction = createLegacyPlan(root, [
+      {
+        packageIndex: 4,
+        pkg: catalogPackage(catalogPath, catalog, 'later'),
+        changes: [{ ...shared }],
+      },
+      {
+        packageIndex: 1,
+        pkg: catalogPackage(catalogPath, catalog, '\u001B[31m owner '),
+        changes: [{ ...shared }],
+      },
+      { packageIndex: 2, pkg: manifest(firstPath, 'a'), changes: [change('alpha')] },
+      { packageIndex: 3, pkg: manifest(secondPath, ''), changes: [change('beta')] },
+    ])
+
+    expect(construction.selectionEvidence).toEqual({
+      status: 'ready',
+      evidence: {
+        operations: [
+          {
+            operationId: construction.plan.operations[0]?.id,
+            packageIndex: 1,
+            changeIndex: 0,
+            ownerLabel: 'owner',
+            physicalTarget: 'package.json',
+            occurrencePath: ['workspaces', 'catalog', 'shared'],
+            name: 'shared',
+            current: '1.0.0',
+            target: '2.0.0',
+            diff: 'major',
+            publishedAt: '2025-01-01T00:00:00.000Z',
+            nodeCompatible: false,
+            nodeCompat: '<24',
+            catalog: { name: 'default', sourcePath: 'package.json' },
+          },
+          expect.objectContaining({
+            operationId: construction.plan.operations[1]?.id,
+            packageIndex: 2,
+            ownerLabel: 'a',
+            physicalTarget: 'packages/a/package.json',
+            name: 'alpha',
+          }),
+          expect.objectContaining({
+            operationId: construction.plan.operations[2]?.id,
+            packageIndex: 3,
+            ownerLabel: 'packages/b/package.json',
+            physicalTarget: 'packages/b/package.json',
+            name: 'beta',
+          }),
+        ],
+        targets: [
+          { path: 'package.json', operationIds: [construction.plan.operations[0]?.id] },
+          { path: 'packages/a/package.json', operationIds: [construction.plan.operations[1]?.id] },
+          { path: 'packages/b/package.json', operationIds: [construction.plan.operations[2]?.id] },
+        ],
+      },
+    })
+    expect(Object.isFrozen(construction.selectionEvidence)).toBe(true)
+    if (construction.selectionEvidence.status !== 'ready') throw new Error('Expected evidence')
+    expect(Object.isFrozen(construction.selectionEvidence.evidence)).toBe(true)
+    expect(Object.isFrozen(construction.selectionEvidence.evidence.operations)).toBe(true)
+    expect(Object.isFrozen(construction.selectionEvidence.evidence.operations[0])).toBe(true)
+    expect(Object.isFrozen(construction.selectionEvidence.evidence.operations[0]?.catalog)).toBe(
+      true,
+    )
+    expect(Object.isFrozen(construction.selectionEvidence.evidence.targets[0]?.operationIds)).toBe(
+      true,
+    )
+  })
+
+  it('fails selection evidence closed for unsupported, unbound, and inconsistent truth', () => {
+    const root = temporaryRoot()
+    const outside = temporaryRoot()
+    const filepath = join(root, 'package.json')
+    const outsidePath = join(outside, 'package.json')
+    writeFileSync(filepath, '{"dependencies":{"shared":"1.0.0"}}\n')
+    writeFileSync(outsidePath, '{"dependencies":{"outside":"1.0.0"}}\n')
+    const pkg = manifest(filepath, 'root')
+    const first = change('shared')
+    const second = change('shared')
+    first.publishedAt = '2025-01-01T00:00:00.000Z'
+    second.publishedAt = '2025-01-02T00:00:00.000Z'
+    const missingCatalog = catalogPackage(
+      filepath,
+      {
+        type: 'bun',
+        name: 'default',
+        filepath,
+        deps: [],
+        raw: {},
+        indent: '  ',
+      },
+      'catalog',
+    )
+
+    expect(
+      createLegacyPlan(root, [
+        { packageIndex: 0, pkg: manifest(outsidePath, 'outside'), changes: [change('outside')] },
+      ]).selectionEvidence,
+    ).toEqual({ status: 'unavailable', reason: 'UNSUPPORTED_WRITE_SOURCE' })
+    expect(
+      createLegacyPlan(root, [
+        { packageIndex: 0, pkg: missingCatalog, changes: [change('missing')] },
+      ]).selectionEvidence,
+    ).toEqual({ status: 'unavailable', reason: 'UNBOUND_OPERATION' })
+    expect(
+      createLegacyPlan(root, [
+        { packageIndex: 0, pkg, changes: [first] },
+        { packageIndex: 1, pkg, changes: [second] },
+      ]).selectionEvidence,
+    ).toEqual({ status: 'unavailable', reason: 'INCONSISTENT_SELECTION_EVIDENCE' })
+  })
+
+  it('fails owner fallback closed when a catalog consumer source is outside the root', async () => {
+    const root = temporaryRoot()
+    const outside = temporaryRoot()
+    const catalogPath = join(root, 'package.json')
+    const consumerPath = join(outside, 'package.json')
+    writeFileSync(catalogPath, '{"workspaces":{"catalog":{"shared":"1.0.0"}}}\n')
+    writeFileSync(consumerPath, '{"name":"outside-consumer"}\n')
+    const catalog: CatalogSource = {
+      type: 'bun',
+      name: 'default',
+      filepath: catalogPath,
+      deps: [
+        {
+          name: 'shared',
+          currentVersion: '1.0.0',
+          rawVersion: '1.0.0',
+          source: 'catalog',
+          update: true,
+          parents: [],
+        },
+      ],
+      raw: {},
+      indent: '  ',
+    }
+    const selection = {
+      packageIndex: 0,
+      pkg: catalogPackage(consumerPath, catalog, '\u001B[31m'),
+      changes: [change('shared')],
+    }
+
+    const construction = createLegacyPlan(root, [selection])
+    expect(construction.blocked).toBe(false)
+    expect(construction.plan.operations).toHaveLength(1)
+    expect(construction.selectionEvidence).toEqual({
+      status: 'unavailable',
+      reason: 'UNBOUND_OPERATION',
+    })
+
+    const result = await applyLegacyCommandWrite(root, [selection], authority)
+    expect(result.status).toBe('executed')
+    expect(JSON.parse(readFileSync(catalogPath, 'utf8')).workspaces.catalog.shared).toBe('2.0.0')
+  })
+
+  it('fails owner fallback closed for a lexical symlink consumer with a contained catalog', () => {
+    const root = temporaryRoot()
+    const catalogPath = join(root, 'package.json')
+    const consumerTarget = join(root, 'consumer.json')
+    const consumerLink = join(root, 'consumer-link.json')
+    writeFileSync(catalogPath, '{"workspaces":{"catalog":{"shared":"1.0.0"}}}\n')
+    writeFileSync(consumerTarget, '{"name":"consumer"}\n')
+    symlinkSync(consumerTarget, consumerLink)
+    const catalog: CatalogSource = {
+      type: 'bun',
+      name: 'default',
+      filepath: catalogPath,
+      deps: [
+        {
+          name: 'shared',
+          currentVersion: '1.0.0',
+          rawVersion: '1.0.0',
+          source: 'catalog',
+          update: true,
+          parents: [],
+        },
+      ],
+      raw: {},
+      indent: '  ',
+    }
+
+    const construction = createLegacyPlan(root, [
+      {
+        packageIndex: 0,
+        pkg: catalogPackage(consumerLink, catalog, ''),
+        changes: [change('shared')],
+      },
+    ])
+
+    expect(construction.blocked).toBe(false)
+    expect(construction.plan.operations).toHaveLength(1)
+    expect(construction.selectionEvidence).toEqual({
+      status: 'unavailable',
+      reason: 'UNBOUND_OPERATION',
+    })
+  })
+
+  it('calls the frozen evidence observer before blocked apply and aborts mutation on throw', async () => {
+    const root = temporaryRoot()
+    const filepath = join(root, 'package.json')
+    const initial = '{"dependencies":{"shared":"1.0.0"}}\n'
+    writeFileSync(filepath, initial)
+    const observed: unknown[] = []
+
+    await expect(
+      applyLegacyCommandWrite(
+        root,
+        [{ packageIndex: 0, pkg: manifest(filepath, 'root'), changes: [change('shared')] }],
+        authority,
+        (evidence) => {
+          observed.push(evidence)
+          expect(Object.isFrozen(evidence)).toBe(true)
+          throw new Error('observer stopped apply')
+        },
+      ),
+    ).rejects.toThrow('observer stopped apply')
+
+    expect(observed).toHaveLength(1)
+    expect(readFileSync(filepath, 'utf8')).toBe(initial)
+  })
+
+  it('notifies the observer before returning a blocked command result', async () => {
+    const root = temporaryRoot()
+    const filepath = join(root, 'package.json')
+    const initial = '{"dependencies":{"shared":"1.0.0"}}\n'
+    writeFileSync(filepath, initial)
+    const pkg = manifest(filepath, 'root')
+    const observed: unknown[] = []
+
+    const result = await applyLegacyCommandWrite(
+      root,
+      [
+        { packageIndex: 0, pkg, changes: [change('shared', '1.0.0', '2.0.0')] },
+        { packageIndex: 1, pkg, changes: [change('shared', '1.0.0', '3.0.0')] },
+      ],
+      authority,
+      (evidence) => observed.push(evidence),
+    )
+
+    expect(observed).toEqual([{ status: 'unavailable', reason: 'INCONSISTENT_SELECTION_EVIDENCE' }])
+    expect(result.status).toBe('blocked')
+    expect(readFileSync(filepath, 'utf8')).toBe(initial)
+  })
 })

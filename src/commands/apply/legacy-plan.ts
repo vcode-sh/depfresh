@@ -28,6 +28,7 @@ import type {
   ResolvedDepChange,
   WriteOutcome,
 } from '../../types'
+import { sanitizeTerminalText } from '../../utils/format'
 import { applyWithExecutionEvidence } from './index'
 
 export interface LegacyWriteDiagnostic {
@@ -66,6 +67,7 @@ interface LegacyOperationInput {
   expectedValue: string
   requestedValue: string
   indent: string
+  catalog?: { name: string; sourcePath: string }
 }
 
 interface LegacyProjection {
@@ -78,6 +80,43 @@ interface LegacyProjection {
   physicalKey?: string
   operationId?: string
   blockedOutcome?: WriteOutcome
+  ownerLabel: string | undefined
+  catalog?: { name: string; sourcePath: string }
+}
+
+export type LegacySelectionEvidenceResult =
+  | { readonly status: 'ready'; readonly evidence: LegacySelectionEvidence }
+  | {
+      readonly status: 'unavailable'
+      readonly reason:
+        | 'UNSUPPORTED_WRITE_SOURCE'
+        | 'UNBOUND_OPERATION'
+        | 'INCONSISTENT_SELECTION_EVIDENCE'
+    }
+
+export interface LegacySelectionEvidence {
+  readonly operations: readonly LegacySelectionEvidenceOperation[]
+  readonly targets: readonly {
+    readonly path: string
+    readonly operationIds: readonly string[]
+  }[]
+}
+
+export interface LegacySelectionEvidenceOperation {
+  readonly operationId: string
+  readonly packageIndex: number
+  readonly changeIndex: number
+  readonly ownerLabel: string
+  readonly physicalTarget: string
+  readonly occurrencePath: readonly string[]
+  readonly name: string
+  readonly current: string
+  readonly target: string
+  readonly diff: 'major' | 'minor' | 'patch'
+  readonly publishedAt?: string
+  readonly nodeCompatible?: boolean
+  readonly nodeCompat?: string
+  readonly catalog?: { readonly name: string; readonly sourcePath: string }
 }
 
 export interface LegacyPlanConstruction {
@@ -85,6 +124,7 @@ export interface LegacyPlanConstruction {
   projections: LegacyProjection[]
   blocked: boolean
   blockReason?: 'AMBIGUOUS_OCCURRENCE' | 'UNSUPPORTED_WRITE_SOURCE'
+  selectionEvidence: LegacySelectionEvidenceResult
 }
 
 const LEGACY_VCS_DIAGNOSTIC_CODES: ReadonlySet<string> = new Set([
@@ -133,6 +173,7 @@ export function createLegacyPlan(
           expectedValue: collected.outcome.expectedValue,
           requestedValue: collected.outcome.requestedValue,
           blockedOutcome: collected.outcome,
+          ownerLabel: selectionOwnerLabel(root, selection.pkg),
         })
         continue
       }
@@ -149,6 +190,8 @@ export function createLegacyPlan(
         expectedValue: input.expectedValue,
         requestedValue: input.requestedValue,
         physicalKey,
+        ownerLabel: selectionOwnerLabel(root, selection.pkg),
+        ...(input.catalog ? { catalog: { ...input.catalog } } : {}),
       })
     }
     if (selectionProjections.some((projection) => projection.blockedOutcome)) {
@@ -220,10 +263,12 @@ export function createLegacyPlan(
     }
   }
 
+  const selectionEvidence = createSelectionEvidence(root, projections, plan)
   return {
     plan,
     projections,
     blocked,
+    selectionEvidence,
     ...(hasConflict
       ? { blockReason: 'AMBIGUOUS_OCCURRENCE' as const }
       : hasUnsupportedInput
@@ -251,10 +296,160 @@ function validateSelections(selections: readonly LegacyCommandSelection[]): void
   }
 }
 
+function createSelectionEvidence(
+  root: string,
+  projections: readonly LegacyProjection[],
+  plan: PlanResult,
+): LegacySelectionEvidenceResult {
+  const unsupported = projections.some(
+    (projection) => projection.blockedOutcome?.reason === 'UNSUPPORTED_WRITE_SOURCE',
+  )
+  if (unsupported) return freezeEvidenceUnavailable('UNSUPPORTED_WRITE_SOURCE')
+  if (
+    projections.some(
+      (projection) =>
+        projection.physicalKey === undefined ||
+        projection.operationId === undefined ||
+        projection.ownerLabel === undefined,
+    )
+  ) {
+    return freezeEvidenceUnavailable('UNBOUND_OPERATION')
+  }
+
+  const byPhysicalKey = new Map<string, LegacyProjection[]>()
+  for (const projection of projections) {
+    const candidates = byPhysicalKey.get(projection.physicalKey!)
+    if (candidates) candidates.push(projection)
+    else byPhysicalKey.set(projection.physicalKey!, [projection])
+  }
+
+  const canonicalByOperationId = new Map<string, LegacySelectionEvidenceOperation>()
+  const blockedOperationIds: string[] = []
+  for (const [, candidates] of [...byPhysicalKey].sort(([left], [right]) =>
+    compareText(left, right),
+  )) {
+    const facts = candidates.map((projection) => evidenceFacts(root, projection))
+    if (facts.some((fact) => fact === undefined)) {
+      return freezeEvidenceUnavailable('UNBOUND_OPERATION')
+    }
+    const distinctFacts = new Set(facts.map((fact) => canonicalJson(fact)))
+    if (distinctFacts.size !== 1) {
+      return freezeEvidenceUnavailable('INCONSISTENT_SELECTION_EVIDENCE')
+    }
+    const operationIds = new Set(candidates.map((projection) => projection.operationId))
+    if (operationIds.size !== 1) {
+      return freezeEvidenceUnavailable('INCONSISTENT_SELECTION_EVIDENCE')
+    }
+    const canonical = [...candidates].sort(
+      (left, right) =>
+        left.packageIndex - right.packageIndex || left.changeIndex - right.changeIndex,
+    )[0]!
+    const fact = facts[0]!
+    const operationId = canonical.operationId!
+    const operation: LegacySelectionEvidenceOperation = {
+      operationId,
+      packageIndex: canonical.packageIndex,
+      changeIndex: canonical.changeIndex,
+      ownerLabel: canonical.ownerLabel!,
+      physicalTarget: fact.physicalTarget,
+      occurrencePath: [...fact.occurrencePath],
+      name: fact.name,
+      current: fact.current,
+      target: fact.target,
+      diff: fact.diff,
+      ...(fact.publishedAt === undefined ? {} : { publishedAt: fact.publishedAt }),
+      ...(fact.nodeCompatible === undefined ? {} : { nodeCompatible: fact.nodeCompatible }),
+      ...(fact.nodeCompat === undefined ? {} : { nodeCompat: fact.nodeCompat }),
+      ...(fact.catalog === undefined ? {} : { catalog: { ...fact.catalog } }),
+    }
+    canonicalByOperationId.set(operationId, operation)
+    if (!plan.operations.some((candidate) => candidate.id === operationId)) {
+      blockedOperationIds.push(operationId)
+    }
+  }
+
+  const orderedIds = [...plan.operations.map((operation) => operation.id), ...blockedOperationIds]
+  if (orderedIds.length !== canonicalByOperationId.size) {
+    return freezeEvidenceUnavailable('UNBOUND_OPERATION')
+  }
+  const operations = orderedIds.map((operationId) => canonicalByOperationId.get(operationId)!)
+  if (operations.some((operation) => operation === undefined)) {
+    return freezeEvidenceUnavailable('UNBOUND_OPERATION')
+  }
+  const targetsByPath = new Map<string, string[]>()
+  for (const operation of operations) {
+    const operationIds = targetsByPath.get(operation.physicalTarget)
+    if (operationIds) operationIds.push(operation.operationId)
+    else targetsByPath.set(operation.physicalTarget, [operation.operationId])
+  }
+  const evidence: LegacySelectionEvidence = {
+    operations: operations.map((operation) => ({ ...operation })),
+    targets: [...targetsByPath]
+      .sort(([left], [right]) => compareText(left, right))
+      .map(([path, operationIds]) => ({ path, operationIds: [...operationIds] })),
+  }
+  return deepFreezeEvidence({ status: 'ready', evidence })
+}
+
+function evidenceFacts(
+  root: string,
+  projection: LegacyProjection,
+):
+  | Omit<
+      LegacySelectionEvidenceOperation,
+      'operationId' | 'packageIndex' | 'changeIndex' | 'ownerLabel'
+    >
+  | undefined {
+  const diff = projection.change.diff
+  if (diff !== 'major' && diff !== 'minor' && diff !== 'patch') return undefined
+  const canonical = canonicalContainedSource(root, projection.occurrence.file)
+  if (!canonical) return undefined
+  const physicalTarget = repositoryRelative(root, canonical)
+  if (projection.catalog && projection.catalog.sourcePath !== physicalTarget) return undefined
+  return {
+    physicalTarget,
+    occurrencePath: [...projection.occurrence.path],
+    name: projection.change.name,
+    current: projection.expectedValue,
+    target: projection.requestedValue,
+    diff,
+    ...(projection.change.publishedAt === undefined
+      ? {}
+      : { publishedAt: projection.change.publishedAt }),
+    ...(projection.change.nodeCompatible === undefined
+      ? {}
+      : { nodeCompatible: projection.change.nodeCompatible }),
+    ...(projection.change.nodeCompat === undefined
+      ? {}
+      : { nodeCompat: projection.change.nodeCompat }),
+    ...(projection.catalog === undefined ? {} : { catalog: { ...projection.catalog } }),
+  }
+}
+
+function selectionOwnerLabel(root: string, pkg: PackageMeta): string | undefined {
+  const safeName = sanitizeTerminalText(pkg.name).trim()
+  if (safeName.length > 0) return safeName
+  const canonical = canonicalContainedSource(root, pkg.filepath)
+  return canonical ? repositoryRelative(root, canonical) : undefined
+}
+
+function freezeEvidenceUnavailable(
+  reason: Extract<LegacySelectionEvidenceResult, { status: 'unavailable' }>['reason'],
+): LegacySelectionEvidenceResult {
+  return Object.freeze({ status: 'unavailable' as const, reason })
+}
+
+function deepFreezeEvidence<T>(value: T): T {
+  if (value === null || typeof value !== 'object' || Object.isFrozen(value)) return value
+  for (const nested of Object.values(value)) deepFreezeEvidence(nested)
+  return Object.freeze(value)
+}
+
 export async function applyLegacyCommandWrite(
   root: string,
   selections: readonly LegacyCommandSelection[],
   requestedAuthority: InvocationAuthority,
+  observer?: (evidence: LegacySelectionEvidenceResult) => void,
 ): Promise<LegacyCommandApplyResult> {
   const authority = snapshotInvocationAuthority(requestedAuthority)
   if (!authority.write) {
@@ -263,6 +458,7 @@ export async function applyLegacyCommandWrite(
     })
   }
   const construction = createLegacyPlan(root, selections)
+  observer?.(construction.selectionEvidence)
   const blockedAttempts = createAttemptEvidence(root, construction.projections)
 
   if (construction.blocked) {
@@ -299,6 +495,7 @@ function collectInput(
 ): { ok: true; input: LegacyOperationInput } | { ok: false; outcome: WriteOutcome } {
   let request: ReturnType<typeof createPackageWriteRequest>
   let indent = pkg.indent
+  let catalogEvidence: LegacyOperationInput['catalog']
   if (pkg.type === 'package.json' || pkg.type === 'package.yaml') {
     if (!canonicalContainedSource(root, pkg.filepath)) {
       return { ok: false, outcome: unsupportedOutcome(pkg.filepath, change) }
@@ -327,11 +524,16 @@ function collectInput(
       }
     }
     const catalog = matches[0]!
-    if (!canonicalContainedSource(root, catalog.filepath)) {
+    const canonicalCatalogSource = canonicalContainedSource(root, catalog.filepath)
+    if (!canonicalCatalogSource) {
       return { ok: false, outcome: unsupportedOutcome(catalog.filepath, change) }
     }
     request = createCatalogWriteRequest(catalog, change)
     indent = catalog.indent
+    catalogEvidence = {
+      name: catalog.name,
+      sourcePath: repositoryRelative(root, canonicalCatalogSource),
+    }
   }
   const values = resolvePhysicalValues(request, undefined)
   const canonical = canonicalContainedSource(root, request.occurrence.file)
@@ -356,6 +558,7 @@ function collectInput(
       name: change.name,
       ...values,
       indent,
+      ...(catalogEvidence ? { catalog: catalogEvidence } : {}),
     },
   }
 }
