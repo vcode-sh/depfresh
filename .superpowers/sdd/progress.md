@@ -23,3 +23,4 @@ receipts.
 Plan 031 owns the separate 2.0.2 release proof. Plans 032-035 then deliver the renderer-neutral run
 model, one command-level local apply, complete inline Visual+ v2, functional relationship maps, and
 real PTY/fallback proof. Plan 036 owns the final 2.1.0 public release proof.
+Plan 030 Task 1: complete (commits 9bb9e00..3b1549e, review clean).
