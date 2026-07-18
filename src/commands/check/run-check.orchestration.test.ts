@@ -5,6 +5,7 @@ import { dirname, join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createInvocationAuthority } from '../../invocation-authority'
 import type { depfreshOptions, PackageMeta, ResolvedDepChange } from '../../types'
+import { stripAnsi, visualLength } from '../../utils/format'
 import { createCheckRunController } from './run-controller'
 import type { CheckRunEvent } from './run-model'
 import {
@@ -34,6 +35,8 @@ const originalIsTTY = process.stdout.isTTY
 const originalStderrIsTTY = process.stderr.isTTY
 const originalCi = process.env.CI
 const originalTerm = process.env.TERM
+const originalForceColor = process.env.FORCE_COLOR
+const originalColumns = process.stdout.columns
 
 describe('run-check orchestration paths', () => {
   let mocks: CheckMocks
@@ -50,6 +53,8 @@ describe('run-check orchestration paths', () => {
     setStderrTTY(originalStderrIsTTY)
     restoreEnvironment('CI', originalCi)
     restoreEnvironment('TERM', originalTerm)
+    restoreEnvironment('FORCE_COLOR', originalForceColor)
+    setStdoutColumns(originalColumns)
     vi.restoreAllMocks()
   })
 
@@ -265,6 +270,177 @@ describe('run-check orchestration paths', () => {
     }
   })
 
+  it('sanitizes Visual+ discovery values immediately before durable output', async () => {
+    const packages = makeMixedPackages()
+    mocks.loadPackagesMock.mockImplementation(
+      async (
+        options: depfreshOptions,
+        observer?: { onPackagesDiscovered(pkgs: PackageMeta[]): void },
+      ) => {
+        options.discoveryReport = {
+          inputCwd: '/tmp/input\u001B]0;owned\u0007\nspoofed',
+          effectiveRoot: '/tmp/root\u001B[2J\u202Etxt',
+          discoveryMode: 'direct-root',
+          matchedManifests: ['/tmp/matched'],
+          loadedPackages: ['/tmp/loaded\u009B2J\rforged'],
+          skippedManifests: [
+            { path: '/tmp/skipped\u001B]8;;https://evil.invalid\u0007link', reason: 'bad\nreason' },
+          ],
+          loadedCatalogs: ['/tmp/catalog\u0000name'],
+        }
+        observer?.onPackagesDiscovered(packages)
+        return packages
+      },
+    )
+    mocks.resolvePackageMock.mockImplementation(async (pkg: PackageMeta) => resolvedForPackage(pkg))
+    setStdoutTTY(true)
+    setStderrTTY(true)
+    setStdoutColumns(8)
+    const stdoutWriteSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+    const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+
+    try {
+      const { checkFromCli } = await import('./run-check')
+      await expect(
+        checkFromCli({ ...baseOptions, output: 'table', loglevel: 'info', explainDiscovery: true }),
+      ).resolves.toBe(0)
+
+      const durableCalls = consoleSpy.mock.calls
+      const output = reconstructedLoggerText(durableCalls)
+      expect(output).toContain('/tmp/input spoofed')
+      expect(output).toContain('/tmp/roottxt')
+      expect(output).toContain('/tmp/loaded forged')
+      expect(output).toContain('/tmp/skippedlink (bad reason)')
+      expect(output).toContain('/tmp/catalogname')
+      expect(hasTerminalControl(output)).toBe(false)
+      expect(output).not.toMatch(/[\u202A-\u202E\u2066-\u2069]/u)
+      expect(
+        durableCalls
+          .flat()
+          .map(String)
+          .every((value) => !/[\n\r]/u.test(value)),
+      ).toBe(true)
+      for (const call of durableCalls) {
+        expect(visualLength(call.map(String).join(' '))).toBeLessThanOrEqual(8)
+      }
+    } finally {
+      stdoutWriteSpy.mockRestore()
+      consoleSpy.mockRestore()
+    }
+  })
+
+  it('renders Visual+ resolution errors losslessly at immutable startup width 8', async () => {
+    const dependencyName = 'missing-abcdefghijklmnopqrstuvwxyz'
+    const currentVersion = '^1.0.0-hostile\u001B]0;owned\u0007\ncontinued'
+    const error = makeResolved({
+      name: dependencyName,
+      currentVersion,
+      targetVersion: currentVersion,
+      diff: 'error',
+    })
+    const pkg = makePkg('broken-application-name', [error])
+    mocks.loadPackagesMock.mockResolvedValue([pkg])
+    mocks.resolvePackageMock.mockImplementation(async () => {
+      setStdoutColumns(118)
+      return [error]
+    })
+    setStdoutTTY(true)
+    setStderrTTY(true)
+    setStdoutColumns(8)
+    const stdoutWriteSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+    const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+
+    try {
+      const { checkFromCli } = await import('./run-check')
+      await expect(
+        checkFromCli({ ...baseOptions, output: 'table', loglevel: 'info' }),
+      ).resolves.toBe(0)
+
+      const output = stripAnsi(stdoutWriteSpy.mock.calls.flat().map(String).join(''))
+      const compact = output.replace(/\n/gu, '')
+      expect(compact).toContain(dependencyName)
+      expect(compact).toContain('^1.0.0-hostile continued')
+      expect(output).not.toContain('\u001B]0;owned')
+      for (const line of output.split('\n')) {
+        expect(visualLength(line)).toBeLessThanOrEqual(8)
+      }
+      expect(consoleSpy.mock.calls.flat().map(String).join(' ')).not.toContain('resolution errors')
+    } finally {
+      stdoutWriteSpy.mockRestore()
+      consoleSpy.mockRestore()
+    }
+  })
+
+  it('keeps constrained Visual+ durable logs colorless even when color is forced', async () => {
+    const packages = makeMixedPackages()
+    mocks.loadPackagesMock.mockImplementation(
+      async (
+        options: depfreshOptions,
+        observer?: { onPackagesDiscovered(pkgs: PackageMeta[]): void },
+      ) => {
+        options.discoveryReport = {
+          inputCwd: '/tmp/input',
+          effectiveRoot: '/tmp/root',
+          discoveryMode: 'direct-root',
+          matchedManifests: ['/tmp/matched'],
+          loadedPackages: ['/tmp/loaded'],
+          skippedManifests: [],
+          loadedCatalogs: [],
+        }
+        observer?.onPackagesDiscovered(packages)
+        return packages
+      },
+    )
+    mocks.resolvePackageMock.mockImplementation(async (pkg: PackageMeta) => resolvedForPackage(pkg))
+    process.env.FORCE_COLOR = '1'
+    setStdoutTTY(false)
+    setStderrTTY(false)
+    const stdoutWriteSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+    const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    try {
+      const { checkFromCli } = await import('./run-check')
+      await expect(
+        checkFromCli({ ...baseOptions, output: 'table', loglevel: 'info', explainDiscovery: true }),
+      ).resolves.toBe(0)
+
+      const durableOutput = consoleSpy.mock.calls.flat().map(String).join(' ')
+      expect(durableOutput).toContain('Discovery: mode=')
+      expect(durableOutput).not.toContain('\u001B[')
+      expect(stdoutWriteSpy.mock.calls.flat().map(String).join('')).not.toContain('\u001B[')
+      expect(errorSpy.mock.calls.flat().map(String).join('')).not.toContain('\u001B[')
+    } finally {
+      stdoutWriteSpy.mockRestore()
+      consoleSpy.mockRestore()
+      errorSpy.mockRestore()
+    }
+  })
+
+  it('sanitizes the caught Visual+ error immediately before human output', async () => {
+    mocks.loadPackagesMock.mockRejectedValue(
+      new Error('load failed\u001B]0;owned\u0007\nforged\u009B2J\u202Etxt'),
+    )
+    setStdoutTTY(false)
+    setStderrTTY(false)
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    try {
+      const { checkFromCli } = await import('./run-check')
+      await expect(
+        checkFromCli({ ...baseOptions, output: 'table', loglevel: 'info' }),
+      ).resolves.toBe(2)
+
+      const args = errorSpy.mock.calls.flat().map(String)
+      expect(reconstructedLoggerText(errorSpy.mock.calls)).toContain('load failed forgedtxt')
+      expect(args.every((value) => !/[\n\r]/u.test(value))).toBe(true)
+      expect(hasTerminalControl(args.join(''))).toBe(false)
+      expect(args.join('')).not.toMatch(/[\u202A-\u202E\u2066-\u2069]/u)
+    } finally {
+      errorSpy.mockRestore()
+    }
+  })
+
   it('reports a Visual+ finalization failure once without fabricating a final receipt', async () => {
     const packages = makeMixedPackages()
     mocks.loadPackagesMock.mockResolvedValue(packages)
@@ -451,7 +627,7 @@ describe('run-check orchestration paths', () => {
         checkFromCli({ ...baseOptions, output: 'table', loglevel: 'info', write: true }),
       ).resolves.toBe(2)
 
-      expect(errorSpy.mock.calls.flat().map(String).join(' ')).toContain(
+      expect(reconstructedLoggerText(errorSpy.mock.calls)).toContain(
         'shared outcome projections are inconsistent',
       )
       expect(stdoutWriteSpy.mock.calls.flat().map(String).join('')).not.toContain('Exit 0')
@@ -526,6 +702,79 @@ describe('run-check orchestration paths', () => {
       expect(output.match(/Exit 2/gu)).toHaveLength(1)
     } finally {
       stdoutWriteSpy.mockRestore()
+    }
+  })
+
+  it('does not invent retained cleanup for a clean unattempted VCS preflight unknown', async () => {
+    const change = makeResolved({ name: 'vcs-unavailable', rawVersion: '^1.0.0' })
+    const pkg = makePkg('vcs-unavailable-app', [change])
+    mocks.loadPackagesMock.mockResolvedValue([pkg])
+    mocks.resolvePackageMock.mockResolvedValue([change])
+    const defaultCommandWrite = mocks.commandWriteMock.getMockImplementation() as (
+      ...args: unknown[]
+    ) => Promise<unknown>
+    mocks.commandWriteMock.mockImplementation(async (...args: unknown[]) => {
+      await defaultCommandWrite(...args)
+      const [root, selections] = args as [
+        string,
+        Parameters<typeof createCommandResultWithOutcomes>[1],
+      ]
+      const result = createCommandResultWithOutcomes(
+        root,
+        selections,
+        [
+          {
+            packageIndex: 0,
+            outcomes: [
+              {
+                name: change.name,
+                occurrence: {
+                  file: pkg.filepath,
+                  path: [change.source, ...change.parents, change.name],
+                },
+                expectedValue: change.rawVersion ?? change.currentVersion,
+                requestedValue: change.targetVersion,
+                status: 'unknown',
+                reason: 'VCS_UNAVAILABLE',
+              },
+            ],
+          },
+        ],
+        [],
+        false,
+      )
+      if (result.status !== 'executed') throw new Error('Expected executed result')
+      return {
+        ...result,
+        applyResult: {
+          ...result.applyResult,
+          phases: [
+            { name: 'preflight' as const, status: 'unknown' as const, reason: 'VCS_UNAVAILABLE' },
+          ],
+          recovery: { status: 'unknown' as const },
+        },
+      }
+    })
+    setStdoutTTY(false)
+    const stdoutWriteSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    try {
+      const { checkFromCli } = await import('./run-check')
+      await expect(
+        checkFromCli({ ...baseOptions, output: 'table', loglevel: 'info', write: true }),
+      ).resolves.toBe(2)
+
+      const output = stdoutWriteSpy.mock.calls.flat().map(String).join('')
+      expect(errorSpy.mock.calls.flat().map(String).join(' ')).not.toContain('Check failed')
+      expect(output).toContain('Safety block')
+      expect(output).toContain('no files were changed')
+      expect(output).toContain('Preflight could not confirm Git state')
+      expect(output).toContain('Exit 2')
+      expect(output).not.toContain('Recovery unknown')
+    } finally {
+      stdoutWriteSpy.mockRestore()
+      errorSpy.mockRestore()
     }
   })
 
@@ -783,7 +1032,7 @@ describe('run-check orchestration paths', () => {
       expect(writes[cacheDebug - 1]).toContain('\x1B[')
       expect(writes[cacheDebug - 1]).not.toContain('resolve')
       expect(writes.slice(cacheDebug + 1).at(-1)).not.toContain('resolve')
-      const errors = errorSpy.mock.calls.flat().map(String).join(' ')
+      const errors = reconstructedLoggerText(errorSpy.mock.calls)
       expect(errors).toContain('resolved facts exceed eligible occurrences')
       expect(errors).not.toContain('suspension requires a live renderer')
     } finally {
@@ -1514,6 +1763,12 @@ describe('run-check orchestration paths', () => {
   }
 })
 
+function reconstructedLoggerText(calls: readonly (readonly unknown[])[]): string {
+  return calls
+    .map((call) => (call.length > 1 ? call.slice(1) : call).map(String).join(' '))
+    .join('')
+}
+
 function makeMixedPackages(): PackageMeta[] {
   return [
     makePkg('app-update', [
@@ -1603,7 +1858,16 @@ function setStderrTTY(value: boolean | undefined): void {
   Object.defineProperty(process.stderr, 'isTTY', { value, configurable: true })
 }
 
-function restoreEnvironment(name: 'CI' | 'TERM', value: string | undefined): void {
+function setStdoutColumns(value: number | undefined): void {
+  Object.defineProperty(process.stdout, 'columns', { configurable: true, value })
+}
+
+function restoreEnvironment(name: 'CI' | 'TERM' | 'FORCE_COLOR', value: string | undefined): void {
   if (value === undefined) delete process.env[name]
   else process.env[name] = value
+}
+
+function hasTerminalControl(value: string): boolean {
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: asserts the human-output security boundary.
+  return /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/u.test(value)
 }

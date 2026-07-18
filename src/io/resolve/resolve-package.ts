@@ -10,7 +10,7 @@ import type {
   RawDep,
   ResolvedDepChange,
 } from '../../types'
-import { createLogger } from '../../utils/logger'
+import { createLogger, type Logger } from '../../utils/logger'
 import { loadNpmrc } from '../../utils/npmrc'
 import { resolveDiscoveryContext } from '../packages/root-detection'
 import { type ResolveContext, recordResolutionTrace } from './context'
@@ -54,7 +54,28 @@ export async function resolvePackage(
   onDependencyProcessed?: (pkg: PackageMeta, dep: RawDep) => void | Promise<void>,
   resolveContext?: ResolveContext,
 ): Promise<ResolvedDepChange[]> {
-  const logger = createLogger(options.loglevel)
+  return resolvePackageWithLogger(
+    pkg,
+    options,
+    externalCache,
+    externalNpmrc,
+    privatePackages,
+    onDependencyProcessed,
+    resolveContext,
+  )
+}
+
+export async function resolvePackageWithLogger(
+  pkg: PackageMeta,
+  options: depfreshOptions,
+  externalCache: Cache | undefined,
+  externalNpmrc: NpmrcConfig | undefined,
+  privatePackages: Set<string> | undefined,
+  onDependencyProcessed: ((pkg: PackageMeta, dep: RawDep) => void | Promise<void>) | undefined,
+  resolveContext: ResolveContext | undefined,
+  outputLogger?: Logger,
+): Promise<ResolvedDepChange[]> {
+  const logger = outputLogger ?? createLogger(options.loglevel)
   const effectiveRoot = options.effectiveRoot ?? resolveDiscoveryContext(options.cwd).effectiveRoot
   const npmrc = externalNpmrc ?? loadNpmrc(effectiveRoot)
   const cache = externalCache ?? createSqliteCache()

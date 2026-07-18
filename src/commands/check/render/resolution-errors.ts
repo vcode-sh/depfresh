@@ -2,6 +2,8 @@ import c from 'ansis'
 import type { ResolvedDepChange } from '../../../types'
 import { sanitizeTerminalText } from '../../../utils/format'
 import { fitCell, getTerminalWidth } from '../render-layout'
+import type { VisualPlusCapabilities } from '../visual-plus/capabilities'
+import { createVisualPlusTheme, wrapVisualPlusText } from '../visual-plus/theme'
 
 function defaultLog(...args: unknown[]): void {
   // biome-ignore lint/suspicious/noConsole: intentional render output
@@ -77,4 +79,30 @@ export function renderResolutionErrors(
   }
 
   log()
+}
+
+export function renderVisualPlusResolutionErrors(
+  packageName: string,
+  errors: readonly ResolvedDepChange[],
+  capabilities: VisualPlusCapabilities,
+  write: (chunk: string) => void,
+): void {
+  if (errors.length === 0) return
+
+  const theme = createVisualPlusTheme(capabilities)
+  const logicalLines = [
+    'Resolution errors',
+    `Package: ${packageName}`,
+    ...errors.flatMap((dependency) => [
+      `Dependency: ${dependency.name}`,
+      `Current: ${dependency.currentVersion}`,
+      'Message: Failed to resolve from registry',
+    ]),
+  ]
+
+  for (const logicalLine of logicalLines) {
+    for (const line of wrapVisualPlusText(logicalLine, capabilities.width, theme)) {
+      write(`${line}\n`)
+    }
+  }
 }

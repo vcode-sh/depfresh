@@ -20,13 +20,17 @@ const createLegacyPlanMock = vi.hoisted(() => vi.fn())
 const spawnSyncMock = vi.hoisted(() => vi.fn())
 const createGlobalApplyPlanMock = vi.hoisted(() => vi.fn())
 const applyGlobalPlanMock = vi.hoisted(() => vi.fn())
+const loadPackagesMock = vi.hoisted(() => vi.fn())
+const resolvePackageMock = vi.hoisted(() => vi.fn())
 
 vi.mock('../../io/packages', () => ({
-  loadPackages: vi.fn(),
+  loadPackages: loadPackagesMock,
+  loadPackagesWithLogger: loadPackagesMock,
 }))
 
 vi.mock('../../io/resolve', () => ({
-  resolvePackage: vi.fn(),
+  resolvePackage: resolvePackageMock,
+  resolvePackageWithLogger: resolvePackageMock,
   createResolveContext: vi.fn(() => ({
     limit: ((fn: () => Promise<unknown>) => fn()) as (
       fn: () => Promise<unknown>,

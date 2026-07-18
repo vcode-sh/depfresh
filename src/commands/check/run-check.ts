@@ -6,10 +6,10 @@ import { createSqliteCache } from '../../cache/index'
 import type { InvocationScopeExclusions } from '../../cli/scope-exclusions'
 import { hasInvocationScopeExclusions } from '../../cli/scope-exclusions'
 import { createInvocationAuthority, snapshotInvocationAuthority } from '../../invocation-authority'
-import { loadPackages } from '../../io/packages'
+import { loadPackages, loadPackagesWithLogger } from '../../io/packages'
 import type { PackageLoadObserver } from '../../io/packages/discovery'
 import { resolveDiscoveryContext } from '../../io/packages/root-detection'
-import { createResolveContext, resolvePackage } from '../../io/resolve'
+import { createResolveContext, resolvePackage, resolvePackageWithLogger } from '../../io/resolve'
 import { resolvePhysicalValues } from '../../io/write/occurrence'
 import { readInvocationSelectionReceipt, type SelectionReceipt } from '../../selection'
 import type {
@@ -52,7 +52,7 @@ import {
 import { renderUpToDate, runExecute } from './post-write-actions'
 import type { ProcessPackageHooks } from './process-package'
 import { type CheckProgress, createCheckProgress } from './progress'
-import { renderResolutionErrors, renderTable } from './render'
+import { renderResolutionErrors, renderTable, renderVisualPlusResolutionErrors } from './render'
 import { type CheckRunController, createCheckRunController } from './run-controller'
 import type {
   CheckRunChange,
@@ -77,6 +77,7 @@ import {
   type VisualPlusSelectionProjection,
 } from './visual-plus/integration'
 import { createVisualPlusRenderer, type VisualPlusRenderer } from './visual-plus/renderer'
+import { createVisualPlusTheme, wrapVisualPlusText } from './visual-plus/theme'
 import { applyLegacyCommandWrite, applyPackageWrite, type PackageWriteResult } from './write-flow'
 import {
   buildWriteReceipt,
@@ -133,7 +134,7 @@ export async function runCheck(
     ...options,
     loglevel: logLevel,
   }
-  const logger = createLogger(logLevel)
+  let logger = createLogger(logLevel)
   const addons = createAddonLifecycle(addonOptions)
   let progress: CheckProgress | null = null
   let durableOwner: DurableOutputOwner | null = null
@@ -181,6 +182,13 @@ export async function runCheck(
         ...(process.env.CI === undefined ? {} : { ci: process.env.CI }),
         ...(process.env.TERM === undefined ? {} : { term: process.env.TERM }),
         ...(process.env.NO_COLOR === undefined ? {} : { noColor: process.env.NO_COLOR }),
+      })
+      const loggerTheme = createVisualPlusTheme(visualCapabilities)
+      logger = createLogger(logLevel, {
+        color: visualCapabilities.color,
+        sanitize: true,
+        width: visualCapabilities.width,
+        wrap: (value, width) => wrapVisualPlusText(value, width, loggerTheme),
       })
       runController =
         injectedRunController ??
@@ -261,13 +269,20 @@ export async function runCheck(
               : {}),
           }
         : undefined
-    const packages = packageObserver
-      ? hasSelection
-        ? await loadPackages(runtimeOptions, packageObserver, invocationSelection)
-        : await loadPackages(runtimeOptions, packageObserver)
-      : hasSelection
-        ? await loadPackages(runtimeOptions, undefined, invocationSelection)
-        : await loadPackages(runtimeOptions)
+    const packages = visualRenderer
+      ? await loadPackagesWithLogger(
+          runtimeOptions,
+          packageObserver,
+          hasSelection ? invocationSelection : undefined,
+          logger,
+        )
+      : packageObserver
+        ? hasSelection
+          ? await loadPackages(runtimeOptions, packageObserver, invocationSelection)
+          : await loadPackages(runtimeOptions, packageObserver)
+        : hasSelection
+          ? await loadPackages(runtimeOptions, undefined, invocationSelection)
+          : await loadPackages(runtimeOptions)
     if (runController && !packagesDiscovered) {
       runController.emit({
         type: 'packages-discovered',
@@ -417,7 +432,18 @@ export async function runCheck(
             })
           }
         } else {
-          writeDurable(durableOwner, () => renderResolutionErrors(pkg.name, errors))
+          writeDurable(durableOwner, () => {
+            if (visualRenderer && visualCapabilities) {
+              renderVisualPlusResolutionErrors(
+                pkg.name,
+                errors,
+                visualCapabilities,
+                (chunk) => void process.stdout.write(chunk),
+              )
+            } else {
+              renderResolutionErrors(pkg.name, errors)
+            }
+          })
         }
       },
       onAllModeNoUpdates: () => {
@@ -460,18 +486,30 @@ export async function runCheck(
       const launchPendingResolutions = async (): Promise<void> => {
         for (const pkg of packages) {
           await addons.beforePackageStart(pkg)
-          pendingResolutions.set(
-            pkg,
-            resolvePackage(
-              pkg,
-              runtimeOptions,
-              cache,
-              npmrc,
-              workspacePackageNames,
-              progress ? () => progress?.onDependencyProcessed() : undefined,
-              resolveContext,
-            ),
-          )
+          const onDependencyProcessed = progress
+            ? () => progress?.onDependencyProcessed()
+            : undefined
+          const pending = visualRenderer
+            ? resolvePackageWithLogger(
+                pkg,
+                runtimeOptions,
+                cache,
+                npmrc,
+                workspacePackageNames,
+                onDependencyProcessed,
+                resolveContext,
+                logger,
+              )
+            : resolvePackage(
+                pkg,
+                runtimeOptions,
+                cache,
+                npmrc,
+                workspacePackageNames,
+                onDependencyProcessed,
+                resolveContext,
+              )
+          pendingResolutions.set(pkg, pending)
         }
       }
 
@@ -1229,7 +1267,7 @@ function emitVisualWriteResult(
     )
   })
   if (diagnostics.length > 0) controller.emit({ type: 'diagnostics-recorded', diagnostics })
-  emitApplyPhases(controller, localExecution.result.applyResult)
+  emitApplyPhases(controller, localExecution.result)
   controller.emit({
     type: 'results-recorded',
     operations,
@@ -1315,7 +1353,7 @@ function emitLocalWriteResult(
   })
   emitModelSelection(controller, inventory)
   if (diagnostics.length > 0) controller.emit({ type: 'diagnostics-recorded', diagnostics })
-  emitApplyPhases(controller, localExecution.result.applyResult)
+  emitApplyPhases(controller, localExecution.result)
   controller.emit({ type: 'results-recorded', ...inventory.results })
 }
 
@@ -1655,8 +1693,9 @@ function commandDiagnostics(root: string, result: LegacyCommandApplyResult): Che
 
 function emitApplyPhases(
   controller: CheckRunController,
-  result: Extract<LegacyCommandApplyResult, { status: 'executed' }>['applyResult'],
+  commandResult: Extract<LegacyCommandApplyResult, { status: 'executed' }>,
 ): void {
+  const result = commandResult.applyResult
   const preflight = requireApplyPhase(result, 'preflight')
   const preflightStatus =
     preflight.status === 'failed' &&
@@ -1665,7 +1704,7 @@ function emitApplyPhases(
       : preflight.status
   controller.emit({ type: 'phase-completed', phase: 'preflight', status: preflightStatus })
   if (preflightStatus !== 'passed') {
-    emitRetainedCleanupEvidence(controller, result)
+    emitRetainedCleanupEvidence(controller, commandResult)
     return
   }
 
@@ -1685,12 +1724,12 @@ function emitApplyPhases(
     if (inspect) {
       controller.emit({ type: 'phase-completed', phase: 'observe', status: inspect.status })
     }
-    emitRetainedCleanupEvidence(controller, result)
+    emitRetainedCleanupEvidence(controller, commandResult)
     return
   }
   controller.emit({ type: 'phase-completed', phase: 'stage', status: stageStatus })
   if (stageStatus !== 'passed') {
-    emitRetainedCleanupEvidence(controller, result)
+    emitRetainedCleanupEvidence(controller, commandResult)
     return
   }
 
@@ -1702,7 +1741,7 @@ function emitApplyPhases(
     if (inspect) {
       controller.emit({ type: 'phase-completed', phase: 'observe', status: inspect.status })
     }
-    emitRetainedCleanupEvidence(controller, result)
+    emitRetainedCleanupEvidence(controller, commandResult)
     return
   }
   controller.emit({
@@ -1736,13 +1775,14 @@ function emitApplyPhases(
   if (inspect) {
     controller.emit({ type: 'phase-completed', phase: 'observe', status: inspect.status })
   }
-  if (!recoveryRequired) emitRetainedCleanupEvidence(controller, result)
+  if (!recoveryRequired) emitRetainedCleanupEvidence(controller, commandResult)
 }
 
 function emitRetainedCleanupEvidence(
   controller: CheckRunController,
-  result: Extract<LegacyCommandApplyResult, { status: 'executed' }>['applyResult'],
+  commandResult: Extract<LegacyCommandApplyResult, { status: 'executed' }>,
 ): void {
+  const result = commandResult.applyResult
   if (result.recovery.status !== 'unknown') return
   if (
     (result.recovery.restoredPaths?.length ?? 0) > 0 ||
@@ -1752,6 +1792,7 @@ function emitRetainedCleanupEvidence(
       'non-executed cleanup evidence cannot retain recovery paths',
     )
   }
+  if (isCleanUnattemptedVcsUnknown(commandResult)) return
   controller.emit({
     type: 'recovery-recorded',
     executed: false,
@@ -1763,6 +1804,31 @@ function emitRetainedCleanupEvidence(
       ? {}
       : { externalEffects: result.recovery.externalEffects }),
   })
+}
+
+function isCleanUnattemptedVcsUnknown(
+  commandResult: Extract<LegacyCommandApplyResult, { status: 'executed' }>,
+): boolean {
+  const { applyResult, attempts } = commandResult
+  const preflight = applyResult.phases.find((phase) => phase.name === 'preflight')
+  const cleanup = applyResult.phases.find((phase) => phase.name === 'cleanup')
+  const executionStarted = applyResult.phases.some((phase) =>
+    ['lock', 'stage', 'precommit', 'commit', 'recovery', 'inspect'].includes(phase.name),
+  )
+  return (
+    preflight?.status === 'unknown' &&
+    preflight.reason === 'VCS_UNAVAILABLE' &&
+    !executionStarted &&
+    (cleanup === undefined || cleanup.status === 'passed') &&
+    applyResult.operations.length > 0 &&
+    applyResult.operations.every(
+      (operation) => operation.status === 'unknown' && operation.reason === 'VCS_UNAVAILABLE',
+    ) &&
+    attempts.length > 0 &&
+    attempts.every((attempt) => !attempt.replacementAttempted) &&
+    applyResult.recovery.journalId === undefined &&
+    (applyResult.recovery.externalEffects?.length ?? 0) === 0
+  )
 }
 
 function requireApplyPhase(

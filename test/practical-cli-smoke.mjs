@@ -807,10 +807,11 @@ process.exit(result.status ?? 1)
 
   assert.equal(result.status, 2, JSON.stringify(result, null, 2))
   const orderedReceipt = [
-    'Safety block · no files were changed',
-    'package.json · 1 update not attempted',
-    'Preflight could not confirm Git state (VCS_UNAVAILABLE / VCS_OUTPUT_LIMIT_EXCEEDED)',
-    'Exit 2 · fix the Git evidence problem, then rerun',
+    'Safety block',
+    'no files were changed',
+    'Applied 0  Blocked 0  Not attempted 1  Failed 0  Unknown 1',
+    'Preflight could not confirm Git state for package.json.',
+    'Exit 2',
   ]
   let previousIndex = -1
   for (const fragment of orderedReceipt) {
@@ -892,7 +893,9 @@ process.exit(result.status ?? 1)
 
   assert.equal(blocked.status, 2, JSON.stringify(blocked, null, 2))
   assert.equal(readFileSync(counter, 'utf8'), '3')
-  assert.match(blocked.stdout, /Safety block · no files were changed/u)
+  const safetyBlockIndex = blocked.stdout.indexOf('Safety block')
+  assert.ok(safetyBlockIndex >= 0)
+  assert.ok(blocked.stdout.indexOf('no files were changed', safetyBlockIndex) > safetyBlockIndex)
   assert.deepEqual(hashTargetManifests(blockedRepo, expectedManifests), before)
 
   const successRepo = createFixture('command-transaction-success')

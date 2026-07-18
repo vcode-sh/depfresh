@@ -15,7 +15,13 @@ export function renderVisualPlusReceipt(input: VisualPlusSectionInput): readonly
         : snapshot.exitCode === 1
           ? `Review complete${separator}updates available`
           : 'Review incomplete'
-    return finalLines(input, headline, reviewSummary(input), snapshot.exitCode)
+    const diagnostics = snapshot.exitCode === 2 ? reviewDiagnosticLines(input) : []
+    return visualPlusSectionLines(input, [
+      headline,
+      reviewSummary(input),
+      ...diagnostics,
+      `Exit ${snapshot.exitCode}`,
+    ])
   }
 
   if (snapshot.counts.operations === 0 && snapshot.counts.targets === 0) {
@@ -110,6 +116,21 @@ export function renderVisualPlusReceipt(input: VisualPlusSectionInput): readonly
     totalsLine(snapshot.results.totals, snapshot.results.targetTotals),
     snapshot.exitCode,
   )
+}
+
+function reviewDiagnosticLines(input: VisualPlusSectionInput): readonly string[] {
+  const separator = visualPlusSeparator(input.capabilities)
+  return input.snapshot.diagnostics.map((diagnostic) => {
+    const path =
+      diagnostic.path === undefined
+        ? ''
+        : `${separator}path ${sanitizeTerminalText(diagnostic.path)}`
+    const detail =
+      diagnostic.detail === undefined
+        ? ''
+        : `${separator}detail ${sanitizeTerminalText(diagnostic.detail)}`
+    return `Diagnostic ${sanitizeTerminalText(diagnostic.code)}${path}${detail}`
+  })
 }
 
 function finalLines(

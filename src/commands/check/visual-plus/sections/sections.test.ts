@@ -299,6 +299,16 @@ function allSections(input: VisualPlusSectionInput): readonly string[] {
   ]
 }
 
+function collectColumnValues(lines: readonly string[], label: string): string {
+  const prefix = `${label} `
+  return lines
+    .flatMap((line) => line.split(' | '))
+    .map((cell) => cell.trimEnd())
+    .filter((cell) => cell.startsWith(prefix))
+    .map((cell) => cell.slice(prefix.length))
+    .join('')
+}
+
 describe('Visual+ section input', () => {
   it('deep-copies, recursively freezes, and reconciles the complete 76/15/14 fixture', () => {
     const source = fixture()
@@ -665,7 +675,13 @@ describe('Visual+ pure sections', () => {
       }
     }
     expect(lines.filter((line) => line.startsWith('Target '))).toHaveLength(14)
-    expect(output).toContain('dependency-0-0  ^1.0.0 -> ^2.0.0  major  age ~5d  compat unknown')
+    const review = renderVisualPlusChanges(input).map(stripAnsi).join('')
+    for (const change of input.snapshot.changes) {
+      expect(review.match(new RegExp(`Operation ID ${change.id}(?![0-9])`, 'gu'))).toHaveLength(1)
+    }
+    expect(output).toContain('Dependency dependency-0-0')
+    expect(output).toMatch(/Current \^1\.0\.0\s+\| Target \^2\.0\.0/u)
+    expect(output).toMatch(/Diff major\s+\| Age ~5d\s+\| Compatibility unknown/u)
     expect(renderVisualPlusReceipt(input).map(stripAnsi)).toEqual([
       'Complete · 76 updates applied across 14 files',
       'Applied 76  Blocked 0  Not attempted 0  Failed 0  Unknown 0',
@@ -806,13 +822,153 @@ describe('Visual+ pure sections', () => {
   it('renders exact operation-ID membership under every structured transaction target', () => {
     const input = createVisualPlusSectionInput(fixture())
     const lines = renderVisualPlusTransaction(input).map(stripAnsi)
-    const membership = lines.filter((line) => line.startsWith('Operations '))
+    const membership = lines.filter((line) => line.startsWith('Operations · outcome applied'))
 
     expect(membership).toHaveLength(14)
+    expect(lines.length).toBeLessThanOrEqual(45)
     const transaction = lines.join('')
     for (const change of input.snapshot.changes) {
       expect(transaction.match(new RegExp(`${change.id}(?![0-9])`, 'gu'))).toHaveLength(1)
     }
+  })
+
+  it('renders exact operation outcomes, independent flags, and sanitized reasons under a mixed target', () => {
+    const base = fixture()
+    const operations = base.snapshot.results.operations.map((operation, index) => {
+      if (index !== 1) return operation
+      return {
+        ...operationResult(operation.operationId, 'blocked'),
+        reason: 'SOURCE\u001B[31m_CHANGED\u202E',
+      }
+    })
+    const targetResults = base.snapshot.results.targets.map((target, index) =>
+      index === 0
+        ? {
+            ...target,
+            outcome: 'mixed' as const,
+            blocked: true,
+            notAttempted: true,
+          }
+        : target,
+    )
+    const input = createVisualPlusSectionInput({
+      ...base,
+      snapshot: {
+        ...base.snapshot,
+        results: {
+          operations,
+          targets: targetResults,
+          totals: totals({ applied: 75, blocked: 1, notAttempted: 1 }),
+          targetTotals: totals({ applied: 13, mixed: 1, blocked: 1, notAttempted: 1 }),
+        },
+      },
+      writeReceipt: undefined,
+    })
+    const lines = renderVisualPlusTransaction(input).map(stripAnsi)
+    const output = lines.join('')
+
+    expect(output).toContain(
+      'Operations · outcome applied · blocked false · not attempted false · unknown false · IDs operation-0-0',
+    )
+    expect(output).toContain(
+      'Operations · outcome blocked · blocked true · not attempted true · unknown false · reason SOURCE_CHANGED · IDs operation-0-1',
+    )
+    expect(output.match(/IDs operation-0-1(?![0-9])/gu)).toHaveLength(1)
+    expect(lines.join('')).not.toContain('\u001B')
+    expect(lines.join('')).not.toContain('\u202E')
+  })
+
+  it.each([60, 80, 118])(
+    'keeps every long medium/wide change field labeled and lossless at width %i',
+    (width) => {
+      const base = fixture()
+      const dependency = `dependency-${'x'.repeat(72)}`
+      const current = `npm:${'current'.repeat(10)}@1.0.0`
+      const target = `npm:${'target'.repeat(12)}@2.0.0`
+      const detail = `requires-${'runtime'.repeat(12)}`
+      const input = createVisualPlusSectionInput({
+        ...base,
+        capabilities: {
+          ...base.capabilities,
+          color: false,
+          width,
+          layout: width < 100 ? 'medium' : 'wide',
+        },
+        snapshot: {
+          ...base.snapshot,
+          changes: [
+            { ...base.snapshot.changes[0]!, name: dependency, current, target },
+            ...base.snapshot.changes.slice(1),
+          ],
+        },
+        changes: base.changes.map((metadata, index) =>
+          index === 0 ? { ...metadata, compatibility: { status: 'unknown', detail } } : metadata,
+        ),
+      })
+      const lines = renderVisualPlusChanges(input).map(stripAnsi)
+      const compact = lines.join('')
+
+      expect(lines.every((line) => visualLength(line) <= width)).toBe(true)
+      const operationRows = lines.filter((line) => line.startsWith('Operation ID '))
+      const currentRows = lines.filter((line) => line.startsWith('Current '))
+      const detailRows = lines.filter((line) => line.startsWith('Diff '))
+      expect(operationRows.length).toBeGreaterThanOrEqual(76)
+      expect(detailRows.length).toBeGreaterThanOrEqual(76)
+      if (width < 100) expect(currentRows.length).toBeGreaterThanOrEqual(76)
+      else expect(operationRows.every((line) => line.includes(' | Current '))).toBe(true)
+      for (const rows of [
+        operationRows,
+        ...(currentRows.length > 0 ? [currentRows] : []),
+        detailRows,
+      ]) {
+        const separatorPositions = rows.map((line) =>
+          [...line.matchAll(/ \| /gu)].map((match) => match.index),
+        )
+        expect(separatorPositions.every((positions) => positions.length > 0)).toBe(true)
+        expect(new Set(separatorPositions.map((positions) => positions.join(','))).size).toBe(1)
+      }
+      expect(compact).toContain('Operation ID operation-0-0')
+      expect(collectColumnValues(lines, 'Dependency')).toContain(dependency)
+      expect(collectColumnValues(lines, 'Current')).toContain(current)
+      expect(collectColumnValues(lines, 'Target')).toContain(target)
+      expect(collectColumnValues(lines, 'Compatibility').replaceAll(' ', '')).toContain(
+        `unknown(${detail})`,
+      )
+      expect(
+        collectColumnValues(lines, 'Dependency').match(new RegExp(dependency, 'gu')),
+      ).toHaveLength(1)
+      expect(collectColumnValues(lines, 'Current').match(new RegExp(current, 'gu'))).toHaveLength(1)
+      expect(collectColumnValues(lines, 'Target').match(new RegExp(target, 'gu'))).toHaveLength(1)
+      expect(
+        collectColumnValues(lines, 'Compatibility').match(new RegExp(detail, 'gu')),
+      ).toHaveLength(1)
+    },
+  )
+
+  it.each([
+    { width: 8, layout: 'narrow' as const },
+    { width: 8, layout: 'plain' as const },
+  ])('keeps narrow $layout fields labeled and lossless at width $width', ({ width, layout }) => {
+    const base = fixture()
+    const input = createVisualPlusSectionInput({
+      ...base,
+      capabilities: {
+        ...base.capabilities,
+        color: false,
+        unicode: false,
+        width,
+        layout,
+      },
+    })
+    const lines = renderVisualPlusChanges(input).map(stripAnsi)
+    const compact = lines.join('')
+
+    expect(lines.every((line) => visualLength(line) <= width)).toBe(true)
+    expect(compact).toContain('Operation ID operation-0-0')
+    expect(compact).toContain('Dependency dependency-0-0')
+    expect(compact).toContain('Current ^1.0.0')
+    expect(compact).toContain('Target ^2.0.0')
+    expect(compact).toContain('Compatibility unknown')
   })
 
   it('uses a neutral transaction heading for read-only physical target evidence', () => {
@@ -826,7 +982,7 @@ describe('Visual+ pure sections', () => {
 
     expect(lines[0]).toBe('Reviewed physical targets')
     expect(lines).not.toContain('Apply transaction')
-    expect(lines.filter((line) => line.startsWith('Operations '))).toHaveLength(14)
+    expect(lines.filter((line) => line.startsWith('Operations · outcome applied'))).toHaveLength(14)
   })
 
   it('renders ambiguous manager versions and unavailable evidence sources', () => {
@@ -866,7 +1022,7 @@ describe('Visual+ pure sections', () => {
     expect(unavailableLines).toContain('Package manager unavailable · package.json, pnpm-lock.yaml')
   })
 
-  it('uses the capability separator for catalog metadata in ASCII mode', () => {
+  it('uses aligned ASCII columns for catalog metadata in ASCII mode', () => {
     const base = fixture()
     const input = createVisualPlusSectionInput({
       ...base,
@@ -881,8 +1037,8 @@ describe('Visual+ pure sections', () => {
     })
     const output = renderVisualPlusChanges(input).map(stripAnsi).join('\n')
 
-    expect(output).toContain('catalog root - pnpm-workspace.yaml')
-    expect(output).not.toContain('catalog root · pnpm-workspace.yaml')
+    expect(output).toMatch(/Catalog root\s+\| Source pnpm-workspace\.yaml/u)
+    expect(output).not.toContain('Catalog root · Source pnpm-workspace.yaml')
   })
 })
 
@@ -1016,6 +1172,57 @@ describe('Visual+ receipt decision table', () => {
       headline,
     )
   })
+
+  it.each([
+    { width: 8, layout: 'plain' as const },
+    { width: 60, layout: 'medium' as const },
+    { width: 80, layout: 'medium' as const },
+    { width: 118, layout: 'wide' as const },
+  ])(
+    'renders every authoritative read-only diagnostic once, sanitized and losslessly wrapped at width $width',
+    ({ width, layout }) => {
+      const base = oneOperation({ write: false, exitCode: 2 })
+      const input = createVisualPlusSectionInput({
+        ...base,
+        capabilities: {
+          ...base.capabilities,
+          color: false,
+          unicode: false,
+          width,
+          layout,
+        },
+        snapshot: {
+          ...base.snapshot,
+          diagnostics: [
+            {
+              code: 'READ_ONLY\u001B[31m_INCOMPLETE',
+              path: 'package.json',
+              detail: 'registry\u001B]8;;https://evil.example\u0007 unavailable\u202E safely',
+            },
+            {
+              code: 'INSPECTION_UNAVAILABLE',
+              path: 'packages/app/package.json',
+              detail: 'manager evidence unavailable',
+            },
+          ],
+        },
+      })
+      const lines = renderVisualPlusReceipt(input).map(stripAnsi)
+      const compact = lines.join('')
+
+      expect(lines.every((line) => visualLength(line) <= width)).toBe(true)
+      expect(compact.match(/Diagnostic READ_ONLY_INCOMPLETE/gu)).toHaveLength(1)
+      expect(compact.match(/Diagnostic INSPECTION_UNAVAILABLE/gu)).toHaveLength(1)
+      expect(compact).toContain(
+        'Diagnostic READ_ONLY_INCOMPLETE - path package.json - detail registry unavailable safely',
+      )
+      expect(compact).toContain(
+        'Diagnostic INSPECTION_UNAVAILABLE - path packages/app/package.json - detail manager evidence unavailable',
+      )
+      expect(lines.join('')).not.toContain('\u001B')
+      expect(lines.join('')).not.toContain('\u202E')
+    },
+  )
 
   it('renders canonical skipped operations as complete when not-attempted overlaps', () => {
     const base = oneOperation({ outcome: 'skipped' })

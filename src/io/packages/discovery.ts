@@ -2,7 +2,7 @@ import { resolve } from 'pathe'
 import { glob } from 'tinyglobby'
 import type { InvocationScopeExclusions } from '../../cli/scope-exclusions'
 import type { depfreshOptions, PackageMeta } from '../../types'
-import { createLogger } from '../../utils/logger'
+import { createLogger, type Logger } from '../../utils/logger'
 import { loadCatalogs } from '../catalogs/index'
 import { resolveContainedPath } from './containment'
 import { loadPackage } from './load-package'
@@ -21,16 +21,28 @@ export async function loadPackages(
   observer?: PackageLoadObserver,
   invocationSelection?: InvocationScopeExclusions,
 ): Promise<PackageMeta[]> {
-  if (options.global || options.globalAll) return discoverPackages(options, observer)
+  return loadPackagesWithLogger(options, observer, invocationSelection)
+}
+
+export async function loadPackagesWithLogger(
+  options: depfreshOptions,
+  observer: PackageLoadObserver | undefined,
+  invocationSelection: InvocationScopeExclusions | undefined,
+  outputLogger?: Logger,
+): Promise<PackageMeta[]> {
+  if (options.global || options.globalAll) return discoverPackages(options, observer, outputLogger)
   const { inspectRepositoryWithProjection } = await import('../../repository/inspect')
-  return (await inspectRepositoryWithProjection(options, observer, invocationSelection)).packages
+  return (
+    await inspectRepositoryWithProjection(options, observer, invocationSelection, outputLogger)
+  ).packages
 }
 
 export async function discoverPackages(
   options: depfreshOptions,
   observer?: PackageLoadObserver,
+  outputLogger?: Logger,
 ): Promise<PackageMeta[]> {
-  const logger = createLogger(options.loglevel)
+  const logger = outputLogger ?? createLogger(options.loglevel)
   const discoveryContext = resolveDiscoveryContext(options.cwd)
   const requestedRoot = options.effectiveRoot ?? discoveryContext.effectiveRoot
   const rootResolution = resolveContainedPath(requestedRoot, requestedRoot)

@@ -11,6 +11,7 @@ import {
 import type { depfreshOptions, PackageMeta, PolicyDecision } from '../types'
 import { DEFAULT_OPTIONS } from '../types'
 import type { InspectRepositoryOptions, RepositoryModel } from '../types/repository'
+import type { Logger } from '../utils/logger'
 import { buildRepositoryModel } from './model'
 
 export interface RepositoryInspection {
@@ -31,9 +32,10 @@ export async function inspectRepositoryWithProjection(
   options: depfreshOptions,
   observer?: PackageLoadObserver,
   invocationSelection?: InvocationScopeExclusions,
+  outputLogger?: Logger,
 ): Promise<RepositoryInspection> {
   const discoveryOptions = { ...options, include: undefined, exclude: undefined }
-  const packages = await discoverPackages(discoveryOptions, observer)
+  const packages = await discoverPackages(discoveryOptions, observer, outputLogger)
   options.discoveryReport = discoveryOptions.discoveryReport
   options.effectiveRoot = discoveryOptions.effectiveRoot
   const root = options.effectiveRoot ?? options.cwd
