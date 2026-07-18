@@ -242,6 +242,8 @@ findings.
 **Files:**
 
 - Modify: `src/commands/check/run-check.ts`
+- Modify: `src/commands/check/run-model.ts`
+- Modify: `src/commands/check/run-model.test.ts`
 - Modify: `src/commands/check/test-helpers.ts`
 - Modify: `src/commands/check/run-check.orchestration.test.ts`
 - Modify: `src/commands/check/run-check.model.test.ts`
@@ -302,6 +304,13 @@ Map apply phases `preflight`, `stage`, `commit`, `inspect`, and `recovery` to th
 phase states. Retain `journalId`, restored/unrecovered paths, external effects, and exact operation
 totals. Derive not-attempted totals only from the structural attempt evidence retained by Task 2;
 do not infer replacement attempts from outcome wording.
+
+Retain engine `skipped` as an exact neutral operation outcome, distinct from structural
+not-attempted truth. A physical target whose member operations have different exact outcomes uses a
+mixed target result rather than selecting a worst status. Target attempt evidence applies to every
+member operation because replacement is physical-file scoped; it does not rewrite a skipped base
+outcome. Cover applied+skipped and recovery-time reverted+failed/unknown target matrices before
+wiring the command stream.
 
 - [ ] **Step 6: Gate post-write actions on the complete result**
 
