@@ -67,6 +67,8 @@ export interface CheckRunDiagnostic {
 
 export interface CheckRunResultTotals {
   readonly applied: number
+  readonly skipped: number
+  readonly mixed: number
   readonly blocked: number
   readonly notAttempted: number
   readonly failed: number
@@ -76,11 +78,14 @@ export interface CheckRunResultTotals {
 
 export type CheckRunOperationOutcome =
   | 'applied'
+  | 'skipped'
   | 'blocked'
   | 'not-attempted'
   | 'failed'
   | 'reverted'
   | 'unknown'
+
+export type CheckRunTargetOutcome = CheckRunOperationOutcome | 'mixed'
 
 export interface CheckRunOperationResult {
   readonly operationId: string
@@ -95,7 +100,7 @@ export interface CheckRunTargetResult {
   readonly path: string
   readonly operationIds: readonly string[]
   // Physical-file outcome and aggregate safety receipts remain separate dimensions.
-  readonly outcome: CheckRunOperationOutcome
+  readonly outcome: CheckRunTargetOutcome
   readonly blocked: boolean
   readonly notAttempted: boolean
   readonly unknown: boolean
@@ -227,12 +232,15 @@ const TERMINAL_PHASE_STATUSES = new Set<CheckRunTerminalPhaseStatus>([
 
 const OPERATION_OUTCOMES = new Set<CheckRunOperationOutcome>([
   'applied',
+  'skipped',
   'blocked',
   'not-attempted',
   'failed',
   'reverted',
   'unknown',
 ])
+
+const TARGET_OUTCOMES = new Set<CheckRunTargetOutcome>([...OPERATION_OUTCOMES, 'mixed'])
 
 const RECOVERY_STATUSES = new Set<CheckRunRecoveryStatus>([
   'not-needed',
@@ -744,7 +752,7 @@ function copyOperationResult(
 
 function copyTargetResult(result: CheckRunTargetResult): CheckRunTargetResult {
   assertRelativePath(result.path)
-  assertOutcome(result.outcome)
+  assertTargetOutcome(result.outcome)
   assertBoolean('physical target blocked receipt', result.blocked)
   assertBoolean('physical target not-attempted receipt', result.notAttempted)
   assertBoolean('physical target unknown receipt', result.unknown)
@@ -787,35 +795,18 @@ function assertTargetOutcomeCoherence(
   ) {
     throw new CheckRunInvariantError('physical target receipt dimensions differ from operations')
   }
-  if (
-    targetResult.outcome === 'applied' &&
-    operations.some((operation) => operation.outcome !== 'applied')
-  ) {
-    throw new CheckRunInvariantError('applied physical target outcome differs from operations')
+  if (operations.length === 0) {
+    throw new CheckRunInvariantError('physical target requires at least one operation result')
   }
-  if (
-    targetResult.outcome === 'reverted' &&
-    operations.some((operation) => operation.outcome !== 'reverted')
-  ) {
-    throw new CheckRunInvariantError('reverted physical target outcome differs from operations')
-  }
-  if (targetResult.outcome === 'failed') {
-    if (operations.some((operation) => operation.outcome !== 'failed')) {
-      throw new CheckRunInvariantError('failed physical target differs from operations')
+  const outcomes = new Set(operations.map((operation) => operation.outcome))
+  if (outcomes.size === 1) {
+    if (targetResult.outcome !== operations[0]!.outcome) {
+      throw new CheckRunInvariantError(
+        'uniform physical target must use its exact operation outcome',
+      )
     }
-  }
-  if (targetResult.outcome === 'blocked') {
-    if (operations.some((operation) => !operation.blocked)) {
-      throw new CheckRunInvariantError('blocked physical target differs from operations')
-    }
-  }
-  if (targetResult.outcome === 'unknown') {
-    if (operations.some((operation) => !operation.unknown)) {
-      throw new CheckRunInvariantError('unknown physical target differs from operations')
-    }
-  }
-  if (targetResult.outcome === 'not-attempted' && operations.some((item) => !item.notAttempted)) {
-    throw new CheckRunInvariantError('not-attempted physical target differs from operations')
+  } else if (targetResult.outcome !== 'mixed') {
+    throw new CheckRunInvariantError('heterogeneous physical target requires mixed outcome')
   }
 }
 
@@ -848,7 +839,7 @@ function assertResultPhaseCoherence(
         recoveryRecorded && !state.recovery.executed && state.recovery.status === 'unknown'
       const expectedResults = cleanupUnknown
         ? totals.unknown === selected && totals.applied === 0
-        : totals.applied === selected && totals.unknown === 0
+        : totals.applied + totals.skipped === selected && totals.unknown === 0
       if (
         !expectedResults ||
         totals.blocked > 0 ||
@@ -952,6 +943,7 @@ function assertResultPhaseCoherence(
     }
     if (
       totals.blocked > 0 ||
+      totals.skipped > 0 ||
       totals.unknown > 0 ||
       operations.some((operation) => operation.notAttempted && operation.outcome !== 'failed') ||
       targets.some(
@@ -979,6 +971,7 @@ function deriveOperationTotals(
   const totals = emptyResults()
   for (const operation of operations) {
     if (operation.outcome === 'applied') totals.applied += 1
+    if (operation.outcome === 'skipped') totals.skipped += 1
     if (operation.outcome === 'failed') totals.failed += 1
     if (operation.outcome === 'reverted') totals.reverted += 1
     if (operation.blocked) totals.blocked += 1
@@ -992,6 +985,8 @@ function deriveTargetTotals(targets: readonly CheckRunTargetResult[]): CheckRunR
   const totals = emptyResults()
   for (const targetResult of targets) {
     if (targetResult.outcome === 'applied') totals.applied += 1
+    if (targetResult.outcome === 'skipped') totals.skipped += 1
+    if (targetResult.outcome === 'mixed') totals.mixed += 1
     if (targetResult.outcome === 'failed') totals.failed += 1
     if (targetResult.outcome === 'reverted') totals.reverted += 1
     if (targetResult.blocked) totals.blocked += 1
@@ -1074,7 +1069,16 @@ type MutableResultTotals = {
 }
 
 function emptyResults(): MutableResultTotals {
-  return { applied: 0, blocked: 0, notAttempted: 0, failed: 0, reverted: 0, unknown: 0 }
+  return {
+    applied: 0,
+    skipped: 0,
+    mixed: 0,
+    blocked: 0,
+    notAttempted: 0,
+    failed: 0,
+    reverted: 0,
+    unknown: 0,
+  }
 }
 
 function emptyRunResults(): CheckRunResults {
@@ -1105,7 +1109,12 @@ function finalStatus(
   if (state.results.totals.blocked > 0) status = worseStatus(status, 'blocked')
   if (state.results.totals.failed > 0) status = worseStatus(status, 'failed')
   if (state.results.totals.unknown > 0) status = worseStatus(status, 'unknown')
-  if (state.write && state.results.totals.notAttempted > 0) {
+  if (
+    state.write &&
+    state.results.operations.some(
+      (operation) => operation.notAttempted && operation.outcome !== 'skipped',
+    )
+  ) {
     status = worseStatus(status, 'blocked')
   }
   if (state.results.totals.reverted > 0) status = worseStatus(status, 'failed')
@@ -1174,6 +1183,12 @@ function assertRecoveryStatus(status: CheckRunRecoveryStatus): void {
 function assertOutcome(outcome: CheckRunOperationOutcome): void {
   if (!OPERATION_OUTCOMES.has(outcome)) {
     throw new CheckRunInvariantError('invalid operation outcome')
+  }
+}
+
+function assertTargetOutcome(outcome: CheckRunTargetOutcome): void {
+  if (!TARGET_OUTCOMES.has(outcome)) {
+    throw new CheckRunInvariantError('invalid physical target outcome')
   }
 }
 

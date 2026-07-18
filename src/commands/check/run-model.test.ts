@@ -211,7 +211,7 @@ const recoveryCompatibilityCases: readonly RecoveryCompatibilityCase[] = [
     expectedError: 'completed recovery cannot retain applied results',
   },
   {
-    name: 'completed recovery rejects the internal skipped analogue',
+    name: 'completed recovery rejects structurally not-attempted outcomes',
     applyStatus: 'failed',
     recoveryStatus: 'passed',
     observeStatus: 'passed',
@@ -221,6 +221,19 @@ const recoveryCompatibilityCases: readonly RecoveryCompatibilityCase[] = [
       unrecoveredPaths: [],
     },
     outcomes: ['not-attempted'],
+    expectedError: 'completed recovery cannot retain forbidden results',
+  },
+  {
+    name: 'completed recovery rejects neutral skipped outcomes',
+    applyStatus: 'failed',
+    recoveryStatus: 'passed',
+    observeStatus: 'passed',
+    recovery: {
+      status: 'completed',
+      restoredPaths: ['package-lock.json'],
+      unrecoveredPaths: [],
+    },
+    outcomes: ['skipped'],
     expectedError: 'completed recovery cannot retain forbidden results',
   },
   {
@@ -523,6 +536,8 @@ describe('check run model', () => {
 
     expect(state.results.totals).toEqual({
       applied: 0,
+      skipped: 0,
+      mixed: 0,
       blocked: 1,
       notAttempted: 1,
       failed: 0,
@@ -533,6 +548,8 @@ describe('check run model', () => {
     expect(state.results.targets).toHaveLength(1)
     expect(state.results.targetTotals).toEqual({
       applied: 0,
+      skipped: 0,
+      mixed: 0,
       blocked: 1,
       notAttempted: 1,
       failed: 0,
@@ -810,6 +827,8 @@ describe('check run model', () => {
 
     expect(state.results.totals).toEqual({
       applied: 0,
+      skipped: 0,
+      mixed: 0,
       blocked: 0,
       notAttempted: 1,
       failed: 1,
@@ -1021,6 +1040,197 @@ describe('check run model', () => {
     expect(state.results.targetTotals).toMatchObject({ applied: 1, reverted: 1 })
   })
 
+  it('retains applied and skipped outcomes on one attempted physical target', () => {
+    const applied = finishApply(selectedInventoryState(2, 1))
+    const selected = applied.targets[0]!
+    const state = results(
+      applied,
+      [
+        operationResult(selected.operationIds[0]!, 'applied'),
+        operationResult(selected.operationIds[1]!, 'skipped'),
+      ],
+      [targetResult(selected, 'mixed')],
+    )
+
+    expect(state.results.totals).toMatchObject({ applied: 1, skipped: 1, mixed: 0 })
+    expect(state.results.targetTotals).toMatchObject({ applied: 0, skipped: 0, mixed: 1 })
+    expect(state.results.targets[0]).toMatchObject({
+      outcome: 'mixed',
+      blocked: false,
+      notAttempted: false,
+      unknown: false,
+    })
+  })
+
+  it('keeps an all-no-change target skipped and structurally unattempted without worsening truth', () => {
+    let state = completePhase(selectedInventoryState(2, 1), 'preflight')
+    state = completePhase(state, 'stage', 'skipped')
+    const selected = state.targets[0]!
+    state = results(
+      state,
+      selected.operationIds.map((operationId) => ({
+        ...operationResult(operationId, 'skipped'),
+        notAttempted: true,
+      })),
+      [{ ...targetResult(selected, 'skipped'), notAttempted: true }],
+    )
+    state = reduceCheckRun(state, {
+      type: 'run-completed',
+      eventId: 'complete:all-no-change',
+      elapsedMs: 1,
+      exitCode: 0,
+    })
+
+    expect(state.results.totals).toMatchObject({ skipped: 2, notAttempted: 2, mixed: 0 })
+    expect(state.results.targetTotals).toMatchObject({ skipped: 1, notAttempted: 1, mixed: 0 })
+    expect(state.phases.find((phase) => phase.name === 'complete')?.status).toBe('passed')
+  })
+
+  it('retains reverted and failed outcomes on one recovered physical target', () => {
+    let state = completePhase(selectedInventoryState(2, 1), 'preflight')
+    state = completePhase(state, 'stage')
+    state = completePhase(state, 'apply', 'failed')
+    state = reduceCheckRun(state, {
+      type: 'recovery-recorded',
+      executed: true,
+      status: 'completed',
+      restoredPaths: ['package-lock.json'],
+      unrecoveredPaths: [],
+    })
+    state = completePhase(state, 'recover')
+    state = completePhase(state, 'observe')
+    const selected = state.targets[0]!
+    state = results(
+      state,
+      [
+        operationResult(selected.operationIds[0]!, 'reverted'),
+        operationResult(selected.operationIds[1]!, 'failed'),
+      ],
+      [targetResult(selected, 'mixed')],
+    )
+
+    expect(state.results.totals).toMatchObject({ reverted: 1, failed: 1, mixed: 0 })
+    expect(state.results.targetTotals).toMatchObject({ reverted: 0, failed: 0, mixed: 1 })
+  })
+
+  it.each([
+    {
+      name: 'partial',
+      applyStatus: 'failed' as const,
+      recoveryStatus: 'partial' as const,
+      recoverPhaseStatus: 'failed' as const,
+      observeStatus: 'failed' as const,
+    },
+    {
+      name: 'unknown',
+      applyStatus: 'unknown' as const,
+      recoveryStatus: 'unknown' as const,
+      recoverPhaseStatus: 'unknown' as const,
+      observeStatus: 'unknown' as const,
+    },
+  ])('retains reverted and unknown outcomes on one $name recovery target', (fixture) => {
+    let state = completePhase(selectedInventoryState(2, 1), 'preflight')
+    state = completePhase(state, 'stage')
+    state = completePhase(state, 'apply', fixture.applyStatus)
+    state = reduceCheckRun(state, {
+      type: 'recovery-recorded',
+      executed: true,
+      status: fixture.recoveryStatus,
+      restoredPaths: [],
+      unrecoveredPaths: ['package-lock.json'],
+    })
+    state = completePhase(state, 'recover', fixture.recoverPhaseStatus)
+    state = completePhase(state, 'observe', fixture.observeStatus)
+    const selected = state.targets[0]!
+    state = results(
+      state,
+      [
+        operationResult(selected.operationIds[0]!, 'reverted'),
+        operationResult(selected.operationIds[1]!, 'unknown'),
+      ],
+      [{ ...targetResult(selected, 'mixed'), unknown: true }],
+    )
+
+    expect(state.results.totals).toMatchObject({ reverted: 1, unknown: 1, mixed: 0 })
+    expect(state.results.targetTotals).toMatchObject({ reverted: 0, unknown: 1, mixed: 1 })
+  })
+
+  it('rejects mixed target truth for one uniform operation outcome', () => {
+    const state = finishApply()
+
+    expect(() =>
+      results(state, [appliedOperation], [{ ...appliedTarget, outcome: 'mixed' }]),
+    ).toThrow('uniform physical target must use its exact operation outcome')
+  })
+
+  it('rejects mixed target truth without any member operation outcome', () => {
+    const selected = inventory(2, 1)
+    let state = createCheckRunState({ mode: 'major', write: true })
+    state = reduceCheckRun(state, { type: 'packages-discovered', packages: 1, declared: 2 })
+    state = reduceCheckRun(state, {
+      type: 'resolution-completed',
+      eligible: 2,
+      unresolved: 0,
+      updates: 2,
+    })
+    state = reduceCheckRun(state, {
+      type: 'selection-completed',
+      operations: 2,
+      targets: 2,
+      changes: selected.changes,
+      selectedTargets: [
+        ...selected.selectedTargets,
+        { path: 'package-empty.json', operationIds: [] },
+      ],
+    })
+    state = finishApply(state)
+    const populatedTarget = state.targets[0]!
+    const emptyTarget = state.targets[1]!
+
+    expect(() =>
+      results(
+        state,
+        [
+          operationResult(populatedTarget.operationIds[0]!, 'applied'),
+          operationResult(populatedTarget.operationIds[1]!, 'skipped'),
+        ],
+        [targetResult(populatedTarget, 'mixed'), targetResult(emptyTarget, 'mixed')],
+      ),
+    ).toThrow('physical target requires at least one operation result')
+  })
+
+  it('rejects a non-mixed target for heterogeneous operation outcomes', () => {
+    const state = finishApply(selectedInventoryState(2, 1))
+    const selected = state.targets[0]!
+
+    expect(() =>
+      results(
+        state,
+        [
+          operationResult(selected.operationIds[0]!, 'applied'),
+          operationResult(selected.operationIds[1]!, 'skipped'),
+        ],
+        [targetResult(selected, 'applied')],
+      ),
+    ).toThrow('heterogeneous physical target requires mixed outcome')
+  })
+
+  it('rejects mixed target receipts that do not exactly aggregate member receipts', () => {
+    const state = finishApply(selectedInventoryState(2, 1))
+    const selected = state.targets[0]!
+
+    expect(() =>
+      results(
+        state,
+        [
+          operationResult(selected.operationIds[0]!, 'applied'),
+          operationResult(selected.operationIds[1]!, 'skipped'),
+        ],
+        [{ ...targetResult(selected, 'mixed'), notAttempted: true }],
+      ),
+    ).toThrow('physical target receipt dimensions differ from operations')
+  })
+
   it('rejects a reverted target that combines applied and reverted owned operations', () => {
     let state = completePhase(selectedInventoryState(2, 1), 'preflight')
     state = completePhase(state, 'stage')
@@ -1045,7 +1255,7 @@ describe('check run model', () => {
         ],
         [targetResult(selected, 'reverted')],
       ),
-    ).toThrow('reverted physical target outcome differs from operations')
+    ).toThrow('heterogeneous physical target requires mixed outcome')
   })
 
   it.each([
@@ -1240,7 +1450,7 @@ describe('check run model', () => {
         ],
         [physicalTarget('failed', { unknown: true })],
       ),
-    ).toThrow('failed physical target differs from operations')
+    ).toThrow('uniform physical target must use its exact operation outcome')
   })
 
   it('prevents generic successful events from bypassing fact-bearing phases', () => {
