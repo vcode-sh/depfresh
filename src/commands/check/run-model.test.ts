@@ -770,11 +770,11 @@ describe('check run model', () => {
     },
   )
 
-  it('retains an untouched failed target receipt after completed recovery', () => {
+  it('retains an untouched failed target receipt after a late commit abort', () => {
     let state = startExactApply(selectedInventoryState(2, 2))
     state = reduceCheckRun(state, {
       type: 'apply-completed',
-      status: 'passed',
+      status: 'failed',
       recoveryRequired: true,
     })
     state = reduceCheckRun(state, {
@@ -827,6 +827,31 @@ describe('check run model', () => {
 
     expect(state.phases.find((phase) => phase.name === 'complete')?.status).toBe('failed')
     expect(state.exitCode).toBe(2)
+  })
+
+  it('rejects an untouched failed target receipt after a passed apply', () => {
+    let state = reduceCheckRun(startExactApply(), {
+      type: 'apply-completed',
+      status: 'passed',
+      recoveryRequired: true,
+    })
+    state = reduceCheckRun(state, {
+      type: 'recovery-recorded',
+      executed: true,
+      status: 'completed',
+      restoredPaths: [target.path],
+      unrecoveredPaths: [],
+    })
+    state = completePhase(state, 'recover')
+    state = completePhase(state, 'observe')
+
+    expect(() =>
+      results(
+        state,
+        [{ ...operationResult(change.id, 'failed'), notAttempted: true }],
+        [{ ...physicalTarget('failed'), notAttempted: true }],
+      ),
+    ).toThrow('failed results require a failed lifecycle branch')
   })
 
   it.each(['applied', 'reverted'] as const)(

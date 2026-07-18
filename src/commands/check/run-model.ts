@@ -898,17 +898,7 @@ function assertResultPhaseCoherence(
   if (totals.blocked > 0 && !blockedPhase) {
     throw new CheckRunInvariantError('blocked results require a blocked mutation phase')
   }
-  const completedUntouchedFailures =
-    state.recovery.status === 'completed' &&
-    operations
-      .filter((operation) => operation.outcome === 'failed')
-      .every((operation) => operation.notAttempted)
-  if (
-    totals.failed > 0 &&
-    !failedPhase &&
-    state.recovery.status !== 'partial' &&
-    !completedUntouchedFailures
-  ) {
+  if (totals.failed > 0 && !failedPhase && state.recovery.status !== 'partial') {
     throw new CheckRunInvariantError('failed results require a failed lifecycle branch')
   }
   if (
