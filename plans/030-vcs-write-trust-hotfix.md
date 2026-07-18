@@ -224,6 +224,7 @@ Expected: all pass; JSON keeps its existing top-level keys and includes the addi
 - Create: `src/commands/check/write-receipt.test.ts`
 - Modify: `src/commands/check/run-check.ts`
 - Modify: `src/commands/check/check.write-outcomes.test.ts`
+- Modify: `test/release-readiness.test.ts`
 - Modify: `docs/output-formats/table.md`
 - Modify: `docs/output-formats/json.md`
 - Modify: `docs/troubleshooting.md`
@@ -289,7 +290,8 @@ Run:
 pnpm exec vitest run src/commands/check/write-receipt.test.ts \
   src/commands/check/check.write-outcomes.test.ts \
   src/commands/check/check.json-output.test.ts \
-  src/commands/check/run-check.orchestration.test.ts
+  src/commands/check/run-check.orchestration.test.ts \
+  test/release-readiness.test.ts
 ```
 
 Expected: all pass; one physical warning replaces 41 duplicates; exit remains `2`; JSON remains
