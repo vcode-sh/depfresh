@@ -152,18 +152,140 @@ quality reviews reported no Critical, Important, or Minor findings.
 - Create: `src/commands/check/visual-plus/sections/receipt.ts`
 - Create: `src/commands/check/visual-plus/sections/sections.test.ts`
 - Create: `src/commands/check/visual-plus/theme.ts`
+- Create: `src/commands/check/visual-plus/input.ts`
 - Modify: `src/commands/check/render/table-rows.ts`
 
 **Interfaces:**
 
-- Consumes: `CheckRunSnapshot`, `VisualPlusCapabilities`, and selected change metadata.
+- Consumes: `CheckRunSnapshot`, `VisualPlusCapabilities`, and exact immutable renderer metadata.
 - Produces: pure `readonly string[]` section functions with no I/O or timers.
+
+Task 2 uses this renderer-only input contract; it does not widen the public run-model schema:
+
+```ts
+export interface VisualPlusRunMetadata {
+  readonly repository?: {
+    readonly name?: string
+    readonly relativePath?: string
+  }
+  readonly workspaceScope: 'single-package' | 'workspace' | 'unknown'
+  readonly packageManager: VisualPlusPackageManagerMetadata
+}
+
+export type VisualPlusPackageManagerMetadata =
+  | {
+      readonly status: 'observed'
+      readonly name: string
+      readonly version?: string
+      readonly sources: readonly [string, ...string[]]
+    }
+  | {
+      readonly status: 'ambiguous'
+      readonly candidates: readonly {
+        readonly name: string
+        readonly version?: string
+        readonly source: string
+      }[]
+    }
+  | {
+      readonly status: 'unavailable'
+      readonly sources: readonly string[]
+    }
+  | {
+      readonly status: 'unknown'
+      readonly sources: readonly []
+    }
+
+export interface VisualPlusChangeMetadata {
+  readonly operationId: string
+  readonly ownerGroup: {
+    readonly id: string
+    readonly label: string
+    readonly order: number
+    readonly physicalTarget: string
+  }
+  readonly ageMs: number | null
+  readonly compatibility: {
+    readonly status: 'compatible' | 'incompatible' | 'unknown'
+    readonly detail?: string
+  }
+  readonly catalog?: {
+    readonly name: string
+    readonly sourcePath: string
+  }
+}
+
+export interface VisualPlusSectionInput {
+  readonly snapshot: CheckRunSnapshot
+  readonly capabilities: VisualPlusCapabilities
+  readonly run: VisualPlusRunMetadata
+  readonly changes: readonly VisualPlusChangeMetadata[]
+  readonly writeReceipt?: VisualPlusWriteReceiptEvidence
+}
+
+export interface VisualPlusWriteReceiptEvidence {
+  readonly canonical: DeepReadonly<WriteReceipt>
+  readonly operationIds: readonly string[]
+  readonly targets: readonly {
+    readonly path: string
+    readonly operationIds: readonly string[]
+  }[]
+  readonly recovery: DeepReadonly<CheckRunRecovery>
+}
+
+export type DeepReadonly<T> = T extends (...args: never[]) => unknown
+  ? T
+  : T extends readonly (infer Item)[]
+    ? readonly DeepReadonly<Item>[]
+    : T extends object
+      ? { readonly [Key in keyof T]: DeepReadonly<T[Key]> }
+      : T
+```
+
+`changes` must contain exactly one entry for every `snapshot.changes[].id`; duplicate, missing, or
+extra IDs fail closed. Every `ownerGroup.physicalTarget` must equal the selected physical target
+containing that operation ID. Logical owner-group identity is separate from the physical target:
+the acceptance fixture has 15 stable owner groups and 14 target paths, with exactly one target
+shared by two groups. Group order is numeric `order`, then `id`; ties, unsafe paths, or incomplete
+target membership fail closed. Missing age is `null` and renders `age unknown`; missing
+compatibility is the explicit `unknown` state and renders `compat unknown`. Repository, workspace,
+manager, catalog, age, and compatibility facts come only from these inputs. Absent facts are
+omitted or rendered unknown and are never inferred from paths, filenames, process runtime, or
+enumeration order. Task 4 must build this input from the already resolved selection using one fixed
+startup clock and exact plan projections before enabling Visual+.
+
+Every path-bearing metadata value (`repository.relativePath`, manager source, owner physical
+target, catalog source, receipt group/target path, and recovery path) uses the same safe `.` or
+repository-relative containment rule. All IDs, labels, names, versions, details, and sources must
+be nonempty after terminal sanitization when their state requires them. `observed` manager evidence
+requires a name and at least one source; `ambiguous` requires at least two distinct candidates;
+`unknown` carries no candidate, name, version, or source. Contradictory shapes fail closed.
+
+Task 4 maps `ResolvedDepChange.nodeCompatible === true` to `compatible`, `false` to
+`incompatible`, and `undefined` to `unknown`; sanitized `nodeCompat` may be retained only as detail.
+It captures one finite startup wall-clock value. A valid `publishedAt` not later than that clock
+becomes the floored non-negative millisecond difference; malformed/future/missing timestamps become
+`ageMs: null`. Supplied ages must be finite non-negative integers or fail closed.
+
+`writeReceipt.canonical` is a deeply copied and recursively frozen projection produced from the
+existing canonical `buildWriteReceipt()` path. Its operation IDs, target membership, and recovery
+copy must exactly equal the snapshot selection/results/recovery. Canonical applied, skipped,
+conflicted, reverted, failed, and unknown operation totals must respectively equal snapshot
+applied, skipped, blocked, reverted, failed, and unknown totals. Canonical planned-file count must
+equal selected target count, and every non-applied canonical group path must be one selected target.
+Restored/unrecovered paths must be safe selected targets. A duplicate, missing, extra, or
+contradictory fact fails closed before receipt prose. The renderer must not recompute replacement
+attempts, cleanup certainty, or the zero-file predicate from snapshot statuses or diagnostic prose.
 
 - [ ] **Step 1: Write complete section RED snapshots**
 
-Use a fixture with 15 owner groups, 76 changes, and 14 physical targets. Assert all 76 dependency
-names and all 14 target paths occur exactly once, owner ordering is stable, success/block receipts
-are exact, and no visible line exceeds the requested width.
+Use a fixture with counts `66/616/612/0/76/76/14`, 76 unique changes and metadata entries, 15
+logical owner groups, and 14 physical targets. Exactly one physical target is shared by two logical
+groups; every change ID belongs to one group and one target. Assert all 76 dependency names occur
+exactly once in change rows and all 14 target paths have exactly one structured transaction entry.
+Owner-group cross-references may repeat a physical path and are not transaction entries. Assert
+owner ordering is stable, success/block receipts are exact, and no visible line exceeds the
+requested width.
 
 - [ ] **Step 2: Run section RED tests**
 
@@ -178,19 +300,32 @@ reverted, and not attempted. Color and Unicode symbols decorate those labels but
 them. Do not introduce gradients, banners, logos, or box art without meaning.
 
 The header renders command mode, sanitized repository path/name, workspace scope, observed package
-manager evidence, and explicit read-only/write intent. It never infers a manager from filename
-order or exposes an absolute path outside the selected root.
+manager evidence, and explicit read-only/write intent. `relativePath` accepts only `.` or a safe
+repository-relative path; absolute, parent-traversing, empty-segment, control-bearing, or otherwise
+unsafe values fail closed. It never infers a manager from filename order or exposes an absolute
+path outside the selected root.
 
 - [ ] **Step 4: Implement complete owner-grouped rows**
 
 Each row exposes dependency, current, target, diff, age, and compatibility. Wide/medium layouts use
 columns; narrow/plain layouts use wrapped labeled lines. Do not truncate semantic values into
 ambiguity: move them to continuation lines. Replace unexplained `?node` with `compat unknown` or
-render a visible same-section legend.
+render a visible same-section legend. `topology.ts` renders only the count flow and stable owner
+grouping; relationship, impact, shared-surface, and risk maps remain owned by Plan 035.
+
+Sanitize every raw value before styling. Lossless wrapping may split a long semantic token only at
+grapheme boundaries and must retain every sanitized grapheme across continuation lines; ellipsis
+must never replace names, versions, paths, statuses, or receipt facts. Each emitted line satisfies
+`visualLength(line) <= max(1, width)`. Apply and reset ANSI styling independently per wrapped
+fragment. When `unicode=false`, use ASCII tokens and separators only. At normalized width `1`,
+encode every width-two grapheme as a reversible ASCII `U+{HEX...}` token before one-column wrapping;
+at width `2` and above retain the sanitized grapheme itself.
 
 - [ ] **Step 5: Implement transaction and receipts**
 
-Render every physical target with phase/result. Success copy must be equivalent to:
+Render the command transaction phase rail once, then every physical target with its exact selected
+membership and final result. Before target results exist, render `pending`; never project the global
+active phase onto an individual target. Success copy must be equivalent to:
 
 ```text
 Complete · 76 updates applied across 14 files
@@ -203,18 +338,53 @@ Preflight block before replacement must be equivalent to:
 
 ```text
 Safety block · no files were changed
-Applied 0  Blocked 76  Not attempted 76  Failed 0  Unknown 76
+Applied 0  Blocked 76  Not attempted 76  Failed 0  Unknown 0
 Preflight could not confirm Git state for package.json.
 Exit 2
 ```
 
-Partial/recovery cases must list restored and unrecovered physical files and never use the zero-file
-claim without observed original bytes.
+Render the snapshot's operation totals exactly. `blocked`, `notAttempted`, and `unknown` are
+independent, overlapping dimensions; never synthesize `unknown` from a diagnostic. Also render
+nonzero `skipped` and `reverted` operation totals so no result is hidden; `mixed` is rendered only
+from `snapshot.results.targetTotals.mixed`. The five example counts come from operation totals.
+
+Use this ordered receipt decision table; the first matching row wins:
+
+| Condition | Headline/claim |
+| --- | --- |
+| Invalid or mismatched immutable input | Fail closed; integration returns exit `2` and emits no success or zero-file claim |
+| `exitCode === null` | `Pending`; no final claim |
+| `write === false`, exit `0` | `Review complete`; use `no updates` or exact reviewed update/target counts |
+| `write === false`, exit `1` | `Review complete · updates available`; use exact counts |
+| `write === false`, exit `2` | `Review incomplete`; use exact counts/diagnostics |
+| Write with zero selected operations/targets, exit `0` | `Complete · no selected updates`; never say applied or no files changed |
+| Write with zero selected operations/targets, exit `1` or `2` | `Write incomplete · no selected updates`; render exact exit |
+| Missing receipt on a final nonempty write | `Result unknown · receipt evidence unavailable` |
+| Recovery executed and `completed` | `Recovered`; list every restored path; never use the strict complete/zero-file claims |
+| Recovery `partial` | `Recovery incomplete`; list restored and unrecovered paths |
+| Recovery `unknown` | `Recovery unknown`; list retained safe evidence |
+| Canonical `safety-block` with `noFilesChanged === true` | `Safety block · no files were changed` |
+| Canonical `partial` | `Partial` |
+| Canonical `failed` | `Failed` |
+| Canonical `unknown` | `Unknown` |
+| Canonical `complete`, every operation/target applied, observe passed, recovery `not-needed`, exit `0` | Exact strict `Complete` and observed-requested-values claims |
+| Canonical `complete` with skipped operations and exit `0` | `Complete · A applied, S skipped across F files`; no all-requested-values claim |
+| Canonical `complete` with nonzero exit or any other non-strict shape | `Write complete · command incomplete`; render exact totals and exit |
+
+Canonical `safety-block` with `noFilesChanged !== true`, contradictory recovery/verdict shapes, or
+any case not covered by the table is invalid input and fails closed. Partial/recovery cases list
+restored and unrecovered physical files and never use the zero-file claim; every final branch
+renders the exact exit code.
 
 - [ ] **Step 6: Run section GREEN snapshots**
 
-Run sections, format/ANSI, width, current render, and overflow tests. Expected: all pass at
-8/10/40/60/80/118 columns with hostile Unicode/control inputs contained.
+Run sections, format/ANSI, width, current render, and overflow tests. Expected: all pass for both
+capable and constrained modes at 8/10/40/60/80/118 columns with hostile ANSI, OSC, bidi, control,
+combining, emoji, and wide-grapheme inputs contained. Color/no-color and Unicode/ASCII variants
+retain identical words and numbers.
+
+Task 2 changes to `table-rows.ts` are pure and additive. Existing `renderRows()`, `buildHeader()`,
+`renderTimediff()`, callers, truncation, and legacy output bytes remain unchanged until Task 4.
 
 ### Task 3: One live renderer and cursor owner
 
@@ -228,7 +398,8 @@ Run sections, format/ANSI, width, current render, and overflow tests. Expected: 
 
 **Interfaces:**
 
-- Consumes: `CheckRunController`, capability decision, output writer, and injected scheduler.
+- Consumes: `CheckRunController`, capability decision, immutable run/change metadata, canonical
+  receipt evidence, output writer, and injected scheduler.
 - Produces: `createVisualPlusRenderer(options): VisualPlusRenderer`.
 
 - [ ] **Step 1: Write renderer lifecycle RED tests**
@@ -239,12 +410,16 @@ plain modes.
 
 ```ts
 export interface VisualPlusRenderer {
-  start(controller: CheckRunController): void
-  writeReview(snapshot: CheckRunSnapshot): void
-  finalize(snapshot: CheckRunSnapshot): void
+  start(controller: CheckRunController, run: VisualPlusRunMetadata): void
+  writeReview(input: VisualPlusSectionInput): void
+  finalize(input: VisualPlusSectionInput): void
   dispose(): void
 }
 ```
+
+`start()` may render only lifecycle and already supplied run facts. `writeReview()` is called only
+after exact change metadata and pre-apply physical targets reconcile. `finalize()` receives the
+same immutable selection plus canonical write-receipt evidence when `snapshot.write` is true.
 
 - [ ] **Step 2: Run renderer RED tests**
 
@@ -274,6 +449,10 @@ pass, no open handles, and final scrollback contains no spinner or erased durabl
 
 - Modify: `src/commands/check/run-check.ts`
 - Modify: `src/commands/check/render/index.ts`
+- Modify: `src/commands/check/write-flow.ts`
+- Modify: `src/commands/apply/legacy-plan.ts`
+- Modify: `src/commands/apply/legacy-plan.test.ts`
+- Modify: `src/commands/check/run-check.model.test.ts`
 - Modify: `src/commands/check/run-check.orchestration.test.ts`
 - Modify: `src/commands/check/check.edge-cases.test.ts`
 - Modify: `src/commands/check/check.json-output.test.ts`
@@ -284,6 +463,17 @@ pass, no open handles, and final scrollback contains no spinner or erased durabl
 
 - Consumes: authoritative run controller and Visual+ renderer.
 - Produces: default CLI table output with unchanged machine/library surfaces.
+
+Before enabling Visual+, expose one package-private, read-only selection-evidence seam from
+`createLegacyPlan()`. For write runs, `applyLegacyCommandWrite()` invokes its injected observer
+synchronously after exact plan construction and before VCS preflight or any replacement. For
+read-only runs, build the same plan evidence without invoking apply. The evidence contains stable
+operation IDs, package-index owner groups, exact physical target paths including catalog owners,
+resolved age/compatibility metadata, and target membership. It grants no authority, performs no
+mutation, and is not a public library/schema surface. Emit the run-model selection and
+`VisualPlusChangeMetadata` from this one evidence object; do not emit a manifest approximation and
+do not reconstruct physical targets after apply. If exact evidence does not reconcile, fail closed
+before Visual+ claims a target or result.
 
 - [ ] **Step 1: Write default-output RED journeys**
 
@@ -298,9 +488,11 @@ progress are still written directly.
 
 - [ ] **Step 3: Route human output through one renderer**
 
-Subscribe Visual+ at command start, emit durable review after resolution/selection, emit target
-transaction state during apply, and finalize after the exit decision is known. Suppress old table,
-summary, per-write warning, and progress output only on the Visual+ route.
+Subscribe Visual+ at command start, emit durable review after resolution/selection, update the
+single command transaction rail during apply, and finalize target outcomes after the exit decision
+is known. Suppress old table, summary, per-write warning, and progress output only on the Visual+
+route. Never invent a per-target live phase; targets have exact pending/final result states while
+the command rail owns the active phase.
 
 - [ ] **Step 4: Preserve fallbacks and cleanup**
 
