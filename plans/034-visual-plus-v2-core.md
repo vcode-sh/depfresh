@@ -20,8 +20,10 @@ utilities, Vitest, Biome, pnpm `10.33.0`. No new runtime or native dependency.
 
 - All code, documentation, plans, and commit messages are English.
 - Begin only after Plan 033 is complete and reviewed; keep package version `2.0.2`.
-- Visual+ v2 is the default human terminal interface for `table` output. Full-screen Focus
-  TUI/OpenTUI and alternate screen mode are out of scope.
+- Visual+ v2 is the default human terminal interface only for local, non-global, noninteractive CLI
+  `table` output. Direct library calls, JSON, silent, explicit interactive selection, `--global`,
+  and `--global-all` retain their current paths. Global output cannot enter Visual+ until a separate
+  truthful global run model exists.
 - Full-screen Focus TUI/OpenTUI is not part of this implementation plan.
 - Output is inline, complete, copyable, and stable in scrollback. Every selected row and physical
   target appears exactly once; summaries never replace details.
@@ -33,6 +35,14 @@ utilities, Vitest, Biome, pnpm `10.33.0`. No new runtime or native dependency.
 - Normal CLI completion sets `process.exitCode` and returns so slow/large pipes drain; immediate
   process exit remains reserved for signal termination.
 - Sanitize hostile terminal text and calculate visible width for every emitted line.
+- Metadata not present in `CheckRunSnapshot` must arrive as explicit immutable renderer input. When
+  repository, workspace, or manager facts are absent, omit them or render unknown; never infer them
+  from filenames, enumeration order, or the executor environment.
+- On the Visual+ route, Visual+ is the only ordinary cursor/timer owner and the legacy progress loop
+  is disabled. Explicit interactive TUI retains ownership on its excluded route. The signal handler
+  remains a last-resort cursor-restoration authority on termination, not a renderer or timer owner.
+  Legacy progress remains available only on excluded compatibility routes until their migration is
+  separately planned.
 - Do not stage, commit, push, publish, tag, or create a branch/worktree without separate authority.
 
 ## Drift Check and Stop Conditions
@@ -58,6 +68,32 @@ drifts, or owned files overlap unrelated work.
 - Consumes: stdout/stderr TTY state, columns, `CI`, `TERM`, `NO_COLOR`, and an internal
   reduced-motion override used by tests.
 - Produces: `detectVisualPlusCapabilities(input): VisualPlusCapabilities`.
+
+The detector is pure and receives one immutable startup snapshot:
+
+```ts
+export interface VisualPlusCapabilityInput {
+  stdoutIsTTY: boolean
+  stderrIsTTY: boolean
+  columns?: number
+  ci?: string
+  term?: string
+  noColor?: string
+  reducedMotion?: boolean
+}
+```
+
+Normalize a finite positive width by flooring it with a minimum of `1`; zero, negative,
+non-finite, or missing columns become `80`. `CI` is inactive only when missing, empty after trim, or
+case-insensitive `false`; every other value, including `0`, is active. `TERM=dumb` is
+case-insensitive after trim. Any present `NO_COLOR` value, including the empty string, disables
+color.
+
+A run is constrained when either stdout or stderr is not a TTY, CI is active, or `TERM=dumb`.
+Constrained runs are noninteractive, plain, colorless, motionless, and emit no cursor control.
+Unicode remains available in CI and pipes; only `TERM=dumb` forces ASCII. A capable TTY uses
+`narrow` below 60 columns, `medium` from 60 through 99, and `wide` from 100 columns. Reduced motion
+changes only `motion` and `cursorControl`; `NO_COLOR` changes only `color`.
 
 - [ ] **Step 1: Write capability RED tests**
 
@@ -87,6 +123,9 @@ Expected: FAIL because the module does not exist.
 Detect capabilities once per run. Use deterministic layout thresholds proved by snapshots, not
 terminal brand detection. `TERM=dumb` forces ASCII/plain/no motion; non-TTY and CI force
 plain/no-motion/no cursor; `NO_COLOR` changes only color; zero columns use width 80.
+
+Task 1 additions to `render-layout.ts` must be pure and additive. Do not change existing
+`getTerminalWidth()`, `fitCell()`, column sizing, truncation, table bytes, or callers before Task 4.
 
 - [ ] **Step 4: Run capability GREEN tests**
 
