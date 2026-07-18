@@ -160,8 +160,7 @@ export interface LegacyCommandSelection {
   changes: ResolvedDepChange[]
 }
 
-export interface LegacyCommandApplyResult {
-  applyResult: ApplyResult
+interface LegacyCommandResultBase {
   packages: Array<{ packageIndex: number; outcomes: WriteOutcome[] }>
   diagnostics: LegacyWriteDiagnostic[]
   attempts: Array<{
@@ -170,6 +169,15 @@ export interface LegacyCommandApplyResult {
     replacementAttempted: boolean
   }>
 }
+
+export type LegacyCommandApplyResult =
+  | (LegacyCommandResultBase & {
+      status: 'applied'
+      applyResult: ApplyResult
+    })
+  | (LegacyCommandResultBase & {
+      status: 'blocked'
+    })
 ```
 
 - [ ] **Step 2: Run the plan RED tests**
@@ -188,8 +196,9 @@ paths, formatting metadata, plan fingerprinting, VCS diagnostics, and invocation
 
 Key operations by source file plus JSON/YAML path. Identical expected/requested pairs become one
 physical operation with multiple package projections. Conflicting expected or requested values
-produce deterministic `AMBIGUOUS_OCCURRENCE` outcomes for all projections and prevent apply; never
-select one by package order.
+produce the deterministic blocked result with `AMBIGUOUS_OCCURRENCE` outcomes for all projections,
+all structural attempts false, no `applyResult`, and zero engine calls; never select one by package
+order or fabricate a dummy/no-op plan result.
 
 - [ ] **Step 5: Apply exactly once and project outcomes**
 
