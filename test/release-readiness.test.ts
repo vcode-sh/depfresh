@@ -74,8 +74,12 @@ describe('2.0.1 release readiness', () => {
       changelog.indexOf('## [1.2.0]'),
     )
 
-    expect(unreleased.trim()).toBe('')
-    expect(patchRelease).toContain('First-class exact workspace and catalog exclusions')
+    const workspaceCatalogEntry = 'First-class exact workspace and catalog exclusions'
+    const groupedReceiptEntry = 'Truthful grouped legacy write receipts'
+
+    expect(unreleased).not.toContain(workspaceCatalogEntry)
+    expect(unreleased).toContain(groupedReceiptEntry)
+    expect(patchRelease).toContain(workspaceCatalogEntry)
     expect(historicalRelease).toContain('Portable isolated npm bootstrap in the release workflow')
   })
 
