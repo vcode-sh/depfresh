@@ -9,11 +9,13 @@ wire every lifecycle fact that current orchestration exposes truthfully, without
 orchestration or default terminal bytes yet.
 
 **Architecture:** A pure reducer turns typed check events into immutable snapshots. `run-check.ts`
-emits complete read-only and error event streams at existing orchestration seams while the current
-progress, table, JSON, addon, and write paths remain authoritative. Current package-level writes do
-not expose a truthful command transaction, so Plan 033 activates write-mode events from its one real
-command-level apply result. Later renderers consume the same snapshot instead of reconstructing
-state from logger strings.
+emits complete local read-only and error event streams at existing orchestration seams while the
+current progress, table, JSON, addon, and write paths remain authoritative. Current package-level
+writes do not expose a truthful command transaction, so Plan 033 activates local write-mode events
+from its one real command-level apply result. Global owners use logical identities rather than
+repository-relative target paths and remain outside this model until an explicit identity contract
+is approved. Later renderers consume the same snapshot instead of reconstructing state from logger
+strings.
 
 **Tech Stack:** TypeScript, Node `24.15.0`, Vitest, Biome, pnpm `10.33.0`.
 
@@ -40,9 +42,10 @@ duplicates authority decisions, or overlaps unrelated concurrent edits.
 writes can apply an earlier target before a later preflight block, hide interactive selection and
 catalog ownership inside package processing, and discard exact recovery evidence in the legacy
 compatibility projection. Emitting one aggregate write rail here would invent transaction facts.
-The approved correction is to wire complete read-only/error streams in this plan and defer all
-write-mode event emission to Plan 033, which first collects every selection and calls one
-command-level apply lifecycle.
+The approved correction is to wire complete local read-only/error streams in this plan and defer
+local write-mode event emission to Plan 033, which first collects every selection and calls one
+command-level apply lifecycle. Global invocations remain inactive because values such as
+`global:npm` are logical identities, not repository-relative paths.
 
 ---
 
@@ -205,8 +208,8 @@ reported no Critical, Important, or Minor findings.
 
 - Consumes: `CheckRunController` through a private optional dependency of `runCheck()` used by
   tests and later renderers.
-- Produces: one complete event stream for read-only and error journeys alongside current behavior.
-  Write-mode injection remains deliberately inactive until Plan 033 owns one command-level apply.
+- Produces: one complete event stream for local read-only and error journeys alongside current
+  behavior. Write-mode and global injection remain deliberately inactive.
 
 - [ ] **Step 1: Characterize current output and callback order**
 
@@ -218,8 +221,8 @@ behavior and that no incomplete or invented model stream is emitted.
 - [ ] **Step 2: Write failing event-stream tests**
 
 Inject a recording controller and require ordered phase/count/result/final events for read-only,
-resolution-error, no-package, and thrown-error journeys. Inject it into write-success and partial
-write cases and require no model events; Plan 033 replaces this explicit boundary.
+resolution-error, no-package, and thrown-error journeys. Inject it into write-success, partial
+write, and global cases and require no model events; Plan 033 replaces the local-write boundary.
 
 - [ ] **Step 3: Run the new RED test**
 
@@ -229,12 +232,12 @@ Expected: FAIL because `runCheck()` does not emit model events.
 
 - [ ] **Step 4: Emit events at verified seams**
 
-For read-only invocations, add events immediately after package discovery, repository inspection
-start/end, resolution completion, selection completion, and final exit selection. Use existing
-computed counts; do not rescan packages or parse rendered text. Treat ordinary per-occurrence
-resolution errors as unresolved facts rather than a failed aggregate resolve phase. In `catch` and
-`finally`, resolve every active phase to failed or unknown before finalization. Do not attach the
-controller to any write invocation in this plan.
+For local read-only invocations, add events immediately after package discovery, repository
+inspection start/end, resolution completion, selection completion, and final exit selection. Use
+existing computed counts; do not rescan packages or parse rendered text. Treat ordinary
+per-occurrence resolution errors as unresolved facts rather than a failed aggregate resolve phase.
+In `catch` and `finally`, resolve every active phase to failed or unknown before finalization. Do
+not attach the controller to any write or global invocation in this plan.
 
 - [ ] **Step 5: Prove zero public behavior drift**
 
@@ -279,5 +282,5 @@ Expected: all exit `0`; public CLI bytes remain behaviorally unchanged from the 
 
 Require one reviewer to map every read-only/error lifecycle phase to an event and verify that the
 model can represent every apply/recovery fact Plan 033 will receive. Require another reviewer to
-verify no authority/output/API drift and that write invocations emit no incomplete model stream.
-Stop Plan 033 if any required transaction fact cannot be represented.
+verify no authority/output/API drift and that write/global invocations emit no incomplete model
+stream. Stop Plan 033 if any required local transaction fact cannot be represented.

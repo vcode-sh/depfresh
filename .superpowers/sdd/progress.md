@@ -68,4 +68,5 @@ path cannot emit one truthful command transaction because interactive/catalog fa
 earlier targets may apply before a later preflight block, and exact recovery evidence is projected
 away. The approved correction is to instrument complete read-only/error streams in Plan 032 while
 keeping write-mode model emission inactive. Plan 033 owns the first write stream after it collects
-all selections and invokes one command-level apply.
+all selections and invokes one command-level apply. Global invocations also remain inactive because
+their logical owner identities cannot truthfully satisfy the repository-relative target contract.

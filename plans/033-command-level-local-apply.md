@@ -31,9 +31,10 @@ pnpm `10.33.0`.
   `beforePackageWrite` never receives `afterPackageWrite`.
 - Keep JSON envelope/schema version stable; reconcile existing operation totals from the single
   result.
-- Plan 032 intentionally leaves the run controller inactive for `write: true`. Task 3 in this plan
-  is the first write-mode event producer and must drive it only from the collected selections and
-  exact command-level apply result; never reconstruct legacy package-level transaction phases.
+- Plan 032 intentionally leaves the run controller inactive for `write: true` and for global
+  invocations. Task 3 in this plan is the first local write-mode event producer and must drive it
+  only from the collected selections and exact command-level apply result; never reconstruct legacy
+  package-level transaction phases. Do not project global owners into repository-relative targets.
 - Do not stage, commit, push, publish, tag, or create a branch/worktree without separate authority.
 
 ## Drift Check and Stop Conditions
