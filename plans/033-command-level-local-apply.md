@@ -242,6 +242,7 @@ findings.
 **Files:**
 
 - Modify: `src/commands/check/run-check.ts`
+- Modify: `src/commands/check/run-check.model.test.ts`
 - Modify: `src/commands/check/run-model.ts`
 - Modify: `src/commands/check/run-model.test.ts`
 - Modify: `src/commands/check/test-helpers.ts`
