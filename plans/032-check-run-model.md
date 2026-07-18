@@ -202,6 +202,7 @@ reported no Critical, Important, or Minor findings.
 - Modify: `src/commands/check/check.callbacks.test.ts`
 - Modify: `src/commands/check/check.addons.test.ts`
 - Modify: `src/commands/check/check.json-output.test.ts`
+- Modify: `src/io/packages/discovery.ts`
 - Create: `src/commands/check/run-check.model.test.ts`
 
 **Interfaces:**
@@ -237,7 +238,9 @@ inspection start/end, resolution completion, selection completion, and final exi
 existing computed counts; do not rescan packages or parse rendered text. Treat ordinary
 per-occurrence resolution errors as unresolved facts rather than a failed aggregate resolve phase.
 In `catch` and `finally`, resolve every active phase to failed or unknown before finalization. Do
-not attach the controller to any write or global invocation in this plan.
+not attach the controller to any write or global invocation in this plan. Extend the internal
+package observer only as needed to preserve the default discovery log bytes while emitting the real
+discovery callback before repository inspection starts; never emit retrospective active timing.
 
 - [ ] **Step 5: Prove zero public behavior drift**
 
