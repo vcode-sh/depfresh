@@ -294,8 +294,13 @@ stable order pass.
 - Create: `src/commands/check/visual-plus/sections/shared.ts`
 - Create: `src/commands/check/visual-plus/sections/risk.ts`
 - Create: `src/commands/check/visual-plus/sections/insights.test.ts`
+- Create: `src/commands/check/visual-plus/test-fixture.ts`
 - Modify: `src/commands/check/visual-plus/renderer.ts`
+- Modify: `src/commands/check/visual-plus/renderer.test.ts`
+- Modify: `src/commands/check/visual-plus/insights.test.ts`
+- Modify: `src/commands/check/visual-plus/sections/sections.test.ts`
 - Modify: `src/commands/check/visual-plus/sections/topology.ts`
+- Modify: `src/commands/check/visual-plus/theme.ts`
 
 **Interfaces:**
 
@@ -303,11 +308,65 @@ stable order pass.
 - Produces: complete topology/distribution/impact/shared/risk lines in wide, medium, narrow, plain,
   and colorless modes.
 
+**Integration and rendering contract:**
+
+- Keep `VisualPlusSectionInput` and `run-check.ts` unchanged. Caller-supplied derived insights are
+  forbidden. After `createVisualPlusSectionInput(source)` validates and deep-copies the
+  authoritative snapshot, `writeReview()` calls `buildVisualPlusInsights(input.snapshot)` exactly
+  once and before emitting any review-section bytes.
+- Add `VisualPlusInsightError` to the renderer's contract-error classification. Invalid insight
+  evidence fails closed without being reported through the internal `onError` callback and without
+  partial topology/map/change-list output.
+- Pure map sections receive only `VisualPlusInsights` plus the immutable startup
+  `VisualPlusCapabilities`. A capability-only safe wrapping helper in `theme.ts` is the single text
+  sanitation/width boundary; sections never derive evidence independently.
+- Review order is exactly topology -> distribution -> risk -> impact -> shared -> unchanged
+  complete change list. `renderVisualPlusChanges(input)` remains the only operation-review surface
+  and appears exactly once. Maps never print operation IDs.
+- `Risk focus` means the exact major-card inventory only. It renders both approved cards, their
+  current/target transitions, occurrence count, exact age state, independent
+  compatible/incompatible/unknown counts, and every major owner. Non-major compatibility
+  uncertainty remains complete in the unchanged change list; it is not silently claimed as part of
+  the risk map.
+- `Shared dependencies` renders all 18 dependency IDs and every one of the 39 physical occurrences.
+  Each visible occurrence includes semantic `Owner`, `Source`, and `Path` labels derived from its
+  canonical owner/source/occurrence evidence; equal display names remain separate surfaces.
+- `Owner impact` renders all 15 owner IDs with owner label, physical target, update count, and exact
+  major/minor/patch counts. `Distribution` always retains explicit `Major 3`, `Minor 37`, and
+  `Patch 36` text next to any proportional bar. `Topology` uses insight topology, so selected
+  operations—not registry candidates—supply its update count.
+- For these new map sections only, `layout === 'plain'` forces ASCII separators, connectors, and
+  bars even when `capabilities.unicode === true` (the real CI/pipe profile). This does not alter
+  existing Plan 034 header/lifecycle/change/receipt rendering. Test both plain+Unicode and
+  plain+ASCII capability profiles.
+- Zero-selection insights render stable headings, zero numeric distribution, and explicit empty
+  owner/shared/risk states without division by zero. Decorations disappear before any semantic
+  label, count, owner, source, path, age, compatibility state, or transition.
+- Extract the exact Task 1 66/616/612/76/15/14/18/39/2 synthetic model into the test-only
+  `test-fixture.ts` and reuse it from insight and section tests. Do not import another `.test.ts` or
+  duplicate the arithmetic.
+
 - [ ] **Step 1: Write RED snapshots at required widths**
 
 Snapshot 40, 60, 80, and 118 columns plus plain 8/10-column containment. Assert every shared
 occurrence and major owner remains present, bars have numeric labels, and color stripping preserves
-the same words/numbers.
+the same words/numbers. Use small stripped snapshots for layout and full-fixture semantic
+inventories for completeness rather than raw snapshots of all 76 operations. Include:
+
+- every rendered line has `visualLength <= width` at 40/60/80/118 and both real plain profiles at
+  8/10;
+- all 15 owners and exact `[6, ...14x5]` updates, all 18 shared dependency IDs and 39 distinct
+  owner/source/path occurrence tuples, and both major cards/all three major occurrences;
+- exact transitions, `~5d`, explicit compatibility counters, and numeric Major/Minor/Patch labels
+  that remain after bar glyphs and ANSI are removed;
+- colored output contains ANSI and strips to exactly the same semantic bytes as the equivalent
+  same-Unicode colorless output; colorless/plain output contains no escape bytes;
+- hostile OSC/CSI/newline/bidi/zero-width/wide-grapheme fields remain sanitized and contained;
+- topology uses `insights.topology.updates` when registry `counts.updates` differs from selected
+  `counts.operations`;
+- hierarchy headings are strictly ordered and emitted once, builder failure emits no review
+  section bytes, maps contain no operation IDs, and the unchanged change list retains all 76 exact
+  operation rows once.
 
 - [ ] **Step 2: Run section RED tests**
 
