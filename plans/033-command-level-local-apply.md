@@ -305,6 +305,12 @@ phase states. Retain `journalId`, restored/unrecovered paths, external effects, 
 totals. Derive not-attempted totals only from the structural attempt evidence retained by Task 2;
 do not infer replacement attempts from outcome wording.
 
+Apply completion records independently whether recovery and final observation actually exist in the
+engine result. A precommit or zero-replacement commit failure after stage may have neither inspect
+nor recovery: retain the failed/unknown apply fact, skip both model phases, and complete with exact
+blocked/failed/unknown plus structural not-attempted receipts. Never invent inspect or recovery to
+advance the reducer.
+
 Retain engine `skipped` as an exact neutral operation outcome, distinct from structural
 not-attempted truth. A physical target whose member operations have different exact outcomes uses a
 mixed target result rather than selecting a worst status. Target attempt evidence applies to every
