@@ -50,3 +50,10 @@ and SLSA provenance with empty invalid/missing sets. The public installed CLI pa
 1,368,031-byte oversized-index replay without Git index mutation or write ambiguity. The SLSA
 subject binds the package SHA-512 digest to tag v2.0.2, the release workflow, commit 45ac1d4, run
 29631713748, and the GitHub-hosted builder. Plan 031 is DONE; Plan 032 is next and has not started.
+Plan 032 Task 1: complete through c439ce0. The pure renderer-neutral reducer now retains immutable
+phase, inventory, occurrence, physical-target, result, recovery, diagnostic, elapsed, and exit
+truth. Focused tests pass 52/52 and model/schema/apply compatibility passes 132/132; schema,
+typecheck, Biome, and diff gates pass. Independent review exhaustively checked all 63 non-empty
+outcome combinations against the apply-validator recovery contract with zero mismatches and no
+Critical, Important, or Minor findings. Task 2 is next; no controller or orchestration wiring has
+started.

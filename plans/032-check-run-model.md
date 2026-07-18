@@ -47,7 +47,7 @@ duplicates authority decisions, or overlaps unrelated concurrent edits.
 - Consumes: sanitized repository-relative run facts already known by `run-check.ts`.
 - Produces: `createCheckRunState()`, `reduceCheckRun()`, `CheckRunEvent`, and `CheckRunSnapshot`.
 
-- [ ] **Step 1: Write the reducer RED tests**
+- [x] **Step 1: Write the reducer RED tests**
 
 Cover legal phase progression, rejected backward transitions, immutable snapshots, count
 reconciliation, duplicate event idempotency, unknown state, and recovery branching.
@@ -67,13 +67,13 @@ expect(state.counts).toEqual({
 })
 ```
 
-- [ ] **Step 2: Run the RED test**
+- [x] **Step 2: Run the RED test**
 
 Run: `pnpm exec vitest run src/commands/check/run-model.test.ts`
 
 Expected: FAIL because the module does not exist.
 
-- [ ] **Step 3: Define exact phase and outcome types**
+- [x] **Step 3: Define exact phase and outcome types**
 
 Use these internal names consistently:
 
@@ -104,13 +104,13 @@ export type CheckRunPhaseStatus =
 selected change/target arrays, diagnostics, result totals, recovery, elapsed milliseconds, and
 exit code. Every array is readonly and every displayed path is repository-relative.
 
-- [ ] **Step 4: Implement a strict pure reducer**
+- [x] **Step 4: Implement a strict pure reducer**
 
 Reject impossible count reductions and phase completion before activation with a private invariant
 error. Accept duplicate terminal events only when payloads are byte-for-byte equivalent. Return a
 new frozen object for each accepted event; never mutate caller arrays.
 
-- [ ] **Step 5: Run reducer GREEN tests**
+- [x] **Step 5: Run reducer GREEN tests**
 
 Run:
 
@@ -121,6 +121,13 @@ pnpm exec biome check src/commands/check/run-model.ts src/commands/check/run-mod
 ```
 
 Expected: all exit `0` with no warnings.
+
+**Completion evidence (2026-07-18):** The reducer was implemented through `c439ce0`. Its focused
+suite passes 52/52 tests, the combined model/schema/apply compatibility suite passes 132/132, and
+schema generation, typecheck, focused Biome, and diff checks pass. Independent review enumerated
+all 63 non-empty internal outcome combinations with zero recovery-matrix mismatches and reported
+no Critical, Important, or Minor findings. No public, renderer, I/O, schema, or authority surface
+changed.
 
 ### Task 2: One internal run controller
 
