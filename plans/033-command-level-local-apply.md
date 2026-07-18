@@ -312,6 +312,12 @@ member operation because replacement is physical-file scoped; it does not rewrit
 outcome. Cover applied+skipped and recovery-time reverted+failed/unknown target matrices before
 wiring the command stream.
 
+For a pre-engine blocked union, build model inventory only when every exact projected occurrence is
+contained, repository-relative, deterministic, and fully reconciled. Then mark preflight blocked and
+every operation blocked plus structurally not attempted. If any projection is outside/unbound or the
+inventory cannot reconcile, emit `CHECK_RUN_SELECTION_UNBOUND` and close review as unknown before
+selection/results; never omit a projection or fabricate an owner, operation ID, or target path.
+
 - [ ] **Step 6: Gate post-write actions on the complete result**
 
 Install/update/execute/verify paths may run only when their existing authority is present, at least
