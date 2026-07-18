@@ -263,13 +263,13 @@ findings.
 - Produces: one local apply lifecycle followed by projected package completion and post-write
   phases.
 
-- [ ] **Step 1: Write the late-preflight RED regression**
+- [x] **Step 1: Write the late-preflight RED regression**
 
 Create 14 target manifests, make the last target's VCS evidence unavailable, and select 76
 operations. Assert before implementation that the old path changes earlier files; retain this as
 RED evidence, then change the final expectation to byte-identical targets under the new path.
 
-- [ ] **Step 2: Write orchestration call-count RED tests**
+- [x] **Step 2: Write orchestration call-count RED tests**
 
 For 15 prepared owner groups, assert one local adapter call, one plan, 14 unique targets, projected
 callbacks in package order, one final run result, and no post-write action after block/unknown.
@@ -277,12 +277,12 @@ Extend the shared test helper with a distinct command-adapter mock. Keep the leg
 mock for compatibility tests; never route production command apply through the old writer to satisfy
 test interception.
 
-- [ ] **Step 3: Run RED orchestration tests**
+- [x] **Step 3: Run RED orchestration tests**
 
 Run the orchestration/model/write-outcome/flag suites listed above. Expected: FAIL because current
 `run-check.ts` applies inside the package loop.
 
-- [ ] **Step 4: Replace the package write loop**
+- [x] **Step 4: Replace the package write loop**
 
 Prepare every package first. Separate global selections from local selections. Execute the one
 local command adapter, project results, then execute existing global state-machine requests under
@@ -304,7 +304,7 @@ completion in package order, omit `afterPackagesEnd`, and then rethrow the retai
 model emission succeeds, the first package-order completion rejection remains primary. Tests must
 cover both precedence branches so instrumentation cannot bypass or replace mandatory cleanup.
 
-- [ ] **Step 5: Drive the run model from the real apply result**
+- [x] **Step 5: Drive the run model from the real apply result**
 
 Map apply phases `preflight`, `stage`, `commit`, `inspect`, and `recovery` to the renderer-neutral
 phase states. Retain `journalId`, restored/unrecovered paths, external effects, and exact operation
@@ -342,16 +342,27 @@ every operation blocked plus structurally not attempted. If any projection is ou
 inventory cannot reconcile, emit `CHECK_RUN_SELECTION_UNBOUND` and close review as unknown before
 selection/results; never omit a projection or fabricate an owner, operation ID, or target path.
 
-- [ ] **Step 6: Gate post-write actions on the complete result**
+- [x] **Step 6: Gate post-write actions on the complete result**
 
 Install/update/execute/verify paths may run only when their existing authority is present, at least
 one local/global write was observed, and no local/global outcome is conflicted, failed, or unknown.
 Keep `strictPostWrite` and exit behavior unchanged.
 
-- [ ] **Step 7: Run GREEN orchestration tests**
+- [x] **Step 7: Run GREEN orchestration tests**
 
 Expected: all focused suites pass; the 14-target failure changes zero target bytes, reports 76 not
 attempted operations, returns `2`, and starts no manager/post-write command.
+
+**Completion evidence (2026-07-18):** Authoritative command apply was implemented in `590e3d5`,
+with the supporting run-model corrections in `5c22caa`, `276c7d7`, and `b5a180e`. All package
+decisions are prepared before one local adapter call; exact command results project back in package
+order, separately authorized globals retain their lifecycle, and post-write actions require an
+observed non-blocking result. The 14-target late-preflight regression retains byte-identical files,
+76 structurally not-attempted operations, exit code 2, and zero manager starts. The full project
+passes 1,744/1,744 tests, the check suite passes 496/496, and the compatibility matrix passes
+200/200, with lint, typecheck, build, schemas, and diff checks green. Independent final review
+reported no Critical, Important, or Minor findings. The detailed evidence is retained in
+`.superpowers/sdd/plan033-task-3-report.md`.
 
 ### Task 4: Recovery and interruption matrix
 
