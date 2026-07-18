@@ -469,6 +469,8 @@ evidence and the intentionally deferred mixed no-change plus completed-recovery 
   `src/commands/apply/legacy-plan.test.ts` for complete blocked attempt evidence
 - Modify: `src/commands/check/run-check.ts` and
   `src/commands/check/run-check.orchestration.test.ts` for multi-operation blocked targets
+- Modify: `src/commands/check/check.command-apply.integration.test.ts` to isolate the real-fixture
+  command path from shared unit-test helper mocks
 
 **Interfaces:**
 
@@ -498,5 +500,7 @@ Serialize only the declaration Rollup traversal so repeated clean builds preserv
 Retain deterministic private operation IDs and target-scoped `replacementAttempted: false` evidence
 for every contained ambiguous physical occurrence, including multiple operations sharing one
 target. Keep outside or unreconciled projections on the existing fail-closed unbound path. Run the
-new RED tests before implementation, then replay Steps 1-3 and require both reviewers to report no
-findings.
+new RED tests before implementation. Explicitly unmock every production seam replaced by the shared
+check test helper before the real command-apply integration imports the command path; the complete
+suite must exercise real discovery, resolution, cache, npmrc, filesystem, process, and legacy apply
+modules. Then replay Steps 1-3 and require both reviewers to report no findings.
