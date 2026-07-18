@@ -277,7 +277,7 @@ Restored/unrecovered paths must be safe selected targets. A duplicate, missing, 
 contradictory fact fails closed before receipt prose. The renderer must not recompute replacement
 attempts, cleanup certainty, or the zero-file predicate from snapshot statuses or diagnostic prose.
 
-- [ ] **Step 1: Write complete section RED snapshots**
+- [x] **Step 1: Write complete section RED snapshots**
 
 Use a fixture with counts `66/616/612/0/76/76/14`, 76 unique changes and metadata entries, 15
 logical owner groups, and 14 physical targets. Exactly one physical target is shared by two logical
@@ -287,13 +287,13 @@ Owner-group cross-references may repeat a physical path and are not transaction 
 owner ordering is stable, success/block receipts are exact, and no visible line exceeds the
 requested width.
 
-- [ ] **Step 2: Run section RED tests**
+- [x] **Step 2: Run section RED tests**
 
 Run: `pnpm exec vitest run src/commands/check/visual-plus/sections/sections.test.ts`
 
 Expected: FAIL because the section modules do not exist.
 
-- [ ] **Step 3: Implement shared semantic tokens**
+- [x] **Step 3: Implement shared semantic tokens**
 
 Define text labels for pending, active, passed, skipped, blocked, failed, unknown, applied,
 reverted, and not attempted. Color and Unicode symbols decorate those labels but never replace
@@ -305,7 +305,7 @@ repository-relative path; absolute, parent-traversing, empty-segment, control-be
 unsafe values fail closed. It never infers a manager from filename order or exposes an absolute
 path outside the selected root.
 
-- [ ] **Step 4: Implement complete owner-grouped rows**
+- [x] **Step 4: Implement complete owner-grouped rows**
 
 Each row exposes dependency, current, target, diff, age, and compatibility. Wide/medium layouts use
 columns; narrow/plain layouts use wrapped labeled lines. Do not truncate semantic values into
@@ -321,7 +321,7 @@ fragment. When `unicode=false`, use ASCII tokens and separators only. At normali
 encode every width-two grapheme as a reversible ASCII `U+{HEX...}` token before one-column wrapping;
 at width `2` and above retain the sanitized grapheme itself.
 
-- [ ] **Step 5: Implement transaction and receipts**
+- [x] **Step 5: Implement transaction and receipts**
 
 Render the command transaction phase rail once, then every physical target with its exact selected
 membership and final result. Before target results exist, render `pending`; never project the global
@@ -376,7 +376,7 @@ any case not covered by the table is invalid input and fails closed. Partial/rec
 restored and unrecovered physical files and never use the zero-file claim; every final branch
 renders the exact exit code.
 
-- [ ] **Step 6: Run section GREEN snapshots**
+- [x] **Step 6: Run section GREEN snapshots**
 
 Run sections, format/ANSI, width, current render, and overflow tests. Expected: all pass for both
 capable and constrained modes at 8/10/40/60/80/118 columns with hostile ANSI, OSC, bidi, control,
@@ -385,6 +385,18 @@ retain identical words and numbers.
 
 Task 2 changes to `table-rows.ts` are pure and additive. Existing `renderRows()`, `buildHeader()`,
 `renderTimediff()`, callers, truncation, and legacy output bytes remain unchanged until Task 4.
+
+**Completion evidence (2026-07-18):** Pure Visual+ input, theme, wrapping, header, lifecycle,
+topology, change, transaction, and receipt sections were implemented in `47a64c7`. The initial RED
+failed before collection because `../input` did not exist. The final acceptance matrix passed
+128/128 section, canonical receipt, ANSI, width, overflow, and legacy-render tests; the combined
+section plus authoritative run-model proof passed 172/172, and the final union passed 226/226.
+Typecheck, focused Biome, and untracked-aware whitespace checks passed. The acceptance fixture
+retains all 76 rows, 15 logical owners, 14 exact physical targets, immutable fail-closed evidence,
+canonical receipt authority, complete recovery truth, constrained/capable width coverage, and
+hostile terminal containment. No `table-rows.ts` change was required, so legacy renderer bytes and
+callers remain untouched. Final spec and terminal/security reviews reported no Critical, Important,
+or Minor findings.
 
 ### Task 3: One live renderer and cursor owner
 

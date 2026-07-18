@@ -258,10 +258,11 @@ structural attempts plus best-effort recovery evidence. The final 397-test focus
 three times, full coverage passed 149 files and 1,775 tests, all static/build/smoke/demo/release and
 56-file package gates passed, and repeated declaration builds exactly matched public `2.0.2`.
 Independent authority/model and public-contract reviews reported no findings. Plan 034 is in
-progress: Task 1 added the pure, deterministic capability contract in `8a5d011`, with 49/49 focused
-tests, static gates, and two clean independent reviews. Task 2 is next and will add pure lifecycle,
-topology, change-row, transaction, and receipt sections. Plan 034 replaces fragmented table/progress
-output with the inline, complete, copyable Visual+ v2 renderer. Plan 035 adds topology, severity,
+progress: Task 1 added the pure, deterministic capability contract in `8a5d011`; Task 2 added the
+immutable renderer input and complete pure sections in `47a64c7`. The final Task 2 union passed
+226/226 tests with static gates and two clean independent reviews. Task 3 is next and will add the
+single live-region/cursor owner. Plan 034 replaces fragmented table/progress output with the inline,
+complete, copyable Visual+ v2 renderer. Plan 035 adds topology, severity,
 impact, shared-surface, and major-risk
 visualizations plus full built-CLI PTY/fallback proof against the deterministic 66-package,
 616-declaration, 76-update, 14-target acceptance fixture. Plan 036 owns the immutable `2.1.0`

@@ -124,3 +124,9 @@ layout, CI, dumb-terminal, NO_COLOR, dual-stream TTY, Unicode, reduced-motion, a
 Focused capability/progress/overflow proof passes 49/49 tests with typecheck, Biome, and diff gates
 green. Existing render-layout behavior and callers remain unchanged, and independent spec plus code
 quality reviews reported no Critical, Important, or Minor findings. Task 2 pure sections are next.
+Plan 034 Task 2: complete in 47a64c7. Deeply immutable, fail-closed renderer input now reconciles
+exact run, owner-group, physical-target, canonical receipt, result, and recovery evidence. Pure
+sections retain all 76 changes, 15 logical owners, and 14 targets with lossless capable/constrained
+wrapping and hostile-terminal containment. The final render union passed 226/226 tests; typecheck,
+Biome, whitespace, and two independent C0/I0/M0 reviews passed. Legacy renderer files and callers
+remain unchanged. Task 3 single live-region and cursor ownership is next.
