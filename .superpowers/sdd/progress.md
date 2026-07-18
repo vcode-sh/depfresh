@@ -139,3 +139,18 @@ and atomic clear/draw boundaries. The final focused matrix passed 241/241 tests 
 Biome, whitespace, and legacy-progress byte checks green; two independent final reviews reported
 no Critical, Important, or Minor issues. Progress and callers remain unchanged. Task 4 exclusive
 route integration is next.
+Plan 034 Task 4: complete through 8b0fe05 after the exact route contract in f10cc6b. Frozen
+selection evidence and authoritative operation/target projection route only eligible local,
+noninteractive table output through one Visual+ owner. Shared physical operations deduplicate only
+inside the Visual+ receipt, resolver/callback/debug output remains continuously suspended, and
+JSON, silent, library, interactive, global/global-all, and veto-capable routes retain legacy
+semantics. The final aggregate passed 59 files and 832 tests with two C0/I0/M0 reviews.
+Plan 034 Task 5 and final closeout: complete through 723cecf. Review-driven RED waves made every
+operation outcome, independent flag, reason, and read-only diagnostic visible; restored aligned
+lossless medium/wide columns; bounded the exact 76-operation transaction; and sanitized, wrapped,
+and color-bound all Visual+-only durable output at the immutable startup width. Clean pre-mutation
+VCS uncertainty no longer invents recovery while retained ambiguity still fails closed. The final
+focused matrix passed three times at 16 files and 281 tests. Isolated full coverage passed 155 files
+and 1,976 tests; schema, typecheck, Biome over 337 files, build, 35-check smoke, 14-check demo, 102
+release tests, 56-file packed verification, three stable declaration builds, and final independent
+C0/I0/M0 reviews all passed. Plan 034 is DONE; Plan 035 is next.

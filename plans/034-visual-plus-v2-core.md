@@ -844,17 +844,34 @@ passed 59 files and 832 tests, typecheck, focused Biome, and the diff check. Imp
 - Consumes: Tasks 1-4.
 - Produces: stable Visual+ core for Plan 035 insights and PTY proof.
 
-- [ ] **Step 1: Run focused tests three times**
+- [x] **Step 1: Run focused tests three times**
 
 Repeat capabilities, sections, renderer, progress, orchestration, command apply, JSON, interactive,
 width, ANSI, and overflow suites. Expected: stable pass counts and no timer/handle leaks.
 
-- [ ] **Step 2: Run complete gates**
+- [x] **Step 2: Run complete gates**
 
 Run schemas check, typecheck, lint, full coverage, build, smoke, demo, and packed verification.
 Expected: all exit `0` with no new runtime dependency.
 
-- [ ] **Step 3: Review semantic and terminal safety**
+- [x] **Step 3: Review semantic and terminal safety**
 
 Require one UX/content review and one terminal-control/security review. Stop Plan 035 if any result
 is hidden, any line overflows required widths, or cursor ownership is ambiguous.
+
+**Completion evidence (2026-07-18):** Review-driven RED waves closed every Task 5 stop condition:
+each reviewed change maps to its stable operation ID; exact per-operation outcomes, independent
+flags, reasons, and read-only diagnostics remain visible; medium and wide layouts use aligned,
+lossless columns; identical transaction facts group without hiding any ID; and the 76-operation
+reference transaction remains bounded. Visual+-only durable discovery, resolution, debug, and error
+output is sanitized at its final human boundary, wrapped to the immutable startup width, colorless
+when constrained, and no-throw for hostile values. Clean pre-mutation VCS uncertainty no longer
+invents recovery evidence, while retained or ambiguous evidence remains fail-closed. The final
+focused matrix passed three times at 16 files and 281 tests. Full isolated coverage passed 155 files
+and 1,976 tests with 88.12% statements, 81.57% branches, 94.59% functions, and 90.44% lines. Schema,
+typecheck, Biome over 337 files, build, 35-check/69-request smoke, 14-check demo, 102 release tests,
+56-file packed verification, three deterministic declaration builds, and diff checks all passed.
+No runtime dependency changed. Final independent specification and quality/security reviews reported
+no Critical, Important, or Minor findings. Coverage diagnostics also proved that concurrent runners
+must use distinct reports directories; no product defect or speculative source change was accepted.
+Remediation commit: `723cecf`. Plan 034 is DONE; Plan 035 is next.
