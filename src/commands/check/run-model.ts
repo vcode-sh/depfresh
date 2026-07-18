@@ -84,6 +84,7 @@ export type CheckRunOperationOutcome =
 
 export interface CheckRunOperationResult {
   readonly operationId: string
+  // The base outcome is exclusive; safety receipts are independent and may overlap.
   readonly outcome: CheckRunOperationOutcome
   readonly blocked: boolean
   readonly notAttempted: boolean
@@ -93,7 +94,11 @@ export interface CheckRunOperationResult {
 export interface CheckRunTargetResult {
   readonly path: string
   readonly operationIds: readonly string[]
+  // Physical-file outcome and aggregate safety receipts remain separate dimensions.
   readonly outcome: CheckRunOperationOutcome
+  readonly blocked: boolean
+  readonly notAttempted: boolean
+  readonly unknown: boolean
 }
 
 export interface CheckRunResults {
@@ -653,12 +658,13 @@ function copyAndValidateResults(
   }
 
   const totals = deriveOperationTotals(operations)
-  assertResultPhaseCoherence(state, totals)
+  const targetTotals = deriveTargetTotals(targets)
+  assertResultPhaseCoherence(state, totals, targets)
   return {
     operations,
     targets,
     totals,
-    targetTotals: deriveTargetTotals(targets),
+    targetTotals,
   }
 }
 
@@ -703,6 +709,24 @@ function copyOperationResult(
 function copyTargetResult(result: CheckRunTargetResult): CheckRunTargetResult {
   assertRelativePath(result.path)
   assertOutcome(result.outcome)
+  assertBoolean('physical target blocked receipt', result.blocked)
+  assertBoolean('physical target not-attempted receipt', result.notAttempted)
+  assertBoolean('physical target unknown receipt', result.unknown)
+  if (result.outcome === 'applied' && (result.blocked || result.notAttempted || result.unknown)) {
+    throw new CheckRunInvariantError('applied physical target cannot retain a safety receipt')
+  }
+  if (result.outcome === 'blocked' && !result.blocked) {
+    throw new CheckRunInvariantError('blocked physical target requires a blocked receipt')
+  }
+  if (result.outcome === 'not-attempted' && !result.notAttempted) {
+    throw new CheckRunInvariantError('not-attempted physical target requires its receipt')
+  }
+  if (result.outcome === 'unknown' && !result.unknown) {
+    throw new CheckRunInvariantError('unknown physical target requires an unknown receipt')
+  }
+  if (result.blocked && !result.notAttempted) {
+    throw new CheckRunInvariantError('physical target blocked receipt requires not-attempted truth')
+  }
   const operationIds = result.operationIds.map((operationId) => {
     assertSafeIdentifier('physical target operation identifier', operationId)
     return operationId
@@ -720,6 +744,13 @@ function assertTargetOutcomeCoherence(
     if (!operation) throw new CheckRunInvariantError('physical target references a missing result')
     return operation
   })
+  if (
+    targetResult.blocked !== operations.some((operation) => operation.blocked) ||
+    targetResult.notAttempted !== operations.some((operation) => operation.notAttempted) ||
+    targetResult.unknown !== operations.some((operation) => operation.unknown)
+  ) {
+    throw new CheckRunInvariantError('physical target receipt dimensions differ from operations')
+  }
   if (targetResult.outcome === 'applied' || targetResult.outcome === 'reverted') {
     if (operations.some((operation) => operation.outcome !== targetResult.outcome)) {
       throw new CheckRunInvariantError('successful physical target outcome differs from operations')
@@ -745,12 +776,131 @@ function assertTargetOutcomeCoherence(
   }
 }
 
-function assertResultPhaseCoherence(state: CheckRunSnapshot, totals: CheckRunResultTotals): void {
+function assertResultPhaseCoherence(
+  state: CheckRunSnapshot,
+  totals: CheckRunResultTotals,
+  targets: readonly CheckRunTargetResult[],
+): void {
+  const selected = state.counts.operations
+  const preflight = phaseStatus(state.phases, 'preflight')
+  const stage = phaseStatus(state.phases, 'stage')
+  const apply = phaseStatus(state.phases, 'apply')
+  const observe = phaseStatus(state.phases, 'observe')
+  const recover = phaseStatus(state.phases, 'recover')
+  const blockedPhase = [preflight, stage, apply].includes('blocked')
+  const unknownPhase = [preflight, stage, apply, observe, recover].includes('unknown')
+  const failedPhase = [preflight, stage, apply, observe, recover].includes('failed')
+
+  if (totals.reverted > 0) {
+    const recoveryRecorded = hasTerminalEvent(state, 'recovery-recorded')
+    if (
+      apply === 'passed' ||
+      apply === 'skipped' ||
+      state.recovery.status !== 'completed' ||
+      recover !== 'passed' ||
+      observe !== 'passed' ||
+      !recoveryRecorded
+    ) {
+      throw new CheckRunInvariantError('reverted results require completed recovery')
+    }
+    const restored = new Set(state.recovery.restoredPaths)
+    if (targets.some((target) => target.outcome === 'reverted' && !restored.has(target.path))) {
+      throw new CheckRunInvariantError('reverted target requires restored-path evidence')
+    }
+  }
+
+  if (apply === 'passed' && observe === 'passed') {
+    if (
+      totals.applied !== selected ||
+      totals.blocked > 0 ||
+      totals.notAttempted > 0 ||
+      totals.failed > 0 ||
+      totals.reverted > 0 ||
+      totals.unknown > 0
+    ) {
+      throw new CheckRunInvariantError('passed apply and observe require applied results')
+    }
+    if (recover !== 'skipped' || state.recovery.status !== 'not-needed') {
+      throw new CheckRunInvariantError('applied results cannot include a recovery branch')
+    }
+    return
+  }
+
+  if (apply === 'skipped') {
+    if (totals.applied > 0 || totals.reverted > 0 || totals.failed > 0) {
+      throw new CheckRunInvariantError('skipped apply cannot report mutation outcomes')
+    }
+    if (totals.notAttempted !== selected) {
+      throw new CheckRunInvariantError('skipped apply requires not-attempted results')
+    }
+    if (
+      preflight === 'blocked' &&
+      (totals.blocked !== selected || totals.notAttempted !== selected)
+    ) {
+      throw new CheckRunInvariantError(
+        'blocked preflight requires blocked and not-attempted results',
+      )
+    }
+    const noMutationCause = [preflight, stage].find(
+      (status) => status !== 'passed' && status !== 'skipped',
+    )
+    if (noMutationCause === 'blocked' && totals.blocked !== selected) {
+      throw new CheckRunInvariantError('blocked no-mutation phase requires blocked results')
+    }
+    if (noMutationCause === 'unknown' && totals.unknown !== selected) {
+      throw new CheckRunInvariantError('unknown no-mutation phase requires unknown results')
+    }
+  }
+
+  if (totals.applied > 0) {
+    throw new CheckRunInvariantError('applied results require passed apply and observe')
+  }
+
+  if (totals.blocked > 0 && !blockedPhase) {
+    throw new CheckRunInvariantError('blocked results require a blocked mutation phase')
+  }
+  if (totals.failed > 0 && !failedPhase && state.recovery.status !== 'partial') {
+    throw new CheckRunInvariantError('failed results require a failed lifecycle branch')
+  }
   if (
-    phaseStatus(state.phases, 'apply') === 'skipped' &&
-    (totals.applied > 0 || totals.reverted > 0 || totals.failed > 0)
+    totals.unknown > 0 &&
+    !unknownPhase &&
+    totals.blocked === 0 &&
+    state.recovery.status !== 'partial' &&
+    state.recovery.status !== 'unknown'
   ) {
-    throw new CheckRunInvariantError('skipped apply cannot report mutation outcomes')
+    throw new CheckRunInvariantError('unknown results require an unknown lifecycle branch')
+  }
+
+  const recoveryRecorded = hasTerminalEvent(state, 'recovery-recorded')
+  if (recover === 'skipped') {
+    if (state.recovery.status !== 'not-needed' || recoveryRecorded) {
+      throw new CheckRunInvariantError('skipped recovery cannot retain recovery evidence')
+    }
+  } else if (!recoveryRecorded) {
+    throw new CheckRunInvariantError('recovery phase requires recorded recovery evidence')
+  }
+
+  if (state.recovery.status === 'completed' && recover !== 'passed') {
+    throw new CheckRunInvariantError('completed recovery requires a passed recovery phase')
+  }
+  if (state.recovery.status === 'partial' && recover !== 'failed' && recover !== 'unknown') {
+    throw new CheckRunInvariantError('partial recovery requires failed or unknown phase truth')
+  }
+  if (state.recovery.status === 'unknown' && recover !== 'unknown') {
+    throw new CheckRunInvariantError('unknown recovery requires an unknown recovery phase')
+  }
+  if (state.recovery.status === 'partial' && totals.failed + totals.unknown === 0) {
+    throw new CheckRunInvariantError('partial recovery requires failed or unknown results')
+  }
+  if (state.recovery.status === 'unknown' && totals.unknown === 0) {
+    throw new CheckRunInvariantError('unknown recovery requires unknown results')
+  }
+  if (observe === 'unknown' && totals.unknown === 0) {
+    throw new CheckRunInvariantError('unknown observation requires unknown results')
+  }
+  if (observe === 'failed' && totals.failed + totals.unknown === 0) {
+    throw new CheckRunInvariantError('failed observation requires failed or unknown results')
   }
 }
 
@@ -773,11 +923,11 @@ function deriveTargetTotals(targets: readonly CheckRunTargetResult[]): CheckRunR
   const totals = emptyResults()
   for (const targetResult of targets) {
     if (targetResult.outcome === 'applied') totals.applied += 1
-    if (targetResult.outcome === 'blocked') totals.blocked += 1
-    if (targetResult.outcome === 'not-attempted') totals.notAttempted += 1
     if (targetResult.outcome === 'failed') totals.failed += 1
     if (targetResult.outcome === 'reverted') totals.reverted += 1
-    if (targetResult.outcome === 'unknown') totals.unknown += 1
+    if (targetResult.blocked) totals.blocked += 1
+    if (targetResult.notAttempted) totals.notAttempted += 1
+    if (targetResult.unknown) totals.unknown += 1
   }
   return totals
 }

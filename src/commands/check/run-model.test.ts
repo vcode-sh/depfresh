@@ -31,6 +31,24 @@ const appliedTarget = {
   path: target.path,
   operationIds: target.operationIds,
   outcome: 'applied' as const,
+  blocked: false,
+  notAttempted: false,
+  unknown: false,
+}
+
+function physicalTarget(
+  outcome: CheckRunTargetResult['outcome'],
+  overrides: Partial<CheckRunTargetResult> = {},
+): CheckRunTargetResult {
+  return {
+    path: target.path,
+    operationIds: target.operationIds,
+    outcome,
+    blocked: outcome === 'blocked',
+    notAttempted: outcome === 'blocked' || outcome === 'not-attempted',
+    unknown: outcome === 'unknown',
+    ...overrides,
+  }
 }
 
 function inventory(
@@ -208,7 +226,16 @@ describe('check run model', () => {
           unknown: true,
         },
       ],
-      [{ path: target.path, operationIds: target.operationIds, outcome: 'unknown' }],
+      [
+        {
+          path: target.path,
+          operationIds: target.operationIds,
+          outcome: 'blocked',
+          blocked: true,
+          notAttempted: true,
+          unknown: true,
+        },
+      ],
     )
 
     expect(state.results.totals).toEqual({
@@ -223,29 +250,296 @@ describe('check run model', () => {
     expect(state.results.targets).toHaveLength(1)
     expect(state.results.targetTotals).toEqual({
       applied: 0,
-      blocked: 0,
-      notAttempted: 0,
+      blocked: 1,
+      notAttempted: 1,
       failed: 0,
       reverted: 0,
       unknown: 1,
     })
   })
 
+  it('rejects physical-target receipt dimensions that do not reconcile to owned operations', () => {
+    const state = completePhase(selectedState(), 'preflight', 'blocked')
+    expect(() =>
+      results(
+        state,
+        [
+          {
+            operationId: change.id,
+            outcome: 'blocked',
+            blocked: true,
+            notAttempted: true,
+            unknown: true,
+          },
+        ],
+        [
+          {
+            path: target.path,
+            operationIds: target.operationIds,
+            outcome: 'blocked',
+            blocked: true,
+            notAttempted: true,
+            unknown: false,
+          },
+        ],
+      ),
+    ).toThrow('physical target receipt dimensions differ from operations')
+  })
+
+  it('rejects passed mutation phases with non-applied result truth', () => {
+    const state = finishApply()
+    expect(() =>
+      results(
+        state,
+        [
+          {
+            operationId: change.id,
+            outcome: 'unknown',
+            blocked: false,
+            notAttempted: false,
+            unknown: true,
+          },
+        ],
+        [
+          {
+            path: target.path,
+            operationIds: target.operationIds,
+            outcome: 'unknown',
+            blocked: false,
+            notAttempted: false,
+            unknown: true,
+          },
+        ],
+      ),
+    ).toThrow('passed apply and observe require applied results')
+  })
+
+  it('requires blocked preflight truth to reconcile to every selected operation and target', () => {
+    const state = completePhase(selectedState(), 'preflight', 'blocked')
+    expect(() =>
+      results(
+        state,
+        [
+          {
+            operationId: change.id,
+            outcome: 'not-attempted',
+            blocked: false,
+            notAttempted: true,
+            unknown: false,
+          },
+        ],
+        [
+          {
+            path: target.path,
+            operationIds: target.operationIds,
+            outcome: 'not-attempted',
+            blocked: false,
+            notAttempted: true,
+            unknown: false,
+          },
+        ],
+      ),
+    ).toThrow('blocked preflight requires blocked and not-attempted results')
+  })
+
+  it('requires reverted results to follow completed recovery and observation', () => {
+    const state = finishApply()
+    const operation = {
+      operationId: change.id,
+      outcome: 'reverted' as const,
+      blocked: false,
+      notAttempted: false,
+      unknown: false,
+    }
+    const physicalTarget = {
+      path: target.path,
+      operationIds: target.operationIds,
+      outcome: 'reverted' as const,
+      blocked: false,
+      notAttempted: false,
+      unknown: false,
+    }
+    expect(() => results(state, [operation], [physicalTarget])).toThrow(
+      'reverted results require completed recovery',
+    )
+  })
+
+  it('accepts reverted results only on a real completed recovery branch', () => {
+    let state = completePhase(selectedState(), 'preflight')
+    state = completePhase(state, 'stage')
+    state = completePhase(state, 'apply', 'failed')
+    state = reduceCheckRun(state, {
+      type: 'recovery-recorded',
+      status: 'completed',
+      journalId: 'run-reverted',
+      restoredPaths: [target.path],
+      unrecoveredPaths: [],
+    })
+    state = completePhase(state, 'recover')
+    state = completePhase(state, 'observe')
+    state = results(
+      state,
+      [
+        {
+          operationId: change.id,
+          outcome: 'reverted',
+          blocked: false,
+          notAttempted: false,
+          unknown: false,
+        },
+      ],
+      [physicalTarget('reverted')],
+    )
+
+    expect(state.results.totals.reverted).toBe(1)
+    expect(state.recovery.status).toBe('completed')
+  })
+
+  it('accepts a known failed result on a matching failed recovery branch', () => {
+    let state = completePhase(selectedState(), 'preflight')
+    state = completePhase(state, 'stage')
+    state = completePhase(state, 'apply', 'failed')
+    state = reduceCheckRun(state, {
+      type: 'recovery-recorded',
+      status: 'partial',
+      journalId: 'run-failed',
+      restoredPaths: [],
+      unrecoveredPaths: [target.path],
+    })
+    state = completePhase(state, 'recover', 'failed')
+    state = completePhase(state, 'observe', 'failed')
+    state = results(
+      state,
+      [
+        {
+          operationId: change.id,
+          outcome: 'failed',
+          blocked: false,
+          notAttempted: false,
+          unknown: false,
+        },
+      ],
+      [physicalTarget('failed')],
+    )
+
+    expect(state.results.totals.failed).toBe(1)
+    expect(state.recovery.status).toBe('partial')
+  })
+
+  it('rejects unknown results without an unknown or blocked lifecycle cause', () => {
+    let state = completePhase(selectedState(), 'preflight')
+    state = completePhase(state, 'stage')
+    state = completePhase(state, 'apply', 'failed')
+    state = reduceCheckRun(state, {
+      type: 'recovery-recorded',
+      status: 'completed',
+      restoredPaths: [],
+      unrecoveredPaths: [],
+    })
+    state = completePhase(state, 'recover')
+    state = completePhase(state, 'observe')
+
+    expect(() =>
+      results(
+        state,
+        [
+          {
+            operationId: change.id,
+            outcome: 'unknown',
+            blocked: false,
+            notAttempted: false,
+            unknown: true,
+          },
+        ],
+        [physicalTarget('unknown')],
+      ),
+    ).toThrow('unknown results require an unknown lifecycle branch')
+  })
+
+  it('requires unknown no-mutation phases to retain unknown result receipts', () => {
+    const state = completePhase(selectedState(), 'preflight', 'unknown')
+    expect(() =>
+      results(
+        state,
+        [
+          {
+            operationId: change.id,
+            outcome: 'not-attempted',
+            blocked: false,
+            notAttempted: true,
+            unknown: false,
+          },
+        ],
+        [physicalTarget('not-attempted')],
+      ),
+    ).toThrow('unknown no-mutation phase requires unknown results')
+  })
+
+  it('requires every entered recovery branch to record matching evidence', () => {
+    let state = completePhase(selectedState(), 'preflight')
+    state = completePhase(state, 'stage')
+    state = completePhase(state, 'apply', 'failed')
+    state = completePhase(state, 'recover')
+    state = completePhase(state, 'observe')
+
+    expect(() =>
+      results(
+        state,
+        [
+          {
+            operationId: change.id,
+            outcome: 'not-attempted',
+            blocked: false,
+            notAttempted: true,
+            unknown: false,
+          },
+        ],
+        [physicalTarget('not-attempted')],
+      ),
+    ).toThrow('recovery phase requires recorded recovery evidence')
+  })
+
+  it('requires unknown recovery evidence to retain unknown final results', () => {
+    let state = completePhase(selectedState(), 'preflight')
+    state = completePhase(state, 'stage')
+    state = completePhase(state, 'apply', 'failed')
+    state = reduceCheckRun(state, {
+      type: 'recovery-recorded',
+      status: 'unknown',
+      restoredPaths: [],
+      unrecoveredPaths: [target.path],
+    })
+    state = completePhase(state, 'recover', 'unknown')
+    state = completePhase(state, 'observe', 'failed')
+
+    expect(() =>
+      results(
+        state,
+        [
+          {
+            operationId: change.id,
+            outcome: 'failed',
+            blocked: false,
+            notAttempted: false,
+            unknown: false,
+          },
+        ],
+        [physicalTarget('failed')],
+      ),
+    ).toThrow('unknown recovery requires unknown results')
+  })
+
   it('rejects missing, duplicate, foreign, and all-zero write operation outcomes', () => {
     const state = completePhase(selectedState(), 'preflight', 'blocked')
     expect(() => results(state, [], [])).toThrow('operation results must reconcile')
     expect(() =>
-      results(
-        state,
-        [appliedOperation, appliedOperation],
-        [{ path: target.path, operationIds: target.operationIds, outcome: 'applied' }],
-      ),
+      results(state, [appliedOperation, appliedOperation], [physicalTarget('applied')]),
     ).toThrow('operation result identifiers must be unique')
     expect(() =>
       results(
         state,
         [{ ...appliedOperation, operationId: 'foreign' }],
-        [{ path: target.path, operationIds: target.operationIds, outcome: 'applied' }],
+        [physicalTarget('applied')],
       ),
     ).toThrow('operation result is not selected')
   })
@@ -270,7 +564,7 @@ describe('check run model', () => {
           unknown: false,
         },
       ],
-      [{ path: target.path, operationIds: target.operationIds, outcome: 'not-attempted' }],
+      [physicalTarget('not-attempted')],
     )
     expect(readOnly.results.totals.notAttempted).toBe(1)
   })
@@ -294,7 +588,7 @@ describe('check run model', () => {
             unknown: true,
           },
         ],
-        [{ path: target.path, operationIds: target.operationIds, outcome: 'unknown' }],
+        [physicalTarget('unknown', { blocked: true, notAttempted: false })],
       ),
     ).toThrow('blocked receipt requires not-attempted')
   })
@@ -305,17 +599,13 @@ describe('check run model', () => {
       'physical target results must reconcile',
     )
     expect(() =>
-      results(
-        write,
-        [appliedOperation],
-        [{ path: 'other.json', operationIds: target.operationIds, outcome: 'applied' }],
-      ),
+      results(write, [appliedOperation], [physicalTarget('applied', { path: 'other.json' })]),
     ).toThrow('physical target result is not selected')
     expect(() =>
       results(
         write,
         [appliedOperation],
-        [{ path: target.path, operationIds: ['foreign'], outcome: 'applied' }],
+        [physicalTarget('applied', { operationIds: ['foreign'] })],
       ),
     ).toThrow('physical target operation membership differs')
   })
@@ -334,33 +624,9 @@ describe('check run model', () => {
             unknown: true,
           },
         ],
-        [{ path: target.path, operationIds: target.operationIds, outcome: 'failed' }],
+        [physicalTarget('failed', { unknown: true })],
       ),
     ).toThrow('failed physical target differs from operations')
-  })
-
-  it.each([
-    ['applied', 'applied'],
-    ['blocked', 'blocked'],
-    ['reverted', 'reverted'],
-    ['failed', 'failed'],
-    ['unknown', 'unknown'],
-  ] as const)('represents a physical target %s result', (outcome, expected) => {
-    const state = finishApply()
-    const operationOutcome = outcome === 'unknown' ? 'unknown' : outcome
-    const operation = {
-      operationId: change.id,
-      outcome: operationOutcome,
-      blocked: outcome === 'blocked',
-      notAttempted: outcome === 'blocked',
-      unknown: outcome === 'unknown',
-    } satisfies CheckRunOperationResult
-    const next = results(
-      state,
-      [operation],
-      [{ path: target.path, operationIds: target.operationIds, outcome }],
-    )
-    expect(next.results.targets[0]?.outcome).toBe(expected)
   })
 
   it('prevents generic successful events from bypassing fact-bearing phases', () => {
@@ -445,7 +711,7 @@ describe('check run model', () => {
           unknown: true,
         },
       ],
-      [{ path: target.path, operationIds: target.operationIds, outcome: 'unknown' }],
+      [physicalTarget('unknown')],
     )
     state = reduceCheckRun(state, {
       type: 'run-completed',
@@ -471,7 +737,7 @@ describe('check run model', () => {
           unknown: false,
         },
       ],
-      [{ path: target.path, operationIds: target.operationIds, outcome: 'not-attempted' }],
+      [physicalTarget('not-attempted')],
     )
     const completion = {
       type: 'run-completed' as const,
@@ -637,7 +903,7 @@ describe('check run model', () => {
           unknown: false,
         },
       ],
-      [{ path: target.path, operationIds: target.operationIds, outcome: 'not-attempted' }],
+      [physicalTarget('not-attempted')],
     )
     state = reduceCheckRun(state, {
       type: 'run-completed',
