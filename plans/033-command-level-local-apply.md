@@ -172,7 +172,7 @@ interface LegacyCommandResultBase {
 
 export type LegacyCommandApplyResult =
   | (LegacyCommandResultBase & {
-      status: 'applied'
+      status: 'executed'
       applyResult: ApplyResult
     })
   | (LegacyCommandResultBase & {
@@ -194,6 +194,7 @@ paths, formatting metadata, plan fingerprinting, VCS diagnostics, and invocation
 
 - [ ] **Step 4: Deduplicate physical occurrences safely**
 
+`executed` means the engine ran exactly once; it does not claim that its `ApplyResult` succeeded.
 Key operations by source file plus JSON/YAML path. Identical expected/requested pairs become one
 physical operation with multiple package projections. Conflicting expected or requested values
 produce the deterministic blocked result with `AMBIGUOUS_OCCURRENCE` outcomes for all projections,
