@@ -403,7 +403,9 @@ Completed recovery may retain a later exact precondition conflict only when at l
 selected operation is reverted, every conflicted operation is structurally not attempted, and its
 reason is `SOURCE_CHANGED`, `STAGED_SOURCE_CHANGED`, or `BACKUP_SOURCE_CHANGED`. This represents a
 fully restored earlier replacement plus a later target that was never mutated. Amend the semantic
-validator and run model narrowly for that matrix. Continue to reject completed recovery containing
+validator and run model narrowly for that matrix. The semantic result must also contain the exact
+lifecycle evidence: failed commit, passed recovery, passed final inspection, and passed cleanup;
+missing or different phase evidence is invalid. Continue to reject completed recovery containing
 applied, skipped, unknown, attempted-conflict, arbitrary-conflict, or conflict-only results; never
 mislabel the truthful matrix as partial recovery merely to satisfy an older validator.
 
