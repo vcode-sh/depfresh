@@ -63,7 +63,7 @@ schema must break in place, or owned files contain unrelated concurrent edits.
 - Consumes: `PackageMeta`, resolved changes, options, authority, and `ProcessPackageHooks`.
 - Produces: `preparePackage()` and `PreparedPackage` without calling a writer.
 
-- [ ] **Step 1: Write preparation RED tests**
+- [x] **Step 1: Write preparation RED tests**
 
 Cover updates/errors, interactive selection, no-write mode, rejected addon, accepted local write,
 accepted global write, empty selection, thrown hook, and deterministic callbacks.
@@ -80,13 +80,13 @@ export interface PreparedPackage {
 
 Assert no filesystem writer or global manager runs during preparation.
 
-- [ ] **Step 2: Run preparation RED tests**
+- [x] **Step 2: Run preparation RED tests**
 
 Run: `pnpm exec vitest run src/commands/check/package-preparation.test.ts`
 
 Expected: FAIL because preparation is still coupled to `applyPackageWrite()`.
 
-- [ ] **Step 3: Extract preparation with current semantics**
+- [x] **Step 3: Extract preparation with current semantics**
 
 Move resolution result classification, `onHasUpdates`, interactive selection, and
 `beforePackageWrite` into `preparePackage()`. Do not call `afterPackageWrite` or `afterPackageEnd`
@@ -96,7 +96,7 @@ preparation, every return or throw must transfer to one explicit completion/erro
 calls `afterPackageEnd` exactly once. A preparation failure must not start a writer or any result or
 after-write hook.
 
-- [ ] **Step 4: Add completion helpers**
+- [x] **Step 4: Add completion helpers**
 
 Define:
 
@@ -116,10 +116,18 @@ adapter that returned no result and calls only `afterPackageEnd`. Rejected/no-wr
 result is an internal invariant failure. Completion is idempotent per prepared package, and a thrown
 `afterPackageEnd` retains the current error-precedence behavior.
 
-- [ ] **Step 5: Run GREEN callback tests**
+- [x] **Step 5: Run GREEN callback tests**
 
 Run the preparation, core-flow, interactive-selection, addon, and callback suites. Expected: all
 pass and no mutation occurs before command orchestration requests it.
+
+**Completion evidence (2026-07-18):** Package preparation/completion was implemented in `a21fea1`.
+The compatibility wrapper preserves the legacy start/error boundary and callback order while
+preparation performs no local or global mutation. Completion owns exactly-once cleanup, retains
+`didWrite: false` after-write behavior, and enforces incoherent-result invariants. The full
+`src/commands/check` suite passes 440/440 tests; focused lifecycle and write/global/post-write
+matrices pass 48/48 and 26/26, with typecheck, focused Biome, and diff checks green. Independent
+review reported no Critical, Important, or Minor findings.
 
 ### Task 2: Build one command-level legacy plan
 

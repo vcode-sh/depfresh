@@ -89,3 +89,9 @@ three times at 185/185 tests without timer/open-handle warnings. Full coverage p
 2.0.2, and diff/status gates passed. Final lifecycle and authority/output/API reviews reported no
 Critical, Important, or Minor findings. Plan 032 is DONE; Plan 033 is next and may activate the first
 truthful local write stream from one command-level apply plus structural replacement-attempt facts.
+Plan 033 Task 1: complete in a21fea1. `preparePackage()` now records deterministic package decisions
+without invoking a local writer or global manager, while `completePreparedPackage()` preserves
+legacy result-hook, after-write, after-end, idempotence, and error-precedence semantics. The full
+check suite passes 440/440 tests, focused lifecycle and write/global/post-write matrices pass 48/48
+and 26/26, and typecheck/Biome/diff gates pass. Independent review found no Critical, Important, or
+Minor issues. Task 2 command-level plan construction is next.
