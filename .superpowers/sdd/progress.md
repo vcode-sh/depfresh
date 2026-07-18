@@ -36,3 +36,9 @@ outside current authority.
 Plan 031 Task 1: complete in bc6548c. The version-coupled 2.0.2 candidate changed exactly the 13
 owned release surfaces; focused 28/28 and release 102/102 tests, schemas, typecheck, and Biome
 passed. Independent spec and quality reviews approved Task 2 with no release-blocking findings.
+Plan 031 Task 2: complete in d6915cd. Exact isolated local gates passed 102 release tests, 1,559
+coverage tests across 143 files, 34 smoke checks/63 requests, 14 demo checks, exact 56-file package
+verification, installed CLI 2.0.2, and built plus installed 1,368,035-byte oversized-index replays.
+Two independent reviews reproduced the artifact identity with no findings. Plan 031 is IN PROGRESS
+at the hosted boundary; push, tag, npm publication, GitHub release, and public provenance proof are
+not authorized or completed.
