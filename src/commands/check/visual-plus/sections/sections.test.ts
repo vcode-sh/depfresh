@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
+import { createRepositoryId } from '../../../../repository/identity'
 import { stripAnsi, visualLength } from '../../../../utils/format'
 import type {
   CheckRunChange,
+  CheckRunInsightEvidence,
   CheckRunOperationOutcome,
   CheckRunOperationResult,
   CheckRunPhaseName,
@@ -160,36 +162,125 @@ function receiptEvidence(
   }
 }
 
+function manifestInsight(
+  name: string,
+  sourcePath: string,
+  label: string,
+  order: number,
+): CheckRunInsightEvidence {
+  return {
+    dependencyId: createRepositoryId('dependency', name),
+    rawName: name,
+    sourceFileId: createRepositoryId('source', sourcePath),
+    sourcePath,
+    occurrencePath: ['dependencies', name],
+    owner: {
+      id: createRepositoryId('package', sourcePath),
+      role: 'manifest',
+      label,
+      path: sourcePath,
+      order,
+      physicalTarget: sourcePath,
+    },
+    catalog: { role: 'direct' },
+    ageMs: null,
+    compatibility: { status: 'unknown' },
+  }
+}
+
 function fixture(
   outcome: CheckRunOperationOutcome = 'applied',
   exitCode: 0 | 1 | 2 | null = 0,
 ): VisualPlusSectionInput {
   const changes: CheckRunChange[] = []
   const metadata: VisualPlusChangeMetadata[] = []
+  const ownerOrderByGroup = new Map(
+    Array.from({ length: 15 }, (_, group) => {
+      const targetIndex = group >= 13 ? 13 : group
+      const physicalTarget = `packages/target-${targetIndex}/package.json`
+      const ownerLabel = `workspace-${group}`
+      const catalogOwner = group >= 13
+      const id = catalogOwner
+        ? createRepositoryId('catalog', `${physicalTarget}\0bun\0${ownerLabel}`)
+        : createRepositoryId('package', physicalTarget)
+      return {
+        group,
+        key: [
+          physicalTarget,
+          catalogOwner ? 'catalog' : 'manifest',
+          catalogOwner ? 'bun' : '',
+          catalogOwner ? ownerLabel : '',
+          id,
+        ].join('\0'),
+      }
+    })
+      .sort((left, right) => (left.key < right.key ? -1 : left.key > right.key ? 1 : 0))
+      .map((entry, order) => [entry.group, order]),
+  )
   for (let group = 0; group < 15; group += 1) {
     const count = group === 0 ? 6 : 5
-    const targetIndex = group === 14 ? 0 : group
+    const targetIndex = group >= 13 ? 13 : group
+    const physicalTarget = `packages/target-${targetIndex}/package.json`
+    const ownerLabel = `workspace-${group}`
+    const catalog =
+      group >= 13
+        ? {
+            role: 'owner' as const,
+            id: createRepositoryId('catalog', `${physicalTarget}\0bun\0${ownerLabel}`),
+            manager: 'bun' as const,
+            name: ownerLabel,
+            sourceFileId: createRepositoryId('source', physicalTarget),
+            sourcePath: physicalTarget,
+          }
+        : { role: 'direct' as const }
+    const owner = {
+      id: catalog.role === 'owner' ? catalog.id : createRepositoryId('package', physicalTarget),
+      role: catalog.role === 'owner' ? ('catalog' as const) : ('manifest' as const),
+      label: ownerLabel,
+      path: physicalTarget,
+      order: ownerOrderByGroup.get(group)!,
+      physicalTarget,
+    }
     for (let item = 0; item < count; item += 1) {
       const id = `operation-${group}-${item}`
+      const name = `dependency-${group}-${item}`
+      const ageMs = group === 0 && item === 0 ? 432_000_000 : null
       changes.push({
         id,
-        name: `dependency-${group}-${item}`,
-        owner: `packages/target-${targetIndex}/package.json`,
+        name,
+        owner: physicalTarget,
         current: '^1.0.0',
         target: group === 0 && item === 0 ? '^2.0.0' : '^1.1.0',
         diff: group === 0 && item === 0 ? 'major' : 'minor',
-        ageMs: group === 0 && item === 0 ? 432_000_000 : undefined,
+        ...(ageMs === null ? {} : { ageMs }),
+        insight: {
+          dependencyId: createRepositoryId('dependency', name),
+          rawName: name,
+          sourceFileId: createRepositoryId('source', physicalTarget),
+          sourcePath: physicalTarget,
+          occurrencePath:
+            catalog.role === 'owner'
+              ? ['workspaces', 'catalogs', catalog.name, name]
+              : ['dependencies', name],
+          owner: { ...owner },
+          catalog: { ...catalog },
+          ageMs,
+          compatibility: { status: 'unknown' },
+        },
       })
       metadata.push({
         operationId: id,
         ownerGroup: {
-          id: `owner-${group}`,
-          label: `workspace-${group}`,
-          order: group,
-          physicalTarget: `packages/target-${targetIndex}/package.json`,
+          id: owner.id,
+          label: owner.label,
+          order: owner.order,
+          physicalTarget: owner.physicalTarget,
         },
-        ageMs: group === 0 && item === 0 ? 432_000_000 : null,
+        ageMs,
         compatibility: { status: 'unknown' },
+        ...(catalog.role === 'owner'
+          ? { catalog: { name: catalog.name, sourcePath: catalog.sourcePath } }
+          : {}),
       })
     }
   }
@@ -751,16 +842,11 @@ describe('Visual+ pure sections', () => {
       snapshot: {
         ...base.snapshot,
         changes: [
-          { ...base.snapshot.changes[0]!, name: hostile },
+          { ...base.snapshot.changes[0]!, current: hostile },
           ...base.snapshot.changes.slice(1),
         ],
         diagnostics: [{ code: hostile, path: 'package.json', detail: hostile }],
       },
-      changes: base.changes.map((metadata) =>
-        metadata.ownerGroup.id === 'owner-0'
-          ? { ...metadata, ownerGroup: { ...metadata.ownerGroup, label: hostile } }
-          : metadata,
-      ),
     })
     const lines = allSections(input)
 
@@ -897,7 +983,19 @@ describe('Visual+ pure sections', () => {
         snapshot: {
           ...base.snapshot,
           changes: [
-            { ...base.snapshot.changes[0]!, name: dependency, current, target },
+            {
+              ...base.snapshot.changes[0]!,
+              name: dependency,
+              current,
+              target,
+              insight: {
+                ...base.snapshot.changes[0]!.insight!,
+                dependencyId: createRepositoryId('dependency', dependency),
+                rawName: dependency,
+                occurrencePath: ['dependencies', dependency],
+                compatibility: { status: 'unknown', detail },
+              },
+            },
             ...base.snapshot.changes.slice(1),
           ],
         },
@@ -1024,21 +1122,23 @@ describe('Visual+ pure sections', () => {
 
   it('uses aligned ASCII columns for catalog metadata in ASCII mode', () => {
     const base = fixture()
+    const catalogChange = base.changes.find((change) => change.catalog !== undefined)
+    if (!catalogChange?.catalog) throw new Error('Expected catalog fixture evidence')
     const input = createVisualPlusSectionInput({
       ...base,
       capabilities: { ...base.capabilities, unicode: false, color: false },
-      changes: [
-        {
-          ...base.changes[0]!,
-          catalog: { name: 'root', sourcePath: 'pnpm-workspace.yaml' },
-        },
-        ...base.changes.slice(1),
-      ],
     })
     const output = renderVisualPlusChanges(input).map(stripAnsi).join('\n')
 
-    expect(output).toMatch(/Catalog root\s+\| Source pnpm-workspace\.yaml/u)
-    expect(output).not.toContain('Catalog root · Source pnpm-workspace.yaml')
+    expect(output).toMatch(
+      new RegExp(
+        `Catalog ${catalogChange.catalog.name}\\s+\\| Source ${catalogChange.catalog.sourcePath.replaceAll('.', '\\.')}`,
+        'u',
+      ),
+    )
+    expect(output).not.toContain(
+      `Catalog ${catalogChange.catalog.name} · Source ${catalogChange.catalog.sourcePath}`,
+    )
   })
 })
 
@@ -1063,6 +1163,24 @@ describe('Visual+ receipt decision table', () => {
       current: '1.0.0',
       target: '2.0.0',
       diff: 'major',
+      insight: {
+        dependencyId: createRepositoryId('dependency', 'dep'),
+        rawName: 'dep',
+        sourceFileId: createRepositoryId('source', 'package.json'),
+        sourcePath: 'package.json',
+        occurrencePath: ['dependencies', 'dep'],
+        owner: {
+          id: createRepositoryId('package', 'package.json'),
+          role: 'manifest',
+          label: 'root',
+          path: 'package.json',
+          order: 0,
+          physicalTarget: 'package.json',
+        },
+        catalog: { role: 'direct' },
+        ageMs: null,
+        compatibility: { status: 'unknown' },
+      },
     }
     const target: CheckRunTarget = { path: 'package.json', operationIds: ['op'] }
     const recovery = options.recovery ?? {
@@ -1143,7 +1261,12 @@ describe('Visual+ receipt decision table', () => {
       changes: [
         {
           operationId: 'op',
-          ownerGroup: { id: 'root', label: 'root', order: 0, physicalTarget: 'package.json' },
+          ownerGroup: {
+            id: createRepositoryId('package', 'package.json'),
+            label: 'root',
+            order: 0,
+            physicalTarget: 'package.json',
+          },
           ageMs: null,
           compatibility: { status: 'unknown' },
         },
@@ -1371,6 +1494,7 @@ describe('Visual+ receipt decision table', () => {
         current: '1.0.0',
         target: '2.0.0',
         diff: 'major',
+        insight: manifestInsight('applied-dep', 'mixed/package.json', 'mixed', 0),
       },
       {
         id: 'blocked',
@@ -1379,6 +1503,7 @@ describe('Visual+ receipt decision table', () => {
         current: '1.0.0',
         target: '2.0.0',
         diff: 'major',
+        insight: manifestInsight('blocked-dep', 'mixed/package.json', 'mixed', 0),
       },
       {
         id: 'reverted',
@@ -1387,6 +1512,7 @@ describe('Visual+ receipt decision table', () => {
         current: '1.0.0',
         target: '2.0.0',
         diff: 'major',
+        insight: manifestInsight('reverted-dep', 'reverted/package.json', 'reverted', 1),
       },
     ]
     const targets: CheckRunTarget[] = [
@@ -1491,7 +1617,7 @@ describe('Visual+ receipt decision table', () => {
         {
           operationId: 'applied',
           ownerGroup: {
-            id: 'mixed',
+            id: createRepositoryId('package', 'mixed/package.json'),
             label: 'mixed',
             order: 0,
             physicalTarget: 'mixed/package.json',
@@ -1502,7 +1628,7 @@ describe('Visual+ receipt decision table', () => {
         {
           operationId: 'blocked',
           ownerGroup: {
-            id: 'mixed',
+            id: createRepositoryId('package', 'mixed/package.json'),
             label: 'mixed',
             order: 0,
             physicalTarget: 'mixed/package.json',
@@ -1513,7 +1639,7 @@ describe('Visual+ receipt decision table', () => {
         {
           operationId: 'reverted',
           ownerGroup: {
-            id: 'reverted',
+            id: createRepositoryId('package', 'reverted/package.json'),
             label: 'reverted',
             order: 1,
             physicalTarget: 'reverted/package.json',

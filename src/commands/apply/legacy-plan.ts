@@ -67,7 +67,7 @@ interface LegacyOperationInput {
   expectedValue: string
   requestedValue: string
   indent: string
-  catalog?: { name: string; sourcePath: string }
+  catalog?: { manager: 'pnpm' | 'bun' | 'yarn'; name: string; sourcePath: string }
 }
 
 interface LegacyProjection {
@@ -81,7 +81,7 @@ interface LegacyProjection {
   operationId?: string
   blockedOutcome?: WriteOutcome
   ownerLabel: string | undefined
-  catalog?: { name: string; sourcePath: string }
+  catalog?: { manager: 'pnpm' | 'bun' | 'yarn'; name: string; sourcePath: string }
 }
 
 export type LegacySelectionEvidenceResult =
@@ -106,7 +106,17 @@ export interface LegacySelectionEvidenceOperation {
   readonly operationId: string
   readonly packageIndex: number
   readonly changeIndex: number
-  readonly ownerLabel: string
+  readonly dependencyId: string
+  readonly rawName: string
+  readonly sourceFileId: string
+  readonly sourcePath: string
+  readonly owner: {
+    readonly id: string
+    readonly role: 'manifest' | 'catalog'
+    readonly label: string
+    readonly path: string
+    readonly physicalTarget: string
+  }
   readonly physicalTarget: string
   readonly occurrencePath: readonly string[]
   readonly name: string
@@ -116,7 +126,16 @@ export interface LegacySelectionEvidenceOperation {
   readonly publishedAt?: string
   readonly nodeCompatible?: boolean
   readonly nodeCompat?: string
-  readonly catalog?: { readonly name: string; readonly sourcePath: string }
+  readonly catalog:
+    | { readonly role: 'direct' }
+    | {
+        readonly role: 'owner'
+        readonly id: string
+        readonly manager: 'pnpm' | 'bun' | 'yarn'
+        readonly name: string
+        readonly sourceFileId: string
+        readonly sourcePath: string
+      }
 }
 
 export interface LegacyPlanConstruction {
@@ -310,7 +329,7 @@ function createSelectionEvidence(
       (projection) =>
         projection.physicalKey === undefined ||
         projection.operationId === undefined ||
-        projection.ownerLabel === undefined,
+        (projection.catalog === undefined && projection.ownerLabel === undefined),
     )
   ) {
     return freezeEvidenceUnavailable('UNBOUND_OPERATION')
@@ -350,7 +369,11 @@ function createSelectionEvidence(
       operationId,
       packageIndex: canonical.packageIndex,
       changeIndex: canonical.changeIndex,
-      ownerLabel: canonical.ownerLabel!,
+      dependencyId: fact.dependencyId,
+      rawName: fact.rawName,
+      sourceFileId: fact.sourceFileId,
+      sourcePath: fact.sourcePath,
+      owner: { ...fact.owner },
       physicalTarget: fact.physicalTarget,
       occurrencePath: [...fact.occurrencePath],
       name: fact.name,
@@ -360,7 +383,7 @@ function createSelectionEvidence(
       ...(fact.publishedAt === undefined ? {} : { publishedAt: fact.publishedAt }),
       ...(fact.nodeCompatible === undefined ? {} : { nodeCompatible: fact.nodeCompatible }),
       ...(fact.nodeCompat === undefined ? {} : { nodeCompat: fact.nodeCompat }),
-      ...(fact.catalog === undefined ? {} : { catalog: { ...fact.catalog } }),
+      catalog: { ...fact.catalog },
     }
     canonicalByOperationId.set(operationId, operation)
     if (!plan.operations.some((candidate) => candidate.id === operationId)) {
@@ -395,10 +418,7 @@ function evidenceFacts(
   root: string,
   projection: LegacyProjection,
 ):
-  | Omit<
-      LegacySelectionEvidenceOperation,
-      'operationId' | 'packageIndex' | 'changeIndex' | 'ownerLabel'
-    >
+  | Omit<LegacySelectionEvidenceOperation, 'operationId' | 'packageIndex' | 'changeIndex'>
   | undefined {
   const diff = projection.change.diff
   if (diff !== 'major' && diff !== 'minor' && diff !== 'patch') return undefined
@@ -406,7 +426,18 @@ function evidenceFacts(
   if (!canonical) return undefined
   const physicalTarget = repositoryRelative(root, canonical)
   if (projection.catalog && projection.catalog.sourcePath !== physicalTarget) return undefined
+  const sourceFileId = createRepositoryId('source', physicalTarget)
+  const rawName = projection.change.name
+  const dependencyId = createRepositoryId('dependency', rawName)
+  const owner = projection.catalog
+    ? catalogOwner(projection.catalog)
+    : manifestOwner(physicalTarget, projection.ownerLabel!)
   return {
+    dependencyId,
+    rawName,
+    sourceFileId,
+    sourcePath: physicalTarget,
+    owner,
     physicalTarget,
     occurrencePath: [...projection.occurrence.path],
     name: projection.change.name,
@@ -422,7 +453,43 @@ function evidenceFacts(
     ...(projection.change.nodeCompat === undefined
       ? {}
       : { nodeCompat: projection.change.nodeCompat }),
-    ...(projection.catalog === undefined ? {} : { catalog: { ...projection.catalog } }),
+    catalog:
+      projection.catalog === undefined
+        ? { role: 'direct' as const }
+        : {
+            role: 'owner' as const,
+            id: owner.id,
+            manager: projection.catalog.manager,
+            name: projection.catalog.name,
+            sourceFileId,
+            sourcePath: projection.catalog.sourcePath,
+          },
+  }
+}
+
+function manifestOwner(
+  sourcePath: string,
+  label: string,
+): LegacySelectionEvidenceOperation['owner'] {
+  return {
+    id: createRepositoryId('package', sourcePath),
+    role: 'manifest',
+    label,
+    path: sourcePath,
+    physicalTarget: sourcePath,
+  }
+}
+
+function catalogOwner(
+  catalog: NonNullable<LegacyProjection['catalog']>,
+): LegacySelectionEvidenceOperation['owner'] {
+  const label = sanitizeTerminalText(catalog.name).trim() || catalog.sourcePath
+  return {
+    id: createRepositoryId('catalog', `${catalog.sourcePath}\0${catalog.manager}\0${catalog.name}`),
+    role: 'catalog',
+    label,
+    path: catalog.sourcePath,
+    physicalTarget: catalog.sourcePath,
   }
 }
 
@@ -531,6 +598,7 @@ function collectInput(
     request = createCatalogWriteRequest(catalog, change)
     indent = catalog.indent
     catalogEvidence = {
+      manager: catalog.type,
       name: catalog.name,
       sourcePath: repositoryRelative(root, canonicalCatalogSource),
     }

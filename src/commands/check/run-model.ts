@@ -1,5 +1,16 @@
 import { isAbsolute } from 'node:path'
 import type { RangeMode } from '../../types'
+import type { CheckRunInsightEvidence } from './relationship-evidence'
+import {
+  copyAndValidateRelationshipSelection,
+  RelationshipEvidenceError,
+} from './relationship-evidence'
+
+export type {
+  CheckRunCatalogEvidence,
+  CheckRunInsightEvidence,
+  CheckRunOwnerReference,
+} from './relationship-evidence'
 
 export type CheckRunPhaseName =
   | 'discover'
@@ -52,6 +63,7 @@ export interface CheckRunChange {
   readonly target: string
   readonly diff: 'major' | 'minor' | 'patch' | 'none' | 'unknown'
   readonly ageMs?: number
+  readonly insight?: CheckRunInsightEvidence
 }
 
 export interface CheckRunTarget {
@@ -674,7 +686,7 @@ function copyAndValidateInventory(event: Extract<CheckRunEvent, { type: 'selecti
 }
 
 function copyChanges(changes: readonly CheckRunChange[]): readonly CheckRunChange[] {
-  return changes.map((change) => {
+  const copied = changes.map((change) => {
     assertSafeIdentifier('change identifier', change.id)
     assertSafeText('dependency name', change.name)
     assertRelativePath(change.owner)
@@ -686,6 +698,18 @@ function copyChanges(changes: readonly CheckRunChange[]): readonly CheckRunChang
     if (change.ageMs !== undefined) assertCount('change age milliseconds', change.ageMs)
     return { ...change }
   })
+  try {
+    const insights = copyAndValidateRelationshipSelection(copied, 'optional')
+    return copied.map((change, index) => {
+      const insight = insights[index]
+      return insight === undefined ? { ...change } : { ...change, insight }
+    })
+  } catch (error) {
+    if (error instanceof RelationshipEvidenceError) {
+      throw new CheckRunInvariantError(error.message)
+    }
+    throw error
+  }
 }
 
 function copyTargets(targets: readonly CheckRunTarget[]): readonly CheckRunTarget[] {

@@ -1,5 +1,9 @@
 import { isAbsolute, win32 } from 'node:path'
 import { sanitizeTerminalText } from '../../../utils/format'
+import {
+  copyAndValidateRelationshipSelection,
+  RelationshipEvidenceError,
+} from '../relationship-evidence'
 import type { CheckRunRecovery, CheckRunSnapshot } from '../run-model'
 import type { WriteReceipt } from '../write-receipt'
 import type { VisualPlusCapabilities } from './capabilities'
@@ -107,6 +111,7 @@ export function validateVisualPlusSectionInput(input: VisualPlusSectionInput): v
 function validateInput(input: VisualPlusSectionInput): void {
   validateCapabilities(input.capabilities)
   validateRunMetadata(input.run)
+  validateSnapshotRelationships(input.snapshot)
   const targetsByOperation = validateSnapshotSelection(input.snapshot)
   validateChangeMetadata(input, targetsByOperation)
   if (input.writeReceipt) {
@@ -119,6 +124,15 @@ function validateInput(input: VisualPlusSectionInput): void {
       invalid('final write receipt requires complete result inventories')
     }
     validateWriteReceipt(input.snapshot, input.writeReceipt)
+  }
+}
+
+function validateSnapshotRelationships(snapshot: CheckRunSnapshot): void {
+  try {
+    copyAndValidateRelationshipSelection(snapshot.changes, 'required')
+  } catch (error) {
+    if (error instanceof RelationshipEvidenceError) invalid(error.message)
+    throw error
   }
 }
 
@@ -334,6 +348,9 @@ function validateChangeMetadata(
 
   const groups = new Map<string, { label: string; order: number; physicalTarget: string }>()
   const orderOwners = new Map<number, string>()
+  const insightsByOperation = new Map(
+    input.snapshot.changes.map((change) => [change.id, change.insight!] as const),
+  )
   for (const metadata of input.changes) {
     safeText(metadata.operationId, 'metadata operation ID')
     const group = metadata.ownerGroup
@@ -384,6 +401,35 @@ function validateChangeMetadata(
       safeText(metadata.catalog.name, 'catalog name')
       safeRepositoryPath(metadata.catalog.sourcePath, 'catalog source')
     }
+    const insight = insightsByOperation.get(metadata.operationId)
+    if (insight) validateMetadataInsightEquality(metadata, insight)
+  }
+  if (orderOwners.size !== groups.size) invalid('owner group order is incomplete')
+  for (let order = 0; order < groups.size; order += 1) {
+    if (!orderOwners.has(order)) invalid('owner group order is not contiguous')
+  }
+}
+
+function validateMetadataInsightEquality(
+  metadata: VisualPlusChangeMetadata,
+  insight: NonNullable<CheckRunSnapshot['changes'][number]['insight']>,
+): void {
+  if (
+    metadata.ownerGroup.id !== insight.owner.id ||
+    metadata.ownerGroup.label !== insight.owner.label ||
+    metadata.ownerGroup.order !== insight.owner.order ||
+    metadata.ownerGroup.physicalTarget !== insight.owner.physicalTarget ||
+    metadata.ageMs !== insight.ageMs ||
+    !sameJson(metadata.compatibility, insight.compatibility)
+  ) {
+    invalid('change metadata differs from insight evidence')
+  }
+  const expectedCatalog =
+    insight.catalog.role === 'direct'
+      ? undefined
+      : { name: insight.catalog.name, sourcePath: insight.catalog.sourcePath }
+  if (!sameJson(metadata.catalog, expectedCatalog)) {
+    invalid('change catalog metadata differs from insight evidence')
   }
 }
 

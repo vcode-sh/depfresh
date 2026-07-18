@@ -10,6 +10,7 @@ import {
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
+import { createRepositoryId } from '../../repository/identity'
 import type {
   CatalogSource,
   InvocationAuthority,
@@ -516,6 +517,10 @@ describe('command-level legacy plan', () => {
       { packageIndex: 3, pkg: manifest(secondPath, ''), changes: [change('beta')] },
     ])
 
+    const catalogSourceId = createRepositoryId('source', 'package.json')
+    const catalogId = createRepositoryId('catalog', 'package.json\0bun\0default')
+    const alphaSourceId = createRepositoryId('source', 'packages/a/package.json')
+    const betaSourceId = createRepositoryId('source', 'packages/b/package.json')
     expect(construction.selectionEvidence).toEqual({
       status: 'ready',
       evidence: {
@@ -524,7 +529,17 @@ describe('command-level legacy plan', () => {
             operationId: construction.plan.operations[0]?.id,
             packageIndex: 1,
             changeIndex: 0,
-            ownerLabel: 'owner',
+            dependencyId: createRepositoryId('dependency', 'shared'),
+            rawName: 'shared',
+            sourceFileId: catalogSourceId,
+            sourcePath: 'package.json',
+            owner: {
+              id: catalogId,
+              role: 'catalog',
+              label: 'default',
+              path: 'package.json',
+              physicalTarget: 'package.json',
+            },
             physicalTarget: 'package.json',
             occurrencePath: ['workspaces', 'catalog', 'shared'],
             name: 'shared',
@@ -534,19 +549,48 @@ describe('command-level legacy plan', () => {
             publishedAt: '2025-01-01T00:00:00.000Z',
             nodeCompatible: false,
             nodeCompat: '<24',
-            catalog: { name: 'default', sourcePath: 'package.json' },
+            catalog: {
+              role: 'owner',
+              id: catalogId,
+              manager: 'bun',
+              name: 'default',
+              sourceFileId: catalogSourceId,
+              sourcePath: 'package.json',
+            },
           },
           expect.objectContaining({
             operationId: construction.plan.operations[1]?.id,
             packageIndex: 2,
-            ownerLabel: 'a',
+            dependencyId: createRepositoryId('dependency', 'alpha'),
+            rawName: 'alpha',
+            sourceFileId: alphaSourceId,
+            sourcePath: 'packages/a/package.json',
+            owner: {
+              id: createRepositoryId('package', 'packages/a/package.json'),
+              role: 'manifest',
+              label: 'a',
+              path: 'packages/a/package.json',
+              physicalTarget: 'packages/a/package.json',
+            },
+            catalog: { role: 'direct' },
             physicalTarget: 'packages/a/package.json',
             name: 'alpha',
           }),
           expect.objectContaining({
             operationId: construction.plan.operations[2]?.id,
             packageIndex: 3,
-            ownerLabel: 'packages/b/package.json',
+            dependencyId: createRepositoryId('dependency', 'beta'),
+            rawName: 'beta',
+            sourceFileId: betaSourceId,
+            sourcePath: 'packages/b/package.json',
+            owner: {
+              id: createRepositoryId('package', 'packages/b/package.json'),
+              role: 'manifest',
+              label: 'packages/b/package.json',
+              path: 'packages/b/package.json',
+              physicalTarget: 'packages/b/package.json',
+            },
+            catalog: { role: 'direct' },
             physicalTarget: 'packages/b/package.json',
             name: 'beta',
           }),
@@ -563,6 +607,7 @@ describe('command-level legacy plan', () => {
     expect(Object.isFrozen(construction.selectionEvidence.evidence)).toBe(true)
     expect(Object.isFrozen(construction.selectionEvidence.evidence.operations)).toBe(true)
     expect(Object.isFrozen(construction.selectionEvidence.evidence.operations[0])).toBe(true)
+    expect(Object.isFrozen(construction.selectionEvidence.evidence.operations[0]?.owner)).toBe(true)
     expect(Object.isFrozen(construction.selectionEvidence.evidence.operations[0]?.catalog)).toBe(
       true,
     )
@@ -614,7 +659,7 @@ describe('command-level legacy plan', () => {
     ).toEqual({ status: 'unavailable', reason: 'INCONSISTENT_SELECTION_EVIDENCE' })
   })
 
-  it('fails owner fallback closed when a catalog consumer source is outside the root', async () => {
+  it('uses the physical catalog owner when a consumer source is outside the root', async () => {
     const root = temporaryRoot()
     const outside = temporaryRoot()
     const catalogPath = join(root, 'package.json')
@@ -647,9 +692,16 @@ describe('command-level legacy plan', () => {
     const construction = createLegacyPlan(root, [selection])
     expect(construction.blocked).toBe(false)
     expect(construction.plan.operations).toHaveLength(1)
-    expect(construction.selectionEvidence).toEqual({
-      status: 'unavailable',
-      reason: 'UNBOUND_OPERATION',
+    expect(construction.selectionEvidence).toMatchObject({
+      status: 'ready',
+      evidence: {
+        operations: [
+          {
+            owner: { role: 'catalog', path: 'package.json', label: 'default' },
+            catalog: { role: 'owner', manager: 'bun', sourcePath: 'package.json' },
+          },
+        ],
+      },
     })
 
     const result = await applyLegacyCommandWrite(root, [selection], authority)
@@ -657,7 +709,7 @@ describe('command-level legacy plan', () => {
     expect(JSON.parse(readFileSync(catalogPath, 'utf8')).workspaces.catalog.shared).toBe('2.0.0')
   })
 
-  it('fails owner fallback closed for a lexical symlink consumer with a contained catalog', () => {
+  it('uses the physical catalog owner for a lexical symlink consumer', () => {
     const root = temporaryRoot()
     const catalogPath = join(root, 'package.json')
     const consumerTarget = join(root, 'consumer.json')
@@ -693,9 +745,16 @@ describe('command-level legacy plan', () => {
 
     expect(construction.blocked).toBe(false)
     expect(construction.plan.operations).toHaveLength(1)
-    expect(construction.selectionEvidence).toEqual({
-      status: 'unavailable',
-      reason: 'UNBOUND_OPERATION',
+    expect(construction.selectionEvidence).toMatchObject({
+      status: 'ready',
+      evidence: {
+        operations: [
+          {
+            owner: { role: 'catalog', path: 'package.json', label: 'default' },
+            catalog: { role: 'owner', manager: 'bun', sourcePath: 'package.json' },
+          },
+        ],
+      },
     })
   })
 

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { createRepositoryId } from '../../../repository/identity'
 import type { CheckRunController } from '../run-controller'
 import type { CheckRunPhaseName, CheckRunPhaseStatus, CheckRunSnapshot } from '../run-model'
 import type { VisualPlusCapabilities } from './capabilities'
@@ -112,6 +113,24 @@ function selectedSnapshot(overrides: Partial<CheckRunSnapshot> = {}): CheckRunSn
         current: '^1.0.0',
         target: '^2.0.0',
         diff: 'major',
+        insight: {
+          dependencyId: createRepositoryId('dependency', 'alpha'),
+          rawName: 'alpha',
+          sourceFileId: createRepositoryId('source', 'package.json'),
+          sourcePath: 'package.json',
+          occurrencePath: ['dependencies', 'alpha'],
+          owner: {
+            id: createRepositoryId('package', 'package.json'),
+            role: 'manifest',
+            label: 'root',
+            path: 'package.json',
+            order: 0,
+            physicalTarget: 'package.json',
+          },
+          catalog: { role: 'direct' },
+          ageMs: null,
+          compatibility: { status: 'unknown' },
+        },
       },
     ],
     targets: [{ path: 'package.json', operationIds: ['op-1'] }],
@@ -172,13 +191,21 @@ function input(value: CheckRunSnapshot, caps = capable): VisualPlusSectionInput 
     changes: value.changes.map((change) => ({
       operationId: change.id,
       ownerGroup: {
-        id: 'root',
-        label: 'root',
-        order: 0,
-        physicalTarget: 'package.json',
+        id: change.insight!.owner.id,
+        label: change.insight!.owner.label,
+        order: change.insight!.owner.order,
+        physicalTarget: change.insight!.owner.physicalTarget,
       },
-      ageMs: null,
-      compatibility: { status: 'unknown' },
+      ageMs: change.insight!.ageMs,
+      compatibility: change.insight!.compatibility,
+      ...(change.insight!.catalog.role === 'direct'
+        ? {}
+        : {
+            catalog: {
+              name: change.insight!.catalog.name,
+              sourcePath: change.insight!.catalog.sourcePath,
+            },
+          }),
     })),
     ...(value.exitCode === null || !value.write
       ? {}

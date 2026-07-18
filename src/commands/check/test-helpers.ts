@@ -6,8 +6,10 @@ import {
   createPackageWriteRequest,
   resolvePhysicalValues,
 } from '../../io/write/occurrence'
+import { createRepositoryId } from '../../repository/identity'
 import type { depfreshOptions, PackageMeta, ResolvedDepChange, WriteOutcome } from '../../types'
 import { DEFAULT_OPTIONS, summarizeWriteOutcomes } from '../../types'
+import { sanitizeTerminalText } from '../../utils/format'
 import type {
   LegacyCommandApplyResult,
   LegacyCommandSelection,
@@ -447,7 +449,11 @@ function createTestSelectionEvidence(
       change: ResolvedDepChange
       current: string
       target: string
-      catalog?: { name: string; sourcePath: string }
+      catalog?: {
+        manager: 'pnpm' | 'bun' | 'yarn'
+        name: string
+        sourcePath: string
+      }
     }
   >()
 
@@ -479,7 +485,28 @@ function createTestSelectionEvidence(
     operationId: entry.operationId,
     packageIndex: entry.packageIndex,
     changeIndex: entry.changeIndex,
-    ownerLabel: entry.ownerLabel,
+    dependencyId: createRepositoryId('dependency', entry.change.name),
+    rawName: entry.change.name,
+    sourceFileId: createRepositoryId('source', entry.physicalTarget),
+    sourcePath: entry.physicalTarget,
+    owner: entry.catalog
+      ? {
+          id: createRepositoryId(
+            'catalog',
+            `${entry.catalog.sourcePath}\0${entry.catalog.manager}\0${entry.catalog.name}`,
+          ),
+          role: 'catalog' as const,
+          label: sanitizeTerminalText(entry.catalog.name).trim() || entry.catalog.sourcePath,
+          path: entry.catalog.sourcePath,
+          physicalTarget: entry.physicalTarget,
+        }
+      : {
+          id: createRepositoryId('package', entry.physicalTarget),
+          role: 'manifest' as const,
+          label: sanitizeTerminalText(entry.ownerLabel).trim() || entry.physicalTarget,
+          path: entry.physicalTarget,
+          physicalTarget: entry.physicalTarget,
+        },
     physicalTarget: entry.physicalTarget,
     occurrencePath: entry.occurrencePath,
     name: entry.change.name,
@@ -491,7 +518,19 @@ function createTestSelectionEvidence(
       ? {}
       : { nodeCompatible: entry.change.nodeCompatible }),
     ...(entry.change.nodeCompat === undefined ? {} : { nodeCompat: entry.change.nodeCompat }),
-    ...(entry.catalog ? { catalog: entry.catalog } : {}),
+    catalog: entry.catalog
+      ? {
+          role: 'owner' as const,
+          id: createRepositoryId(
+            'catalog',
+            `${entry.catalog.sourcePath}\0${entry.catalog.manager}\0${entry.catalog.name}`,
+          ),
+          manager: entry.catalog.manager,
+          name: entry.catalog.name,
+          sourceFileId: createRepositoryId('source', entry.physicalTarget),
+          sourcePath: entry.catalog.sourcePath,
+        }
+      : { role: 'direct' as const },
   }))
   const targetIds = new Map<string, string[]>()
   for (const operation of operations) {
@@ -504,7 +543,7 @@ function createTestSelectionEvidence(
     evidence: {
       operations,
       targets: [...targetIds]
-        .sort(([left], [right]) => left.localeCompare(right))
+        .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
         .map(([path, operationIds]) => ({ path, operationIds })),
     },
   }
@@ -514,7 +553,7 @@ function testCatalogIdentity(
   pkg: PackageMeta,
   change: ResolvedDepChange,
   physicalTarget: string,
-): { name: string; sourcePath: string } | undefined {
+): { manager: 'pnpm' | 'bun' | 'yarn'; name: string; sourcePath: string } | undefined {
   if (pkg.type === 'package.json' || pkg.type === 'package.yaml') return undefined
   const catalog = pkg.catalogs?.find((candidate) =>
     candidate.deps.some(
@@ -525,7 +564,9 @@ function testCatalogIdentity(
             dependency.parents.every((parent, index) => parent === change.parents[index]))),
     ),
   )
-  return catalog ? { name: catalog.name, sourcePath: physicalTarget } : undefined
+  return catalog
+    ? { manager: catalog.type, name: catalog.name, sourcePath: physicalTarget }
+    : undefined
 }
 
 export function createCommandResultWithOutcomes(

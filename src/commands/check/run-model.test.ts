@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
+import { createRepositoryId } from '../../repository/identity'
 import {
   type CheckRunChange,
   type CheckRunEvent,
+  type CheckRunInsightEvidence,
   type CheckRunOperationResult,
   type CheckRunSnapshot,
   type CheckRunTarget,
@@ -19,6 +21,62 @@ const change = {
   diff: 'major' as const,
 }
 const target = { path: 'package.json', operationIds: [change.id] }
+
+function manifestInsight(
+  rawName = 'vitest',
+  sourcePath = 'package.json',
+  order = 0,
+): CheckRunInsightEvidence {
+  return {
+    dependencyId: createRepositoryId('dependency', rawName),
+    rawName,
+    sourceFileId: createRepositoryId('source', sourcePath),
+    sourcePath,
+    occurrencePath: ['dependencies', rawName],
+    owner: {
+      id: createRepositoryId('package', sourcePath),
+      role: 'manifest',
+      label: rawName,
+      path: sourcePath,
+      order,
+      physicalTarget: sourcePath,
+    },
+    catalog: { role: 'direct' },
+    ageMs: null,
+    compatibility: { status: 'unknown' },
+  }
+}
+
+function catalogInsight(): CheckRunInsightEvidence {
+  const sourcePath = 'package.json'
+  const name = 'default'
+  const id = createRepositoryId('catalog', `${sourcePath}\0bun\0${name}`)
+  return {
+    dependencyId: createRepositoryId('dependency', 'vitest'),
+    rawName: 'vitest',
+    sourceFileId: createRepositoryId('source', sourcePath),
+    sourcePath,
+    occurrencePath: ['workspaces', 'catalog', 'vitest'],
+    owner: {
+      id,
+      role: 'catalog',
+      label: name,
+      path: sourcePath,
+      order: 0,
+      physicalTarget: sourcePath,
+    },
+    catalog: {
+      role: 'owner',
+      id,
+      manager: 'bun',
+      name,
+      sourceFileId: createRepositoryId('source', sourcePath),
+      sourcePath,
+    },
+    ageMs: null,
+    compatibility: { status: 'unknown' },
+  }
+}
 
 const appliedOperation = {
   operationId: change.id,
@@ -2008,6 +2066,333 @@ describe('check run model', () => {
     expect(state.targets[0]?.operationIds).toEqual([change.id])
     expect(state.results.operations[0]?.operationId).toBe(change.id)
     expect(state.results.targets[0]?.operationIds).toEqual([change.id])
+  })
+
+  it('deep-copies and validates exact nested Visual+ insight evidence', () => {
+    const sourcePath = 'package.json'
+    const insight = {
+      dependencyId: createRepositoryId('dependency', 'vitest'),
+      rawName: 'vitest',
+      sourceFileId: createRepositoryId('source', sourcePath),
+      sourcePath,
+      occurrencePath: ['dependencies', 'vitest'],
+      owner: {
+        id: createRepositoryId('package', sourcePath),
+        role: 'manifest' as const,
+        label: 'root',
+        path: sourcePath,
+        order: 0,
+        physicalTarget: sourcePath,
+      },
+      catalog: { role: 'direct' as const },
+      ageMs: null,
+      compatibility: { status: 'unknown' as const },
+    }
+    const selectedChange = { ...change, insight }
+    let state = createCheckRunState({ mode: 'major', write: false })
+    state = reduceCheckRun(state, { type: 'packages-discovered', packages: 1, declared: 1 })
+    state = reduceCheckRun(state, {
+      type: 'resolution-completed',
+      eligible: 1,
+      unresolved: 0,
+      updates: 1,
+    })
+    state = reduceCheckRun(state, {
+      type: 'selection-completed',
+      operations: 1,
+      targets: 1,
+      changes: [selectedChange],
+      selectedTargets: [target],
+    })
+
+    insight.owner.label = 'mutated owner'
+    insight.occurrencePath.push('mutated')
+    expect(state.changes[0]?.insight).toMatchObject({
+      rawName: 'vitest',
+      occurrencePath: ['dependencies', 'vitest'],
+      owner: { label: 'root', order: 0 },
+    })
+    expect(Object.isFrozen(state.changes[0]?.insight)).toBe(true)
+    expect(Object.isFrozen(state.changes[0]?.insight?.owner)).toBe(true)
+    expect(Object.isFrozen(state.changes[0]?.insight?.occurrencePath)).toBe(true)
+
+    for (const candidate of [
+      {
+        ...selectedChange,
+        insight: { ...selectedChange.insight, sourceFileId: 'source:wrong' },
+      },
+      {
+        ...selectedChange,
+        insight: { ...selectedChange.insight, dependencyId: 'dependency:wrong' },
+      },
+      {
+        ...selectedChange,
+        insight: { ...selectedChange.insight, sourcePath: '../outside.json' },
+      },
+      {
+        ...selectedChange,
+        insight: {
+          ...selectedChange.insight,
+          owner: { ...selectedChange.insight.owner, physicalTarget: 'other.json' },
+        },
+      },
+    ]) {
+      let invalid = createCheckRunState({ mode: 'major', write: false })
+      invalid = reduceCheckRun(invalid, {
+        type: 'packages-discovered',
+        packages: 1,
+        declared: 1,
+      })
+      invalid = reduceCheckRun(invalid, {
+        type: 'resolution-completed',
+        eligible: 1,
+        unresolved: 0,
+        updates: 1,
+      })
+      expect(() =>
+        reduceCheckRun(invalid, {
+          type: 'selection-completed',
+          operations: 1,
+          targets: 1,
+          changes: [candidate],
+          selectedTargets: [target],
+        }),
+      ).toThrow(/Check run invariant/u)
+    }
+  })
+
+  it.each([
+    {
+      name: 'manifest owner role',
+      mutate: (insight: CheckRunInsightEvidence) => ({
+        ...insight,
+        owner: { ...insight.owner, role: 'catalog' as const },
+      }),
+    },
+    {
+      name: 'manifest owner path',
+      mutate: (insight: CheckRunInsightEvidence) => ({
+        ...insight,
+        owner: { ...insight.owner, path: 'other/package.json' },
+      }),
+    },
+    {
+      name: 'manifest owner ID',
+      mutate: (insight: CheckRunInsightEvidence) => ({
+        ...insight,
+        owner: { ...insight.owner, id: 'package:wrong' },
+      }),
+    },
+    {
+      name: 'owner physical target',
+      mutate: (insight: CheckRunInsightEvidence) => ({
+        ...insight,
+        owner: { ...insight.owner, physicalTarget: 'other/package.json' },
+      }),
+    },
+    {
+      name: 'source path differs from physical target',
+      mutate: (insight: CheckRunInsightEvidence) => ({
+        ...insight,
+        sourcePath: 'other/package.json',
+      }),
+    },
+    {
+      name: 'source ID formula',
+      mutate: (insight: CheckRunInsightEvidence) => ({ ...insight, sourceFileId: 'source:wrong' }),
+    },
+    {
+      name: 'dependency ID formula',
+      mutate: (insight: CheckRunInsightEvidence) => ({
+        ...insight,
+        dependencyId: 'dependency:wrong',
+      }),
+    },
+    {
+      name: 'noncontiguous owner order',
+      mutate: (insight: CheckRunInsightEvidence) => ({
+        ...insight,
+        owner: { ...insight.owner, order: 1 },
+      }),
+    },
+  ])('rejects $name in manifest insight evidence', ({ mutate }) => {
+    let state = createCheckRunState({ mode: 'major', write: false })
+    state = reduceCheckRun(state, { type: 'packages-discovered', packages: 1, declared: 1 })
+    state = reduceCheckRun(state, {
+      type: 'resolution-completed',
+      eligible: 1,
+      unresolved: 0,
+      updates: 1,
+    })
+    expect(() =>
+      reduceCheckRun(state, {
+        type: 'selection-completed',
+        operations: 1,
+        targets: 1,
+        changes: [{ ...change, insight: mutate(manifestInsight()) }],
+        selectedTargets: [target],
+      }),
+    ).toThrow(/Check run invariant/u)
+  })
+
+  it.each([
+    {
+      name: 'catalog owner role',
+      mutate: (insight: CheckRunInsightEvidence) => ({
+        ...insight,
+        owner: { ...insight.owner, role: 'manifest' as const },
+      }),
+    },
+    {
+      name: 'catalog owner ID',
+      mutate: (insight: CheckRunInsightEvidence) => ({
+        ...insight,
+        owner: { ...insight.owner, id: 'catalog:wrong' },
+      }),
+    },
+    {
+      name: 'catalog evidence ID formula',
+      mutate: (insight: CheckRunInsightEvidence) => ({
+        ...insight,
+        catalog:
+          insight.catalog.role === 'owner'
+            ? { ...insight.catalog, id: 'catalog:wrong' }
+            : insight.catalog,
+      }),
+    },
+    {
+      name: 'catalog manager ID formula',
+      mutate: (insight: CheckRunInsightEvidence) => ({
+        ...insight,
+        catalog:
+          insight.catalog.role === 'owner'
+            ? { ...insight.catalog, manager: 'pnpm' as const }
+            : insight.catalog,
+      }),
+    },
+    {
+      name: 'catalog source file ID',
+      mutate: (insight: CheckRunInsightEvidence) => ({
+        ...insight,
+        catalog:
+          insight.catalog.role === 'owner'
+            ? { ...insight.catalog, sourceFileId: 'source:wrong' }
+            : insight.catalog,
+      }),
+    },
+    {
+      name: 'catalog source path',
+      mutate: (insight: CheckRunInsightEvidence) => ({
+        ...insight,
+        catalog:
+          insight.catalog.role === 'owner'
+            ? { ...insight.catalog, sourcePath: 'other/package.json' }
+            : insight.catalog,
+      }),
+    },
+    {
+      name: 'catalog owner path',
+      mutate: (insight: CheckRunInsightEvidence) => ({
+        ...insight,
+        owner: { ...insight.owner, path: 'other/package.json' },
+      }),
+    },
+    {
+      name: 'catalog owner label formula',
+      mutate: (insight: CheckRunInsightEvidence) => ({
+        ...insight,
+        owner: { ...insight.owner, label: 'wrong-safe-label' },
+      }),
+    },
+  ])('rejects $name in catalog insight evidence', ({ mutate }) => {
+    let state = createCheckRunState({ mode: 'major', write: false })
+    state = reduceCheckRun(state, { type: 'packages-discovered', packages: 1, declared: 1 })
+    state = reduceCheckRun(state, {
+      type: 'resolution-completed',
+      eligible: 1,
+      unresolved: 0,
+      updates: 1,
+    })
+    expect(() =>
+      reduceCheckRun(state, {
+        type: 'selection-completed',
+        operations: 1,
+        targets: 1,
+        changes: [{ ...change, insight: mutate(catalogInsight()) }],
+        selectedTargets: [target],
+      }),
+    ).toThrow(/Check run invariant/u)
+  })
+
+  it('rejects an empty sanitized dependency display in insight evidence', () => {
+    const rawName = '\u001B[31m'
+    let state = createCheckRunState({ mode: 'major', write: false })
+    state = reduceCheckRun(state, { type: 'packages-discovered', packages: 1, declared: 1 })
+    state = reduceCheckRun(state, {
+      type: 'resolution-completed',
+      eligible: 1,
+      unresolved: 0,
+      updates: 1,
+    })
+    expect(() =>
+      reduceCheckRun(state, {
+        type: 'selection-completed',
+        operations: 1,
+        targets: 1,
+        changes: [{ ...change, name: '', insight: manifestInsight(rawName) }],
+        selectedTargets: [target],
+      }),
+    ).toThrow(/dependency display/u)
+  })
+
+  it('rejects partial insight inventory and noncanonical complete owner order', () => {
+    const first = {
+      ...change,
+      id: 'first',
+      name: 'alpha',
+      owner: 'a/package.json',
+      insight: manifestInsight('alpha', 'a/package.json', 1),
+    }
+    const second = {
+      ...change,
+      id: 'second',
+      name: 'zeta',
+      owner: 'z/package.json',
+      insight: manifestInsight('zeta', 'z/package.json', 0),
+    }
+    const selectedTargets = [
+      { path: 'a/package.json', operationIds: ['first'] },
+      { path: 'z/package.json', operationIds: ['second'] },
+    ]
+    const resolved = () => {
+      let state = createCheckRunState({ mode: 'major', write: false })
+      state = reduceCheckRun(state, { type: 'packages-discovered', packages: 2, declared: 2 })
+      return reduceCheckRun(state, {
+        type: 'resolution-completed',
+        eligible: 2,
+        unresolved: 0,
+        updates: 2,
+      })
+    }
+
+    expect(() =>
+      reduceCheckRun(resolved(), {
+        type: 'selection-completed',
+        operations: 2,
+        targets: 2,
+        changes: [{ ...first, insight: undefined }, second],
+        selectedTargets,
+      }),
+    ).toThrow(/insight inventory is incomplete/u)
+    expect(() =>
+      reduceCheckRun(resolved(), {
+        type: 'selection-completed',
+        operations: 2,
+        targets: 2,
+        changes: [first, second],
+        selectedTargets,
+      }),
+    ).toThrow(/owner group order is not canonical/u)
   })
 
   it('never reflects hostile raw event text in invariant messages', () => {

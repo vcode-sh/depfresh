@@ -1,7 +1,13 @@
+import { isAbsolute, win32 } from 'node:path'
 import type { depfreshOptions } from '../../../types'
 import { sanitizeTerminalText } from '../../../utils/format'
 import type { LegacySelectionEvidence } from '../../apply/legacy-plan'
-import type { CheckRunChange, CheckRunTarget } from '../run-model'
+import {
+  normalizeRelationshipCompatibilityDetail,
+  RelationshipEvidenceError,
+  reconcileRelationshipEvidence,
+} from '../relationship-evidence'
+import type { CheckRunChange, CheckRunInsightEvidence, CheckRunTarget } from '../run-model'
 import type { VisualPlusChangeMetadata } from './input'
 
 export interface VisualPlusSelectionProjection {
@@ -36,12 +42,51 @@ export function createVisualPlusSelectionProjection(
   if (!(Number.isFinite(wallClockMs) && Number.isInteger(wallClockMs) && wallClockMs >= 0)) {
     throw new VisualPlusIntegrationError('wall clock must be a finite nonnegative integer')
   }
+  const candidates = evidence.operations.map((operation) => {
+    const ageMs = releaseAge(operation.publishedAt, wallClockMs)
+    const detail = normalizeRelationshipCompatibilityDetail(operation.nodeCompat)
+    return {
+      operationId: operation.operationId,
+      displayName: sanitizeTerminalText(operation.name),
+      rawDisplayName: operation.name,
+      physicalTarget: operation.physicalTarget,
+      ...(ageMs === null ? {} : { displayedAgeMs: ageMs }),
+      dependencyId: operation.dependencyId,
+      rawName: operation.rawName,
+      sourceFileId: operation.sourceFileId,
+      sourcePath: operation.sourcePath,
+      occurrencePath: operation.occurrencePath,
+      owner: operation.owner,
+      catalog: operation.catalog,
+      ageMs,
+      compatibility: {
+        status:
+          operation.nodeCompatible === true
+            ? ('compatible' as const)
+            : operation.nodeCompatible === false
+              ? ('incompatible' as const)
+              : ('unknown' as const),
+        ...(detail === undefined ? {} : { detail }),
+      },
+    }
+  })
+  let insights: readonly CheckRunInsightEvidence[]
+  try {
+    insights = reconcileRelationshipEvidence(candidates, { suppliedOwnerOrder: false })
+  } catch (error) {
+    if (error instanceof RelationshipEvidenceError) {
+      throw new VisualPlusIntegrationError(error.message)
+    }
+    throw error
+  }
   validateEvidenceMembership(evidence)
 
   const changes: CheckRunChange[] = []
   const metadata: VisualPlusChangeMetadata[] = []
-  for (const operation of evidence.operations) {
-    const ageMs = releaseAge(operation.publishedAt, wallClockMs)
+  for (let index = 0; index < evidence.operations.length; index += 1) {
+    const operation = evidence.operations[index]!
+    const insight = insights[index]!
+    const owner = insight.owner
     changes.push({
       id: sanitizeTerminalText(operation.operationId),
       name: sanitizeTerminalText(operation.name),
@@ -49,34 +94,25 @@ export function createVisualPlusSelectionProjection(
       current: sanitizeTerminalText(operation.current),
       target: sanitizeTerminalText(operation.target),
       diff: operation.diff,
-      ...(ageMs === null ? {} : { ageMs }),
+      ...(insight.ageMs === null ? {} : { ageMs: insight.ageMs }),
+      insight,
     })
-    const detail =
-      operation.nodeCompat === undefined ? undefined : sanitizeTerminalText(operation.nodeCompat)
     metadata.push({
       operationId: sanitizeTerminalText(operation.operationId),
       ownerGroup: {
-        id: `package:${operation.packageIndex}`,
-        order: operation.packageIndex,
-        label: operation.ownerLabel,
-        physicalTarget: operation.physicalTarget,
+        id: owner.id,
+        order: owner.order,
+        label: owner.label,
+        physicalTarget: owner.physicalTarget,
       },
-      ageMs,
-      compatibility: {
-        status:
-          operation.nodeCompatible === true
-            ? 'compatible'
-            : operation.nodeCompatible === false
-              ? 'incompatible'
-              : 'unknown',
-        ...(detail === undefined ? {} : { detail }),
-      },
-      ...(operation.catalog === undefined
+      ageMs: insight.ageMs,
+      compatibility: { ...insight.compatibility },
+      ...(insight.catalog.role === 'direct'
         ? {}
         : {
             catalog: {
-              name: operation.catalog.name,
-              sourcePath: operation.catalog.sourcePath,
+              name: insight.catalog.name,
+              sourcePath: insight.catalog.sourcePath,
             },
           }),
     })
@@ -94,23 +130,16 @@ export function createVisualPlusSelectionProjection(
 
 function validateEvidenceMembership(evidence: LegacySelectionEvidence): void {
   const operationIds = evidence.operations.map((operation) => operation.operationId)
-  if (
-    operationIds.some(
-      (operationId) =>
-        operationId.trim().length === 0 || sanitizeTerminalText(operationId) !== operationId,
-    )
-  ) {
-    throw new VisualPlusIntegrationError('operation ID is unsafe')
-  }
-  if (new Set(operationIds).size !== operationIds.length) {
-    throw new VisualPlusIntegrationError('operation IDs must be unique')
-  }
   const selectedIds = new Set(operationIds)
   const assignedIds = new Set<string>()
   const targetPathByOperation = new Map<string, string>()
   const paths = new Set<string>()
   for (const target of evidence.targets) {
-    if (paths.has(target.path) || target.operationIds.length === 0) {
+    if (
+      !safeRepositoryPath(target.path) ||
+      paths.has(target.path) ||
+      target.operationIds.length === 0
+    ) {
       throw new VisualPlusIntegrationError('target inventory is inconsistent')
     }
     paths.add(target.path)
@@ -129,10 +158,21 @@ function validateEvidenceMembership(evidence: LegacySelectionEvidence): void {
     if (targetPathByOperation.get(operation.operationId) !== operation.physicalTarget) {
       throw new VisualPlusIntegrationError('operation physical target is inconsistent')
     }
-    if (operation.catalog && operation.catalog.sourcePath !== operation.physicalTarget) {
-      throw new VisualPlusIntegrationError('catalog physical target is inconsistent')
-    }
   }
+}
+
+function safeRepositoryPath(value: string): boolean {
+  if (
+    value.length === 0 ||
+    sanitizeTerminalText(value) !== value ||
+    isAbsolute(value) ||
+    win32.isAbsolute(value) ||
+    /^[A-Za-z]:/u.test(value) ||
+    value.includes('\\')
+  ) {
+    return false
+  }
+  return !value.split('/').some((part) => part.length === 0 || part === '.' || part === '..')
 }
 
 function releaseAge(publishedAt: string | undefined, wallClockMs: number): number | null {

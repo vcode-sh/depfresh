@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
+import { createRepositoryId } from '../../../repository/identity'
 import { DEFAULT_OPTIONS, type depfreshOptions } from '../../../types'
 import type { LegacySelectionEvidenceOperation } from '../../apply/legacy-plan'
+import { createCheckRunState, reduceCheckRun } from '../run-model'
 import { createVisualPlusSelectionProjection, isVisualPlusEligible } from './integration'
 
 type MutableEvidenceOperation = {
@@ -8,18 +10,56 @@ type MutableEvidenceOperation = {
 }
 
 interface MutableEvidence {
-  operations: MutableEvidenceOperation[]
+  operations: Array<
+    MutableEvidenceOperation & {
+      dependencyId: string
+      rawName: string
+      sourceFileId: string
+      sourcePath: string
+      owner: {
+        id: string
+        role: 'manifest' | 'catalog'
+        label: string
+        path: string
+        physicalTarget: string
+      }
+      catalog:
+        | { role: 'direct' }
+        | {
+            role: 'owner'
+            id: string
+            manager: 'pnpm' | 'bun' | 'yarn'
+            name: string
+            sourceFileId: string
+            sourcePath: string
+          }
+    }
+  >
   targets: Array<{ path: string; operationIds: string[] }>
 }
 
 function evidence(): MutableEvidence {
+  const catalogSourceId = createRepositoryId('source', 'package.json')
+  const catalogId = createRepositoryId('catalog', 'package.json\0bun\0default')
+  const manifestSourceId = createRepositoryId('source', 'packages/b/package.json')
+  const manifestOwnerId = createRepositoryId('package', 'packages/b/package.json')
   return {
     operations: [
       {
         operationId: 'operation-shared',
         packageIndex: 1,
         changeIndex: 0,
-        ownerLabel: 'workspace a',
+        dependencyId: createRepositoryId('dependency', '\u001B[31mshared'),
+        rawName: '\u001B[31mshared',
+        sourceFileId: catalogSourceId,
+        sourcePath: 'package.json',
+        owner: {
+          id: catalogId,
+          role: 'catalog',
+          label: 'default',
+          path: 'package.json',
+          physicalTarget: 'package.json',
+        },
         physicalTarget: 'package.json',
         occurrencePath: ['workspaces', 'catalog', 'shared'],
         name: '\u001B[31mshared',
@@ -29,13 +69,31 @@ function evidence(): MutableEvidence {
         publishedAt: '2025-01-01T00:00:00.000Z',
         nodeCompatible: false,
         nodeCompat: '\u001B[31m<24',
-        catalog: { name: 'default', sourcePath: 'package.json' },
+        catalog: {
+          role: 'owner',
+          id: catalogId,
+          manager: 'bun',
+          name: 'default',
+          sourceFileId: catalogSourceId,
+          sourcePath: 'package.json',
+        },
       },
       {
         operationId: 'operation-future',
         packageIndex: 2,
         changeIndex: 3,
-        ownerLabel: 'workspace b',
+        dependencyId: createRepositoryId('dependency', 'future'),
+        rawName: 'future',
+        sourceFileId: manifestSourceId,
+        sourcePath: 'packages/b/package.json',
+        owner: {
+          id: manifestOwnerId,
+          role: 'manifest',
+          label: 'workspace b',
+          path: 'packages/b/package.json',
+          physicalTarget: 'packages/b/package.json',
+        },
+        catalog: { role: 'direct' },
         physicalTarget: 'packages/b/package.json',
         occurrencePath: ['dependencies', 'future'],
         name: 'future',
@@ -49,7 +107,18 @@ function evidence(): MutableEvidence {
         operationId: 'operation-unknown',
         packageIndex: 2,
         changeIndex: 4,
-        ownerLabel: 'workspace b',
+        dependencyId: createRepositoryId('dependency', 'unknown'),
+        rawName: 'unknown',
+        sourceFileId: manifestSourceId,
+        sourcePath: 'packages/b/package.json',
+        owner: {
+          id: manifestOwnerId,
+          role: 'manifest',
+          label: 'workspace b',
+          path: 'packages/b/package.json',
+          physicalTarget: 'packages/b/package.json',
+        },
+        catalog: { role: 'direct' },
         physicalTarget: 'packages/b/package.json',
         occurrencePath: ['devDependencies', 'unknown'],
         name: 'unknown',
@@ -62,7 +131,18 @@ function evidence(): MutableEvidence {
         operationId: 'operation-loose-date',
         packageIndex: 2,
         changeIndex: 5,
-        ownerLabel: 'workspace b',
+        dependencyId: createRepositoryId('dependency', 'loose-date'),
+        rawName: 'loose-date',
+        sourceFileId: manifestSourceId,
+        sourcePath: 'packages/b/package.json',
+        owner: {
+          id: manifestOwnerId,
+          role: 'manifest',
+          label: 'workspace b',
+          path: 'packages/b/package.json',
+          physicalTarget: 'packages/b/package.json',
+        },
+        catalog: { role: 'direct' },
         physicalTarget: 'packages/b/package.json',
         occurrencePath: ['devDependencies', 'loose-date'],
         name: 'loose-date',
@@ -87,6 +167,10 @@ describe('Visual+ integration projection', () => {
     const source = evidence()
     const now = Date.parse('2026-01-01T00:00:00.000Z')
     const result = createVisualPlusSelectionProjection(source, now)
+    const catalogSourceId = createRepositoryId('source', 'package.json')
+    const catalogId = createRepositoryId('catalog', 'package.json\0bun\0default')
+    const manifestSourceId = createRepositoryId('source', 'packages/b/package.json')
+    const manifestOwnerId = createRepositoryId('package', 'packages/b/package.json')
 
     expect(result.changes).toEqual([
       {
@@ -97,6 +181,31 @@ describe('Visual+ integration projection', () => {
         target: '2.0.0',
         diff: 'major',
         ageMs: 365 * 24 * 60 * 60 * 1000,
+        insight: {
+          dependencyId: createRepositoryId('dependency', '\u001B[31mshared'),
+          rawName: '\u001B[31mshared',
+          sourceFileId: catalogSourceId,
+          sourcePath: 'package.json',
+          occurrencePath: ['workspaces', 'catalog', 'shared'],
+          owner: {
+            id: catalogId,
+            role: 'catalog',
+            label: 'default',
+            path: 'package.json',
+            order: 0,
+            physicalTarget: 'package.json',
+          },
+          catalog: {
+            role: 'owner',
+            id: catalogId,
+            manager: 'bun',
+            name: 'default',
+            sourceFileId: catalogSourceId,
+            sourcePath: 'package.json',
+          },
+          ageMs: 365 * 24 * 60 * 60 * 1000,
+          compatibility: { status: 'incompatible', detail: '<24' },
+        },
       },
       {
         id: 'operation-future',
@@ -105,6 +214,24 @@ describe('Visual+ integration projection', () => {
         current: '1.0.0',
         target: '1.1.0',
         diff: 'minor',
+        insight: {
+          dependencyId: createRepositoryId('dependency', 'future'),
+          rawName: 'future',
+          sourceFileId: manifestSourceId,
+          sourcePath: 'packages/b/package.json',
+          occurrencePath: ['dependencies', 'future'],
+          owner: {
+            id: manifestOwnerId,
+            role: 'manifest',
+            label: 'workspace b',
+            path: 'packages/b/package.json',
+            order: 1,
+            physicalTarget: 'packages/b/package.json',
+          },
+          catalog: { role: 'direct' },
+          ageMs: null,
+          compatibility: { status: 'compatible' },
+        },
       },
       {
         id: 'operation-unknown',
@@ -113,6 +240,24 @@ describe('Visual+ integration projection', () => {
         current: '1.0.0',
         target: '1.0.1',
         diff: 'patch',
+        insight: {
+          dependencyId: createRepositoryId('dependency', 'unknown'),
+          rawName: 'unknown',
+          sourceFileId: manifestSourceId,
+          sourcePath: 'packages/b/package.json',
+          occurrencePath: ['devDependencies', 'unknown'],
+          owner: {
+            id: manifestOwnerId,
+            role: 'manifest',
+            label: 'workspace b',
+            path: 'packages/b/package.json',
+            order: 1,
+            physicalTarget: 'packages/b/package.json',
+          },
+          catalog: { role: 'direct' },
+          ageMs: null,
+          compatibility: { status: 'unknown' },
+        },
       },
       {
         id: 'operation-loose-date',
@@ -121,6 +266,24 @@ describe('Visual+ integration projection', () => {
         current: '1.0.0',
         target: '1.0.1',
         diff: 'patch',
+        insight: {
+          dependencyId: createRepositoryId('dependency', 'loose-date'),
+          rawName: 'loose-date',
+          sourceFileId: manifestSourceId,
+          sourcePath: 'packages/b/package.json',
+          occurrencePath: ['devDependencies', 'loose-date'],
+          owner: {
+            id: manifestOwnerId,
+            role: 'manifest',
+            label: 'workspace b',
+            path: 'packages/b/package.json',
+            order: 1,
+            physicalTarget: 'packages/b/package.json',
+          },
+          catalog: { role: 'direct' },
+          ageMs: null,
+          compatibility: { status: 'unknown' },
+        },
       },
     ])
     expect(result.targets).toEqual(source.targets)
@@ -128,9 +291,9 @@ describe('Visual+ integration projection', () => {
       {
         operationId: 'operation-shared',
         ownerGroup: {
-          id: 'package:1',
-          order: 1,
-          label: 'workspace a',
+          id: catalogId,
+          order: 0,
+          label: 'default',
           physicalTarget: 'package.json',
         },
         ageMs: 365 * 24 * 60 * 60 * 1000,
@@ -140,8 +303,8 @@ describe('Visual+ integration projection', () => {
       {
         operationId: 'operation-future',
         ownerGroup: {
-          id: 'package:2',
-          order: 2,
+          id: manifestOwnerId,
+          order: 1,
           label: 'workspace b',
           physicalTarget: 'packages/b/package.json',
         },
@@ -151,8 +314,8 @@ describe('Visual+ integration projection', () => {
       {
         operationId: 'operation-unknown',
         ownerGroup: {
-          id: 'package:2',
-          order: 2,
+          id: manifestOwnerId,
+          order: 1,
           label: 'workspace b',
           physicalTarget: 'packages/b/package.json',
         },
@@ -162,8 +325,8 @@ describe('Visual+ integration projection', () => {
       {
         operationId: 'operation-loose-date',
         ownerGroup: {
-          id: 'package:2',
-          order: 2,
+          id: manifestOwnerId,
+          order: 1,
           label: 'workspace b',
           physicalTarget: 'packages/b/package.json',
         },
@@ -175,6 +338,8 @@ describe('Visual+ integration projection', () => {
     expect(Object.isFrozen(result.changes)).toBe(true)
     expect(Object.isFrozen(result.targets[1]?.operationIds)).toBe(true)
     expect(Object.isFrozen(result.metadata[0]?.ownerGroup)).toBe(true)
+    expect(Object.isFrozen(result.changes[0]?.insight?.owner)).toBe(true)
+    expect(Object.isFrozen(result.changes[0]?.insight?.occurrencePath)).toBe(true)
     expect(result.changes).not.toBe(source.operations)
     expect(result.targets).not.toBe(source.targets)
   })
@@ -201,6 +366,40 @@ describe('Visual+ integration projection', () => {
     expect(createVisualPlusSelectionProjection(withOffset, now).metadata[0]?.ageMs).toBe(
       365 * 24 * 60 * 60 * 1000,
     )
+  })
+
+  it('omits a node compatibility detail that sanitizes to empty and remains reducer-valid', () => {
+    const source = evidence()
+    source.operations[0]!.nodeCompat = '\u001B[31m'
+    const projection = createVisualPlusSelectionProjection(
+      source,
+      Date.parse('2026-01-01T00:00:00.000Z'),
+    )
+    expect(projection.changes[0]?.insight?.compatibility).toEqual({
+      status: 'incompatible',
+    })
+
+    let state = createCheckRunState({ mode: 'major', write: false })
+    state = reduceCheckRun(state, {
+      type: 'packages-discovered',
+      packages: 2,
+      declared: projection.changes.length,
+    })
+    state = reduceCheckRun(state, {
+      type: 'resolution-completed',
+      eligible: projection.changes.length,
+      unresolved: 0,
+      updates: projection.changes.length,
+    })
+    expect(() =>
+      reduceCheckRun(state, {
+        type: 'selection-completed',
+        operations: projection.changes.length,
+        targets: projection.targets.length,
+        changes: projection.changes,
+        selectedTargets: projection.targets,
+      }),
+    ).not.toThrow()
   })
 
   it.each([
@@ -267,13 +466,179 @@ describe('Visual+ integration projection', () => {
     )
 
     const catalogMismatch = evidence()
+    const catalog = catalogMismatch.operations[0]!.catalog
+    if (catalog.role !== 'owner') throw new Error('Expected catalog owner evidence')
     catalogMismatch.operations[0]!.catalog = {
-      name: 'default',
+      ...catalog,
       sourcePath: 'other/package.json',
     }
     expect(() => createVisualPlusSelectionProjection(catalogMismatch, now)).toThrow(
-      /catalog physical target is inconsistent/u,
+      /catalog owner evidence is inconsistent/u,
     )
+  })
+
+  it('assigns physical owner order independently from selection and consumer order', () => {
+    const now = Date.parse('2026-01-01T00:00:00.000Z')
+    const first = createVisualPlusSelectionProjection(evidence(), now)
+    const permuted = evidence()
+    permuted.operations.reverse()
+    permuted.targets.reverse()
+    for (const target of permuted.targets) target.operationIds.reverse()
+    const second = createVisualPlusSelectionProjection(permuted, now)
+
+    const ownerOrders = (projection: typeof first) =>
+      Object.fromEntries(
+        projection.changes.map((change) => [change.id, change.insight?.owner.order]),
+      )
+    expect(ownerOrders(second)).toEqual(ownerOrders(first))
+    expect(new Set(first.changes.map((change) => change.insight?.owner.order))).toEqual(
+      new Set([0, 1]),
+    )
+  })
+
+  it.each([
+    {
+      name: 'manifest owner role',
+      mutate: (source: MutableEvidence) => {
+        source.operations[1]!.owner.role = 'catalog'
+      },
+    },
+    {
+      name: 'manifest owner path',
+      mutate: (source: MutableEvidence) => {
+        source.operations[1]!.owner.path = 'other/package.json'
+      },
+    },
+    {
+      name: 'manifest owner ID',
+      mutate: (source: MutableEvidence) => {
+        source.operations[1]!.owner.id = 'package:wrong'
+      },
+    },
+    {
+      name: 'owner physical target',
+      mutate: (source: MutableEvidence) => {
+        source.operations[1]!.owner.physicalTarget = 'other/package.json'
+      },
+    },
+    {
+      name: 'catalog owner role',
+      mutate: (source: MutableEvidence) => {
+        source.operations[0]!.owner.role = 'manifest'
+      },
+    },
+    {
+      name: 'catalog owner ID',
+      mutate: (source: MutableEvidence) => {
+        source.operations[0]!.owner.id = 'catalog:wrong'
+      },
+    },
+    {
+      name: 'catalog evidence ID formula',
+      mutate: (source: MutableEvidence) => {
+        const catalog = source.operations[0]!.catalog
+        if (catalog.role !== 'owner') throw new Error('Expected catalog owner evidence')
+        catalog.id = 'catalog:wrong'
+      },
+    },
+    {
+      name: 'catalog manager ID formula',
+      mutate: (source: MutableEvidence) => {
+        const catalog = source.operations[0]!.catalog
+        if (catalog.role !== 'owner') throw new Error('Expected catalog owner evidence')
+        catalog.manager = 'pnpm'
+      },
+    },
+    {
+      name: 'catalog source file ID',
+      mutate: (source: MutableEvidence) => {
+        const catalog = source.operations[0]!.catalog
+        if (catalog.role !== 'owner') throw new Error('Expected catalog owner evidence')
+        catalog.sourceFileId = 'source:wrong'
+      },
+    },
+    {
+      name: 'catalog source path',
+      mutate: (source: MutableEvidence) => {
+        const catalog = source.operations[0]!.catalog
+        if (catalog.role !== 'owner') throw new Error('Expected catalog owner evidence')
+        catalog.sourcePath = 'other/package.json'
+      },
+    },
+    {
+      name: 'catalog owner path',
+      mutate: (source: MutableEvidence) => {
+        source.operations[0]!.owner.path = 'other/package.json'
+      },
+    },
+    {
+      name: 'source path differs from physical target',
+      mutate: (source: MutableEvidence) => {
+        source.operations[1]!.sourcePath = 'other/package.json'
+      },
+    },
+    {
+      name: 'source reverse mapping',
+      mutate: (source: MutableEvidence) => {
+        source.operations[1]!.sourcePath = source.operations[0]!.sourcePath
+      },
+    },
+    {
+      name: 'dependency reverse mapping',
+      mutate: (source: MutableEvidence) => {
+        source.operations[2]!.rawName = source.operations[1]!.rawName
+        source.operations[2]!.name = source.operations[1]!.name
+      },
+    },
+    {
+      name: 'dependency ID formula',
+      mutate: (source: MutableEvidence) => {
+        source.operations[0]!.dependencyId = 'dependency:wrong'
+      },
+    },
+    {
+      name: 'source ID formula',
+      mutate: (source: MutableEvidence) => {
+        source.operations[0]!.sourceFileId = 'source:wrong'
+      },
+    },
+    {
+      name: 'unsafe source path',
+      mutate: (source: MutableEvidence) => {
+        source.operations[0]!.sourcePath = '../package.json'
+      },
+    },
+    {
+      name: 'empty sanitized dependency display',
+      mutate: (source: MutableEvidence) => {
+        const rawName = '\u001B[31m'
+        source.operations[0]!.rawName = rawName
+        source.operations[0]!.name = rawName
+        source.operations[0]!.dependencyId = createRepositoryId('dependency', rawName)
+      },
+    },
+    {
+      name: 'contradictory owner reference',
+      mutate: (source: MutableEvidence) => {
+        source.operations[1]!.owner = { ...source.operations[1]!.owner, label: 'other' }
+      },
+    },
+    {
+      name: 'duplicate physical occurrence',
+      mutate: (source: MutableEvidence) => {
+        source.operations[1]!.sourceFileId = source.operations[2]!.sourceFileId
+        source.operations[1]!.sourcePath = source.operations[2]!.sourcePath
+        source.operations[1]!.physicalTarget = source.operations[2]!.physicalTarget
+        source.operations[1]!.owner = { ...source.operations[2]!.owner }
+        source.operations[1]!.occurrencePath = [...source.operations[2]!.occurrencePath]
+        source.operations[1]!.catalog = { role: 'direct' }
+      },
+    },
+  ])('fails closed on $name', ({ mutate }) => {
+    const now = Date.parse('2026-01-01T00:00:00.000Z')
+    const source = evidence()
+    mutate(source)
+    expect(() => createVisualPlusSelectionProjection(source, now)).toThrow(/Visual\+ integration/u)
   })
 })
 
