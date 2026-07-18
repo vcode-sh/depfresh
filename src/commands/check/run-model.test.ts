@@ -770,6 +770,102 @@ describe('check run model', () => {
     },
   )
 
+  it('retains an untouched failed target receipt after completed recovery', () => {
+    let state = startExactApply(selectedInventoryState(2, 2))
+    state = reduceCheckRun(state, {
+      type: 'apply-completed',
+      status: 'passed',
+      recoveryRequired: true,
+    })
+    state = reduceCheckRun(state, {
+      type: 'recovery-recorded',
+      executed: true,
+      status: 'completed',
+      journalId: 'run-partial-attempt',
+      restoredPaths: [state.targets[0]!.path],
+      unrecoveredPaths: [],
+    })
+    state = completePhase(state, 'recover')
+    state = completePhase(state, 'observe')
+
+    const revertedTarget = state.targets[0]!
+    const untouchedTarget = state.targets[1]!
+    state = results(
+      state,
+      [
+        operationResult(revertedTarget.operationIds[0]!, 'reverted'),
+        {
+          ...operationResult(untouchedTarget.operationIds[0]!, 'failed'),
+          notAttempted: true,
+        },
+      ],
+      [
+        targetResult(revertedTarget, 'reverted'),
+        {
+          ...targetResult(untouchedTarget, 'failed'),
+          notAttempted: true,
+        },
+      ],
+    )
+
+    expect(state.results.totals).toEqual({
+      applied: 0,
+      blocked: 0,
+      notAttempted: 1,
+      failed: 1,
+      reverted: 1,
+      unknown: 0,
+    })
+    expect(state.results.targetTotals).toEqual(state.results.totals)
+
+    state = reduceCheckRun(state, {
+      type: 'run-completed',
+      eventId: 'complete:partial-attempt',
+      elapsedMs: 3,
+      exitCode: 2,
+    })
+
+    expect(state.phases.find((phase) => phase.name === 'complete')?.status).toBe('failed')
+    expect(state.exitCode).toBe(2)
+  })
+
+  it.each(['applied', 'reverted'] as const)(
+    'rejects a %s operation with an incoherent not-attempted receipt',
+    (outcome) => {
+      const state = finishApply()
+      expect(() =>
+        results(
+          state,
+          [{ ...operationResult(change.id, outcome), notAttempted: true }],
+          [{ ...physicalTarget(outcome), notAttempted: true }],
+        ),
+      ).toThrow()
+    },
+  )
+
+  it('rejects an untouched target receipt that differs from its exact owned operation', () => {
+    let state = completePhase(selectedState(), 'preflight')
+    state = completePhase(state, 'stage')
+    state = completePhase(state, 'apply', 'failed')
+    state = reduceCheckRun(state, {
+      type: 'recovery-recorded',
+      executed: true,
+      status: 'partial',
+      restoredPaths: [],
+      unrecoveredPaths: [target.path],
+    })
+    state = completePhase(state, 'recover', 'failed')
+    state = completePhase(state, 'observe', 'failed')
+
+    expect(() =>
+      results(
+        state,
+        [{ ...operationResult(change.id, 'failed'), notAttempted: true }],
+        [physicalTarget('failed')],
+      ),
+    ).toThrow('physical target receipt dimensions differ from operations')
+  })
+
   it('retains cleanup uncertainty without inventing executed recovery', () => {
     let state = reduceCheckRun(startExactApply(), {
       type: 'apply-completed',

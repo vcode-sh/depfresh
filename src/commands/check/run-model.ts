@@ -719,10 +719,13 @@ function copyOperationResult(
     }
     if (!write) throw new CheckRunInvariantError('read-only runs cannot report applied results')
   }
-  if (result.outcome === 'reverted' || result.outcome === 'failed') {
+  if (result.outcome === 'reverted') {
     if (result.blocked || result.notAttempted || result.unknown) {
       throw new CheckRunInvariantError('known final operation cannot retain a safety receipt')
     }
+  }
+  if (result.outcome === 'failed' && (result.blocked || result.unknown)) {
+    throw new CheckRunInvariantError('failed operation cannot retain blocked or unknown truth')
   }
   if (result.outcome === 'blocked' && !result.blocked) {
     throw new CheckRunInvariantError('blocked operation requires a blocked receipt')
@@ -895,7 +898,17 @@ function assertResultPhaseCoherence(
   if (totals.blocked > 0 && !blockedPhase) {
     throw new CheckRunInvariantError('blocked results require a blocked mutation phase')
   }
-  if (totals.failed > 0 && !failedPhase && state.recovery.status !== 'partial') {
+  const completedUntouchedFailures =
+    state.recovery.status === 'completed' &&
+    operations
+      .filter((operation) => operation.outcome === 'failed')
+      .every((operation) => operation.notAttempted)
+  if (
+    totals.failed > 0 &&
+    !failedPhase &&
+    state.recovery.status !== 'partial' &&
+    !completedUntouchedFailures
+  ) {
     throw new CheckRunInvariantError('failed results require a failed lifecycle branch')
   }
   if (
@@ -949,13 +962,14 @@ function assertResultPhaseCoherence(
     }
     if (
       totals.blocked > 0 ||
-      totals.notAttempted > 0 ||
       totals.unknown > 0 ||
+      operations.some((operation) => operation.notAttempted && operation.outcome !== 'failed') ||
       targets.some(
         (target) =>
           target.outcome === 'blocked' ||
           target.outcome === 'not-attempted' ||
-          target.outcome === 'unknown',
+          target.outcome === 'unknown' ||
+          (target.notAttempted && target.outcome !== 'failed'),
       )
     ) {
       throw new CheckRunInvariantError('completed recovery cannot retain forbidden results')
