@@ -440,7 +440,7 @@ function recordRecovery(
   if (phaseStatus(state.phases, 'recover') !== 'active') {
     throw new CheckRunInvariantError('recovery can only be recorded during recover')
   }
-  return acceptedTerminal(state, event, { recovery: copyRecovery(state, event) })
+  return acceptedTerminal(state, event, { recovery: copyRecovery(event) })
 }
 
 function completeRun(
@@ -878,55 +878,20 @@ function assertResultPhaseCoherence(
   if (state.recovery.status === 'unknown' && recover !== 'unknown') {
     throw new CheckRunInvariantError('unknown recovery requires an unknown recovery phase')
   }
-  if (recoveryRecorded) assertRecoveryTargetCoherence(state.recovery, targets)
+  if (
+    state.recovery.status === 'completed' &&
+    (totals.applied > 0 || targets.some((target) => target.outcome === 'applied'))
+  ) {
+    throw new CheckRunInvariantError('completed recovery cannot retain applied results')
+  }
   if (state.recovery.status === 'partial' && totals.failed + totals.unknown === 0) {
     throw new CheckRunInvariantError('partial recovery requires failed or unknown results')
-  }
-  if (state.recovery.status === 'unknown' && totals.unknown === 0) {
-    throw new CheckRunInvariantError('unknown recovery requires unknown results')
   }
   if (observe === 'unknown' && totals.unknown === 0) {
     throw new CheckRunInvariantError('unknown observation requires unknown results')
   }
   if (observe === 'failed' && totals.failed + totals.unknown === 0) {
     throw new CheckRunInvariantError('failed observation requires failed or unknown results')
-  }
-}
-
-function assertRecoveryTargetCoherence(
-  recovery: CheckRunRecovery,
-  targets: readonly CheckRunTargetResult[],
-): void {
-  const restored = new Set(recovery.restoredPaths)
-  const unrecovered = new Set(recovery.unrecoveredPaths)
-
-  // Recovery path receipts are exact physical-target evidence, not command-wide guesses.
-  for (const target of targets) {
-    if (target.outcome === 'reverted' && !restored.has(target.path)) {
-      throw new CheckRunInvariantError('reverted target requires restored-path evidence')
-    }
-    if (restored.has(target.path) && target.outcome !== 'reverted') {
-      throw new CheckRunInvariantError('restored path requires a reverted target result')
-    }
-    if (unrecovered.has(target.path) && !['failed', 'unknown'].includes(target.outcome)) {
-      throw new CheckRunInvariantError('unrecovered path requires failed or unknown target truth')
-    }
-    if (
-      (target.outcome === 'failed' || target.outcome === 'unknown') &&
-      !unrecovered.has(target.path)
-    ) {
-      throw new CheckRunInvariantError(
-        'failed or unknown target requires unrecovered-path evidence',
-      )
-    }
-  }
-
-  const targetPaths = new Set(targets.map((target) => target.path))
-  if ([...restored].some((path) => !targetPaths.has(path))) {
-    throw new CheckRunInvariantError('restored path requires a reverted target result')
-  }
-  if ([...unrecovered].some((path) => !targetPaths.has(path))) {
-    throw new CheckRunInvariantError('unrecovered path requires failed or unknown target truth')
   }
 }
 
@@ -977,7 +942,6 @@ function copyDiagnostics(
 }
 
 function copyRecovery(
-  state: CheckRunSnapshot,
   event: Extract<CheckRunEvent, { type: 'recovery-recorded' }>,
 ): CheckRunRecovery {
   assertRecoveryStatus(event.status)
@@ -991,20 +955,6 @@ function copyRecovery(
   assertUnique(unrecoveredPaths, 'unrecovered paths')
   if (restoredPaths.some((path) => unrecoveredPaths.includes(path))) {
     throw new CheckRunInvariantError('recovery paths cannot be both restored and unrecovered')
-  }
-  if (event.status === 'completed' && unrecoveredPaths.length > 0) {
-    throw new CheckRunInvariantError('completed recovery cannot retain unrecovered paths')
-  }
-  if (event.status !== 'completed' && unrecoveredPaths.length === 0) {
-    throw new CheckRunInvariantError('incomplete recovery requires unrecovered path evidence')
-  }
-  if (state.targets.length > 0) {
-    const selectedPaths = new Set(state.targets.map((target) => target.path))
-    for (const path of [...restoredPaths, ...unrecoveredPaths]) {
-      if (!selectedPaths.has(path)) {
-        throw new CheckRunInvariantError(`recovery path is not a selected target: ${path}`)
-      }
-    }
   }
   const externalEffects = event.externalEffects?.map((effect) => {
     assertSafeText('external effect', effect)

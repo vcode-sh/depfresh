@@ -165,6 +165,103 @@ function finishApply(state = selectedState()): CheckRunSnapshot {
   return completePhase(next, 'observe')
 }
 
+type RecoveryRecordedEvent = Extract<CheckRunEvent, { type: 'recovery-recorded' }>
+type PhaseCompletedEvent = Extract<CheckRunEvent, { type: 'phase-completed' }>
+
+interface RecoveryCompatibilityCase {
+  readonly name: string
+  readonly applyStatus: PhaseCompletedEvent['status']
+  readonly recoveryStatus: PhaseCompletedEvent['status']
+  readonly observeStatus: PhaseCompletedEvent['status']
+  readonly recovery: Omit<RecoveryRecordedEvent, 'type'>
+  readonly outcomes: readonly CheckRunOperationResult['outcome'][]
+  readonly expectedError?: string
+}
+
+const recoveryCompatibilityCases: readonly RecoveryCompatibilityCase[] = [
+  {
+    name: 'completed recovery accepts reverted and semantic failed outcomes with restored lockfile',
+    applyStatus: 'failed',
+    recoveryStatus: 'passed',
+    observeStatus: 'passed',
+    recovery: {
+      status: 'completed',
+      restoredPaths: ['package-lock.json'],
+      unrecoveredPaths: [],
+    },
+    outcomes: ['reverted', 'failed'],
+  },
+  {
+    name: 'completed recovery rejects a surviving applied outcome',
+    applyStatus: 'failed',
+    recoveryStatus: 'passed',
+    observeStatus: 'passed',
+    recovery: {
+      status: 'completed',
+      restoredPaths: ['package-lock.json'],
+      unrecoveredPaths: [],
+    },
+    outcomes: ['reverted', 'applied'],
+    expectedError: 'completed recovery cannot retain applied results',
+  },
+  {
+    name: 'partial recovery accepts semantic failure without an unrecovered manifest path',
+    applyStatus: 'failed',
+    recoveryStatus: 'failed',
+    observeStatus: 'failed',
+    recovery: {
+      status: 'partial',
+      restoredPaths: ['package-lock.json'],
+      unrecoveredPaths: [],
+    },
+    outcomes: ['reverted', 'failed'],
+  },
+  {
+    name: 'unknown recovery accepts restored lockfile and external-effect-only uncertainty',
+    applyStatus: 'failed',
+    recoveryStatus: 'unknown',
+    observeStatus: 'passed',
+    recovery: {
+      status: 'unknown',
+      restoredPaths: ['package-lock.json'],
+      unrecoveredPaths: [],
+      externalEffects: ['package-manager-cache'],
+    },
+    outcomes: ['reverted'],
+  },
+  {
+    name: 'unknown recovery accepts an unrecovered transaction lockfile outside selected targets',
+    applyStatus: 'unknown',
+    recoveryStatus: 'unknown',
+    observeStatus: 'unknown',
+    recovery: {
+      status: 'unknown',
+      restoredPaths: [],
+      unrecoveredPaths: ['package-lock.json'],
+    },
+    outcomes: ['unknown'],
+  },
+]
+
+function applyRecoveryCompatibilityCase(fixture: RecoveryCompatibilityCase): CheckRunSnapshot {
+  let state = completePhase(
+    selectedInventoryState(fixture.outcomes.length, fixture.outcomes.length),
+    'preflight',
+  )
+  state = completePhase(state, 'stage')
+  state = completePhase(state, 'apply', fixture.applyStatus)
+  state = reduceCheckRun(state, { type: 'recovery-recorded', ...fixture.recovery })
+  state = completePhase(state, 'recover', fixture.recoveryStatus)
+  state = completePhase(state, 'observe', fixture.observeStatus)
+  return results(
+    state,
+    state.targets.map((selected, index) =>
+      operationResult(selected.operationIds[0]!, fixture.outcomes[index]!),
+    ),
+    state.targets.map((selected, index) => targetResult(selected, fixture.outcomes[index]!)),
+  )
+}
+
 describe('check run model', () => {
   it('reconciles complete lifecycle inventories and resolution counts', () => {
     const selected = inventory(76, 14)
@@ -475,152 +572,37 @@ describe('check run model', () => {
     expect(state.recovery.status).toBe('partial')
   })
 
-  it('preserves applied, reverted, and unknown target truth after partial recovery', () => {
-    let state = completePhase(selectedInventoryState(3, 3), 'preflight')
-    state = completePhase(state, 'stage')
-    state = completePhase(state, 'apply', 'unknown')
-    const [applied, reverted, unknown] = state.targets as readonly [
-      CheckRunTarget,
-      CheckRunTarget,
-      CheckRunTarget,
-    ]
-    state = reduceCheckRun(state, {
-      type: 'recovery-recorded',
-      status: 'partial',
-      restoredPaths: [reverted.path],
-      unrecoveredPaths: [unknown.path],
-    })
-    state = completePhase(state, 'recover', 'failed')
-    state = completePhase(state, 'observe', 'unknown')
-    state = results(
-      state,
-      [
-        operationResult(applied.operationIds[0]!, 'applied'),
-        operationResult(reverted.operationIds[0]!, 'reverted'),
-        operationResult(unknown.operationIds[0]!, 'unknown'),
-      ],
-      [
-        targetResult(applied, 'applied'),
-        targetResult(reverted, 'reverted'),
-        targetResult(unknown, 'unknown'),
-      ],
-    )
+  it.each(recoveryCompatibilityCases)('$name', (fixture) => {
+    if (fixture.expectedError) {
+      expect(() => applyRecoveryCompatibilityCase(fixture)).toThrow(fixture.expectedError)
+      return
+    }
 
-    expect(state.results.targetTotals).toMatchObject({ applied: 1, reverted: 1, unknown: 1 })
+    const state = applyRecoveryCompatibilityCase(fixture)
+    expect(state.recovery).toMatchObject(fixture.recovery)
+    expect(state.results.operations.map((result) => result.outcome)).toEqual(fixture.outcomes)
+    expect(state.results.targets.map((result) => result.outcome)).toEqual(fixture.outcomes)
   })
 
-  it('preserves reverted and failed target truth after partial recovery', () => {
-    let state = completePhase(selectedInventoryState(2, 2), 'preflight')
-    state = completePhase(state, 'stage')
-    state = completePhase(state, 'apply', 'failed')
-    const [reverted, failed] = state.targets as readonly [CheckRunTarget, CheckRunTarget]
-    state = reduceCheckRun(state, {
-      type: 'recovery-recorded',
-      status: 'partial',
-      restoredPaths: [reverted.path],
-      unrecoveredPaths: [failed.path],
-    })
-    state = completePhase(state, 'recover', 'failed')
-    state = completePhase(state, 'observe', 'failed')
-    state = results(
-      state,
-      [
-        operationResult(reverted.operationIds[0]!, 'reverted'),
-        operationResult(failed.operationIds[0]!, 'failed'),
-      ],
-      [targetResult(reverted, 'reverted'), targetResult(failed, 'failed')],
-    )
-
-    expect(state.results.targetTotals).toMatchObject({ reverted: 1, failed: 1 })
-  })
-
-  it('preserves conclusive applied and reverted targets during unknown recovery', () => {
-    let state = completePhase(selectedInventoryState(3, 3), 'preflight')
-    state = completePhase(state, 'stage')
-    state = completePhase(state, 'apply', 'unknown')
-    const [applied, reverted, unknown] = state.targets as readonly [
-      CheckRunTarget,
-      CheckRunTarget,
-      CheckRunTarget,
-    ]
-    state = reduceCheckRun(state, {
-      type: 'recovery-recorded',
-      status: 'unknown',
-      restoredPaths: [reverted.path],
-      unrecoveredPaths: [unknown.path],
-    })
-    state = completePhase(state, 'recover', 'unknown')
-    state = completePhase(state, 'observe', 'unknown')
-    state = results(
-      state,
-      [
-        operationResult(applied.operationIds[0]!, 'applied'),
-        operationResult(reverted.operationIds[0]!, 'reverted'),
-        operationResult(unknown.operationIds[0]!, 'unknown'),
-      ],
-      [
-        targetResult(applied, 'applied'),
-        targetResult(reverted, 'reverted'),
-        targetResult(unknown, 'unknown'),
-      ],
-    )
-
-    expect(state.recovery.status).toBe('unknown')
-    expect(state.results.targetTotals).toMatchObject({ applied: 1, reverted: 1, unknown: 1 })
-  })
-
-  it('reconciles restored and unrecovered paths bidirectionally with target truth', () => {
-    let state = completePhase(selectedInventoryState(2, 2), 'preflight')
-    state = completePhase(state, 'stage')
-    state = completePhase(state, 'apply', 'failed')
-    const [restored, unrecovered] = state.targets as readonly [CheckRunTarget, CheckRunTarget]
-    state = reduceCheckRun(state, {
-      type: 'recovery-recorded',
-      status: 'partial',
-      restoredPaths: [restored.path],
-      unrecoveredPaths: [unrecovered.path],
-    })
-    state = completePhase(state, 'recover', 'failed')
-    state = completePhase(state, 'observe', 'failed')
-
-    expect(() =>
-      results(
-        state,
-        [
-          operationResult(restored.operationIds[0]!, 'failed'),
-          operationResult(unrecovered.operationIds[0]!, 'failed'),
-        ],
-        [targetResult(restored, 'failed'), targetResult(unrecovered, 'failed')],
-      ),
-    ).toThrow('restored path requires a reverted target result')
-
-    expect(() =>
-      results(
-        state,
-        [
-          operationResult(restored.operationIds[0]!, 'reverted'),
-          operationResult(unrecovered.operationIds[0]!, 'applied'),
-        ],
-        [targetResult(restored, 'reverted'), targetResult(unrecovered, 'applied')],
-      ),
-    ).toThrow('unrecovered path requires failed or unknown target truth')
-  })
-
-  it('requires incomplete recovery statuses to retain unrecovered path evidence', () => {
-    for (const recoveryStatus of ['partial', 'unknown'] as const) {
+  it.each([
+    { restoredPaths: ['/package-lock.json'], unrecoveredPaths: [] },
+    { restoredPaths: [], unrecoveredPaths: ['../package-lock.json'] },
+  ])(
+    'rejects non-relative recovery transaction paths: $restoredPaths $unrecoveredPaths',
+    (paths) => {
       let state = completePhase(selectedState(), 'preflight')
       state = completePhase(state, 'stage')
-      state = completePhase(state, 'apply', recoveryStatus === 'partial' ? 'failed' : 'unknown')
+      state = completePhase(state, 'apply', 'failed')
+
       expect(() =>
         reduceCheckRun(state, {
           type: 'recovery-recorded',
-          status: recoveryStatus,
-          restoredPaths: [target.path],
-          unrecoveredPaths: [],
+          status: 'unknown',
+          ...paths,
         }),
-      ).toThrow('incomplete recovery requires unrecovered path evidence')
-    }
-  })
+      ).toThrow('path must be repository-relative')
+    },
+  )
 
   it('rejects unknown results without an unknown or blocked lifecycle cause', () => {
     let state = completePhase(selectedState(), 'preflight')
@@ -693,36 +675,6 @@ describe('check run model', () => {
         [physicalTarget('not-attempted')],
       ),
     ).toThrow('recovery phase requires recorded recovery evidence')
-  })
-
-  it('requires unknown recovery evidence to retain unknown final results', () => {
-    let state = completePhase(selectedState(), 'preflight')
-    state = completePhase(state, 'stage')
-    state = completePhase(state, 'apply', 'failed')
-    state = reduceCheckRun(state, {
-      type: 'recovery-recorded',
-      status: 'unknown',
-      restoredPaths: [],
-      unrecoveredPaths: [target.path],
-    })
-    state = completePhase(state, 'recover', 'unknown')
-    state = completePhase(state, 'observe', 'failed')
-
-    expect(() =>
-      results(
-        state,
-        [
-          {
-            operationId: change.id,
-            outcome: 'failed',
-            blocked: false,
-            notAttempted: false,
-            unknown: false,
-          },
-        ],
-        [physicalTarget('failed')],
-      ),
-    ).toThrow('unknown recovery requires unknown results')
   })
 
   it('rejects missing, duplicate, foreign, and all-zero write operation outcomes', () => {
