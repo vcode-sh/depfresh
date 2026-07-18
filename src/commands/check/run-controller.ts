@@ -40,6 +40,7 @@ export function createCheckRunController(
   let reducerSnapshot = createCheckRunState({ mode: options.mode, write: options.write })
   let observerDiagnostics: readonly CheckRunDiagnostic[] = []
   let visibleSnapshot = reducerSnapshot
+  let rawCompletion: Readonly<{ eventId: string; signature: string }> | null = null
   const observers = new Map<symbol, (snapshot: CheckRunSnapshot) => void>()
 
   const retainObserverFailure = (): void => {
@@ -60,6 +61,11 @@ export function createCheckRunController(
 
   const emit = (event: CheckRunEvent): void => {
     if (reducerSnapshot.exitCode !== null) {
+      if (event.type === 'run-completed' && rawCompletion?.eventId === event.eventId) {
+        if (rawCompletion.signature !== JSON.stringify(event)) {
+          throw new CheckRunControllerError('terminal event payload differs')
+        }
+      }
       const duplicate = reduceCheckRun(reducerSnapshot, normalizeFinalEvent(event, reducerSnapshot))
       if (duplicate !== reducerSnapshot) {
         throw new CheckRunControllerError('a finalized run produced another snapshot')
@@ -77,6 +83,9 @@ export function createCheckRunController(
     if (nextReducerSnapshot === reducerSnapshot) return
 
     reducerSnapshot = nextReducerSnapshot
+    if (event.type === 'run-completed') {
+      rawCompletion = Object.freeze({ eventId: event.eventId, signature: JSON.stringify(event) })
+    }
     visibleSnapshot = projectSnapshot(reducerSnapshot, observerDiagnostics)
     const emittedSnapshot = visibleSnapshot
     for (const observer of [...observers.values()]) deliver(observer, emittedSnapshot)

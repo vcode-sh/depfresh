@@ -181,6 +181,31 @@ describe('createCheckRunController', () => {
     expect(finalDeliveries).toBe(1)
   })
 
+  it('rejects a completion whose raw elapsed payload differs after clock normalization', () => {
+    const clock = createClock(5)
+    const controller = createCheckRunController({ mode: 'major', write: false, now: clock.now })
+    let finalDeliveries = 0
+    controller.subscribe((snapshot) => {
+      if (snapshot.exitCode !== null) finalDeliveries += 1
+    })
+    const completion = {
+      type: 'run-completed',
+      eventId: 'run-completed',
+      elapsedMs: 111,
+      exitCode: 0,
+    } as const
+    clock.set(8)
+    advanceToCompletion(controller.emit, completion)
+    const finalSnapshot = controller.snapshot()
+
+    expect(finalSnapshot.elapsedMs).toBe(3)
+    expect(() => controller.emit({ ...completion, elapsedMs: 999 })).toThrow(
+      'terminal event payload differs',
+    )
+    expect(controller.snapshot()).toBe(finalSnapshot)
+    expect(finalDeliveries).toBe(1)
+  })
+
   it('rejects a conflicting second completion and keeps the finalized snapshot stable', () => {
     const clock = createClock()
     const controller = createCheckRunController({ mode: 'major', write: false, now: clock.now })
