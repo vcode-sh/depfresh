@@ -25,3 +25,4 @@ model, one command-level local apply, complete inline Visual+ v2, functional rel
 real PTY/fallback proof. Plan 036 owns the final 2.1.0 public release proof.
 Plan 030 Task 1: complete (commits 9bb9e00..3b1549e, review clean).
 Plan 030 Task 2: complete (commits ef7247b..30445ca, review clean).
+Plan 030 Task 3: complete (commits 2e68562..2041c44, review clean after fix wave).
