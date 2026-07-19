@@ -172,7 +172,10 @@ describe('Visual+ PTY adapter', () => {
   it('keeps one owned ONLCR transform and transports explicit CRLF unchanged', async () => {
     const lineFeed = await runInPty({
       cliPath: process.execPath,
-      args: ['-e', 'process.stdout.write("line\\n")'],
+      args: [
+        '-e',
+        'const output=require("node:child_process").execFileSync("/bin/stty",["-a"],{encoding:"utf8",stdio:["inherit","pipe","inherit"]});const modes=new Set(output.split(/[\\s;:]+/u));const required=["-icanon","-echo","opost","onlcr"];const forbidden=["icanon","echo","-opost","-onlcr"];if(required.some(mode=>!modes.has(mode))||forbidden.some(mode=>modes.has(mode)))process.exit(86);process.stdout.write("line\\n")',
+      ],
       columns: 40,
       env: {},
       input: Buffer.alloc(0),
