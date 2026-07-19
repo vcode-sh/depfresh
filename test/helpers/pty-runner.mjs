@@ -454,11 +454,14 @@ export async function runInPty(options) {
   let primaryError
   let outcome
   const observed = new Map()
+  observed.allowWrapperPromotion = true
   observed.probeSucceeded = false
   observed.probeFailed = false
   observed.ambiguous = false
+  observed.authoritative = new Set()
   observed.cleanupFault = cleanupFault
   observed.missing = new Set()
+  observed.provisionalGroupChanges = new Map()
   observed.reappeared = new Set()
   try {
     const config = Buffer.from(
@@ -709,7 +712,12 @@ async function cleanupObserved(observed) {
   if (observed.cleanupFault === 'survivor') {
     errors.push(new Error('Injected PTY cleanup survivor'))
   }
-  if (!observed.probeSucceeded || observed.probeFailed || observed.ambiguous) {
+  if (
+    !observed.probeSucceeded ||
+    observed.probeFailed ||
+    observed.ambiguous ||
+    (observed.provisionalGroupChanges?.size ?? 0) > 0
+  ) {
     errors.push(new Error('PTY descendant observation was unavailable or ambiguous'))
   }
   if (errors.length > 0) throw new AggregateError(errors, 'PTY cleanup evidence is ambiguous')
@@ -754,6 +762,7 @@ function signalMatchingIdentities(current, observed, signal, errors) {
 
 function observeProcessTree(outerPid, directory, observed) {
   const roots = new Set([outerPid])
+  const publishedWrapper = readPublishedWrapperIdentity(directory)
   for (const name of ['script-pid', 'start.json']) {
     try {
       if (name === 'script-pid') roots.add(readPidSidecar(directory, name))
@@ -771,6 +780,18 @@ function observeProcessTree(outerPid, directory, observed) {
   }
   observed.probeSucceeded = true
   observeIdentitySnapshot(observed, current)
+  if (
+    publishedWrapper &&
+    observed.provisionalGroupChanges?.has(publishedWrapper.pid) &&
+    !observed.authoritative?.has(publishedWrapper.pid)
+  ) {
+    promoteWrapperIdentity(
+      observed,
+      publishedWrapper.pid,
+      publishedWrapper.identity,
+      current.get(publishedWrapper.pid),
+    )
+  }
   const descendants = new Set(roots)
   let changed = true
   while (changed) {
@@ -786,6 +807,24 @@ function observeProcessTree(outerPid, directory, observed) {
     const identity = current.get(pid)
     if (!identity) continue
     observeIdentity(observed, pid, identity)
+  }
+}
+
+function readPublishedWrapperIdentity(directory) {
+  try {
+    requireStartReadinessEvidence(directory)
+    const start = readSidecar(directory, 'start.json')
+    validateStart(start)
+    return {
+      pid: start.wrapperPid,
+      identity: {
+        parent: start.wrapperParent,
+        group: start.wrapperGroup,
+        start: start.wrapperStart,
+      },
+    }
+  } catch {
+    return undefined
   }
 }
 
@@ -1006,14 +1045,41 @@ function identityChangeDiagnostic(previous, identity) {
 
 export function observeIdentity(observed, pid, identity) {
   const previous = observed.get(pid)
-  if (previous && !sameProcessIdentity(previous, identity)) observed.ambiguous = true
-  else if (!previous) observed.set(pid, identity)
+  if (!previous) {
+    observed.set(pid, identity)
+    return
+  }
+  if (sameProcessIdentity(previous, identity)) return
+  const provisionalGroupChange =
+    observed.allowWrapperPromotion === true &&
+    !observed.authoritative?.has(pid) &&
+    previous.parent === identity.parent &&
+    previous.start === identity.start &&
+    previous.group !== identity.group &&
+    !observed.missing?.has(pid) &&
+    !observed.reappeared?.has(pid)
+  if (!provisionalGroupChange) {
+    observed.ambiguous = true
+    return
+  }
+  observed.provisionalGroupChanges ??= new Map()
+  if (observed.provisionalGroupChanges.has(pid)) {
+    observed.ambiguous = true
+    return
+  }
+  observed.provisionalGroupChanges.set(pid, {
+    fromGroup: previous.group,
+    parent: previous.parent,
+    start: previous.start,
+    toGroup: identity.group,
+  })
+  observed.set(pid, { ...previous, group: identity.group })
 }
 
 export function observeIdentitySnapshot(observed, current) {
   observed.missing ??= new Set()
   observed.reappeared ??= new Set()
-  for (const [pid, identity] of observed) {
+  for (const [pid] of observed) {
     const currentIdentity = current.get(pid)
     if (!currentIdentity) {
       observed.missing.add(pid)
@@ -1023,8 +1089,46 @@ export function observeIdentitySnapshot(observed, current) {
       observed.ambiguous = true
       observed.reappeared.add(pid)
     }
-    if (!sameProcessIdentity(identity, currentIdentity)) observed.ambiguous = true
+    observeIdentity(observed, pid, currentIdentity)
   }
+}
+
+export function promoteWrapperIdentity(observed, pid, evidence, freshIdentity) {
+  validatePid(pid)
+  validateProcessIdentity(evidence)
+  const previous = observed.get(pid)
+  const change = observed.provisionalGroupChanges?.get(pid)
+  const exactFreshEvidence =
+    freshIdentity && identityChangeDiagnostic(freshIdentity, evidence) === undefined
+  const exactStoredEvidence = previous && identityChangeDiagnostic(previous, evidence) === undefined
+  const stateIsContinuous = !(
+    observed.missing?.has(pid) ||
+    observed.reappeared?.has(pid) ||
+    observed.ambiguous
+  )
+  const validChange =
+    change !== undefined &&
+    change.parent === evidence.parent &&
+    change.start === evidence.start &&
+    change.toGroup === evidence.group &&
+    evidence.group === pid
+  if (
+    observed.allowWrapperPromotion !== true ||
+    !previous ||
+    !freshIdentity ||
+    !exactFreshEvidence ||
+    !exactStoredEvidence ||
+    !stateIsContinuous ||
+    !validChange
+  ) {
+    observed.ambiguous = true
+    return false
+  }
+  observed.authoritative ??= new Set()
+  observed.authoritative.add(pid)
+  observed.provisionalGroupChanges?.delete(pid)
+  observed.set(pid, evidence)
+  return true
 }
 
 export function matchingObservedIdentities(current, observed) {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { registerEvidenceIdentity } from './pty-runner.mjs'
+import { observeIdentity, promoteWrapperIdentity, registerEvidenceIdentity } from './pty-runner.mjs'
 
 const original = Object.freeze({
   parent: 200,
@@ -10,6 +10,31 @@ const original = Object.freeze({
 function createObserved() {
   return Object.assign(new Map([[300, original]]), { ambiguous: false })
 }
+
+function createPromotionObserved() {
+  return Object.assign(
+    new Map([
+      [
+        300,
+        {
+          parent: 200,
+          group: 250,
+          start: original.start,
+        },
+      ],
+    ]),
+    {
+      allowWrapperPromotion: true,
+      ambiguous: false,
+      authoritative: new Set<number>(),
+      missing: new Set<number>(),
+      provisionalGroupChanges: new Map(),
+      reappeared: new Set<number>(),
+    },
+  )
+}
+
+const promoted = Object.freeze({ ...original, group: 300 })
 
 describe('PTY identity registration diagnostics', () => {
   it.each([
@@ -49,5 +74,122 @@ describe('PTY identity registration diagnostics', () => {
 
     expect(() => registerEvidenceIdentity(observed, 'cli', 300, original)).not.toThrow()
     expect(observed.ambiguous).toBe(false)
+  })
+
+  it('promotes exactly one provisional wrapper change to its self-led group', () => {
+    const observed = createPromotionObserved()
+
+    observeIdentity(observed, 300, promoted)
+
+    expect(observed.ambiguous).toBe(false)
+    expect(promoteWrapperIdentity(observed, 300, promoted, promoted)).toBe(true)
+    expect(observed.get(300)).toEqual(promoted)
+    expect(observed.authoritative).toEqual(new Set([300]))
+    expect(observed.provisionalGroupChanges.size).toBe(0)
+  })
+
+  it.each([
+    ['self-led', promoted],
+    ['non-self-led', { ...promoted, group: 301 }],
+  ] as const)('rejects a zero-change %s wrapper identity', (_kind, identity) => {
+    const observed = Object.assign(new Map([[300, identity]]), {
+      allowWrapperPromotion: true,
+      ambiguous: false,
+      authoritative: new Set<number>(),
+      missing: new Set<number>(),
+      provisionalGroupChanges: new Map(),
+      reappeared: new Set<number>(),
+    })
+
+    expect(promoteWrapperIdentity(observed, 300, identity, identity)).toBe(false)
+    expect(observed.ambiguous).toBe(true)
+    expect(observed.authoritative.size).toBe(0)
+  })
+
+  it('rejects a provisional wrapper change to a non-self-led group', () => {
+    const observed = createPromotionObserved()
+    const nonSelf = { ...promoted, group: 301 }
+
+    observeIdentity(observed, 300, nonSelf)
+
+    expect(promoteWrapperIdentity(observed, 300, nonSelf, nonSelf)).toBe(false)
+    expect(observed.ambiguous).toBe(true)
+    expect(observed.authoritative.size).toBe(0)
+  })
+
+  it.each([
+    ['parent', { ...promoted, parent: 201 }],
+    ['start', { ...promoted, start: 'Sun Jul 19 13:20:32 2026' }],
+  ] as const)('rejects changed wrapper %s at promotion', (_axis, changed) => {
+    const observed = createPromotionObserved()
+    observeIdentity(observed, 300, promoted)
+
+    expect(promoteWrapperIdentity(observed, 300, changed, changed)).toBe(false)
+    expect(observed.ambiguous).toBe(true)
+    expect(observed.authoritative.size).toBe(0)
+  })
+
+  it.each(['missing', 'reappeared'] as const)(
+    'rejects a wrapper PID recorded as %s before promotion',
+    (state) => {
+      const observed = createPromotionObserved()
+      observeIdentity(observed, 300, promoted)
+      observed[state].add(300)
+
+      expect(promoteWrapperIdentity(observed, 300, promoted, promoted)).toBe(false)
+      expect(observed.ambiguous).toBe(true)
+      expect(observed.authoritative.size).toBe(0)
+    },
+  )
+
+  it('requires fresh process evidence to agree with the wrapper sidecar', () => {
+    const observed = createPromotionObserved()
+    observeIdentity(observed, 300, promoted)
+
+    expect(promoteWrapperIdentity(observed, 300, promoted, { ...promoted, group: 301 })).toBe(false)
+    expect(observed.ambiguous).toBe(true)
+    expect(observed.authoritative.size).toBe(0)
+  })
+
+  it('fails closed when the wrapper is absent from the fresh process snapshot', () => {
+    const observed = createPromotionObserved()
+    observeIdentity(observed, 300, promoted)
+
+    expect(promoteWrapperIdentity(observed, 300, promoted, undefined)).toBe(false)
+    expect(observed.ambiguous).toBe(true)
+    expect(observed.authoritative.size).toBe(0)
+  })
+
+  it('rejects a second provisional group change', () => {
+    const observed = createPromotionObserved()
+    observeIdentity(observed, 300, promoted)
+
+    observeIdentity(observed, 300, { ...promoted, group: 301 })
+
+    expect(observed.ambiguous).toBe(true)
+    expect(promoteWrapperIdentity(observed, 300, promoted, promoted)).toBe(false)
+    expect(observed.authoritative.size).toBe(0)
+  })
+
+  it('rejects a group change after wrapper authority is established', () => {
+    const observed = createPromotionObserved()
+    observeIdentity(observed, 300, promoted)
+    expect(promoteWrapperIdentity(observed, 300, promoted, promoted)).toBe(true)
+
+    observeIdentity(observed, 300, { ...promoted, group: 301 })
+
+    expect(observed.ambiguous).toBe(true)
+    expect(observed.get(300)).toEqual(promoted)
+  })
+
+  it('never clears an unrelated ambiguity while promoting the wrapper', () => {
+    const observed = createPromotionObserved()
+    observeIdentity(observed, 300, promoted)
+    observed.ambiguous = true
+
+    expect(promoteWrapperIdentity(observed, 300, promoted, promoted)).toBe(false)
+    expect(observed.ambiguous).toBe(true)
+    expect(observed.authoritative.size).toBe(0)
+    expect(observed.provisionalGroupChanges.size).toBe(1)
   })
 })
