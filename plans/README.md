@@ -281,6 +281,11 @@ replay
 results. SLSA provenance binds the exact package digest to the tag, workflow, commit, run, and
 GitHub-hosted builder. Plans 032-036 and the Safe Write/Visual+ v2 program are DONE.
 
+Post-release retained-harness commit `de3c417` deterministically owns the nested PTY line-ending
+mapping after diagnostics isolated recurrent BSD `CRCRLF` below bare-LF-only child writes. Exact
+hosted run `29702709281` passed macOS and Ubuntu source/packed Visual+ 54/54 without retry plus every
+remaining job. This did not move the tag or change the public package and its immutable 50/50 proof.
+
 The new queue is strictly ordered. Do not merge Visual+ output before command-level result truth,
 do not begin the `2.1.0` work before public `2.0.2` proof, and do not collapse unknown evidence or
 recovery ambiguity into success to satisfy a visual snapshot.

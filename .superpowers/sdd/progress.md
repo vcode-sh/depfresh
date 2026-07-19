@@ -357,3 +357,13 @@ exports, schemas, skill assets, runtime dependency, signature, and attestation g
 exact SHA-512 to `refs/tags/v2.1.0`, `.github/workflows/release.yml`, commit `8c4b9dd`, run
 `29699466746` attempt 1, and the GitHub-hosted builder. No floating `v2` tag, tag movement, or
 manual publication occurred. Plans 032-036 and the Safe Write/Visual+ v2 program are DONE.
+Plan 036 post-release retained-harness audit: docs-only run `29700155144`, diagnostic run
+`29701488542` attempt 2, and fully normalized-mode run `29702401603` isolated recurrent BSD
+`CRCRLF` to the physical inner transcript after bare-LF-only child writes. No renderer assertion was
+relaxed. Commits `9ff75c4`, `c080809`, and final `de3c417` add private boolean-only boundary
+evidence, normalize the nested PTY, and move the single bare-LF-to-CRLF transform into the
+deterministic parent harness while preserving explicit CRLF and CRCRLF. Fresh exact Node
+`24.15.0`/npm `11.12.1` local
+proof passed 74/74 without retry plus typecheck, focused Biome, and diff checks. Hosted run
+`29702709281` passed macOS and Ubuntu source/packed Visual+ 54/54 without retry, Test, Lint, Build,
+and Distribution Smoke. The immutable tag and public 50/50 release evidence were not changed.
