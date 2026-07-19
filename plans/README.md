@@ -286,6 +286,13 @@ mapping after diagnostics isolated recurrent BSD `CRCRLF` below bare-LF-only chi
 hosted run `29702709281` passed macOS and Ubuntu source/packed Visual+ 54/54 without retry plus every
 remaining job. This did not move the tag or change the public package and its immutable 50/50 proof.
 
+Docs-only run `29702983469` then preserved every transport assertion but exposed a separate
+cleanup-only BSD process-inventory failure after PTY closure. Commit `765443a` keeps exact
+numeric-UID scope and fixed resource bounds while including no-TTY processes in the inventory and
+retaining only fixed failure categories. It adds no retry and weakens no identity assertion. Exact
+hosted run `29703537651` passed macOS and Ubuntu source/installed Visual+ 54/54 without retry plus
+Test, Lint, Build, and Distribution Smoke. The immutable release state remains unchanged.
+
 The new queue is strictly ordered. Do not merge Visual+ output before command-level result truth,
 do not begin the `2.1.0` work before public `2.0.2` proof, and do not collapse unknown evidence or
 recovery ambiguity into success to satisfy a visual snapshot.

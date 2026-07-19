@@ -367,3 +367,10 @@ deterministic parent harness while preserving explicit CRLF and CRCRLF. Fresh ex
 proof passed 74/74 without retry plus typecheck, focused Biome, and diff checks. Hosted run
 `29702709281` passed macOS and Ubuntu source/packed Visual+ 54/54 without retry, Test, Lint, Build,
 and Distribution Smoke. The immutable tag and public 50/50 release evidence were not changed.
+Docs-only run `29702983469` preserved every transport assertion but exposed a separate cleanup-only
+BSD process-inventory failure after the first 40-column journey. Commit `765443a` retains exact
+numeric-UID scope and the original one-second/one-megabyte bounds, adds `ps -x` so no-TTY runner
+descendants remain observable after PTY closure, and latches only fixed failure categories. No
+retry or weaker identity assertion was added. Exact hosted run `29703537651` passed macOS and
+Ubuntu source/installed Visual+ 54/54 without retry, Test, Lint, Build, and Distribution Smoke. The
+immutable release state remains unchanged.
