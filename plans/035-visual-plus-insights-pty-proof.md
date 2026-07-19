@@ -574,7 +574,7 @@ three times and require identical normalized target hashes and selected IDs.
   zero-width, and wide grapheme cases. It proves sanitization without changing the exact 66-package
   Visual+ fixture contract.
 
-- [ ] **Step 1: Write PTY adapter RED tests**
+- [x] **Step 1: Write PTY adapter RED tests**
 
 Detect BSD and util-linux `script` argument forms with a read-only capability probe. Launch only a
 generated fixed test wrapper; never interpolate repository/user values into shell or Tcl code.
@@ -587,19 +587,21 @@ unknown control, and cleanup failures.
 Run the focused helper test on both supported CI operating systems. Expected: FAIL until the
 adapter returns `isTTY === true` and bounded output.
 
-- [ ] **Step 3: Implement bounded cross-platform capture**
+- [x] **Step 3: Implement bounded cross-platform capture**
 
 Use argument-array `spawn`, a disposable wrapper/config file, a 30-second timeout, 4 MiB combined
 output limit, detached-group signal cleanup, bounded owner-only sidecars, and the terminal-state
 normalizer above. Retain final visible text exactly and expose raw bytes only to test assertions,
 never error messages that could leak hostile or secret fixture values.
 
-- [ ] **Step 4: Write built-CLI success and block journeys**
+- [x] **Step 4: Write built-CLI success and block journeys**
 
 For 40/60/80/118 columns, assert all 76 rows and 14 targets exactly once, lifecycle resolution,
 insight counts, final copy, exit `0`/`2`, no orphan spinner/cursor state, and exact filesystem
-hashes. Count the 76 change rows by their dedicated `Operation ID` field in the normalized review
-region, not by raw IDs that legitimately recur in transaction evidence. Assert exact topology
+hashes. Count the 76 logical changes by their dedicated `Operation ID` field in the normalized
+review region, not by raw IDs that legitimately recur in transaction evidence. Medium/wide cells
+repeat the field label on wrapped fragments, so reconstruct each consecutive `Operation ID` field
+run and count it once; do not count physical label fragments. Assert exact topology
 `66/616/612/76/14`, distribution `3/37/36`, 15 owner impacts, 18 shared identities with 39
 occurrences, two major cards, 14 transaction target rows, success totals `76/0/0/0/0`, safety totals
 `0/0/76/0/76` for applied/blocked/not-attempted/failed/unknown, the correct complete/safety copy,
@@ -611,7 +613,7 @@ length oracle and require it to be no wider than the observed terminal columns. 
 must be recognized, the final cursor state must be visible, no lifecycle frame remains active in
 the capable final projection, and the last semantic text is exactly `Exit 0` or `Exit 2`.
 
-- [ ] **Step 5: Write no-motion fallback journeys**
+- [x] **Step 5: Write no-motion fallback journeys**
 
 Run built-CLI non-TTY, CI, slow-pipe, `TERM=dumb`, `NO_COLOR`, and hostile Unicode/control cases.
 The unchanged Visual+ repository may be reused only for read-only fallback runs; success/safety

@@ -188,3 +188,16 @@ and isolated under hostile inherited environment tests. Exact Node 24.15.0 fixtu
 passed 53/53 tests; build, typecheck, focused Biome, selected smoke, and the full 36-check practical
 smoke passed. Final independent spec and quality reviews reported C0/I0/M0. Task 4 real PTY and
 durable fallback proof is next.
+Plan 035 Task 4 implementation: complete locally in fdd749d after the reviewed PTY contract in
+7ec9e11. The bounded test-only adapter recognizes BSD and util-linux `script` solely from a
+read-only probe, proves exact TTY/width evidence, projects only known terminal controls, and fails
+closed on malformed evidence, overflow, timeout, cleanup ambiguity, signaling failure, survivors,
+and unknown implementations. Built CLI success and safety journeys retain all 76 operations and
+14 targets at 40/60/80/118 columns with exact topology, membership, copy, bytes, Git scope, cursor
+state, and exit codes; direct-pipe, slow-pipe, CI, dumb-terminal, NO_COLOR, hostile-text, and pure
+reduced-motion fallbacks preserve complete semantics. Fresh Node 24.15.0 gates passed build, PTY
+31/31, capability/renderer 62/62, readiness 17/17, typecheck, Biome, and diff checks, with final
+independent spec and quality reviews at C0/I0/M0. The exact `ubuntu-24.04`/`macos-15` hosted matrix
+is configured but remains unproved until an authorized push runs CI; Plan 035 Steps 2 and 6 stay
+open. Task 5 documentation may proceed locally, while Plan 036 remains blocked on that hosted
+evidence and the final Plan 035 gate.
