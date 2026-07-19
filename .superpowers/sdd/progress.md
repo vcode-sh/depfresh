@@ -248,3 +248,13 @@ availability is not the blocker. An independently reviewed artifact-bound test s
 first, including canonical installed-path containment, packed-byte binding, and a distinct-byte
 negative control that detects an ignored override or source-tree fallback. No Task 2 checkbox,
 artifact identity, release-note evidence, hosted publication, tag, or registry claim is complete.
+Plan 036 Task 2A: complete through `6957ebf` and review-fix `c30eec3`. The retained test-only seam
+now resolves a paired canonical installed CLI/root, rejects symlinks and escape, binds installed
+SHA-256 to `package/dist/cli.mjs` extracted from the exact verified tarball, and proves override use
+with a distinct-byte outside-root negative control before running all 32 Visual+ tests. The verifier
+uses bounded private output, minimal disposable HOME/tmp/cache, a 120-second identity-control limit,
+and a fixed 15-minute full-replay limit. Ubuntu/macOS CI legs bootstrap isolated npm `11.12.0` and
+clean it unconditionally. Fresh source and packed replays passed 32/32 with CLI SHA-256
+`3a7980e4be50ff11e732ac1c9e47c1e4b6583abf573d036b6326fc5ab6dcbdfd`; build, schemas,
+typecheck, release, zero-warning Biome, diff checks, and independent re-review passed at C0/I0/M0.
+Task 2 exact source and packed proof may now restart from `c30eec3`.
