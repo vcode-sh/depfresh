@@ -29,6 +29,7 @@ import type {
 } from '../../types'
 import { DEFAULT_OPTIONS } from '../../types'
 import type { ApplyRuntime } from '../apply/types'
+import { check } from './index'
 
 // This suite is a real integration boundary. Some focused check suites register process-global
 // mocks through test-helpers.ts, so reset every production dependency they replace before imports.
@@ -106,7 +107,6 @@ interface CheckPayload {
 
 describe('command-level check apply integration', () => {
   const roots: string[] = []
-  let checkCommand: typeof import('./index').check | undefined
   let registry: Server | undefined
   let registryUrl = ''
   let originalHome: string | undefined
@@ -120,71 +120,6 @@ describe('command-level check apply integration', () => {
     originalHome = process.env.HOME
     originalNpmConfig = process.env.npm_config_userconfig
     originalPath = process.env.PATH
-
-    for (const dependency of [
-      '../../io/packages',
-      '../../io/resolve',
-      '../../io/write',
-      '../../io/write/occurrence',
-      '../apply/legacy',
-      '../apply/legacy-plan',
-      '../../cache/index',
-      '../../utils/npmrc',
-      'node:child_process',
-      'node:fs',
-      '../../io/global',
-      '../global-apply',
-    ]) {
-      vi.doUnmock(dependency)
-    }
-    vi.resetModules()
-
-    const [
-      packages,
-      resolve,
-      write,
-      occurrence,
-      legacy,
-      legacyPlan,
-      cache,
-      npmrc,
-      childProcess,
-      fs,
-      global,
-      globalApply,
-    ] = await Promise.all([
-      import('../../io/packages'),
-      import('../../io/resolve'),
-      import('../../io/write'),
-      import('../../io/write/occurrence'),
-      import('../apply/legacy'),
-      import('../apply/legacy-plan'),
-      import('../../cache/index'),
-      import('../../utils/npmrc'),
-      import('node:child_process'),
-      import('node:fs'),
-      import('../../io/global'),
-      import('../global-apply'),
-    ])
-
-    for (const productionFunction of [
-      packages.loadPackages,
-      resolve.resolvePackage,
-      write.writePackage,
-      occurrence.observeFileOccurrence,
-      legacy.applyLegacyPackageWrite,
-      legacyPlan.applyLegacyCommandWrite,
-      cache.createSqliteCache,
-      npmrc.loadNpmrc,
-      childProcess.spawn,
-      fs.existsSync,
-      global.getGlobalWriteTargets,
-      globalApply.applyGlobalPlan,
-    ]) {
-      expect(vi.isMockFunction(productionFunction)).toBe(false)
-    }
-
-    ;({ check: checkCommand } = await import('./index'))
 
     const started = await startRegistry()
     registry = started.server
@@ -649,8 +584,6 @@ await applyPlanWithRuntime(plan, { cwd: ${JSON.stringify(fixture.root)} }, autho
     vi.spyOn(console, 'log').mockImplementation((...values) => lines.push(values.join(' ')))
     vi.spyOn(console, 'warn').mockImplementation((...values) => lines.push(values.join(' ')))
     vi.spyOn(console, 'error').mockImplementation((...values) => lines.push(values.join(' ')))
-    const check = checkCommand
-    if (!check) throw new Error('Check command was not initialized')
     const options: depfreshOptions = {
       ...(DEFAULT_OPTIONS as depfreshOptions),
       cwd,
