@@ -13,6 +13,7 @@ import { tmpdir } from 'node:os'
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { gunzipSync } from 'node:zlib'
 import { extractSinglePackEntry } from './pack-manifest.mjs'
+import { classifyVisualPlusReplayFailure } from './visual-plus-replay-failure.mjs'
 
 class PackageVerificationError extends Error {}
 
@@ -486,17 +487,27 @@ function verifyVisualPlusReplay(options) {
 
   const reportPath = join(options.temporaryRoot, 'visual-plus-report.json')
   const replay = runVisualPlusVitest(
-    ['run', 'test/visual-plus-cli.test.ts', '--reporter=json', '--outputFile', reportPath],
+    [
+      'run',
+      'test/visual-plus-cli.test.ts',
+      '--retry=0',
+      '--reporter=json',
+      '--outputFile',
+      reportPath,
+    ],
     createVisualPlusEnvironment(environmentRoot, testEnvironment),
     { timeoutMs: VISUAL_PLUS_REPLAY_TIMEOUT_MS },
   )
-  if (replay.error || replay.status !== 0) fail('Installed Visual+ replay failed')
   let report
   try {
     report = JSON.parse(readFileSync(reportPath, 'utf8'))
-  } catch {
-    fail('Installed Visual+ replay did not produce machine evidence')
+  } catch {}
+  if (replay.error) fail('Installed Visual+ replay failed')
+  if (replay.status !== 0) {
+    const classification = classifyVisualPlusReplayFailure(report)
+    fail(`Installed Visual+ replay failed (classification: ${classification})`)
   }
+  if (report === undefined) fail('Installed Visual+ replay did not produce machine evidence')
   if (
     !isRecord(report) ||
     report.numFailedTests !== 0 ||

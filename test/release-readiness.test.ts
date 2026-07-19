@@ -212,6 +212,9 @@ describe('2.1.0 release readiness', () => {
     expect(isolatedNpm).toContain('printf \'%s\\n\' "$NPM_TOOL_ROOT/prefix/bin" >> "$GITHUB_PATH"')
     expect(isolatedNpm).toContain('NPM_CONFIG_USERCONFIG')
     expect(isolatedNpm).toContain('NPM_CONFIG_GLOBALCONFIG')
+    expect(steps.find((step) => step.name === 'Test Visual Plus PTY and fallbacks')?.run).toBe(
+      'pnpm exec vitest run test/visual-plus-cli.test.ts --retry=0',
+    )
     const replay = steps.find(
       (step) => step.name === 'Replay Visual Plus against the installed packed artifact',
     )?.run

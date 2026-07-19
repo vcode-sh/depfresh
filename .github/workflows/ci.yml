@@ -35,7 +35,7 @@ jobs:
         run: pnpm build
 
       - name: Test Visual Plus PTY and fallbacks
-        run: pnpm exec vitest run test/visual-plus-cli.test.ts
+        run: pnpm exec vitest run test/visual-plus-cli.test.ts --retry=0
 
       - name: Install exact isolated npm
         shell: bash
