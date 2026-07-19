@@ -92,6 +92,49 @@ describe('run-check orchestration paths', () => {
     expect(result.tableOutput).not.toContain('Tip: Add `-w`')
   })
 
+  it('reports discovered Spreadoo-shaped repository context before review', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'depfresh-spreadoo-context-'))
+    const webDirectory = join(root, 'apps', 'web')
+    mkdirSync(webDirectory, { recursive: true })
+    writeFileSync(
+      join(root, 'package.json'),
+      JSON.stringify({ name: 'spreadoo', packageManager: 'pnpm@10.33.0' }),
+    )
+    writeFileSync(join(root, 'pnpm-lock.yaml'), "lockfileVersion: '9.0'\n")
+    writeFileSync(join(webDirectory, 'package.json'), JSON.stringify({ name: '@spreadoo/web' }))
+    const rootPackage = makePkg('spreadoo', [])
+    rootPackage.filepath = join(root, 'package.json')
+    rootPackage.packageManager = {
+      name: 'pnpm',
+      version: '10.33.0',
+      raw: 'pnpm@10.33.0',
+    }
+    const webPackage = makePkg('@spreadoo/web', [])
+    webPackage.filepath = join(webDirectory, 'package.json')
+    mocks.loadPackagesMock.mockResolvedValue([webPackage, rootPackage])
+    mocks.resolvePackageMock.mockResolvedValue([])
+    setStdoutTTY(true)
+    setStderrTTY(true)
+    const stdoutWriteSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+
+    try {
+      const { checkFromCli } = await import('./run-check')
+      await expect(
+        checkFromCli({ ...baseOptions, cwd: root, output: 'table', loglevel: 'info' }),
+      ).resolves.toBe(0)
+
+      const output = stripAnsi(stdoutWriteSpy.mock.calls.flat().map(String).join(''))
+      expect(output).toContain('Repository spreadoo · . · workspace')
+      expect(output).toContain('Package manager observed · pnpm 10.33.0 · package.json')
+      expect(output.indexOf('Repository spreadoo')).toBeLessThan(
+        output.indexOf('Repository topology'),
+      )
+    } finally {
+      stdoutWriteSpy.mockRestore()
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   it('keeps exit code, resolved sets, counts, and start hooks equal across both paths', async () => {
     const concurrent = await runScenario('concurrent')
     vi.clearAllMocks()
@@ -241,7 +284,12 @@ describe('run-check orchestration paths', () => {
     try {
       const { checkFromCli } = await import('./run-check')
       await expect(
-        checkFromCli({ ...baseOptions, output: 'table', loglevel: 'info', explainDiscovery: true }),
+        checkFromCli({
+          ...baseOptions,
+          output: 'table',
+          loglevel: 'info',
+          explainDiscovery: true,
+        }),
       ).resolves.toBe(0)
 
       const discoveryCallIndex = consoleSpy.mock.calls.findIndex((call) =>
@@ -515,7 +563,12 @@ describe('run-check orchestration paths', () => {
     try {
       const { checkFromCli } = await import('./run-check')
       await expect(
-        checkFromCli({ ...baseOptions, output: 'table', loglevel: 'info', write: true }),
+        checkFromCli({
+          ...baseOptions,
+          output: 'table',
+          loglevel: 'info',
+          write: true,
+        }),
       ).resolves.toBe(0)
 
       const output = stdoutWriteSpy.mock.calls.flat().map(String).join('')
@@ -692,7 +745,12 @@ describe('run-check orchestration paths', () => {
     try {
       const { checkFromCli } = await import('./run-check')
       await expect(
-        checkFromCli({ ...baseOptions, output: 'table', loglevel: 'info', write: true }),
+        checkFromCli({
+          ...baseOptions,
+          output: 'table',
+          loglevel: 'info',
+          write: true,
+        }),
       ).resolves.toBe(2)
 
       const output = stdoutWriteSpy.mock.calls.flat().map(String).join('')

@@ -13,7 +13,7 @@ import { buildVisualPlusInsights, VisualPlusInsightError } from './insights'
 import { renderVisualPlusChanges } from './sections/changes'
 import { renderVisualPlusCompactReview } from './sections/compact'
 import { renderVisualPlusDistribution } from './sections/distribution'
-import { renderVisualPlusHeader } from './sections/header'
+import { renderVisualPlusCheckHeading, renderVisualPlusRunContext } from './sections/header'
 import { renderVisualPlusImpact } from './sections/impact'
 import {
   renderVisualPlusLifecycleHeading,
@@ -57,6 +57,7 @@ export interface CreateVisualPlusRendererOptions {
 
 export interface VisualPlusRenderer {
   start(controller: CheckRunController, run: VisualPlusRunMetadata): void
+  setRunMetadata(metadata: VisualPlusRunMetadata): void
   writeReview(input: VisualPlusSectionInput): void
   finalize(input: VisualPlusSectionInput): void
   suspend<T>(write: () => T): T
@@ -86,6 +87,7 @@ export function createVisualPlusRenderer(
   let unsubscribe: (() => void) | undefined
   let latestSnapshot: CheckRunSnapshot | undefined
   let startupRun: DeepReadonly<VisualPlusRunMetadata> | undefined
+  let discoveredRun: DeepReadonly<VisualPlusRunMetadata> | undefined
   let reviewInput: DeepReadonly<VisualPlusSectionInput> | undefined
   let finalInput: DeepReadonly<VisualPlusSectionInput> | undefined
   let pendingFrame: PendingFrame | undefined
@@ -415,8 +417,9 @@ export function createVisualPlusRenderer(
       assertMatchingCapabilities(source)
       assertLatestSnapshot(source)
       const validated = createVisualPlusSectionInput(source)
-      if (!isDeepStrictEqual(validated.run, startupRun)) {
-        contractFailure('run metadata differs from startup')
+      if (!discoveredRun) contractFailure('discovered repository context is missing')
+      if (!isDeepStrictEqual(validated.run, discoveredRun)) {
+        contractFailure('run metadata differs from discovered context')
       }
       return validated
     } catch (error) {
@@ -510,8 +513,45 @@ export function createVisualPlusRenderer(
       })
       startupRun = initialInput.run
       latestSnapshot = reconciledSnapshot
-      writeDurableLines(renderVisualPlusHeader(initialInput))
+      writeDurableLines(renderVisualPlusCheckHeading(initialInput))
       writeDurableLines(renderVisualPlusLifecycleHeading(capabilities))
+      renderLatest()
+    } catch (error) {
+      explicitFailure(error)
+    }
+  }
+
+  const setRunMetadata = (metadata: VisualPlusRunMetadata): void => {
+    assertNotReentrant()
+    if (suspensionDepth > 0) contractFailure('context is unavailable during suspension')
+    if (state !== 'live') contractFailure('context requires a live renderer before review')
+    if (discoveredRun) contractFailure('context may be set exactly once')
+    const snapshot = latestSnapshot ?? contractFailure('context requires a subscribed snapshot')
+    if (
+      snapshot.counts.operations !== 0 ||
+      snapshot.counts.targets !== 0 ||
+      snapshot.changes.length !== 0 ||
+      snapshot.targets.length !== 0 ||
+      hasResultEvidence(snapshot)
+    ) {
+      contractFailure('late context has selection or result evidence')
+    }
+    if (metadata.detailLevel !== startupRun?.detailLevel) {
+      contractFailure('context detail level differs from startup')
+    }
+    let input: DeepReadonly<VisualPlusSectionInput>
+    try {
+      input = createVisualPlusSectionInput({
+        snapshot,
+        capabilities,
+        run: metadata,
+        changes: [],
+      })
+      cancelPending()
+      appendTerminalFacts(snapshot)
+      clearFrame()
+      writeDurableLines(renderVisualPlusRunContext(input))
+      discoveredRun = input.run
       renderLatest()
     } catch (error) {
       explicitFailure(error)
@@ -633,7 +673,7 @@ export function createVisualPlusRenderer(
     }
   }
 
-  return { start, writeReview, finalize, suspend, suspendAsync, dispose }
+  return { start, setRunMetadata, writeReview, finalize, suspend, suspendAsync, dispose }
 }
 
 function semanticSignature(value: unknown): string {

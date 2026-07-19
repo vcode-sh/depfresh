@@ -33,6 +33,12 @@ const run: VisualPlusRunMetadata = {
   },
 }
 
+const startupRun: VisualPlusRunMetadata = {
+  detailLevel: 'full',
+  workspaceScope: 'unknown',
+  packageManager: { status: 'unknown', sources: [] },
+}
+
 const capable: VisualPlusCapabilities = {
   interactive: true,
   color: false,
@@ -319,6 +325,72 @@ function harness(caps = capable) {
 }
 
 describe('Visual+ live renderer', () => {
+  it('starts without undiscovered repository or package-manager placeholders', () => {
+    const source = fakeController(snapshot())
+    const view = harness()
+
+    view.renderer.start(source.controller, startupRun)
+
+    expect(view.output()).toContain('Check - major - write\n')
+    expect(view.output()).toContain('Lifecycle\n')
+    expect(view.output()).not.toContain('Repository unknown')
+    expect(view.output()).not.toContain('Package manager unknown')
+  })
+
+  it('writes one discovered context transition before review and freezes it', () => {
+    const source = fakeController(snapshot())
+    const view = harness()
+    view.renderer.start(source.controller, startupRun)
+
+    view.renderer.setRunMetadata(run)
+    const selected = selectedSnapshot()
+    source.push(selected)
+    view.renderer.writeReview(input(selected))
+
+    const output = view.output()
+    expect(output).toContain('Repository fixture - packages/fixture - workspace\n')
+    expect(output).toContain('Package manager observed - pnpm 10.0.0 - package.json\n')
+    expect(output.indexOf('Repository fixture')).toBeLessThan(output.indexOf('Repository topology'))
+  })
+
+  it('rejects a repeated context transition before review', () => {
+    const source = fakeController(snapshot())
+    const view = harness()
+    view.renderer.start(source.controller, startupRun)
+    view.renderer.setRunMetadata(run)
+
+    expect(() => view.renderer.setRunMetadata(run)).toThrow(/exactly once|context|metadata/i)
+  })
+
+  it('rejects review when discovered context is missing', () => {
+    const source = fakeController(snapshot())
+    const view = harness()
+    view.renderer.start(source.controller, startupRun)
+    const selected = selectedSnapshot()
+    source.push(selected)
+
+    expect(() => view.renderer.writeReview(input(selected))).toThrow(/context|metadata/i)
+  })
+
+  it('rejects a late context transition after selection evidence arrives', () => {
+    const source = fakeController(snapshot())
+    const view = harness()
+    view.renderer.start(source.controller, startupRun)
+    source.push(selectedSnapshot())
+
+    expect(() => view.renderer.setRunMetadata(run)).toThrow(/late|context|metadata/i)
+  })
+
+  it('rejects discovered metadata that conflicts with immutable startup detail', () => {
+    const source = fakeController(snapshot())
+    const view = harness()
+    view.renderer.start(source.controller, startupRun)
+
+    expect(() => view.renderer.setRunMetadata({ ...run, detailLevel: 'compact' })).toThrow(
+      /detail|startup|metadata/i,
+    )
+  })
+
   it.each([40, 60, 80, 118, 175])(
     'keeps the successful compact read-only journey within 80 durable lines at %i columns',
     (width) => {
@@ -337,6 +409,7 @@ describe('Visual+ live renderer', () => {
       const source = fakeController(initial)
       const view = harness(caps)
       view.renderer.start(source.controller, compactRun)
+      view.renderer.setRunMetadata(compactRun)
       const selected = { ...createVisualPlusFixtureSnapshot(), write: false }
       source.push(selected)
       view.renderer.writeReview({
@@ -547,6 +620,7 @@ describe('Visual+ live renderer', () => {
     const source = fakeController(snapshot())
     const view = harness()
     view.renderer.start(source.controller, run)
+    view.renderer.setRunMetadata(run)
     const selected = selectedSnapshot()
     source.push(selected)
     view.renderer.writeReview(input(selected))
@@ -625,6 +699,7 @@ describe('Visual+ live renderer', () => {
     const source = fakeController(initial)
     const view = harness(reviewCapabilities)
     view.renderer.start(source.controller, run)
+    view.renderer.setRunMetadata(run)
     const selected = createVisualPlusFixtureSnapshot()
     source.push(selected)
     view.renderer.writeReview({ ...createVisualPlusFixtureInput(reviewCapabilities), run })
@@ -659,6 +734,7 @@ describe('Visual+ live renderer', () => {
     const source = fakeController(initial)
     const view = harness()
     view.renderer.start(source.controller, run)
+    view.renderer.setRunMetadata(run)
     const selected = structuredClone(createVisualPlusFixtureSnapshot())
     ;(selected.changes[0] as { diff: string }).diff = 'unknown'
     source.push(selected)
@@ -677,6 +753,7 @@ describe('Visual+ live renderer', () => {
     const source = fakeController(initial)
     const view = harness()
     view.renderer.start(source.controller, run)
+    view.renderer.setRunMetadata(run)
     const final = snapshot({
       sequence: 2,
       phases: statuses({
@@ -705,9 +782,11 @@ describe('Visual+ live renderer', () => {
     expect(view.output()).toBe(
       [
         'Check - major - write\n',
+        'Lifecycle\n',
+        '\r\u001B[2Kdiscover - [*] active\n',
+        '\u001B[1A\r\u001B[2K\n\u001B[1A',
         'Repository fixture - packages/fixture - workspace\n',
         'Package manager observed - pnpm 10.0.0 - package.json\n',
-        'Lifecycle\n',
         '\r\u001B[2Kdiscover - [*] active\n',
         '\u001B[1A\r\u001B[2K\n\u001B[1A',
         'discover - [+] passed\n',
@@ -735,6 +814,7 @@ describe('Visual+ live renderer', () => {
     const missingReceiptSource = fakeController(snapshot())
     const missingReceiptView = harness()
     missingReceiptView.renderer.start(missingReceiptSource.controller, run)
+    missingReceiptView.renderer.setRunMetadata(run)
     const selected = selectedSnapshot()
     missingReceiptSource.push(selected)
     missingReceiptView.renderer.writeReview(input(selected))
@@ -750,6 +830,7 @@ describe('Visual+ live renderer', () => {
     const incompleteSource = fakeController(snapshot())
     const incompleteView = harness()
     incompleteView.renderer.start(incompleteSource.controller, run)
+    incompleteView.renderer.setRunMetadata(run)
     incompleteSource.push(selected)
     incompleteView.renderer.writeReview(input(selected))
     const incomplete = finalSnapshot()
@@ -778,6 +859,7 @@ describe('Visual+ live renderer', () => {
     const source = fakeController(snapshot({ write: false }))
     const view = harness()
     view.renderer.start(source.controller, run)
+    view.renderer.setRunMetadata(run)
     const selected = selectedSnapshot({ write: false })
     source.push(selected)
     view.renderer.writeReview(input(selected))
@@ -810,6 +892,7 @@ describe('Visual+ live renderer', () => {
     const source = fakeController(snapshot())
     const view = harness()
     view.renderer.start(source.controller, run)
+    view.renderer.setRunMetadata(run)
     const selected = selectedSnapshot()
     source.push(selected)
     expect(() => view.renderer.writeReview(input(snapshot()))).toThrow(/snapshot/i)
@@ -823,6 +906,7 @@ describe('Visual+ live renderer', () => {
     const source = fakeController(snapshot())
     const view = harness()
     view.renderer.start(source.controller, run)
+    view.renderer.setRunMetadata(run)
     const selected = selectedSnapshot()
     source.push(selected)
     view.renderer.writeReview(input(selected))
@@ -944,6 +1028,7 @@ describe('Visual+ live renderer', () => {
       onError: (error) => errors.push(error),
     })
     reviewRenderer.start(reviewSource.controller, run)
+    reviewRenderer.setRunMetadata(run)
     const selected = selectedSnapshot()
     reviewSource.push(selected)
     const selectedInput = input(selected)
@@ -973,6 +1058,7 @@ describe('Visual+ live renderer', () => {
       onError: (error) => errors.push(error),
     })
     finalRenderer.start(finalSource.controller, run)
+    finalRenderer.setRunMetadata(run)
     finalSource.push(selected)
     finalRenderer.writeReview(selectedInput)
     const final = finalSnapshot()

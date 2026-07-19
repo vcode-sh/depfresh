@@ -3,11 +3,22 @@ import type { VisualPlusSectionInput } from '../input'
 import { visualPlusSectionLines, visualPlusSeparator } from '../theme'
 
 export function renderVisualPlusHeader(input: VisualPlusSectionInput): readonly string[] {
-  const { snapshot, run } = input
+  return [...renderVisualPlusCheckHeading(input), ...renderVisualPlusRunContext(input)]
+}
+
+export function renderVisualPlusCheckHeading(input: VisualPlusSectionInput): readonly string[] {
+  const { snapshot } = input
   const separator = visualPlusSeparator(input.capabilities)
   const logical = [
     `Check${separator}${snapshot.mode}${separator}${snapshot.write ? 'write' : 'read-only'}`,
   ]
+  return visualPlusSectionLines(input, logical)
+}
+
+export function renderVisualPlusRunContext(input: VisualPlusSectionInput): readonly string[] {
+  const { run } = input
+  const separator = visualPlusSeparator(input.capabilities)
+  const logical: string[] = []
   const repository = [run.repository?.name, run.repository?.relativePath, run.workspaceScope]
     .filter((value): value is string => value !== undefined)
     .map(sanitizeTerminalText)

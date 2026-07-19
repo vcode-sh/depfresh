@@ -77,6 +77,7 @@ import {
   type VisualPlusSelectionProjection,
 } from './visual-plus/integration'
 import { createVisualPlusRenderer, type VisualPlusRenderer } from './visual-plus/renderer'
+import { deriveVisualPlusRunMetadata } from './visual-plus/run-metadata'
 import { createVisualPlusTheme, wrapVisualPlusText } from './visual-plus/theme'
 import { applyLegacyCommandWrite, applyPackageWrite, type PackageWriteResult } from './write-flow'
 import {
@@ -146,7 +147,7 @@ export async function runCheck(
   let rendererError: unknown
   let unregisterSignalCleanup: (() => void) | undefined
   let visualResolutionSuspended = false
-  const visualRun: VisualPlusRunMetadata = {
+  let visualRun: VisualPlusRunMetadata = {
     workspaceScope: 'unknown',
     packageManager: { status: 'unknown', sources: [] },
   }
@@ -290,6 +291,13 @@ export async function runCheck(
         declared: packages.reduce((sum, pkg) => sum + pkg.deps.length, 0),
       })
       runController.emit({ type: 'repository-inspection-started' })
+    }
+    if (visualRenderer) {
+      const visualRoot =
+        runtimeOptions.effectiveRoot ?? resolveDiscoveryContext(runtimeOptions.cwd).effectiveRoot
+      visualRun = deriveVisualPlusRunMetadata(visualRoot, packages, visualRun.detailLevel)
+      visualRenderer.setRunMetadata(visualRun)
+      throwRetainedRendererError(rendererError)
     }
     const declaredDependencies = packages.reduce((sum, pkg) => sum + pkg.deps.length, 0)
     runController?.emit({ type: 'repository-inspection-completed', status: 'passed' })
