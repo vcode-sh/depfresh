@@ -302,6 +302,50 @@ describe('Visual+ PTY adapter', () => {
       expect(result.transcript).toBe('line\n')
       expect(result.controls).toMatchObject({ carriageReturn: 0, crlf: 1 })
     }
+
+    for (const fault of ['start-readiness-missing', 'start-readiness-malformed'] as const) {
+      await expect(
+        runInPty({
+          cliPath: process.execPath,
+          args: ['-e', 'process.stdout.write("private-readiness-bytes\\n")'],
+          columns: 40,
+          env: {},
+          fault,
+          input: Buffer.alloc(0),
+        }),
+      ).rejects.toThrow(/^PTY start readiness evidence is invalid$/u)
+    }
+
+    if (adapter.family === 'bsd') {
+      for (const fault of [
+        'outer-transport-missing',
+        'outer-transport-malformed',
+        'outer-transport-ambiguous',
+        'outer-output-processing',
+      ] as const) {
+        await expect(
+          runInPty({
+            cliPath: process.execPath,
+            args: ['-e', 'process.stdout.write("private-transport-bytes\\n")'],
+            columns: 40,
+            env: {},
+            fault,
+            input: Buffer.alloc(0),
+          }),
+        ).rejects.toThrow(/^PTY outer transport evidence is invalid$/u)
+      }
+    } else {
+      await expect(
+        runInPty({
+          cliPath: process.execPath,
+          args: ['-e', 'process.exit(0)'],
+          columns: 40,
+          env: {},
+          fault: 'outer-output-processing',
+          input: Buffer.alloc(0),
+        }),
+      ).rejects.toThrow(/^PTY outer transport fault is not applicable$/u)
+    }
   })
 
   it('rejects non-empty input before launching the adapter', async () => {

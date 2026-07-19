@@ -21,7 +21,23 @@ const DEFAULT_TIMEOUT_MS = 30_000
 const DEFAULT_OUTPUT_LIMIT = 4 * 1024 * 1024
 const CONFIG_LIMIT = 256 * 1024
 const SIDECAR_LIMIT = 4 * 1024
-const TEST_FAULTS = new Set(['start-evidence-failure', 'malformed-start', 'malformed-completion'])
+const TEST_FAULTS = new Set([
+  'start-evidence-failure',
+  'malformed-start',
+  'malformed-completion',
+  'start-readiness-missing',
+  'start-readiness-malformed',
+  'outer-transport-missing',
+  'outer-transport-malformed',
+  'outer-transport-ambiguous',
+  'outer-output-processing',
+])
+const OUTER_TRANSPORT_FAULTS = new Set([
+  'outer-transport-missing',
+  'outer-transport-malformed',
+  'outer-transport-ambiguous',
+  'outer-output-processing',
+])
 const CLEANUP_FAULTS = new Set(['observation-ambiguity', 'signaling-failure', 'survivor'])
 const EVIDENCE_ROLES = new Set(['cli', 'unclassified', 'wrapper'])
 const IDENTITY_CHANGE_DIAGNOSTICS = new Map([
@@ -51,13 +67,81 @@ const START_KEYS = [
   'wrapperStart',
 ]
 const COMPLETION_KEYS = ['exitCode', 'records', 'signal']
-const EXPECT_SOURCE = `#!/usr/bin/expect -f
+const OUTER_TRANSPORT_KEYS = ['outerRaw', 'records']
+const START_READINESS_KEYS = ['records', 'startPublished']
+
+function createExpectSource(fault) {
+  const transportFault = OUTER_TRANSPORT_FAULTS.has(fault) ? fault : 'none'
+  const readinessWaitMs =
+    fault === 'start-evidence-failure' || fault === 'start-readiness-missing' ? 100 : 5_000
+  return `#!/usr/bin/expect -f
 set timeout -1
 log_user 0
 fconfigure stdout -translation binary -encoding binary
-set stty_init {raw -echo}
+set transport_fault "${transportFault}"
+set stty_init {raw -echo -opost}
+proc token_count {tokens expected} {
+  set count 0
+  foreach token $tokens {
+    if {$token eq $expected} {
+      incr count
+    }
+  }
+  return $count
+}
 spawn -noecho /usr/bin/script -q -e /dev/null ./run
 fconfigure $spawn_id -translation binary -encoding binary
+set transport_configured 0
+if {[info exists spawn_out(slave,name)]} {
+  set slave $spawn_out(slave,name)
+  set transport_configured [expr {![catch {exec /bin/stty raw -echo -opost < $slave}]}]
+  set start_ready 0
+  set start_deadline [expr {[clock milliseconds] + ${readinessWaitMs}}]
+  while {[clock milliseconds] < $start_deadline} {
+    if {[file exists "./start-ready.json"]} {
+      set start_ready 1
+      break
+    }
+    after 10
+  }
+  if {$start_ready} {
+    set transport_configured [expr {![catch {exec /bin/stty raw -echo -opost < $slave}]}]
+    if {$transport_fault eq "outer-output-processing"} {
+      if {[catch {exec /bin/stty opost onlcr < $slave}]} {
+        set transport_configured 0
+      }
+    }
+  } else {
+    set transport_configured 0
+  }
+  if {$transport_configured && ![catch {set modes [exec /bin/stty -a < $slave]}]} {
+    set tokens [split [string map {";" " " ":" " "} $modes]]
+    if {$transport_fault eq "outer-transport-ambiguous"} {
+      lappend tokens "-opost"
+    }
+    set canonical_off [token_count $tokens "-icanon"]
+    set canonical_on [token_count $tokens "icanon"]
+    set echo_off [token_count $tokens "-echo"]
+    set echo_on [token_count $tokens "echo"]
+    set output_processing_off [token_count $tokens "-opost"]
+    set output_processing_on [token_count $tokens "opost"]
+    set transport_valid [expr {
+      $canonical_off == 1 && $canonical_on == 0 &&
+      $echo_off == 1 && $echo_on == 0 &&
+      $output_processing_off == 1 && $output_processing_on == 0
+    }]
+    if {$transport_fault ne "outer-transport-missing"} {
+      set transport_channel [open "./outer-transport.json" {WRONLY CREAT EXCL} 0600]
+      if {$transport_fault eq "outer-transport-malformed"} {
+        puts $transport_channel {"records":1}
+      } else {
+        set outer_raw_json [expr {$transport_valid ? "true" : "false"}]
+        puts $transport_channel "{\\"records\\":1,\\"outerRaw\\":$outer_raw_json}"
+      }
+      close $transport_channel
+    }
+  }
+}
 set channel [open "./script-pid" {WRONLY CREAT EXCL} 0600]
 puts $channel [exp_pid]
 close $channel
@@ -72,6 +156,7 @@ expect {
 set result [wait]
 exit [lindex $result 3]
 `
+}
 
 export function detectScriptAdapter() {
   const scriptPath = requireExecutable('/usr/bin/script', 'script')
@@ -361,6 +446,9 @@ export async function runInPty(options) {
   const fault = requireTestFault(options?.fault)
   const cleanupFault = requireCleanupFault(options?.cleanupFault)
   const adapter = detectScriptAdapter()
+  if (adapter.family !== 'bsd' && OUTER_TRANSPORT_FAULTS.has(fault)) {
+    throw new Error('PTY outer transport fault is not applicable')
+  }
   const directory = mkdtempSync(join(tmpdir(), 'depfresh-pty-'))
   chmodSync(directory, 0o700)
   let primaryError
@@ -380,7 +468,7 @@ export async function runInPty(options) {
     writeExclusive(join(directory, 'config.json'), config, 0o600)
     writeExclusive(join(directory, 'run'), Buffer.from(createWrapperSource()), 0o700)
     if (adapter.family === 'bsd')
-      writeExclusive(join(directory, 'bootstrap'), Buffer.from(EXPECT_SOURCE), 0o700)
+      writeExclusive(join(directory, 'bootstrap'), Buffer.from(createExpectSource(fault)), 0o700)
 
     const command =
       adapter.family === 'util-linux'
@@ -394,6 +482,8 @@ export async function runInPty(options) {
       directory,
       observed,
     })
+    requireStartReadinessEvidence(directory)
+    if (adapter.family === 'bsd') requireOuterTransportEvidence(directory)
     const start = readSidecar(directory, 'start.json')
     const completion = readSidecar(directory, 'completion.json')
     validateStart(start)
@@ -502,6 +592,14 @@ try {
     ? { records: 1, wrapperPid: 'invalid' }
     : { records: 1, wrapperPid: process.pid, wrapperParent: wrapperIdentity.parent, wrapperGroup: wrapperIdentity.group, wrapperStart: wrapperIdentity.start, cliPid: child.pid, cliParent: childIdentity.parent, cliGroup: childIdentity.group, cliStart: childIdentity.start, stdin: Boolean(process.stdin.isTTY), stdout: Boolean(process.stdout.isTTY), stderr: Boolean(process.stderr.isTTY), columns: process.stdout.columns, nodeVersion: process.version }
   writeRecord('start.json', start)
+  if (config.fault !== 'start-readiness-missing') {
+    writeRecord(
+      'start-ready.json',
+      config.fault === 'start-readiness-malformed'
+        ? { records: 1 }
+        : { records: 1, startPublished: true },
+    )
+  }
 } catch {
   killChild('SIGKILL')
   fail('start evidence failure')
@@ -808,6 +906,28 @@ function validateCompletion(completion) {
     (completion.exitCode === null) === (completion.signal === null)
   ) {
     throw new Error('PTY completion evidence is malformed')
+  }
+}
+
+function requireStartReadinessEvidence(directory) {
+  try {
+    const evidence = readSidecar(directory, 'start-ready.json')
+    requireExactKeys(evidence, START_READINESS_KEYS, 'start readiness')
+    if (evidence.records !== 1 || evidence.startPublished !== true) throw new Error()
+  } catch {
+    throw new Error('PTY start readiness evidence is invalid')
+  }
+}
+
+function requireOuterTransportEvidence(directory) {
+  try {
+    const evidence = readSidecar(directory, 'outer-transport.json')
+    requireExactKeys(evidence, OUTER_TRANSPORT_KEYS, 'outer transport')
+    if (evidence.records !== 1 || evidence.outerRaw !== true) {
+      throw new Error()
+    }
+  } catch {
+    throw new Error('PTY outer transport evidence is invalid')
   }
 }
 
