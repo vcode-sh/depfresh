@@ -269,3 +269,14 @@ the same 56-file, 332890-byte `depfresh-2.1.0.tgz` with SHA-256
 `3a7980e4be50ff11e732ac1c9e47c1e4b6583abf573d036b6326fc5ab6dcbdfd`. Independent proof review
 closed at C0/I0/M0. The release note records local candidate evidence only; hosted publication is
 next.
+Plan 036 hosted candidate stop and proof hardening: exact `main` run `29683662980` at
+`eed33777ac374b8f7e46a4ac585971e955c5457d` passed every job except the first macOS installed
+Visual+ replay. Attempts 2 and 3 passed unchanged bytes, but attempt 2 exposed hidden Vitest retries
+in source PTY/process-observation tests, so neither retry-masked result was accepted for release.
+Commits `deeaaf4` and `7d0fc14` disable retries for hosted source and packed replay, add fixed
+allowlisted failure categories, and bound the private JSON report to an identity-checked regular
+non-symlink file of at most 256 KiB. Unsafe, malformed, oversized, or unknown evidence remains
+`unclassified` without exposing private output. Exact-Node focused tests passed 34/34, source
+Visual+ passed 32/32 without retries, two hosted-like packed replays each passed 32/32 without
+retries, and static gates plus independent C0/I0/M0 re-review passed. The hardened candidate is
+local only; a new exact hosted `main` success is required before tagging.
