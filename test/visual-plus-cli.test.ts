@@ -341,7 +341,7 @@ describe('Visual+ PTY adapter', () => {
     expect(result.exitCode).toBe(0)
   })
 
-  it('diagnoses child writes before the owned ONLCR transform', async () => {
+  it('diagnoses child writes before the owned line-ending transform', async () => {
     const bareLineFeed = await runInPty({
       cliPath: process.execPath,
       args: [
@@ -354,8 +354,9 @@ describe('Visual+ PTY adapter', () => {
       input: Buffer.alloc(0),
     })
     expect(bareLineFeed.writeBoundary).toEqual(
-      expectedWriteBoundary({ childStdout: { bareLf: true }, inner: { singleCrlf: true } }),
+      expectedWriteBoundary({ childStdout: { bareLf: true }, inner: { bareLf: true } }),
     )
+    expect(bareLineFeed.rawTerminal).toEqual(Buffer.from('line\r\n'))
 
     const splitExplicitCrlf = await runInPty({
       cliPath: process.execPath,
@@ -368,9 +369,10 @@ describe('Visual+ PTY adapter', () => {
     expect(splitExplicitCrlf.writeBoundary).toEqual(
       expectedWriteBoundary({
         childStdout: { singleCrlf: true },
-        inner: { doubleCrlf: true },
+        inner: { singleCrlf: true },
       }),
     )
+    expect(splitExplicitCrlf.rawTerminal).toEqual(Buffer.from('line\r\n'))
 
     const childDoubleCrlf = await runInPty({
       cliPath: process.execPath,
@@ -386,6 +388,7 @@ describe('Visual+ PTY adapter', () => {
         inner: { doubleCrlf: true },
       }),
     )
+    expect(childDoubleCrlf.rawTerminal).toEqual(Buffer.from('line\r\r\n'))
   })
 
   it('diagnoses owned output-mode changes at child write time and process close', async () => {
@@ -404,8 +407,6 @@ describe('Visual+ PTY adapter', () => {
       expectedWriteBoundary({
         childStdout: { singleCrlf: true },
         inner: { singleCrlf: true },
-        stateChanged: true,
-        writeModes: { newlineMapping: true, outputProcessing: false },
       }),
     )
 
@@ -413,7 +414,7 @@ describe('Visual+ PTY adapter', () => {
       cliPath: process.execPath,
       args: [
         '-e',
-        'const {execFileSync}=require("node:child_process");execFileSync("/bin/stty",["-opost"],{stdio:"inherit"});process.stdout.write("line\\r\\n");execFileSync("/bin/stty",["opost","onlcr"],{stdio:"inherit"})',
+        'const {execFileSync}=require("node:child_process");execFileSync("/bin/stty",["opost","onlcr"],{stdio:"inherit"});process.stdout.write("line\\r\\n");execFileSync("/bin/stty",["-opost","-onlcr"],{stdio:"inherit"})',
       ],
       columns: 40,
       diagnoseChildWrites: true,
@@ -423,9 +424,9 @@ describe('Visual+ PTY adapter', () => {
     expect(changedAndRestored.writeBoundary).toEqual(
       expectedWriteBoundary({
         childStdout: { singleCrlf: true },
-        inner: { singleCrlf: true },
+        inner: { doubleCrlf: true },
         stateChanged: true,
-        writeModes: { newlineMapping: true, outputProcessing: false },
+        writeModes: { newlineMapping: true, outputProcessing: true },
       }),
     )
 
@@ -433,7 +434,7 @@ describe('Visual+ PTY adapter', () => {
       cliPath: process.execPath,
       args: [
         '-e',
-        'const {execFileSync}=require("node:child_process");const output=execFileSync("/bin/stty",["-a"],{encoding:"utf8",stdio:["inherit","pipe","inherit"]});const modes=new Set(output.split(/[\\s;:]+/u));const required=["-icanon","-echo","opost","onlcr","-onocr","-onlret",...(process.platform==="darwin"?[]:["-ocrnl"])];const forbidden=["icanon","echo","-opost","-onlcr","ocrnl","onocr","onlret"];if(required.some(mode=>!modes.has(mode))||forbidden.some(mode=>modes.has(mode)))process.exit(86);process.stdout.write("line\\n")',
+        'const {execFileSync}=require("node:child_process");const output=execFileSync("/bin/stty",["-a"],{encoding:"utf8",stdio:["inherit","pipe","inherit"]});const modes=new Set(output.split(/[\\s;:]+/u));const required=["-icanon","-echo","-opost","-onlcr","-onocr","-onlret",...(process.platform==="darwin"?[]:["-ocrnl"])];const forbidden=["icanon","echo","opost","onlcr","ocrnl","onocr","onlret"];if(required.some(mode=>!modes.has(mode))||forbidden.some(mode=>modes.has(mode)))process.exit(86);process.stdout.write("line\\n")',
       ],
       columns: 40,
       diagnoseChildWrites: true,
@@ -445,7 +446,7 @@ describe('Visual+ PTY adapter', () => {
     expect(hostileInherited.exitCode).toBe(0)
     expect(hostileInherited.rawTerminal).toEqual(Buffer.from('line\r\n'))
     expect(hostileInherited.writeBoundary).toEqual(
-      expectedWriteBoundary({ childStdout: { bareLf: true }, inner: { singleCrlf: true } }),
+      expectedWriteBoundary({ childStdout: { bareLf: true }, inner: { bareLf: true } }),
     )
   })
 
@@ -454,7 +455,7 @@ describe('Visual+ PTY adapter', () => {
     if (adapter.family !== 'bsd') return
     const result = await runInPty({
       cliPath: process.execPath,
-      args: ['-e', 'process.stdout.write("line\\n")'],
+      args: ['-e', 'process.stdout.write("line\\r\\n")'],
       columns: 40,
       diagnoseChildWrites: true,
       env: {},
@@ -463,7 +464,7 @@ describe('Visual+ PTY adapter', () => {
     })
 
     expect(result.writeBoundary).toEqual(
-      expectedWriteBoundary({ childStdout: { bareLf: true }, inner: { singleCrlf: true } }),
+      expectedWriteBoundary({ childStdout: { singleCrlf: true }, inner: { singleCrlf: true } }),
     )
     expect(result.outerTransportDoubleCrlf).toBe(true)
   })
@@ -502,9 +503,9 @@ describe('Visual+ PTY adapter', () => {
   it('keeps one owned ONLCR transform and transports explicit CRLF unchanged', async () => {
     const adapter = detectScriptAdapter()
     const requiredModes =
-      adapter.family === 'bsd' ? ['-icanon', '-echo', 'opost', 'onlcr'] : ['opost', 'onlcr']
+      adapter.family === 'bsd' ? ['-icanon', '-echo', '-opost', '-onlcr'] : ['-opost', '-onlcr']
     const forbiddenModes =
-      adapter.family === 'bsd' ? ['icanon', 'echo', '-opost', '-onlcr'] : ['-opost', '-onlcr']
+      adapter.family === 'bsd' ? ['icanon', 'echo', 'opost', 'onlcr'] : ['opost', 'onlcr']
     const lineFeed = await runInPty({
       cliPath: process.execPath,
       args: [
@@ -563,7 +564,7 @@ describe('Visual+ PTY adapter', () => {
     if (adapter.family === 'bsd') {
       const postProofOutputProcessing = await runInPty({
         cliPath: process.execPath,
-        args: ['-e', 'process.stdout.write("line\\n")'],
+        args: ['-e', 'process.stdout.write("line\\r\\n")'],
         columns: 40,
         env: {},
         fault: 'outer-post-proof-output-processing',
@@ -1058,7 +1059,7 @@ describe('Visual+ built CLI', () => {
     it('contains no duplicate CRCRLF transport', () => {
       if (!(journeyReady && result)) return
       expect(result.writeBoundary).toEqual(
-        expectedWriteBoundary({ childStdout: { bareLf: true }, inner: { singleCrlf: true } }),
+        expectedWriteBoundary({ childStdout: { bareLf: true }, inner: { bareLf: true } }),
       )
       expect(hasDoubleCarriageReturnLineFeed(result.rawTerminal)).toBe(false)
       transportReady = true
@@ -1451,14 +1452,14 @@ function expectedWriteBoundary(options: {
 }) {
   const stdout = { ...emptyLineEndingEvidence(), ...options.childStdout }
   const stderr = emptyLineEndingEvidence()
-  const start = availableOutputModes(true, true)
+  const start = availableOutputModes(false, false)
   const writes = {
-    ...availableOutputModes(true, true),
+    ...availableOutputModes(false, false),
     ...options.writeModes,
     observed: true,
     stateChanged: options.stateChanged ?? false,
   }
-  const end = availableOutputModes(true, true)
+  const end = availableOutputModes(false, false)
   return {
     child: { combined: { ...stdout }, stderr, stdout },
     inner: { ...emptyLineEndingEvidence(), ...options.inner },

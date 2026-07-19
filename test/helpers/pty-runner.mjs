@@ -740,13 +740,14 @@ export async function runInPty(options) {
     if (adapter.family === 'bsd') {
       applyClosedTranscriptFault(transcriptEvidence, fault)
     }
-    const rawTerminal =
+    const innerTerminal =
       adapter.family === 'bsd'
         ? readValidatedTranscript(transcriptEvidence, outputLimit, fault)
         : captured.stdout
+    const rawTerminal = applyOwnedLineEndings(innerTerminal)
     const normalized = normalizeTerminalCapture(rawTerminal, { columns, limit: outputLimit })
     const writeBoundary = diagnoseChildWrites
-      ? requireWriteBoundaryEvidence(directory, rawTerminal)
+      ? requireWriteBoundaryEvidence(directory, innerTerminal)
       : undefined
     outcome = Object.freeze({
       adapter,
@@ -803,7 +804,7 @@ const fault = ${JSON.stringify(diagnosticFault)}
 const emptyFlags = () => ({ bareLf: false, beforeEscape: false, beforeOtherControl: false, beforeText: false, doubleCrlf: false, singleCrlf: false, trailing: false })
 const emptyState = () => ({ flags: emptyFlags(), pendingCarriageReturns: 0 })
 const states = { combined: emptyState(), stderr: emptyState(), stdout: emptyState() }
-const writes = { available: true, canonicalInput: false, carriageReturnMapping: false, carriageReturnSuppression: false, echo: false, newlineMapping: true, newlineReturn: false, observed: false, outputProcessing: true, stateChanged: false }
+const writes = { available: true, canonicalInput: false, carriageReturnMapping: false, carriageReturnSuppression: false, echo: false, newlineMapping: false, newlineReturn: false, observed: false, outputProcessing: false, stateChanged: false }
 let closed = false
 let firstLineFeedSampled = false
 let lastPublished = ''
@@ -858,18 +859,18 @@ const observeModes = (modes) => {
   writes.carriageReturnMapping ||= modes.carriageReturnMapping
   writes.carriageReturnSuppression ||= modes.carriageReturnSuppression
   writes.echo ||= modes.echo
-  writes.newlineMapping &&= modes.newlineMapping
+  writes.newlineMapping ||= modes.newlineMapping
   writes.newlineReturn ||= modes.newlineReturn
-  writes.outputProcessing &&= modes.outputProcessing
+  writes.outputProcessing ||= modes.outputProcessing
   writes.stateChanged ||=
     !modes.available ||
     modes.canonicalInput ||
     modes.carriageReturnMapping ||
     modes.carriageReturnSuppression ||
     modes.echo ||
-    !modes.newlineMapping ||
+    modes.newlineMapping ||
     modes.newlineReturn ||
-    !modes.outputProcessing
+    modes.outputProcessing
 }
 const classifyPending = (state, next) => {
   if (state.pendingCarriageReturns > 1) state.flags.beforeOtherControl = true
@@ -975,7 +976,7 @@ if (config.fault === 'inner-hostile-output-modes') {
 }
 execFileSync(
   config.sttyPath,
-  ['raw', '-echo', 'opost', 'onlcr', '-ocrnl', '-onocr', '-onlret', 'rows', '24', 'cols', String(config.columns)],
+  ['raw', '-echo', '-opost', '-onlcr', '-ocrnl', '-onocr', '-onlret', 'rows', '24', 'cols', String(config.columns)],
   { stdio: 'inherit' },
 )
 const tokenCount = (tokens, expected) => tokens.filter((token) => token === expected).length
@@ -1711,6 +1712,23 @@ function requireBooleanRecord(value, keys) {
   requireExactKeys(value, keys, 'boolean evidence')
   if (keys.some((key) => typeof value[key] !== 'boolean')) throw new Error()
   return Object.freeze(Object.fromEntries(keys.map((key) => [key, value[key]])))
+}
+
+function applyOwnedLineEndings(bytes) {
+  if (!Buffer.isBuffer(bytes)) throw new TypeError('Terminal capture must be a Buffer')
+  let bareLineFeeds = 0
+  for (let index = 0; index < bytes.byteLength; index += 1) {
+    if (bytes[index] === 10 && bytes[index - 1] !== 13) bareLineFeeds += 1
+  }
+  if (bareLineFeeds === 0) return bytes
+  const mapped = Buffer.allocUnsafe(bytes.byteLength + bareLineFeeds)
+  let target = 0
+  for (let index = 0; index < bytes.byteLength; index += 1) {
+    const byte = bytes[index]
+    if (byte === 10 && bytes[index - 1] !== 13) mapped[target++] = 13
+    mapped[target++] = byte
+  }
+  return mapped
 }
 
 function classifyLineEndingEvidence(bytes) {
