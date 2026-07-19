@@ -126,6 +126,7 @@ describe('2.1.0 release readiness', () => {
     expect(read('docs/README.md')).toContain('[2.1.0 Release Notes](./releases/v2.1.0.md)')
     for (const path of ['docs/agents/README.md', 'skills/depfresh/recipes/runners.md']) {
       expect(read(path), path).toContain('DEPFRESH_VERSION=2.1.0')
+      expect(read(path), path).not.toContain('DEPFRESH_VERSION=2.0.2')
       expect(read(path), path).toContain('depfresh@$DEPFRESH_VERSION')
       expect(read(path), path).not.toContain('depfresh@1.2.0')
     }
