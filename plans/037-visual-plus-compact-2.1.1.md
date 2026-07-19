@@ -56,7 +56,7 @@ PTY harness, Bun global local-package installation.
 - Produces: `VisualPlusRunMetadata.detailLevel: 'compact' | 'full'` and pure compact review/receipt
   renderers with deterministic limits.
 
-- [ ] **Step 1: Write compact renderer RED tests**
+- [x] **Step 1: Write compact renderer RED tests**
 
 Add focused assertions that the 76-change fixture in compact mode contains topology,
 distribution, every major card, bounded owner/shared/update/target previews, explicit omitted
@@ -64,7 +64,7 @@ counts, and no strings matching `Operation ID`, `Owner ID`, `Dependency ID`, `op
 `dependency:`, `package:`, or `source:`. Assert every successful compact journey is at most 80
 durable lines and every rendered line fits widths 40, 60, 80, 118, and 175.
 
-- [ ] **Step 2: Run RED tests**
+- [x] **Step 2: Run RED tests**
 
 Run:
 
@@ -74,7 +74,7 @@ pnpm exec vitest run src/commands/check/visual-plus/sections/sections.test.ts sr
 
 Expected: FAIL because detail-level validation and compact renderers do not exist.
 
-- [ ] **Step 3: Implement the compact contract**
+- [x] **Step 3: Implement the compact contract**
 
 Add `detailLevel` validation/copy/freeze to run metadata. Implement pure helpers with these exact
 limits: owners `5`, shared dependencies `5`, update preview `8`, successful/read-only targets `8`.
@@ -83,7 +83,7 @@ descending then canonical current order, and updates by major/minor/patch then o
 All major cards remain visible. Each truncated section ends with `… N more <items>` using ASCII
 `...` in plain/non-Unicode mode.
 
-- [ ] **Step 4: Route review and transaction output**
+- [x] **Step 4: Route review and transaction output**
 
 In `writeReview()`, build insights exactly once and select compact sections only when
 `detailLevel === 'compact'`; otherwise call the unchanged exhaustive renderers. In finalization,
@@ -94,7 +94,7 @@ recovery-affected target remains visible. Finish a nonempty compact review with:
 Details: rerun with --long for the complete audit.
 ```
 
-- [ ] **Step 5: Run GREEN and regression tests**
+- [x] **Step 5: Run GREEN and regression tests**
 
 Run the Step 2 command plus:
 
@@ -106,12 +106,19 @@ pnpm exec biome check src/commands/check/visual-plus
 
 Expected: all commands exit 0 with no warnings.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/commands/check/visual-plus
 git commit -m "fix: make Visual Plus output compact by default"
 ```
+
+**Task 1 evidence (2026-07-20):** Commits `a053909` and `3435383` implement the compact/full
+contract. Focused verification passed 154 renderer/section tests and 15 input tests under Node
+`24.15.0`, followed by typecheck and focused Biome. Independent review found two safety gaps;
+the fix makes independently flagged blocked/not-attempted/unknown targets bypass compact limits
+and replaces compact recovery journal IDs with the truthful non-identifying `Journal: retained`.
+Re-review reported C0/I0/M0.
 
 ### Task 2: Truthful discovered repository context
 

@@ -374,3 +374,8 @@ descendants remain observable after PTY closure, and latches only fixed failure 
 retry or weaker identity assertion was added. Exact hosted run `29703537651` passed macOS and
 Ubuntu source/installed Visual+ 54/54 without retry, Test, Lint, Build, and Distribution Smoke. The
 immutable release state remains unchanged.
+Plan 037 Task 1: complete (commits `3cf3d9c..3435383`, review clean). Compact/default and
+full/`--long` rendering now share authoritative Visual+ evidence while applying deterministic
+preview limits only to successful detail. Safety-flagged targets bypass limits, compact recovery
+retains truth without the journal ID, and focused pinned-Node proof passed 154 renderer/section
+tests, 15 input tests, typecheck, and Biome. Independent re-review reported C0/I0/M0.
