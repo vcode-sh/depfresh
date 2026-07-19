@@ -64,6 +64,14 @@ const capable: VisualPlusCapabilities = {
   layout: 'wide',
 }
 
+function renderedNextAction(lines: readonly string[]): string | undefined {
+  const start = lines.findIndex((line) => line.startsWith('Next:'))
+  if (start < 0) return undefined
+  const exit = lines.findIndex((line, index) => index > start && line.startsWith('Exit '))
+  if (exit < 0) return undefined
+  return lines.slice(start, exit).join('')
+}
+
 function totals(overrides: Partial<CheckRunResultTotals> = {}): CheckRunResultTotals {
   return {
     applied: 0,
@@ -819,6 +827,7 @@ describe('Visual+ pure sections', () => {
         (_, index) =>
           `Preflight could not confirm Git state for packages/target-${index}/package.json.`,
       ),
+      'Next: review all reported errors and restore trustworthy Git evidence for every reported target before rerunning.',
       'Exit 2',
     ])
   })
@@ -1374,6 +1383,11 @@ describe('Visual+ receipt decision table', () => {
       expect(compact).toContain(
         'Diagnostic INSPECTION_UNAVAILABLE - path packages/app/package.json - detail manager evidence unavailable',
       )
+      expect(compact).toContain(
+        'Next: review every diagnostic and correct each reported cause before rerunning.',
+      )
+      expect(lines.filter((line) => line.startsWith('Next:'))).toHaveLength(1)
+      expect(lines.at(-1)).toBe('Exit 2')
       expect(lines.join('')).not.toContain('\u001B')
       expect(lines.join('')).not.toContain('\u202E')
     },
@@ -1425,6 +1439,127 @@ describe('Visual+ receipt decision table', () => {
     expect(renderVisualPlusReceipt(createVisualPlusSectionInput(withReceipt))[0]).toBe(headline)
   })
 
+  it.each([
+    [
+      'Result unknown - receipt evidence unavailable',
+      { receipt: false, exitCode: 2 },
+      'Next: inspect all reported diagnostics and repository state; do not rerun until every final state is known.',
+    ],
+    [
+      'Safety block - no files were changed',
+      { outcome: 'blocked', exitCode: 2 },
+      'Next: review all reported errors and restore trustworthy Git evidence for every reported target before rerunning.',
+    ],
+    [
+      'Partial',
+      { outcome: 'reverted', verdict: 'partial', exitCode: 2 },
+      'Next: review all reported errors and inspect every applied or incomplete target; do not rerun until the repository state is understood.',
+    ],
+    [
+      'Failed',
+      { outcome: 'failed', verdict: 'failed', exitCode: 2 },
+      'Next: review all reported errors and inspect every failed target; rerun only after every known cause is corrected.',
+    ],
+    [
+      'Unknown',
+      { outcome: 'unknown', verdict: 'unknown', exitCode: 2 },
+      'Next: review all reported errors and inspect every target; do not rerun until every final state is known.',
+    ],
+    [
+      'Write complete - command incomplete',
+      { exitCode: 2 },
+      'Next: review all reported errors before running another write.',
+    ],
+  ] as const)('adds one safe next action to %s', (_headline, options, action) => {
+    const lines = renderVisualPlusReceipt(createVisualPlusSectionInput(oneOperation(options))).map(
+      stripAnsi,
+    )
+
+    expect(renderedNextAction(lines)).toBe(action)
+    expect(lines.at(-1)).toBe('Exit 2')
+    expect(lines.filter((line) => line.startsWith('Next:'))).toHaveLength(1)
+  })
+
+  it('adds one safe next action to an incomplete zero-selection write', () => {
+    const base = oneOperation({ receipt: false, exitCode: 2 })
+    const input = createVisualPlusSectionInput({
+      ...base,
+      changes: [],
+      snapshot: {
+        ...base.snapshot,
+        counts: {
+          packages: 1,
+          declared: 0,
+          eligible: 0,
+          unresolved: 0,
+          updates: 0,
+          operations: 0,
+          targets: 0,
+        },
+        changes: [],
+        targets: [],
+        results: {
+          operations: [],
+          targets: [],
+          totals: totals(),
+          targetTotals: totals(),
+        },
+      },
+    })
+    const lines = renderVisualPlusReceipt(input).map(stripAnsi)
+
+    expect(renderedNextAction(lines)).toBe(
+      'Next: inspect all reported diagnostics; do not rerun until the cause is understood.',
+    )
+    expect(lines.at(-1)).toBe('Exit 2')
+    expect(lines.filter((line) => line.startsWith('Next:'))).toHaveLength(1)
+  })
+
+  it.each([
+    [
+      'Recovered',
+      {
+        executed: true,
+        status: 'completed',
+        restoredPaths: ['package.json'],
+        unrecoveredPaths: [],
+      },
+      'Next: review all reported errors and restored paths; rerun only after every cause is corrected.',
+    ],
+    [
+      'Recovery incomplete',
+      {
+        executed: true,
+        status: 'partial',
+        restoredPaths: [],
+        unrecoveredPaths: ['package.json'],
+      },
+      'Next: preserve retained evidence and reconcile every applied, restored, and unrecovered path and external effect before any retry.',
+    ],
+    [
+      'Recovery unknown',
+      {
+        executed: true,
+        status: 'unknown',
+        restoredPaths: [],
+        unrecoveredPaths: ['package.json'],
+      },
+      'Next: preserve retained evidence and establish every named path and external effect; do not retry until every final state is known.',
+    ],
+  ] as const)('adds one recovery action to %s', (_headline, recovery, action) => {
+    const input = oneOperation({ outcome: 'reverted', verdict: 'partial', exitCode: 2, recovery })
+    const lines = renderVisualPlusReceipt(
+      createVisualPlusSectionInput({
+        ...input,
+        writeReceipt: { ...input.writeReceipt!, recovery },
+      }),
+    ).map(stripAnsi)
+
+    expect(renderedNextAction(lines)).toBe(action)
+    expect(lines.at(-1)).toBe('Exit 2')
+    expect(lines.filter((line) => line.startsWith('Next:'))).toHaveLength(1)
+  })
+
   it('accepts partial recovery with restored paths and no unrecovered manifest path', () => {
     const recovery: CheckRunRecovery = {
       executed: true,
@@ -1446,17 +1581,33 @@ describe('Visual+ receipt decision table', () => {
   })
 
   it.each([
-    ['VCS_UNAVAILABLE', undefined, 'Preflight could not confirm Git state for package.json.'],
+    [
+      'VCS_UNAVAILABLE',
+      undefined,
+      'Preflight could not confirm Git state for package.json.',
+      'Next: review all reported errors and restore trustworthy Git evidence for every reported target before rerunning.',
+    ],
     [
       'AMBIGUOUS_OCCURRENCE',
       'CATALOG_AMBIGUOUS',
       'package.json - AMBIGUOUS_OCCURRENCE / CATALOG_AMBIGUOUS',
+      'Next: review all reported errors and correct every reported preflight blocker before rerunning.',
     ],
-    ['UNSUPPORTED_WRITE_SOURCE', undefined, 'package.json - UNSUPPORTED_WRITE_SOURCE'],
-    ['SOURCE_CHANGED', undefined, 'package.json - SOURCE_CHANGED'],
+    [
+      'UNSUPPORTED_WRITE_SOURCE',
+      undefined,
+      'package.json - UNSUPPORTED_WRITE_SOURCE',
+      'Next: review all reported errors and correct every reported preflight blocker before rerunning.',
+    ],
+    [
+      'SOURCE_CHANGED',
+      undefined,
+      'package.json - SOURCE_CHANGED',
+      'Next: review all reported errors and correct every reported preflight blocker before rerunning.',
+    ],
   ] as const)(
     'renders canonical safety reason %s without inventing Git',
-    (reason, diagnostic, expected) => {
+    (reason, diagnostic, expected, expectedAction) => {
       const input = oneOperation({ outcome: 'blocked', exitCode: 2 })
       const group = input.writeReceipt!.canonical.groups[0]!
       const canonical = {
@@ -1471,6 +1622,7 @@ describe('Visual+ receipt decision table', () => {
       ).map(stripAnsi)
 
       expect(lines).toContain(expected)
+      expect(lines).toContain(expectedAction)
       if (reason !== 'VCS_UNAVAILABLE') {
         expect(lines.join('\n')).not.toContain('Preflight could not confirm Git state')
       }

@@ -53,7 +53,9 @@ present. A fully observed write exits `0`; a clean safety block or any other inc
 write exits `2`. After replacement starts, eligible CLI failures render `Recovered`,
 `Recovery incomplete`, or `Recovery unknown` before any canonical renderer compatibility
 projection. Capable TTY output and plain pipe/CI/`TERM=dumb` fallbacks retain the same semantic
-review and final result. Library `check()` calls and veto-capable routes retain the reachable
+review and final result. Every incomplete Visual+ write receipt places one conservative safe
+`Next:` action immediately before `Exit 2`; it never suggests rerunning an unknown state blindly.
+Library `check()` calls and veto-capable routes retain the reachable
 compatibility `Partial result` surface. JSON, versioned repository apply, interactive, and global
 contracts are unchanged.
 

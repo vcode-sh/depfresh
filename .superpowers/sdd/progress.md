@@ -210,3 +210,15 @@ The focused 16-file Node 24.15.0 matrix then passed three fresh no-retry runs at
 (69.97s, 70.45s, and 70.04s). That proof exposed and corrected four stale orchestration assertions
 so operation uniqueness is now scoped to exact `Complete change list` dependency fields while
 insight sections may truthfully repeat dependency names. Complete project gates are next.
+Plan 035 Task 5 complete local gates: passed after f5096a7. The exact Node 24.15.0 full coverage
+run passed all 160 files and 2,129 tests at 88.33% statements, 81.81% branches, 94.82% functions,
+and 90.57% lines. Schemas, typecheck, zero-warning Biome over 351 files, build, the 35-check and
+673-request practical smoke, 14-check demo, 103 release tests, and exact 56-file package verifier
+all passed. The command-apply integration now ignores and restores ambient lower/uppercase npm
+registry overrides and no longer needs diagnostic passthrough mocks. The final local conformance
+review first found one missing safe-next-action requirement, then approved the test-first fix at
+C0/I0/M0 on both correctness/terminal-safety and UX/docs tracks. Every incomplete Visual+ branch
+now emits exactly one conservative `Next:` action before final `Exit 2`; pure, multi-cause
+orchestration, width, and built PTY tests prevent blind-rerun or sole-cause claims. Task 5 is locally
+complete. Task 4's hosted Ubuntu/macOS PTY replay remains pending an authorized push, so Plan 035
+is not DONE and Plan 036 remains blocked.

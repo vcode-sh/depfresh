@@ -686,7 +686,7 @@ boundary, fallbacks, and explicit interactive/JSON/global differences.
 Repeat insight, section, renderer, fixture, PTY, fallback, command apply, orchestration, JSON, and
 interactive tests three times. Expected: stable counts/transcripts and no leaks.
 
-- [ ] **Step 3: Run complete gates**
+- [x] **Step 3: Run complete gates**
 
 ```bash
 pnpm schemas:check
@@ -703,7 +703,26 @@ pnpm verify:package
 Expected: every command exits `0`, full PTY journeys pass, no new runtime/native dependency exists,
 and the packed CLI reproduces source behavior.
 
-- [ ] **Step 4: Require final design-conformance review**
+**Local completion evidence (2026-07-19):** The exact Node 24.15.0 full coverage run passed all
+160 files and 2,129 tests at 88.33% statements, 81.81% branches, 94.82% functions, and 90.57%
+lines. Schema generation checks, typecheck, zero-warning Biome over 351 files, build, the
+35-check/673-request practical smoke, 14-check demo, 103 release tests, and exact 56-file package
+verification all passed. The command-apply integration was made hermetic against ambient lower-
+and uppercase npm registry overrides; the final native integration passed without the diagnostic
+passthrough mocks, including under full coverage. This proves the complete local gate only; the
+dedicated hosted Ubuntu/macOS PTY matrix in Task 4 remains pending an authorized push.
+
+- [x] **Step 4: Require final design-conformance review**
 
 Map every acceptance criterion in the approved spec to a passing test or inspected output. Require
 independent correctness/terminal-safety and UX/docs approvals. Plan 036 cannot start with gaps.
+
+**Local review evidence (2026-07-19):** The correctness/terminal-safety and UX/docs re-reviews
+reported C0/I0/M0. Their initial UX review found that incomplete Visual+ receipts lacked the
+approved safe next action. The test-first correction now emits exactly one conservative `Next:`
+action before the final `Exit 2` for every incomplete branch, distinguishes recovery-partial from
+recovery-unknown guidance, and never treats a local VCS reason as the only command exit cause.
+Pure decision tests, a strict-resolution-plus-VCS orchestration case, and built PTY journeys at
+40/60/80/118 columns prove exact action cardinality, wrapping, stable final exit, and no blind-rerun
+claim. This closes the local design review only. Task 4 Steps 2 and 6 remain open until the hosted
+Ubuntu/macOS matrix passes; Plan 035 is not done and Plan 036 remains blocked.

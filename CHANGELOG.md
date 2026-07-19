@@ -13,8 +13,9 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Semver
   safety-block, and recovery-first journeys use exact operation counts and paths with exit `0`/`2`;
   the renderer retains a canonical synthetic `Partial` projection, while the current eligible CLI
   engine reports post-replacement failures as `Recovered`, `Recovery incomplete`, or
-  `Recovery unknown` first. Command-level preflight still covers every selected physical target,
-  replacement remains atomic per file only, and repository recovery remains best effort.
+  `Recovery unknown` first. Every incomplete Visual+ write receipt now ends with one conservative
+  safe next action before `Exit 2`. Command-level preflight still covers every selected physical
+  target, replacement remains atomic per file only, and repository recovery remains best effort.
   `NO_COLOR` and narrow capable layouts retain motion, while pipes, CI, and `TERM=dumb` use
   append-only fallbacks. Interactive, JSON, global, veto-capable, and public library contracts are
   unchanged.

@@ -490,6 +490,10 @@ function assertJourney(
   } else {
     expect(compact).toContain('Safetyblock·nofileswerechanged')
     expect(compact).toContain('Applied0Blocked0Notattempted76Failed0Unknown76')
+    expect(result.transcript.match(/^Next:/gmu) ?? []).toHaveLength(1)
+    expect(compact).toContain(
+      'Next:reviewallreportederrorsandrestoretrustworthyGitevidenceforeveryreportedtargetbeforererunning.',
+    )
     expect(compact.split('PreflightcouldnotconfirmGitstatefor').length - 1).toBe(14)
     for (const target of fixture.targets) {
       expect(

@@ -226,6 +226,7 @@ Preflight could not confirm Git state for packages/target-10/package.json.
 Preflight could not confirm Git state for packages/target-11/package.json.
 Preflight could not confirm Git state for packages/target-12/package.json.
 Preflight could not confirm Git state for packages/target-13/package.json.
+Next: review all reported errors and restore trustworthy Git evidence for every reported target before rerunning.
 Exit 2
 ```
 
@@ -248,6 +249,7 @@ Preflight could not confirm Git state for packages/target-10/package.json.
 Preflight could not confirm Git state for packages/target-11/package.json.
 Preflight could not confirm Git state for packages/target-12/package.json.
 Preflight could not confirm Git state for packages/target-13/package.json.
+Next: review all reported errors and restore trustworthy Git evidence for every reported target before rerunning.
 Exit 2
 ```
 
@@ -273,6 +275,7 @@ Applied 1  Blocked 0  Not attempted 1  Failed 1  Unknown 0
 Applied: package.json
 Restored: none
 Unrecovered: none
+Next: review all reported errors and inspect every applied or incomplete target; do not rerun until the repository state is understood.
 Exit 2
 ```
 
@@ -284,6 +287,7 @@ Applied 1  Blocked 0  Not attempted 1  Failed 1  Unknown 0
 Applied: package.json
 Restored: none
 Unrecovered: none
+Next: review all reported errors and inspect every applied or incomplete target; do not rerun until the repository state is understood.
 Exit 2
 ```
 
@@ -304,6 +308,7 @@ Restored: reverted/package.json
 Unrecovered: mixed/package.json
 Journal: journal-mixed
 External effects: install tree may have changed
+Next: preserve retained evidence and reconcile every applied, restored, and unrecovered path and external effect before any retry.
 Exit 2
 ```
 
@@ -317,6 +322,7 @@ Restored: reverted/package.json
 Unrecovered: mixed/package.json
 Journal: journal-mixed
 External effects: install tree may have changed
+Next: preserve retained evidence and reconcile every applied, restored, and unrecovered path and external effect before any retry.
 Exit 2
 ```
 
@@ -324,7 +330,25 @@ For the current eligible CLI engine, a post-replacement failure enters recovery 
 headline takes precedence over the renderer compatibility projection above. A fully restored run
 uses `Recovered`; unobservable recovery uses `Recovery unknown`. Preserve the journal, inspect all
 named paths and external effects, and stop competing writers before retrying. Never delete retained
-evidence merely to make a later run proceed.
+evidence merely to make a later run proceed. Every incomplete Visual+ write receipt includes
+exactly one `Next:` line immediately before `Exit 2`. Safety blocks conservatively require review
+of every reported error because non-write exit causes can coexist with a Git blocker. Failed and
+unknown states require inspecting diagnostics and target state; recovery-incomplete and
+recovery-unknown states require preserving retained evidence before any retry.
+
+The action is conservative because the renderer does not treat a local write reason as the only
+possible cause of exit `2`:
+
+| Incomplete receipt | Safe next action |
+| --- | --- |
+| Git-evidence safety block | Review all reported errors and restore trustworthy Git evidence for every reported target before rerunning. |
+| Other safety block | Review all reported errors and correct every reported preflight blocker before rerunning. |
+| Partial | Review all reported errors and inspect every applied or incomplete target; do not rerun until the repository state is understood. |
+| Failed | Review all reported errors and inspect every failed target; rerun only after every known cause is corrected. |
+| Unknown | Review all reported errors and inspect every target; do not rerun until every final state is known. |
+| Recovered | Review all reported errors and restored paths; rerun only after every cause is corrected. |
+| Recovery incomplete | Preserve retained evidence and reconcile every applied, restored, and unrecovered path and external effect before any retry. |
+| Recovery unknown | Preserve retained evidence and establish every named path and external effect; do not retry until every final state is known. |
 
 ### Counts, preflight, and atomicity
 

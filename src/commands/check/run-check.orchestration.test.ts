@@ -699,6 +699,9 @@ describe('run-check orchestration paths', () => {
       expect(countInCompleteChangeList(output, 'blocked-write')).toBe(1)
       expect(output).toContain('Safety block')
       expect(output).toContain('no files were changed')
+      expect(renderedNextAction(output)).toBe(
+        'Next: review all reported errors and correct every reported preflight blocker before rerunning.',
+      )
       expect(output.match(/Exit 2/gu)).toHaveLength(1)
     } finally {
       stdoutWriteSpy.mockRestore()
@@ -707,9 +710,15 @@ describe('run-check orchestration paths', () => {
 
   it('does not invent retained cleanup for a clean unattempted VCS preflight unknown', async () => {
     const change = makeResolved({ name: 'vcs-unavailable', rawVersion: '^1.0.0' })
-    const pkg = makePkg('vcs-unavailable-app', [change])
+    const resolutionError = makeResolved({
+      name: 'resolution-error',
+      targetVersion: '^1.0.0',
+      diff: 'error',
+      pkgData: { name: 'resolution-error', versions: [], distTags: {} },
+    })
+    const pkg = makePkg('vcs-unavailable-app', [change, resolutionError])
     mocks.loadPackagesMock.mockResolvedValue([pkg])
-    mocks.resolvePackageMock.mockResolvedValue([change])
+    mocks.resolvePackageMock.mockResolvedValue([change, resolutionError])
     const defaultCommandWrite = mocks.commandWriteMock.getMockImplementation() as (
       ...args: unknown[]
     ) => Promise<unknown>
@@ -762,7 +771,13 @@ describe('run-check orchestration paths', () => {
     try {
       const { checkFromCli } = await import('./run-check')
       await expect(
-        checkFromCli({ ...baseOptions, output: 'table', loglevel: 'info', write: true }),
+        checkFromCli({
+          ...baseOptions,
+          output: 'table',
+          loglevel: 'info',
+          write: true,
+          failOnResolutionErrors: true,
+        }),
       ).resolves.toBe(2)
 
       const output = stdoutWriteSpy.mock.calls.flat().map(String).join('')
@@ -770,6 +785,9 @@ describe('run-check orchestration paths', () => {
       expect(output).toContain('Safety block')
       expect(output).toContain('no files were changed')
       expect(output).toContain('Preflight could not confirm Git state')
+      expect(renderedNextAction(output)).toBe(
+        'Next: review all reported errors and restore trustworthy Git evidence for every reported target before rerunning.',
+      )
       expect(output).toContain('Exit 2')
       expect(output).not.toContain('Recovery unknown')
     } finally {
@@ -1898,4 +1916,13 @@ function restoreEnvironment(name: 'CI' | 'TERM' | 'FORCE_COLOR', value: string |
 function hasTerminalControl(value: string): boolean {
   // biome-ignore lint/suspicious/noControlCharactersInRegex: asserts the human-output security boundary.
   return /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/u.test(value)
+}
+
+function renderedNextAction(output: string): string | undefined {
+  const lines = stripAnsi(output).split('\n')
+  const start = lines.findIndex((line) => line.startsWith('Next:'))
+  if (start < 0) return undefined
+  const exit = lines.findIndex((line, index) => index > start && line.startsWith('Exit '))
+  if (exit < 0) return undefined
+  return lines.slice(start, exit).join('')
 }

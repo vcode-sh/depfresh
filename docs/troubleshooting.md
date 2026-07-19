@@ -75,7 +75,10 @@ use the reviewed update count.
 `Safety block - no files were changed` with `TERM=dumb`) is stronger than a generic failure. It
 requires command-level preflight evidence for all selected physical targets and proves no
 replacement, recovery, journal, external effect, or uncertain cleanup occurred. It still exits `2`
-because the requested write was incomplete.
+because the requested write was incomplete. Its single `Next:` line conservatively requires review
+of every reported error because a Git blocker can coexist with a strict resolution or post-write
+failure. Partial, failed, unknown, and recovery-first receipts likewise put one bounded inspection
+or evidence-preservation action immediately before `Exit 2`.
 
 ### Visual+ is plain, colourless, or append-only
 

@@ -16,10 +16,15 @@ export function renderVisualPlusReceipt(input: VisualPlusSectionInput): readonly
           ? `Review complete${separator}updates available`
           : 'Review incomplete'
     const diagnostics = snapshot.exitCode === 2 ? reviewDiagnosticLines(input) : []
+    const action =
+      snapshot.exitCode === 2
+        ? ['Next: review every diagnostic and correct each reported cause before rerunning.']
+        : []
     return visualPlusSectionLines(input, [
       headline,
       reviewSummary(input),
       ...diagnostics,
+      ...action,
       `Exit ${snapshot.exitCode}`,
     ])
   }
@@ -34,6 +39,9 @@ export function renderVisualPlusReceipt(input: VisualPlusSectionInput): readonly
       headline,
       totalsLine(snapshot.results.totals, snapshot.results.targetTotals),
       snapshot.exitCode,
+      snapshot.exitCode === 2
+        ? 'Next: inspect all reported diagnostics; do not rerun until the cause is understood.'
+        : undefined,
     )
   }
 
@@ -44,6 +52,7 @@ export function renderVisualPlusReceipt(input: VisualPlusSectionInput): readonly
       `Result unknown${separator}receipt evidence unavailable`,
       totalsLine(snapshot.results.totals, snapshot.results.targetTotals),
       snapshot.exitCode,
+      'Next: inspect all reported diagnostics and repository state; do not rerun until every final state is known.',
     )
   }
 
@@ -61,6 +70,7 @@ export function renderVisualPlusReceipt(input: VisualPlusSectionInput): readonly
       `Safety block${separator}no files were changed`,
       totalsLine(snapshot.results.totals, snapshot.results.targetTotals),
       ...reasons,
+      safetyBlockAction(input),
       `Exit ${snapshot.exitCode}`,
     ])
   }
@@ -73,6 +83,7 @@ export function renderVisualPlusReceipt(input: VisualPlusSectionInput): readonly
       'Failed',
       totalsLine(snapshot.results.totals, snapshot.results.targetTotals),
       snapshot.exitCode,
+      'Next: review all reported errors and inspect every failed target; rerun only after every known cause is corrected.',
     )
   }
   if (canonical.verdict === 'unknown') {
@@ -81,6 +92,7 @@ export function renderVisualPlusReceipt(input: VisualPlusSectionInput): readonly
       'Unknown',
       totalsLine(snapshot.results.totals, snapshot.results.targetTotals),
       snapshot.exitCode,
+      'Next: review all reported errors and inspect every target; do not rerun until every final state is known.',
     )
   }
 
@@ -115,6 +127,9 @@ export function renderVisualPlusReceipt(input: VisualPlusSectionInput): readonly
     `Write complete${separator}command incomplete`,
     totalsLine(snapshot.results.totals, snapshot.results.targetTotals),
     snapshot.exitCode,
+    snapshot.exitCode === 2
+      ? 'Next: review all reported errors before running another write.'
+      : undefined,
   )
 }
 
@@ -138,8 +153,14 @@ function finalLines(
   headline: string,
   summary: string,
   exitCode: 0 | 1 | 2,
+  action?: string,
 ): readonly string[] {
-  return visualPlusSectionLines(input, [headline, summary, `Exit ${exitCode}`])
+  return visualPlusSectionLines(input, [
+    headline,
+    summary,
+    ...(action === undefined ? [] : [action]),
+    `Exit ${exitCode}`,
+  ])
 }
 
 function retainedEvidenceLines(input: VisualPlusSectionInput, headline: string): readonly string[] {
@@ -167,6 +188,14 @@ function retainedEvidenceLines(input: VisualPlusSectionInput, headline: string):
   const externalEffects = recovery.externalEffects?.length
     ? [`External effects: ${recovery.externalEffects.map(sanitizeTerminalText).join(', ')}`]
     : []
+  const action =
+    recovery.status === 'completed'
+      ? 'Next: review all reported errors and restored paths; rerun only after every cause is corrected.'
+      : recovery.status === 'partial'
+        ? 'Next: preserve retained evidence and reconcile every applied, restored, and unrecovered path and external effect before any retry.'
+        : recovery.status === 'unknown'
+          ? 'Next: preserve retained evidence and establish every named path and external effect; do not retry until every final state is known.'
+          : 'Next: review all reported errors and inspect every applied or incomplete target; do not rerun until the repository state is understood.'
   return visualPlusSectionLines(input, [
     headline,
     totalsLine(input.snapshot.results.totals, input.snapshot.results.targetTotals),
@@ -175,6 +204,7 @@ function retainedEvidenceLines(input: VisualPlusSectionInput, headline: string):
     unrecovered,
     ...journal,
     ...externalEffects,
+    action,
     `Exit ${exitCode}`,
   ])
 }
@@ -191,6 +221,15 @@ function safetyBlockReasons(input: VisualPlusSectionInput): readonly string[] {
     return `${sanitizeTerminalText(group.file)}${separator}${sanitizeTerminalText(group.reason)}${diagnostic}`
   })
   return [...new Set(lines)]
+}
+
+function safetyBlockAction(input: VisualPlusSectionInput): string {
+  const onlyGitEvidence = input.writeReceipt!.canonical.groups.every(
+    (group) => group.reason === 'VCS_UNAVAILABLE',
+  )
+  return onlyGitEvidence
+    ? 'Next: review all reported errors and restore trustworthy Git evidence for every reported target before rerunning.'
+    : 'Next: review all reported errors and correct every reported preflight blocker before rerunning.'
 }
 
 function reviewSummary(input: VisualPlusSectionInput): string {

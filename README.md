@@ -68,10 +68,11 @@ All 14 target files were observed at the requested values. Recovery was not need
 Exit 0
 ```
 
-A clean command-level preflight block ends with `Safety block · no files were changed` and
-`Exit 2`. After replacement starts, a failure renders `Recovered`, `Recovery incomplete`, or
-`Recovery unknown` first and names applied, restored, and unrecovered paths. Each file replacement
-is atomic, but the repository is not one atomic transaction and recovery is best effort. See the
+A clean command-level preflight block ends with `Safety block · no files were changed`, one safe
+`Next:` action, and `Exit 2`. After replacement starts, a failure renders `Recovered`,
+`Recovery incomplete`, or `Recovery unknown` first and names applied, restored, and unrecovered
+paths. Each file replacement is atomic, but the repository is not one atomic transaction and
+recovery is best effort. See the
 [table output journey reference](docs/output-formats/table.md#visual-result-journeys) for
 capable/plain examples and count definitions. Interactive selection, JSON output, and global writes
 use their existing separate surfaces. Library `check()` calls and veto-capable hook routes retain
