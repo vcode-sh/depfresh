@@ -232,3 +232,7 @@ retaining byte-exact empty renderer stdout, and independent review closed at C0/
 2 remains unchecked: `fdd749d` added the tests, adapter, and hosted matrix together, so no earlier
 cross-OS RED run exists and GREEN cannot recreate it. Plan 035 remains not DONE and Plan 036 stays
 blocked until the owner explicitly accepts or rejects that recorded process deviation.
+Plan 035 final closeout: the owner accepted the recorded historical cross-OS RED deviation on
+2026-07-19 without reclassifying it as passed. All implementation, local proof, hosted PTY proof,
+complete CI, documentation, and independent C0/I0/M0 review gates are closed through `c77ed27` and
+successful run `29677729687`. Plan 035 is DONE; Plan 036 is the next executable plan.

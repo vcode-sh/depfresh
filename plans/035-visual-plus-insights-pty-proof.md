@@ -582,7 +582,7 @@ Require `stdin.isTTY`, `stdout.isTTY`, and `stderr.isTTY` plus the exact observe
 accepting a capture as PTY proof. Characterize timeout, overflow, signal, malformed sidecar,
 unknown control, and cleanup failures.
 
-- [ ] **Step 2: Run PTY adapter RED tests**
+- [x] **Step 2: Record the accepted historical RED deviation**
 
 Run the focused helper test on both supported CI operating systems. Expected: FAIL until the
 adapter returns `isTTY === true` and bounded output.
@@ -590,8 +590,10 @@ adapter returns `isTTY === true` and bounded output.
 **Historical RED status (2026-07-19):** This checkpoint was not executed on both hosted operating
 systems before implementation. Commit `fdd749d` introduced the PTY tests, adapter, and dedicated
 matrix together; its parent `7ec9e11` contains none of the PTY test files. Later hosted GREEN
-evidence cannot retroactively establish this RED checkpoint. The step remains unchecked as an
-explicit process deviation rather than being reported as passed.
+evidence cannot retroactively establish this RED checkpoint. The original execution criterion
+remains unpassed and is recorded as an explicit process deviation. On 2026-07-19 the owner accepted
+that recorded deviation so the plan could close; the original hosted RED execution criterion was
+waived, not passed.
 
 - [x] **Step 3: Implement bounded cross-platform capture**
 
@@ -740,6 +742,6 @@ recovery-unknown guidance, and never treats a local VCS reason as the only comma
 Pure decision tests, a strict-resolution-plus-VCS orchestration case, and built PTY journeys at
 40/60/80/118 columns prove exact action cardinality, wrapping, stable final exit, and no blind-rerun
 claim. This closes the local design review. Task 4 Step 6 is now closed by hosted run
-`29677729687`; Step 2 remains open only as the explicit unrecoverable historical RED deviation
-recorded above. Plan 035 is not marked done, and Plan 036 remains blocked until the owner accepts
-or rejects that deviation explicitly.
+`29677729687`; Step 2 records the owner's accepted historical RED deviation without claiming that
+the missing hosted RED run occurred. All Plan 035 implementation, local proof, hosted proof, and
+independent review gates are closed. Plan 035 is DONE, and Plan 036 may begin.

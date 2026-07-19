@@ -62,7 +62,7 @@ may grant side effects. Unknown state is never reported as success.
 | [032](./032-check-run-model.md) | Renderer-neutral check run model | P1 | M | 031 | DONE |
 | [033](./033-command-level-local-apply.md) | Command-level local apply | P0 | L | 032 | DONE |
 | [034](./034-visual-plus-v2-core.md) | Visual+ v2 core terminal renderer | P1 | L | 033 | DONE |
-| [035](./035-visual-plus-insights-pty-proof.md) | Visual+ insights and PTY proof | P1 | L | 034 | TODO |
+| [035](./035-visual-plus-insights-pty-proof.md) | Visual+ insights and PTY proof | P1 | L | 034 | DONE |
 | [036](./036-v2.1.0-release.md) | Publish and prove depfresh 2.1.0 | P1 | M | 035 | TODO |
 
 The implementation order through 016 is present locally. Plans 011 through 013 passed their final
