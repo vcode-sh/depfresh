@@ -32,19 +32,41 @@ import type { ApplyRuntime } from '../apply/types'
 import { check } from './index'
 
 // This suite is a real integration boundary. Some focused check suites register process-global
-// mocks through test-helpers.ts, so reset every production dependency they replace before imports.
-vi.unmock('../../io/packages')
-vi.unmock('../../io/resolve')
-vi.unmock('../../io/write')
-vi.unmock('../../io/write/occurrence')
-vi.unmock('../apply/legacy')
-vi.unmock('../apply/legacy-plan')
-vi.unmock('../../cache/index')
-vi.unmock('../../utils/npmrc')
-vi.unmock('node:child_process')
-vi.unmock('node:fs')
-vi.unmock('../../io/global')
-vi.unmock('../global-apply')
+// mocks through test-helpers.ts, so replace each one with an actual passthrough before imports.
+vi.mock('../../io/packages', async () =>
+  vi.importActual<typeof import('../../io/packages')>('../../io/packages'),
+)
+vi.mock('../../io/resolve', async () =>
+  vi.importActual<typeof import('../../io/resolve')>('../../io/resolve'),
+)
+vi.mock('../../io/write', async () =>
+  vi.importActual<typeof import('../../io/write')>('../../io/write'),
+)
+vi.mock('../../io/write/occurrence', async () =>
+  vi.importActual<typeof import('../../io/write/occurrence')>('../../io/write/occurrence'),
+)
+vi.mock('../apply/legacy', async () =>
+  vi.importActual<typeof import('../apply/legacy')>('../apply/legacy'),
+)
+vi.mock('../apply/legacy-plan', async () =>
+  vi.importActual<typeof import('../apply/legacy-plan')>('../apply/legacy-plan'),
+)
+vi.mock('../../cache/index', async () =>
+  vi.importActual<typeof import('../../cache/index')>('../../cache/index'),
+)
+vi.mock('../../utils/npmrc', async () =>
+  vi.importActual<typeof import('../../utils/npmrc')>('../../utils/npmrc'),
+)
+vi.mock('node:child_process', async () =>
+  vi.importActual<typeof import('node:child_process')>('node:child_process'),
+)
+vi.mock('node:fs', async () => vi.importActual<typeof import('node:fs')>('node:fs'))
+vi.mock('../../io/global', async () =>
+  vi.importActual<typeof import('../../io/global')>('../../io/global'),
+)
+vi.mock('../global-apply', async () =>
+  vi.importActual<typeof import('../global-apply')>('../global-apply'),
+)
 
 const applyRuntime = vi.hoisted(() => ({
   overrides: undefined as Partial<ApplyRuntime> | undefined,
