@@ -1,8 +1,10 @@
 import { sanitizeTerminalText } from '../../../../utils/format'
 import type { VisualPlusSectionInput } from '../input'
 import { visualPlusSectionLines, visualPlusSeparator } from '../theme'
+import { renderVisualPlusCompactTransaction } from './compact'
 
 export function renderVisualPlusTransaction(input: VisualPlusSectionInput): readonly string[] {
+  if (input.run.detailLevel === 'compact') return renderVisualPlusCompactTransaction(input)
   const results = new Map(input.snapshot.results.targets.map((result) => [result.path, result]))
   const operations = new Map(
     input.snapshot.results.operations.map((result) => [result.operationId, result]),

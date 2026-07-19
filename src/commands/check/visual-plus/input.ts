@@ -9,6 +9,7 @@ import type { WriteReceipt } from '../write-receipt'
 import type { VisualPlusCapabilities } from './capabilities'
 
 export interface VisualPlusRunMetadata {
+  readonly detailLevel?: 'compact' | 'full'
   readonly repository?: {
     readonly name?: string
     readonly relativePath?: string
@@ -143,6 +144,9 @@ function validateCapabilities(capabilities: VisualPlusCapabilities): void {
 }
 
 function validateRunMetadata(run: VisualPlusRunMetadata): void {
+  if (run.detailLevel !== undefined && !['compact', 'full'].includes(run.detailLevel)) {
+    invalid('detail level is invalid')
+  }
   if (!['single-package', 'workspace', 'unknown'].includes(run.workspaceScope)) {
     invalid('workspace scope is invalid')
   }

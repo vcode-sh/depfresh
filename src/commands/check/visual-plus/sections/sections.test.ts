@@ -27,6 +27,7 @@ import {
 import { buildVisualPlusInsights } from '../insights'
 import { createVisualPlusTheme, wrapVisualPlusText } from '../theme'
 import { renderVisualPlusChanges } from './changes'
+import { renderVisualPlusCompactTransaction } from './compact'
 import { renderVisualPlusDistribution } from './distribution'
 import { renderVisualPlusHeader } from './header'
 import { renderVisualPlusImpact } from './impact'
@@ -378,6 +379,7 @@ function fixture(
     snapshot,
     capabilities: capable,
     run: {
+      detailLevel: 'full',
       repository: { name: 'spreadu', relativePath: '.' },
       workspaceScope: 'workspace',
       packageManager: {
@@ -469,6 +471,13 @@ describe('Visual+ section input', () => {
       (input: VisualPlusSectionInput) => ({
         ...input,
         run: { ...input.run, repository: { relativePath: '../outside' } },
+      }),
+    ],
+    [
+      'invalid detail level',
+      (input: VisualPlusSectionInput) => ({
+        ...input,
+        run: { ...input.run, detailLevel: 'verbose' as 'compact' },
       }),
     ],
     [
@@ -761,6 +770,31 @@ describe('Visual+ section input', () => {
 })
 
 describe('Visual+ pure sections', () => {
+  it('bounds successful compact targets and retains every non-success target without IDs', () => {
+    const successful = createVisualPlusSectionInput({
+      ...fixture(),
+      run: { ...fixture().run, detailLevel: 'compact' },
+      capabilities: { ...capable, color: false, width: 175 },
+    })
+    const successfulLines = renderVisualPlusCompactTransaction(successful).map(stripAnsi)
+
+    expect(successfulLines.filter((line) => line.startsWith('packages/target-'))).toHaveLength(8)
+    expect(successfulLines).toContain('… 6 more targets')
+    expect(successfulLines.join('\n')).not.toMatch(/Operation ID|operation-|IDs /u)
+
+    const blockedSource = fixture('blocked', 2)
+    const blocked = createVisualPlusSectionInput({
+      ...blockedSource,
+      run: { ...blockedSource.run, detailLevel: 'compact' },
+      capabilities: { ...capable, color: false, width: 175 },
+    })
+    const blockedLines = renderVisualPlusCompactTransaction(blocked).map(stripAnsi)
+
+    expect(blockedLines.filter((line) => line.startsWith('Target '))).toHaveLength(14)
+    expect(blockedLines.join('\n')).not.toContain('more targets')
+    expect(blockedLines.join('\n')).not.toMatch(/Operation ID|operation-|IDs /u)
+  })
+
   it('renders the exact complete hierarchy, every row once, and every transaction target once', () => {
     const input = createVisualPlusSectionInput(fixture())
     const lines = allSections(input).map(stripAnsi)

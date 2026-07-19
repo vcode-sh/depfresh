@@ -70,6 +70,7 @@ export function createVisualPlusFixtureInput(
     snapshot,
     capabilities,
     run: {
+      detailLevel: 'compact',
       repository: { name: 'visual-plus-fixture', relativePath: '.' },
       workspaceScope: 'workspace',
       packageManager: {

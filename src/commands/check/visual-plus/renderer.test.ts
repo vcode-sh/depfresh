@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createRepositoryId } from '../../../repository/identity'
+import { stripAnsi, visualLength } from '../../../utils/format'
 import type { CheckRunController } from '../run-controller'
 import type { CheckRunPhaseName, CheckRunPhaseStatus, CheckRunSnapshot } from '../run-model'
 import type { VisualPlusCapabilities } from './capabilities'
@@ -21,6 +22,7 @@ const phaseNames = [
 ] as const satisfies readonly CheckRunPhaseName[]
 
 const run: VisualPlusRunMetadata = {
+  detailLevel: 'full',
   repository: { name: 'fixture', relativePath: 'packages/fixture' },
   workspaceScope: 'workspace',
   packageManager: {
@@ -317,6 +319,72 @@ function harness(caps = capable) {
 }
 
 describe('Visual+ live renderer', () => {
+  it.each([40, 60, 80, 118, 175])(
+    'keeps the successful compact read-only journey within 80 durable lines at %i columns',
+    (width) => {
+      const caps: VisualPlusCapabilities = {
+        ...capable,
+        interactive: false,
+        color: false,
+        unicode: width !== 40,
+        motion: false,
+        cursorControl: false,
+        width,
+        layout: width === 40 ? 'plain' : width >= 96 ? 'wide' : 'medium',
+      }
+      const compactRun = { ...run, detailLevel: 'compact' as const }
+      const initial = snapshot({ write: false })
+      const source = fakeController(initial)
+      const view = harness(caps)
+      view.renderer.start(source.controller, compactRun)
+      const selected = { ...createVisualPlusFixtureSnapshot(), write: false }
+      source.push(selected)
+      view.renderer.writeReview({
+        ...createVisualPlusFixtureInput(caps),
+        snapshot: selected,
+        run: compactRun,
+      })
+      const final: CheckRunSnapshot = {
+        ...selected,
+        sequence: 10,
+        phases: statuses({
+          discover: 'passed',
+          inspect: 'passed',
+          resolve: 'passed',
+          review: 'passed',
+          preflight: 'skipped',
+          stage: 'skipped',
+          apply: 'skipped',
+          observe: 'skipped',
+          recover: 'skipped',
+          complete: 'passed',
+        }),
+        elapsedMs: 20,
+        exitCode: 1,
+      }
+      source.push(final)
+      view.renderer.finalize({
+        ...createVisualPlusFixtureInput(caps),
+        snapshot: final,
+        run: compactRun,
+      })
+      const lines = view.output().trimEnd().split('\n').map(stripAnsi)
+      const output = lines.join('\n')
+
+      expect(lines.length).toBeLessThanOrEqual(80)
+      expect(lines.every((line) => visualLength(line) <= width)).toBe(true)
+      expect(output).toContain('Repository topology')
+      expect(output).toContain('Distribution')
+      expect(output).toContain('Details: rerun with --long for the')
+      expect(output.replaceAll('\n', '')).toContain(
+        'Details: rerun with --long for the complete audit.',
+      )
+      expect(output).not.toMatch(
+        /Operation ID|Owner ID|Dependency ID|operation-|dependency:|package:|source:/u,
+      )
+    },
+  )
+
   it('reconciles the full synchronous initial notification before writing any bytes', () => {
     const advertised = snapshot()
     const delivered = snapshot({ sequence: 1 })

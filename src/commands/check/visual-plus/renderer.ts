@@ -11,6 +11,7 @@ import {
 } from './input'
 import { buildVisualPlusInsights, VisualPlusInsightError } from './insights'
 import { renderVisualPlusChanges } from './sections/changes'
+import { renderVisualPlusCompactReview } from './sections/compact'
 import { renderVisualPlusDistribution } from './sections/distribution'
 import { renderVisualPlusHeader } from './sections/header'
 import { renderVisualPlusImpact } from './sections/impact'
@@ -540,12 +541,16 @@ export function createVisualPlusRenderer(
       cancelPending()
       if (latestSnapshot) appendTerminalFacts(latestSnapshot)
       clearFrame()
-      writeDurableLines(renderVisualPlusTopology(insights, capabilities))
-      writeDurableLines(renderVisualPlusDistribution(insights, capabilities))
-      writeDurableLines(renderVisualPlusRisk(insights, capabilities))
-      writeDurableLines(renderVisualPlusImpact(insights, capabilities))
-      writeDurableLines(renderVisualPlusShared(insights, capabilities))
-      writeDurableLines(renderVisualPlusChanges(input))
+      if (input.run.detailLevel === 'compact') {
+        writeDurableLines(renderVisualPlusCompactReview(input, insights))
+      } else {
+        writeDurableLines(renderVisualPlusTopology(insights, capabilities))
+        writeDurableLines(renderVisualPlusDistribution(insights, capabilities))
+        writeDurableLines(renderVisualPlusRisk(insights, capabilities))
+        writeDurableLines(renderVisualPlusImpact(insights, capabilities))
+        writeDurableLines(renderVisualPlusShared(insights, capabilities))
+        writeDurableLines(renderVisualPlusChanges(input))
+      }
       reviewInput = input
       state = 'review-written'
       renderLatest()
