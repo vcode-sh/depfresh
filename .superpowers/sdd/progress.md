@@ -236,3 +236,8 @@ Plan 035 final closeout: the owner accepted the recorded historical cross-OS RED
 2026-07-19 without reclassifying it as passed. All implementation, local proof, hosted PTY proof,
 complete CI, documentation, and independent C0/I0/M0 review gates are closed through `c77ed27` and
 successful run `29677729687`. Plan 035 is DONE; Plan 036 is the next executable plan.
+Plan 036 Task 1: complete (commits `47fc418..e99f16e`, review clean). The exact `2.1.0` release
+surfaces, dated changelog, release note, workflow body, maintained runner pins, and readiness guards
+passed a 5-failure RED then 29/29 GREEN release matrix plus schemas, typecheck, lint, and diff checks
+under Node `24.15.0`, npm `11.12.1`, and pnpm `10.33.0`. Independent review closed at C0/I0/M0.
+The candidate remains local; Task 2 exact source and packed PTY proof is next.
