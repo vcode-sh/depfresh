@@ -201,3 +201,12 @@ independent spec and quality reviews at C0/I0/M0. The exact `ubuntu-24.04`/`maco
 is configured but remains unproved until an authorized push runs CI; Plan 035 Steps 2 and 6 stay
 open. Task 5 documentation may proceed locally, while Plan 036 remains blocked on that hosted
 evidence and the final Plan 035 gate.
+Plan 035 Task 5 documentation and repeated focused proof: complete through 6992878 and 442beb2.
+The docs distinguish current eligible Visual+ outcomes, the reachable compatibility-table
+`Partial result`, and the synthetic forward-compatible `Partial` renderer projection without
+weakening recovery precedence. Exact complete, safety, recovery-incomplete, terminal fallback,
+mode, exit, preflight, and atomicity boundaries passed independent spec and UX review at C0/I0/M0.
+The focused 16-file Node 24.15.0 matrix then passed three fresh no-retry runs at 381/381 tests each
+(69.97s, 70.45s, and 70.04s). That proof exposed and corrected four stale orchestration assertions
+so operation uniqueness is now scoped to exact `Complete change list` dependency fields while
+insight sections may truthfully repeat dependency names. Complete project gates are next.

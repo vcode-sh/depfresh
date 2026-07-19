@@ -681,7 +681,7 @@ precedence. Label that boundary explicitly, point to the currently reachable com
 Define all counts, exit codes, command-level preflight, per-file atomicity, non-atomic repository
 boundary, fallbacks, and explicit interactive/JSON/global differences.
 
-- [ ] **Step 2: Run focused terminal proof three times**
+- [x] **Step 2: Run focused terminal proof three times**
 
 Repeat insight, section, renderer, fixture, PTY, fallback, command apply, orchestration, JSON, and
 interactive tests three times. Expected: stable counts/transcripts and no leaks.
