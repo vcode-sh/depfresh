@@ -258,3 +258,14 @@ clean it unconditionally. Fresh source and packed replays passed 32/32 with CLI 
 `3a7980e4be50ff11e732ac1c9e47c1e4b6583abf573d036b6326fc5ab6dcbdfd`; build, schemas,
 typecheck, release, zero-warning Biome, diff checks, and independent re-review passed at C0/I0/M0.
 Task 2 exact source and packed proof may now restart from `c30eec3`.
+Plan 036 Task 2: complete on exact candidate `1b2fca3` after parallel macOS arm64 and corrected
+non-root/reaping-init Linux arm64 proof. Both lanes used Node `24.15.0`, npm `11.12.1`, pnpm
+`10.33.0`, disposable paths, unchanged source/lock hashes, and passed 161 files/2,140 coverage tests,
+smoke, demo, 103 release tests, the 10-test transaction matrix, 32 source Visual+ tests, 62 pure
+Visual+ tests, and 32 installed-artifact Visual+ tests. Linux one-variable controls proved the
+discarded root/non-reaping harness invalid without changing candidate code. Both platforms produced
+the same 56-file, 332890-byte `depfresh-2.1.0.tgz` with SHA-256
+`5d17e2a43a1c76160f0b95214b956a0d100a2e7e0bcfc2eb0b0c4c6f8143c833`; installed CLI SHA-256 was
+`3a7980e4be50ff11e732ac1c9e47c1e4b6583abf573d036b6326fc5ab6dcbdfd`. Independent proof review
+closed at C0/I0/M0. The release note records local candidate evidence only; hosted publication is
+next.
