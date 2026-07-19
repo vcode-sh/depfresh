@@ -12,6 +12,10 @@ const TRUSTED_FAILURE_CATEGORIES = new Map([
     'pty-bounds',
   ],
   [
+    'Visual+ PTY adapter keeps one owned ONLCR transform and transports explicit CRLF unchanged',
+    'pty-transport',
+  ],
+  [
     'Visual+ PTY adapter removes a uniquely identified descendant after overflow',
     'pty-process-cleanup',
   ],
@@ -77,8 +81,12 @@ const TRUSTED_FAILURE_CATEGORIES = new Map([
     'fallback-capable-pty',
   ],
   [
-    'Visual+ built CLI uses durable CI and dumb constrained PTY fallbacks without losing read-only semantic output',
-    'fallback-constrained-pty',
+    'Visual+ built CLI uses durable CI constrained PTY fallback without losing read-only semantic output',
+    'fallback-ci-pty',
+  ],
+  [
+    'Visual+ built CLI uses durable TERM=dumb constrained PTY fallback without losing read-only semantic output',
+    'fallback-dumb-pty',
   ],
   [
     'Visual+ built CLI sanitizes hostile owner text before it can become terminal protocol',

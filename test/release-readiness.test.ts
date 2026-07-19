@@ -151,7 +151,7 @@ describe('2.1.0 release readiness', () => {
       expect(release, bullet).toContain(`- ${bullet}`)
     }
     expect(release).toContain('v2.1.0')
-    expect(release).toContain('Current retained Visual+ verifier contract: `34` tests')
+    expect(release).toContain('Current retained Visual+ verifier contract: `36` tests')
     expect(release).not.toContain('TBD')
     expect(release).not.toContain('TODO')
   })

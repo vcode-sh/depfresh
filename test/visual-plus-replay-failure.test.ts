@@ -55,6 +55,10 @@ describe('installed Visual+ replay failure classification', () => {
       'pty-evidence',
     ],
     [
+      'Visual+ PTY adapter keeps one owned ONLCR transform and transports explicit CRLF unchanged',
+      'pty-transport',
+    ],
+    [
       'Visual+ built CLI renders exact success and safety journeys in a 80-column PTY',
       'product-journey',
     ],
@@ -67,8 +71,12 @@ describe('installed Visual+ replay failure classification', () => {
       'fallback-capable-pty',
     ],
     [
-      'Visual+ built CLI uses durable CI and dumb constrained PTY fallbacks without losing read-only semantic output',
-      'fallback-constrained-pty',
+      'Visual+ built CLI uses durable CI constrained PTY fallback without losing read-only semantic output',
+      'fallback-ci-pty',
+    ],
+    [
+      'Visual+ built CLI uses durable TERM=dumb constrained PTY fallback without losing read-only semantic output',
+      'fallback-dumb-pty',
     ],
   ])('maps the trusted exact title %s to %s', (fullName, expected) => {
     expect(classifyVisualPlusReplayFailure(report([fullName]))).toBe(expected)

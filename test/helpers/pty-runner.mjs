@@ -45,6 +45,7 @@ const EXPECT_SOURCE = `#!/usr/bin/expect -f
 set timeout -1
 log_user 0
 fconfigure stdout -translation binary -encoding binary
+set stty_init {raw -echo}
 spawn -noecho /usr/bin/script -q -e /dev/null ./run
 fconfigure $spawn_id -translation binary -encoding binary
 set channel [open "./script-pid" {WRONLY CREAT EXCL} 0600]
@@ -449,7 +450,7 @@ const stats = lstatSync(configPath)
 if (!stats.isFile() || stats.isSymbolicLink() || (stats.mode & 0o777) !== 0o600 || stats.size > ${CONFIG_LIMIT}) fail('invalid config')
 const config = JSON.parse(readFileSync(configPath, 'utf8'))
 if (!Number.isSafeInteger(config.columns) || config.columns < 1 || config.columns > 1000) fail('invalid columns')
-execFileSync(config.sttyPath, ['rows', '24', 'cols', String(config.columns)], { stdio: 'inherit' })
+execFileSync(config.sttyPath, ['opost', 'onlcr', 'rows', '24', 'cols', String(config.columns)], { stdio: 'inherit' })
 const processIdentity = (pid) => {
   const value = execFileSync(config.psPath, ['-o', 'ppid=', '-o', 'pgid=', '-o', 'lstart=', '-p', String(pid)], { encoding: 'utf8', maxBuffer: 4096, timeout: 1000 })
   const match = /^\\s*(\\d+)\\s+(\\d+)\\s+(.+?)\\s*$/.exec(value)

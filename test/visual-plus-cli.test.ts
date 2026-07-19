@@ -169,6 +169,33 @@ describe('Visual+ PTY adapter', () => {
     expect(result.exitCode).toBe(0)
   })
 
+  it('keeps one owned ONLCR transform and transports explicit CRLF unchanged', async () => {
+    const lineFeed = await runInPty({
+      cliPath: process.execPath,
+      args: ['-e', 'process.stdout.write("line\\n")'],
+      columns: 40,
+      env: {},
+      input: Buffer.alloc(0),
+    })
+    const explicitCrlf = await runInPty({
+      cliPath: process.execPath,
+      args: [
+        '-e',
+        'require("node:child_process").execFileSync("/bin/stty",["-opost"],{stdio:"inherit"});process.stdout.write("line\\r\\n")',
+      ],
+      columns: 40,
+      env: {},
+      input: Buffer.alloc(0),
+    })
+
+    for (const result of [lineFeed, explicitCrlf]) {
+      expect(result.exitCode).toBe(0)
+      expect(result.rawTerminal).toEqual(Buffer.from('line\r\n'))
+      expect(result.transcript).toBe('line\n')
+      expect(result.controls).toMatchObject({ carriageReturn: 0, crlf: 1 })
+    }
+  })
+
   it('rejects non-empty input before launching the adapter', async () => {
     await expect(
       runInPty({
@@ -367,31 +394,51 @@ describe('Visual+ built CLI', () => {
     assertGitClean(fixture)
   }, 120_000)
 
-  it('uses durable CI and dumb constrained PTY fallbacks without losing read-only semantic output', async () => {
-    const fixture = createFixture('constrained-fallbacks')
-    const ci = await runReadOnlyPty(fixture, { CI: '1' })
-    const dumb = await runReadOnlyPty(fixture, { TERM: 'dumb' })
-    for (const result of [ci, dumb]) {
-      expect(result.exitCode).toBe(0)
-      expect(result.evidence.columns).toBe(80)
-      expect(result.finalCursorVisible).toBe(true)
-      expect(result.transcript.endsWith('Exit 0\n')).toBe(true)
-      assertReadOnlySemantics(result.transcript, fixture)
-    }
-    for (const constrained of [ci, dumb]) {
-      expect(constrained.controls.sgr).toBe(0)
-      expect(constrained.controls.carriageReturn).toBe(0)
-      expect(constrained.controls.cursorUp).toBe(0)
-      expect(constrained.controls.eraseLine).toBe(0)
-      expect(constrained.controls.cursorHide).toBe(0)
-      expect(constrained.controls.cursorShow).toBe(1)
-      const activeTransitions = constrained.transcript
-        .split('\n')
-        .filter((line) => /\bactive\b/u.test(line))
-      expect(new Set(activeTransitions).size).toBe(activeTransitions.length)
-    }
-    expect(dumb.transcript).toMatch(/66 packages -> 616 declared -> 612 eligible/u)
-    expect([...dumb.transcript].every((character) => character.codePointAt(0)! <= 0x7f)).toBe(true)
+  it('uses durable CI constrained PTY fallback without losing read-only semantic output', async () => {
+    const fixture = createFixture('ci-constrained-fallback')
+    const result = await runReadOnlyPty(fixture, { CI: '1' })
+    expect(result.exitCode).toBe(0)
+    expect(result.evidence.columns).toBe(80)
+    expect(result.finalCursorVisible).toBe(true)
+    expect(result.transcript.endsWith('Exit 0\n')).toBe(true)
+    assertReadOnlySemantics(result.transcript, fixture)
+    expect(result.controls.sgr).toBe(0)
+    expect(result.controls.carriageReturn).toBe(0)
+    expect(result.controls.cursorUp).toBe(0)
+    expect(result.controls.eraseLine).toBe(0)
+    expect(result.controls.cursorHide).toBe(0)
+    expect(result.controls.cursorShow).toBe(1)
+    const activeTransitions = result.transcript
+      .split('\n')
+      .filter((line) => /\bactive\b/u.test(line))
+    expect(new Set(activeTransitions).size).toBe(activeTransitions.length)
+
+    assertFixtureBytes(fixture, 'before')
+    assertGitClean(fixture)
+  }, 120_000)
+
+  it('uses durable TERM=dumb constrained PTY fallback without losing read-only semantic output', async () => {
+    const fixture = createFixture('dumb-constrained-fallback')
+    const result = await runReadOnlyPty(fixture, { TERM: 'dumb' })
+    expect(result.exitCode).toBe(0)
+    expect(result.evidence.columns).toBe(80)
+    expect(result.finalCursorVisible).toBe(true)
+    expect(result.transcript.endsWith('Exit 0\n')).toBe(true)
+    assertReadOnlySemantics(result.transcript, fixture)
+    expect(result.controls.sgr).toBe(0)
+    expect(result.controls.carriageReturn).toBe(0)
+    expect(result.controls.cursorUp).toBe(0)
+    expect(result.controls.eraseLine).toBe(0)
+    expect(result.controls.cursorHide).toBe(0)
+    expect(result.controls.cursorShow).toBe(1)
+    const activeTransitions = result.transcript
+      .split('\n')
+      .filter((line) => /\bactive\b/u.test(line))
+    expect(new Set(activeTransitions).size).toBe(activeTransitions.length)
+    expect(result.transcript).toMatch(/66 packages -> 616 declared -> 612 eligible/u)
+    expect([...result.transcript].every((character) => character.codePointAt(0)! <= 0x7f)).toBe(
+      true,
+    )
 
     assertFixtureBytes(fixture, 'before')
     assertGitClean(fixture)
