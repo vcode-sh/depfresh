@@ -87,7 +87,7 @@ describe('run-check orchestration paths', () => {
     })
     expect(result.tableOutput).toContain('Check')
     expect(result.tableOutput).toContain('needs-update')
-    expect(result.tableOutput?.match(/needs-update/gu)).toHaveLength(1)
+    expect(countInCompleteChangeList(result.tableOutput ?? '', 'needs-update')).toBe(1)
     expect(result.tableOutput).not.toContain('Checked 2 packages')
     expect(result.tableOutput).not.toContain('Tip: Add `-w`')
   })
@@ -520,7 +520,7 @@ describe('run-check orchestration paths', () => {
 
       const output = stdoutWriteSpy.mock.calls.flat().map(String).join('')
       expect(mocks.commandWriteMock).toHaveBeenCalledTimes(1)
-      expect(output.match(/write-me/gu)).toHaveLength(1)
+      expect(countInCompleteChangeList(output, 'write-me')).toBe(1)
       expect(output.indexOf('Complete change list')).toBeLessThan(
         output.indexOf('preflight · ✓ passed'),
       )
@@ -571,7 +571,7 @@ describe('run-check orchestration paths', () => {
         attempts: [{ operationIds: [expect.any(String)] }],
       })
       const output = stdoutWriteSpy.mock.calls.flat().map(String).join('')
-      expect(output.match(/shared-physical/gu)).toHaveLength(1)
+      expect(countInCompleteChangeList(output, 'shared-physical')).toBe(1)
       expect(output.match(/Target .*1 update.*applied/gu)).toHaveLength(1)
       expect(output.match(/1 update applied across 1 file/gu)).toHaveLength(1)
       expect(output.match(/Exit 0/gu)).toHaveLength(1)
@@ -696,7 +696,7 @@ describe('run-check orchestration paths', () => {
       ).resolves.toBe(2)
 
       const output = stdoutWriteSpy.mock.calls.flat().map(String).join('')
-      expect(output.match(/blocked-write/gu)).toHaveLength(1)
+      expect(countInCompleteChangeList(output, 'blocked-write')).toBe(1)
       expect(output).toContain('Safety block')
       expect(output).toContain('no files were changed')
       expect(output.match(/Exit 2/gu)).toHaveLength(1)
@@ -1767,6 +1767,34 @@ function reconstructedLoggerText(calls: readonly (readonly unknown[])[]): string
   return calls
     .map((call) => (call.length > 1 ? call.slice(1) : call).map(String).join(' '))
     .join('')
+}
+
+function countInCompleteChangeList(output: string, value: string): number {
+  const lines = stripAnsi(output)
+    .split(/\r?\n/u)
+    .map((line) => line.trim())
+  const starts = lines.flatMap((line, index) => (line === 'Complete change list' ? [index] : []))
+  if (starts.length !== 1) throw new Error('Complete change list section is missing or duplicated')
+
+  const start = starts[0]!
+  const boundaries = lines.flatMap((line, index) =>
+    index > start && (line === 'Apply transaction' || line === 'Reviewed physical targets')
+      ? [index]
+      : [],
+  )
+  if (boundaries.length !== 1) {
+    throw new Error('Complete change list boundary is missing or duplicated')
+  }
+
+  const dependencyField = new RegExp(
+    `(?:^|\\|\\s*)Dependency ${escapeRegExp(value)}(?=\\s*(?:\\||$))`,
+    'u',
+  )
+  return lines.slice(start + 1, boundaries[0]).filter((line) => dependencyField.test(line)).length
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')
 }
 
 function makeMixedPackages(): PackageMeta[] {
