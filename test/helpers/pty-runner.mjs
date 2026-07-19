@@ -38,6 +38,7 @@ const TEST_FAULTS = new Set([
   'child-write-evidence-malformed',
   'child-write-evidence-missing',
   'child-write-evidence-unclosed',
+  'inner-hostile-output-modes',
   'start-evidence-failure',
   'malformed-start',
   'malformed-completion',
@@ -141,10 +142,24 @@ const LINE_ENDING_KEYS = [
   'singleCrlf',
   'trailing',
 ]
-const OUTPUT_MODE_KEYS = ['available', 'newlineMapping', 'outputProcessing']
+const OUTPUT_MODE_KEYS = [
+  'available',
+  'canonicalInput',
+  'carriageReturnMapping',
+  'carriageReturnSuppression',
+  'echo',
+  'newlineMapping',
+  'newlineReturn',
+  'outputProcessing',
+]
 const WRITE_MODE_KEYS = [
   'available',
+  'canonicalInput',
+  'carriageReturnMapping',
+  'carriageReturnSuppression',
+  'echo',
   'newlineMapping',
+  'newlineReturn',
   'observed',
   'outputProcessing',
   'stateChanged',
@@ -788,7 +803,7 @@ const fault = ${JSON.stringify(diagnosticFault)}
 const emptyFlags = () => ({ bareLf: false, beforeEscape: false, beforeOtherControl: false, beforeText: false, doubleCrlf: false, singleCrlf: false, trailing: false })
 const emptyState = () => ({ flags: emptyFlags(), pendingCarriageReturns: 0 })
 const states = { combined: emptyState(), stderr: emptyState(), stdout: emptyState() }
-const writes = { available: true, newlineMapping: true, observed: false, outputProcessing: true, stateChanged: false }
+const writes = { available: true, canonicalInput: false, carriageReturnMapping: false, carriageReturnSuppression: false, echo: false, newlineMapping: true, newlineReturn: false, observed: false, outputProcessing: true, stateChanged: false }
 let closed = false
 let firstLineFeedSampled = false
 let lastPublished = ''
@@ -801,18 +816,60 @@ const readOutputModes = () => {
     const outputOff = tokenCount(tokens, '-opost')
     const mappingOn = tokenCount(tokens, 'onlcr')
     const mappingOff = tokenCount(tokens, '-onlcr')
-    if (outputOn + outputOff !== 1 || mappingOn + mappingOff !== 1) throw new Error()
-    return { available: true, newlineMapping: mappingOn === 1, outputProcessing: outputOn === 1 }
+    const canonicalOn = tokenCount(tokens, 'icanon')
+    const canonicalOff = tokenCount(tokens, '-icanon')
+    const echoOn = tokenCount(tokens, 'echo')
+    const echoOff = tokenCount(tokens, '-echo')
+    const carriageReturnMappingOn = tokenCount(tokens, 'ocrnl')
+    const carriageReturnMappingOff = tokenCount(tokens, '-ocrnl')
+    const carriageReturnSuppressionOn = tokenCount(tokens, 'onocr')
+    const carriageReturnSuppressionOff = tokenCount(tokens, '-onocr')
+    const newlineReturnOn = tokenCount(tokens, 'onlret')
+    const newlineReturnOff = tokenCount(tokens, '-onlret')
+    if (
+      outputOn + outputOff !== 1 ||
+      mappingOn + mappingOff !== 1 ||
+      canonicalOn + canonicalOff !== 1 ||
+      echoOn + echoOff !== 1 ||
+      (process.platform === 'darwin'
+        ? carriageReturnMappingOn + carriageReturnMappingOff > 1
+        : carriageReturnMappingOn + carriageReturnMappingOff !== 1) ||
+      carriageReturnSuppressionOn + carriageReturnSuppressionOff !== 1 ||
+      newlineReturnOn + newlineReturnOff !== 1
+    ) throw new Error()
+    return {
+      available: true,
+      canonicalInput: canonicalOn === 1,
+      carriageReturnMapping: carriageReturnMappingOn === 1,
+      carriageReturnSuppression: carriageReturnSuppressionOn === 1,
+      echo: echoOn === 1,
+      newlineMapping: mappingOn === 1,
+      newlineReturn: newlineReturnOn === 1,
+      outputProcessing: outputOn === 1,
+    }
   } catch {
-    return { available: false, newlineMapping: false, outputProcessing: false }
+    return { available: false, canonicalInput: false, carriageReturnMapping: false, carriageReturnSuppression: false, echo: false, newlineMapping: false, newlineReturn: false, outputProcessing: false }
   }
 }
 const observeModes = (modes) => {
   writes.observed = true
   writes.available &&= modes.available
+  writes.canonicalInput ||= modes.canonicalInput
+  writes.carriageReturnMapping ||= modes.carriageReturnMapping
+  writes.carriageReturnSuppression ||= modes.carriageReturnSuppression
+  writes.echo ||= modes.echo
   writes.newlineMapping &&= modes.newlineMapping
+  writes.newlineReturn ||= modes.newlineReturn
   writes.outputProcessing &&= modes.outputProcessing
-  writes.stateChanged ||= !modes.available || !modes.newlineMapping || !modes.outputProcessing
+  writes.stateChanged ||=
+    !modes.available ||
+    modes.canonicalInput ||
+    modes.carriageReturnMapping ||
+    modes.carriageReturnSuppression ||
+    modes.echo ||
+    !modes.newlineMapping ||
+    modes.newlineReturn ||
+    !modes.outputProcessing
 }
 const classifyPending = (state, next) => {
   if (state.pendingCarriageReturns > 1) state.flags.beforeOtherControl = true
@@ -913,7 +970,14 @@ if (typeof config.diagnoseChildWrites !== 'boolean') fail('invalid child-write d
 if (config.mvPath !== '/bin/mv') fail('invalid marker publisher')
 if (typeof config.requiresOuterTransport !== 'boolean') fail('invalid transport requirement')
 if (!Number.isSafeInteger(config.releaseWaitMs) || config.releaseWaitMs < 1 || config.releaseWaitMs > 5000) fail('invalid release wait')
-execFileSync(config.sttyPath, ['opost', 'onlcr', 'rows', '24', 'cols', String(config.columns)], { stdio: 'inherit' })
+if (config.fault === 'inner-hostile-output-modes') {
+  execFileSync(config.sttyPath, ['ocrnl', 'onocr', 'onlret'], { stdio: 'inherit' })
+}
+execFileSync(
+  config.sttyPath,
+  ['raw', '-echo', 'opost', 'onlcr', '-ocrnl', '-onocr', '-onlret', 'rows', '24', 'cols', String(config.columns)],
+  { stdio: 'inherit' },
+)
 const tokenCount = (tokens, expected) => tokens.filter((token) => token === expected).length
 const readOutputModes = () => {
   try {
@@ -923,10 +987,39 @@ const readOutputModes = () => {
     const outputOff = tokenCount(tokens, '-opost')
     const mappingOn = tokenCount(tokens, 'onlcr')
     const mappingOff = tokenCount(tokens, '-onlcr')
-    if (outputOn + outputOff !== 1 || mappingOn + mappingOff !== 1) throw new Error()
-    return { available: true, newlineMapping: mappingOn === 1, outputProcessing: outputOn === 1 }
+    const canonicalOn = tokenCount(tokens, 'icanon')
+    const canonicalOff = tokenCount(tokens, '-icanon')
+    const echoOn = tokenCount(tokens, 'echo')
+    const echoOff = tokenCount(tokens, '-echo')
+    const carriageReturnMappingOn = tokenCount(tokens, 'ocrnl')
+    const carriageReturnMappingOff = tokenCount(tokens, '-ocrnl')
+    const carriageReturnSuppressionOn = tokenCount(tokens, 'onocr')
+    const carriageReturnSuppressionOff = tokenCount(tokens, '-onocr')
+    const newlineReturnOn = tokenCount(tokens, 'onlret')
+    const newlineReturnOff = tokenCount(tokens, '-onlret')
+    if (
+      outputOn + outputOff !== 1 ||
+      mappingOn + mappingOff !== 1 ||
+      canonicalOn + canonicalOff !== 1 ||
+      echoOn + echoOff !== 1 ||
+      (process.platform === 'darwin'
+        ? carriageReturnMappingOn + carriageReturnMappingOff > 1
+        : carriageReturnMappingOn + carriageReturnMappingOff !== 1) ||
+      carriageReturnSuppressionOn + carriageReturnSuppressionOff !== 1 ||
+      newlineReturnOn + newlineReturnOff !== 1
+    ) throw new Error()
+    return {
+      available: true,
+      canonicalInput: canonicalOn === 1,
+      carriageReturnMapping: carriageReturnMappingOn === 1,
+      carriageReturnSuppression: carriageReturnSuppressionOn === 1,
+      echo: echoOn === 1,
+      newlineMapping: mappingOn === 1,
+      newlineReturn: newlineReturnOn === 1,
+      outputProcessing: outputOn === 1,
+    }
   } catch {
-    return { available: false, newlineMapping: false, outputProcessing: false }
+    return { available: false, canonicalInput: false, carriageReturnMapping: false, carriageReturnSuppression: false, echo: false, newlineMapping: false, newlineReturn: false, outputProcessing: false }
   }
 }
 const innerModeStart = config.diagnoseChildWrites ? readOutputModes() : undefined
@@ -1603,10 +1696,7 @@ function requireWriteBoundaryEvidence(directory, rawTerminal) {
     const start = requireBooleanRecord(modes.start, OUTPUT_MODE_KEYS)
     const end = requireBooleanRecord(modes.end, OUTPUT_MODE_KEYS)
     const stateChanged =
-      writes.stateChanged ||
-      start.available !== end.available ||
-      start.newlineMapping !== end.newlineMapping ||
-      start.outputProcessing !== end.outputProcessing
+      writes.stateChanged || OUTPUT_MODE_KEYS.some((key) => start[key] !== end[key])
     return Object.freeze({
       child: Object.freeze({ combined, stderr, stdout }),
       inner: classifyLineEndingEvidence(rawTerminal),

@@ -428,6 +428,25 @@ describe('Visual+ PTY adapter', () => {
         writeModes: { newlineMapping: true, outputProcessing: false },
       }),
     )
+
+    const hostileInherited = await runInPty({
+      cliPath: process.execPath,
+      args: [
+        '-e',
+        'const {execFileSync}=require("node:child_process");const output=execFileSync("/bin/stty",["-a"],{encoding:"utf8",stdio:["inherit","pipe","inherit"]});const modes=new Set(output.split(/[\\s;:]+/u));const required=["-icanon","-echo","opost","onlcr","-onocr","-onlret",...(process.platform==="darwin"?[]:["-ocrnl"])];const forbidden=["icanon","echo","-opost","-onlcr","ocrnl","onocr","onlret"];if(required.some(mode=>!modes.has(mode))||forbidden.some(mode=>modes.has(mode)))process.exit(86);process.stdout.write("line\\n")',
+      ],
+      columns: 40,
+      diagnoseChildWrites: true,
+      env: {},
+      fault: 'inner-hostile-output-modes',
+      input: Buffer.alloc(0),
+    })
+
+    expect(hostileInherited.exitCode).toBe(0)
+    expect(hostileInherited.rawTerminal).toEqual(Buffer.from('line\r\n'))
+    expect(hostileInherited.writeBoundary).toEqual(
+      expectedWriteBoundary({ childStdout: { bareLf: true }, inner: { singleCrlf: true } }),
+    )
   })
 
   it('separates child, inner, and outer output transforms', async () => {
@@ -1428,16 +1447,16 @@ function expectedWriteBoundary(options: {
   childStdout?: Partial<ReturnType<typeof emptyLineEndingEvidence>>
   inner?: Partial<ReturnType<typeof emptyLineEndingEvidence>>
   stateChanged?: boolean
-  writeModes?: { newlineMapping: boolean; outputProcessing: boolean }
+  writeModes?: Partial<ReturnType<typeof availableOutputModes>>
 }) {
   const stdout = { ...emptyLineEndingEvidence(), ...options.childStdout }
   const stderr = emptyLineEndingEvidence()
   const start = availableOutputModes(true, true)
   const writes = {
-    available: true,
+    ...availableOutputModes(true, true),
+    ...options.writeModes,
     observed: true,
     stateChanged: options.stateChanged ?? false,
-    ...(options.writeModes ?? { newlineMapping: true, outputProcessing: true }),
   }
   const end = availableOutputModes(true, true)
   return {
@@ -1460,7 +1479,16 @@ function emptyLineEndingEvidence() {
 }
 
 function availableOutputModes(newlineMapping: boolean, outputProcessing: boolean) {
-  return { available: true, newlineMapping, outputProcessing }
+  return {
+    available: true,
+    canonicalInput: false,
+    carriageReturnMapping: false,
+    carriageReturnSuppression: false,
+    echo: false,
+    newlineMapping,
+    newlineReturn: false,
+    outputProcessing,
+  }
 }
 
 function runDirectFixture(fixture: ReturnType<typeof createVisualPlusFixture>, slow: boolean) {
