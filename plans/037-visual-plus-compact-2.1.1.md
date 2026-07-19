@@ -254,7 +254,6 @@ git commit -m "test: prove compact Visual Plus terminal journeys"
 **Files:**
 
 - Modify: `package.json`
-- Modify: `pnpm-lock.yaml`
 - Modify: maintained current-version references identified by `test/release-readiness.test.ts`
 - Modify: `test/package-assets.test.ts`
 - Modify: `test/release-readiness.test.ts`
@@ -289,7 +288,8 @@ Expected: FAIL because package and maintained release surfaces still identify 2.
 
 - [ ] **Step 3: Bump maintained candidate surfaces**
 
-Set package and lockfile version to `2.1.1`, move the Visual+ compact changelog entry to
+Set the package version to `2.1.1` while leaving the versionless root `pnpm-lock.yaml` unchanged,
+move the Visual+ compact changelog entry to
 `## [2.1.1] - 2026-07-20`, add comparison links, create the candidate release note, update current
 README/docs/workflow/test pins, and leave historical 2.1.0 evidence unchanged.
 
@@ -298,15 +298,17 @@ README/docs/workflow/test pins, and leave historical 2.1.0 evidence unchanged.
 Run with `--retry=0` where supported:
 
 ```bash
-mise exec -- pnpm schemas:check
-mise exec -- pnpm typecheck
-mise exec -- pnpm lint
-mise exec -- pnpm test:run -- --coverage --retry=0
-mise exec -- pnpm build
-mise exec -- pnpm verify:declarations
-mise exec -- pnpm test:smoke
-mise exec -- pnpm test:demo
-mise exec -- pnpm test:release -- --retry=0
+mise exec node@24.15.0 npm@11.12.1 -- pnpm install --frozen-lockfile
+mise exec node@24.15.0 npm@11.12.1 -- pnpm schemas:check
+mise exec node@24.15.0 npm@11.12.1 -- pnpm typecheck
+mise exec node@24.15.0 npm@11.12.1 -- pnpm lint
+mise exec node@24.15.0 npm@11.12.1 -- pnpm exec biome check --error-on-warnings .
+mise exec node@24.15.0 npm@11.12.1 -- pnpm exec vitest run --coverage --retry=0
+mise exec node@24.15.0 npm@11.12.1 -- pnpm build
+mise exec node@24.15.0 npm@11.12.1 -- pnpm test:smoke
+mise exec node@24.15.0 npm@11.12.1 -- pnpm test:demo
+mise exec node@24.15.0 npm@11.12.1 -- pnpm test:release -- --retry=0
+mise exec node@24.15.0 npm@11.12.1 -- pnpm verify:package
 ```
 
 Expected: every command exits 0 with zero failed tests and zero retries.
@@ -338,6 +340,6 @@ covering tests. Mark Plan 037 complete only after the review is clean and every 
 result is recorded.
 
 ```bash
-git add package.json pnpm-lock.yaml CHANGELOG.md README.md docs .github test plans
+git add package.json CHANGELOG.md README.md docs .github test plans
 git commit -m "chore: prepare depfresh 2.1.1"
 ```

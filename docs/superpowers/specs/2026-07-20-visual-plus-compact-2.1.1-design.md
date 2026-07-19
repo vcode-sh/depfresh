@@ -113,7 +113,8 @@ README, changelog, and a dedicated `docs/releases/v2.1.1.md` candidate note.
 After all implementation, source, PTY, coverage, lint, typecheck, build, package, and distribution
 tests pass under the pinned Node `24.15.0`, npm `11.12.1`, and pnpm `10.33.0` toolchain:
 
-- bump maintained current-version surfaces from `2.1.0` to `2.1.1`;
+- bump `package.json` and maintained current-version surfaces from `2.1.0` to `2.1.1` while
+  leaving the versionless root `pnpm-lock.yaml` unchanged;
 - preserve historical 2.1.0 release evidence unchanged;
 - build and pack one local `depfresh-2.1.1.tgz` candidate;
 - install that exact local candidate into Bun's global package directory so ordinary
@@ -133,6 +134,7 @@ Verification layers are independent:
 2. Command orchestration tests for one-time discovered metadata and unchanged excluded routes.
 3. True-PTY and direct-pipe tests for compact default, `--long` completeness, terminal controls,
    line budgets, exact exits, and unchanged fixture bytes.
-4. Full test suite with coverage, lint, typecheck, build, declaration stability, package verifier,
-   practical smoke, WUN demo, release readiness, and distribution smoke.
+4. Full test suite with coverage, lint, zero-warning Biome, typecheck, build, package verifier,
+   practical smoke, WUN demo, release readiness, and distribution smoke. The historical
+   declaration-stability baseline is not rewritten as a side effect of this patch release.
 5. Local packed-artifact installation and a final Spreadoo smoke from outside this checkout.
