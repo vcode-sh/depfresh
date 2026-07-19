@@ -241,3 +241,10 @@ surfaces, dated changelog, release note, workflow body, maintained runner pins, 
 passed a 5-failure RED then 29/29 GREEN release matrix plus schemas, typecheck, lint, and diff checks
 under Node `24.15.0`, npm `11.12.1`, and pnpm `10.33.0`. Independent review closed at C0/I0/M0.
 The candidate remains local; Task 2 exact source and packed PTY proof is next.
+Plan 036 Task 2: blocked before artifact creation. The retained Visual+ product journeys always run
+repository `dist/cli.mjs`; the packed verifier installs exact tarball bytes but does not replay the
+76-row/14-target PTY and fallback matrix against them. Linux Docker is available, so platform
+availability is not the blocker. An independently reviewed artifact-bound test seam is required
+first, including canonical installed-path containment, packed-byte binding, and a distinct-byte
+negative control that detects an ignored override or source-tree fallback. No Task 2 checkbox,
+artifact identity, release-note evidence, hosted publication, tag, or registry claim is complete.
