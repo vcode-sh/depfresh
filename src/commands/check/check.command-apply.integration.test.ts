@@ -18,7 +18,7 @@ import { createServer, type Server } from 'node:http'
 import { tmpdir } from 'node:os'
 import { delimiter, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { hashExactBytes } from '../../contracts/fingerprint'
 import type { ApplyResult } from '../../contracts/schemas'
 import type {
@@ -113,31 +113,6 @@ describe('command-level check apply integration', () => {
   let originalNpmConfig: string | undefined
   let originalPath: string | undefined
 
-  beforeAll(async () => {
-    const [{ loadPackages }, { resolvePackage }, { createSqliteCache }, { loadNpmrc }, legacyPlan] =
-      await Promise.all([
-        import('../../io/packages'),
-        import('../../io/resolve'),
-        import('../../cache/index'),
-        import('../../utils/npmrc'),
-        import('../apply/legacy-plan'),
-      ])
-
-    for (const productionFunction of [
-      loadPackages,
-      resolvePackage,
-      createSqliteCache,
-      loadNpmrc,
-      legacyPlan.applyLegacyCommandWrite,
-      existsSync,
-      spawn,
-    ]) {
-      expect(vi.isMockFunction(productionFunction)).toBe(false)
-    }
-
-    ;({ check: checkCommand } = await import('./index'))
-  })
-
   beforeEach(async () => {
     applyRuntime.overrides = undefined
     applyRuntime.result = undefined
@@ -145,6 +120,72 @@ describe('command-level check apply integration', () => {
     originalHome = process.env.HOME
     originalNpmConfig = process.env.npm_config_userconfig
     originalPath = process.env.PATH
+
+    for (const dependency of [
+      '../../io/packages',
+      '../../io/resolve',
+      '../../io/write',
+      '../../io/write/occurrence',
+      '../apply/legacy',
+      '../apply/legacy-plan',
+      '../../cache/index',
+      '../../utils/npmrc',
+      'node:child_process',
+      'node:fs',
+      '../../io/global',
+      '../global-apply',
+    ]) {
+      vi.doUnmock(dependency)
+    }
+    vi.resetModules()
+
+    const [
+      packages,
+      resolve,
+      write,
+      occurrence,
+      legacy,
+      legacyPlan,
+      cache,
+      npmrc,
+      childProcess,
+      fs,
+      global,
+      globalApply,
+    ] = await Promise.all([
+      import('../../io/packages'),
+      import('../../io/resolve'),
+      import('../../io/write'),
+      import('../../io/write/occurrence'),
+      import('../apply/legacy'),
+      import('../apply/legacy-plan'),
+      import('../../cache/index'),
+      import('../../utils/npmrc'),
+      import('node:child_process'),
+      import('node:fs'),
+      import('../../io/global'),
+      import('../global-apply'),
+    ])
+
+    for (const productionFunction of [
+      packages.loadPackages,
+      resolve.resolvePackage,
+      write.writePackage,
+      occurrence.observeFileOccurrence,
+      legacy.applyLegacyPackageWrite,
+      legacyPlan.applyLegacyCommandWrite,
+      cache.createSqliteCache,
+      npmrc.loadNpmrc,
+      childProcess.spawn,
+      fs.existsSync,
+      global.getGlobalWriteTargets,
+      globalApply.applyGlobalPlan,
+    ]) {
+      expect(vi.isMockFunction(productionFunction)).toBe(false)
+    }
+
+    ;({ check: checkCommand } = await import('./index'))
+
     const started = await startRegistry()
     registry = started.server
     registryUrl = started.url
@@ -168,6 +209,8 @@ describe('command-level check apply integration', () => {
 
     const result = await runCheck(fixture.root, 'json')
 
+    expect(result.loadedPackages).toBe(3)
+    expect(result.resolvedDependencies).toBe(3)
     expect(result.exitCode).toBe(0)
     expect(result.payload).toMatchObject({
       summary: { plannedUpdates: 3, appliedUpdates: 3, unknownWrites: 0 },
@@ -593,8 +636,16 @@ await applyPlanWithRuntime(plan, { cwd: ${JSON.stringify(fixture.root)} }, autho
   async function runCheck(
     cwd: string,
     output: 'json' | 'table',
-  ): Promise<{ exitCode: number; output: string; payload?: CheckPayload }> {
+  ): Promise<{
+    exitCode: number
+    output: string
+    loadedPackages: number
+    resolvedDependencies: number
+    payload?: CheckPayload
+  }> {
     const lines: string[] = []
+    let loadedPackages = -1
+    let resolvedDependencies = -1
     vi.spyOn(console, 'log').mockImplementation((...values) => lines.push(values.join(' ')))
     vi.spyOn(console, 'warn').mockImplementation((...values) => lines.push(values.join(' ')))
     vi.spyOn(console, 'error').mockImplementation((...values) => lines.push(values.join(' ')))
@@ -611,12 +662,20 @@ await applyPlanWithRuntime(plan, { cwd: ${JSON.stringify(fixture.root)} }, autho
       timeout: 5_000,
       retries: 0,
       refreshCache: true,
+      afterPackagesLoaded(packages) {
+        loadedPackages = packages.length
+      },
+      afterPackagesEnd(packages) {
+        resolvedDependencies = packages.reduce((total, pkg) => total + pkg.resolved.length, 0)
+      },
     }
     const exitCode = await check(options)
     const rendered = lines.join('\n')
     return {
       exitCode,
       output: rendered,
+      loadedPackages,
+      resolvedDependencies,
       ...(output === 'json' ? { payload: JSON.parse(rendered) as CheckPayload } : {}),
     }
   }
