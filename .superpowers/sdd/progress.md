@@ -278,5 +278,12 @@ allowlisted failure categories, and bound the private JSON report to an identity
 non-symlink file of at most 256 KiB. Unsafe, malformed, oversized, or unknown evidence remains
 `unclassified` without exposing private output. Exact-Node focused tests passed 34/34, source
 Visual+ passed 32/32 without retries, two hosted-like packed replays each passed 32/32 without
-retries, and static gates plus independent C0/I0/M0 re-review passed. The hardened candidate is
-local only; a new exact hosted `main` success is required before tagging.
+retries, and static gates plus independent C0/I0/M0 re-review passed. Exact hardened SHA
+`f9f1bc04eb3c539120dc7e3fbe8f1050973f4f17` then ran in hosted CI `29685151490`: both source
+lanes, Ubuntu installed Visual+, full tests, lint, build, and distribution smoke passed, while the
+no-retry macOS installed replay stopped with the safe `fallback` category. Commit `f4c6611`
+preserves every prior assertion but splits the combined fallback contract into direct/slow-pipe,
+capable/no-color PTY, and CI/dumb constrained PTY categories. Exact-Node focused tests passed 37/37
+and isolated source plus installed replays passed 34/34 without retries; independent review closed
+at C0/I0/M0. The diagnostic candidate is local only; a new exact hosted `main` success is required
+before tagging.
