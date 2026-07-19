@@ -587,6 +587,12 @@ unknown control, and cleanup failures.
 Run the focused helper test on both supported CI operating systems. Expected: FAIL until the
 adapter returns `isTTY === true` and bounded output.
 
+**Historical RED status (2026-07-19):** This checkpoint was not executed on both hosted operating
+systems before implementation. Commit `fdd749d` introduced the PTY tests, adapter, and dedicated
+matrix together; its parent `7ec9e11` contains none of the PTY test files. Later hosted GREEN
+evidence cannot retroactively establish this RED checkpoint. The step remains unchecked as an
+explicit process deviation rather than being reported as passed.
+
 - [x] **Step 3: Implement bounded cross-platform capture**
 
 Use argument-array `spawn`, a disposable wrapper/config file, a 30-second timeout, 4 MiB combined
@@ -643,7 +649,7 @@ Every write journey invokes `process.execPath` with
 `--output json` and supplies empty input followed by EOF. Read-only fallback journeys use the same
 argv without `--write`.
 
-- [ ] **Step 6: Run PTY/fallback GREEN tests**
+- [x] **Step 6: Run PTY/fallback GREEN tests**
 
 Build first, then run `pnpm exec vitest run test/visual-plus-cli.test.ts`. Expected: all journeys
 pass in a dedicated `ubuntu-24.04` and `macos-15` matrix with Node `24.15.0`; unsupported PTY
@@ -651,6 +657,14 @@ environments fail explicitly rather than skip the release gate silently. The job
 runtime/native package and runs the build, focused PTY suite, and pure reduced-motion tests. Revise
 the release-readiness workflow invariant to allow exactly this named PTY job's two runner values
 while retaining literal `ubuntu-24.04` for every other job.
+
+**Hosted GREEN evidence (2026-07-19):** CI run
+[`29677729687`](https://github.com/vcode-sh/depfresh/actions/runs/29677729687) completed with
+`success` at exact SHA `8f3f13ea5111f2c41dd8b3fe357a2d76473c9b9f`. `Visual Plus PTY
+(ubuntu-24.04)` job `88168165004` and `Visual Plus PTY (macos-15)` job `88168165016` both built
+the distribution and passed the focused PTY/fallback and pure reduced-motion suites. The same run
+also passed `Lint` job `88168164996`, `Test (Node 24.15.0)` job `88168165017`, `Build` job
+`88168514344`, and `Distribution Smoke` job `88168547080`.
 
 ### Task 5: Documentation and final 2.1.0 candidate gate
 
@@ -709,8 +723,9 @@ lines. Schema generation checks, typecheck, zero-warning Biome over 351 files, b
 35-check/673-request practical smoke, 14-check demo, 103 release tests, and exact 56-file package
 verification all passed. The command-apply integration was made hermetic against ambient lower-
 and uppercase npm registry overrides; the final native integration passed without the diagnostic
-passthrough mocks, including under full coverage. This proves the complete local gate only; the
-dedicated hosted Ubuntu/macOS PTY matrix in Task 4 remains pending an authorized push.
+passthrough mocks, including under full coverage. The dedicated hosted Ubuntu/macOS PTY matrix and
+the complete dependent CI chain subsequently passed in run `29677729687` at exact SHA
+`8f3f13ea5111f2c41dd8b3fe357a2d76473c9b9f`.
 
 - [x] **Step 4: Require final design-conformance review**
 
@@ -724,5 +739,7 @@ action before the final `Exit 2` for every incomplete branch, distinguishes reco
 recovery-unknown guidance, and never treats a local VCS reason as the only command exit cause.
 Pure decision tests, a strict-resolution-plus-VCS orchestration case, and built PTY journeys at
 40/60/80/118 columns prove exact action cardinality, wrapping, stable final exit, and no blind-rerun
-claim. This closes the local design review only. Task 4 Steps 2 and 6 remain open until the hosted
-Ubuntu/macOS matrix passes; Plan 035 is not done and Plan 036 remains blocked.
+claim. This closes the local design review. Task 4 Step 6 is now closed by hosted run
+`29677729687`; Step 2 remains open only as the explicit unrecoverable historical RED deviation
+recorded above. Plan 035 is not marked done, and Plan 036 remains blocked until the owner accepts
+or rejects that deviation explicitly.

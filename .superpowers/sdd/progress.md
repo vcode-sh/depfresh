@@ -222,3 +222,13 @@ now emits exactly one conservative `Next:` action before final `Exit 2`; pure, m
 orchestration, width, and built PTY tests prevent blind-rerun or sole-cause claims. Task 5 is locally
 complete. Task 4's hosted Ubuntu/macOS PTY replay remains pending an authorized push, so Plan 035
 is not DONE and Plan 036 remains blocked.
+Plan 035 hosted PTY and candidate gate: Step 6 is complete from successful CI run `29677729687` at
+exact SHA `8f3f13ea5111f2c41dd8b3fe357a2d76473c9b9f`. Ubuntu job `88168165004` and macOS job
+`88168165016` both passed build, focused PTY/fallback, and pure reduced-motion proof. The same run
+passed Lint `88168164996`, the full Test job `88168165017`, Build `88168514344`, and Distribution
+Smoke `88168547080`. The preceding run exposed one environment-dependent redirected-table color
+assertion; commit `8f3f13e` now compares semantic table content across legal color modes while
+retaining byte-exact empty renderer stdout, and independent review closed at C0/I0/M0. Task 4 Step
+2 remains unchecked: `fdd749d` added the tests, adapter, and hosted matrix together, so no earlier
+cross-OS RED run exists and GREEN cannot recreate it. Plan 035 remains not DONE and Plan 036 stays
+blocked until the owner explicitly accepts or rejects that recorded process deviation.
