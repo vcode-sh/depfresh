@@ -64,11 +64,15 @@ function steps(path: string): WorkflowStep[] {
   return Object.values(workflow(path).jobs ?? {}).flatMap((job) => job.steps ?? [])
 }
 
-describe('2.0.2 release readiness', () => {
-  it('moves the write-trust hotfix into the dated 2.0.2 changelog section', () => {
+describe('2.1.0 release readiness', () => {
+  it('moves completed command-apply and Visual+ work into the dated 2.1.0 changelog section', () => {
     const changelog = read('CHANGELOG.md')
     const unreleased = changelog.slice(
       changelog.indexOf('## Unreleased') + '## Unreleased'.length,
+      changelog.indexOf('## [2.1.0]'),
+    )
+    const minorRelease = changelog.slice(
+      changelog.indexOf('## [2.1.0]'),
       changelog.indexOf('## [2.0.2]'),
     )
     const hotfixRelease = changelog.slice(
@@ -84,17 +88,24 @@ describe('2.0.2 release readiness', () => {
       changelog.indexOf('## [1.2.0]'),
     )
 
+    const visualPlusEntry = 'Visual+ local result journeys'
+    const commandApplyEntry = 'Command-level local write safety'
     const workspaceCatalogEntry = 'First-class exact workspace and catalog exclusions'
     const groupedReceiptEntry = 'Truthful grouped legacy write receipts'
 
-    expect(unreleased).not.toContain(workspaceCatalogEntry)
+    expect(unreleased.trim()).toBe('')
+    expect(minorRelease).toContain(visualPlusEntry)
+    expect(minorRelease).toContain(commandApplyEntry)
     expect(unreleased).not.toContain(groupedReceiptEntry)
-    expect(changelog).toContain('## [2.0.2] - 2026-07-18')
+    expect(changelog).toContain('## [2.1.0] - 2026-07-19')
     expect(hotfixRelease).toContain(groupedReceiptEntry)
     expect(patchRelease).toContain(workspaceCatalogEntry)
     expect(historicalRelease).toContain('Portable isolated npm bootstrap in the release workflow')
     expect(changelog).toContain(
-      '[Unreleased]: https://github.com/vcode-sh/depfresh/compare/v2.0.2...HEAD',
+      '[Unreleased]: https://github.com/vcode-sh/depfresh/compare/v2.1.0...HEAD',
+    )
+    expect(changelog).toContain(
+      '[2.1.0]: https://github.com/vcode-sh/depfresh/compare/v2.0.2...v2.1.0',
     )
     expect(changelog).toContain(
       '[2.0.2]: https://github.com/vcode-sh/depfresh/compare/v2.0.1...v2.0.2',
@@ -105,39 +116,40 @@ describe('2.0.2 release readiness', () => {
     expect(read('README.md')).toContain('<a id="skip-native-or-expo-updates-in-a-monorepo"></a>')
   })
 
-  it('couples all current package and runner surfaces to 2.0.2', () => {
+  it('couples all current package and runner surfaces to 2.1.0', () => {
     const packageJson = JSON.parse(read('package.json')) as { version: string }
-    expect(packageJson.version).toBe('2.0.2')
+    expect(packageJson.version).toBe('2.1.0')
     expect(read('.nvmrc')).toBe('24.15.0\n')
 
-    expect(read('README.md')).toContain('depfresh@2.0.2')
-    expect(read('README.md')).toContain('[2.0.2 release notes](docs/releases/v2.0.2.md)')
-    expect(read('docs/README.md')).toContain('[2.0.2 Release Notes](./releases/v2.0.2.md)')
+    expect(read('README.md')).toContain('depfresh@2.1.0')
+    expect(read('README.md')).toContain('[2.1.0 release notes](docs/releases/v2.1.0.md)')
+    expect(read('docs/README.md')).toContain('[2.1.0 Release Notes](./releases/v2.1.0.md)')
     for (const path of ['docs/agents/README.md', 'skills/depfresh/recipes/runners.md']) {
-      expect(read(path), path).toContain('DEPFRESH_VERSION=2.0.2')
+      expect(read(path), path).toContain('DEPFRESH_VERSION=2.1.0')
       expect(read(path), path).toContain('depfresh@$DEPFRESH_VERSION')
       expect(read(path), path).not.toContain('depfresh@1.2.0')
     }
-    expect(read('docs/integrations/README.md')).toContain('capabilities-v2.json` in 2.0.2')
-    expect(read('.github/ISSUE_TEMPLATE/bug_report.yml')).toContain('placeholder: "2.0.2"')
-    expect(read('test/wun-demo-proof.mjs')).toContain('depfresh 2.0.2 is available')
-    expect(read('test/wun-demo-proof.mjs')).toContain('bunx depfresh@2.0.2')
-    expect(read('test/wun-demo-proof.mjs')).toContain("capabilities.version, '2.0.2'")
+    expect(read('docs/integrations/README.md')).toContain('capabilities-v2.json` in 2.1.0')
+    expect(read('.github/ISSUE_TEMPLATE/bug_report.yml')).toContain('placeholder: "2.1.0"')
+    expect(read('test/wun-demo-proof.mjs')).toContain('depfresh 2.1.0 is available')
+    expect(read('test/wun-demo-proof.mjs')).toContain('bunx depfresh@2.1.0')
+    expect(read('test/wun-demo-proof.mjs')).toContain("capabilities.version, '2.1.0'")
   })
 
-  it('ships a dedicated 2.0.2 release candidate record', () => {
-    const release = read('docs/releases/v2.0.2.md')
+  it('ships a dedicated 2.1.0 release candidate record', () => {
+    const release = read('docs/releases/v2.1.0.md')
 
-    expect(release).toContain('# depfresh 2.0.2')
+    expect(release).toContain('# depfresh 2.1.0')
     for (const bullet of [
-      'exact-target Git evidence no longer inventories the complete tracked index;',
-      'VCS preflight blocks retain VCS_UNAVAILABLE instead of WRITE_FAILED;',
-      'repeated non-success writes are grouped by physical target;',
-      'normal 2.0.x writes remain package-by-package until 2.1.0.',
+      'Command-level preflight covers every selected physical target before the first replacement.',
+      'Visual+ hierarchy keeps topology, severity, major risk, owner impact, shared dependencies, and final receipts legible.',
+      'Complete fallbacks preserve append-only output in pipes, CI, and TERM=dumb without terminal control leakage.',
+      'Replacement is atomic per file only; a repository is not an atomic transaction, and recovery remains best effort.',
+      'Incomplete or unobservable recovery remains unknown and exits non-successfully.',
     ]) {
       expect(release, bullet).toContain(`- ${bullet}`)
     }
-    expect(release).toContain('v2.0.2')
+    expect(release).toContain('v2.1.0')
     expect(release).not.toContain('TBD')
     expect(release).not.toContain('TODO')
   })
@@ -264,7 +276,7 @@ describe('2.0.2 release readiness', () => {
       'npm publish "file:$GITHUB_WORKSPACE/$PACKAGE_TARBALL" --access public --ignore-scripts',
     )
     expect(release).not.toContain('npm publish "$PACKAGE_TARBALL" --access public --ignore-scripts')
-    expect(release).toContain('body_path: docs/releases/v2.0.2.md')
+    expect(release).toContain('body_path: docs/releases/v2.1.0.md')
     expect(release).toContain('npm view "depfresh@$' + '{PACKAGE_VERSION}" dist.integrity')
     expect(release).toContain('--install-spec "depfresh@$PACKAGE_VERSION"')
     expect(release).toContain(

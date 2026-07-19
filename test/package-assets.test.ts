@@ -27,8 +27,8 @@ const publicAssets = [
 ]
 
 describe('published workflow assets', () => {
-  it('pins the publishable package manifest to the 2.0.2 release candidate', () => {
-    expect(packageJson.version).toBe('2.0.2')
+  it('pins the publishable package manifest to the 2.1.0 release candidate', () => {
+    expect(packageJson.version).toBe('2.1.0')
   })
 
   it('allowlists dist and skills without publishing plans or scratch state', () => {
@@ -75,7 +75,7 @@ describe('published workflow assets', () => {
 })
 
 describe('npm pack manifest compatibility', () => {
-  const entry = { name: 'depfresh', version: '2.0.2' }
+  const entry = { name: 'depfresh', version: '2.1.0' }
 
   it('accepts the npm 11 single-package array format', () => {
     expect(extractSinglePackEntry([entry])).toBe(entry)
