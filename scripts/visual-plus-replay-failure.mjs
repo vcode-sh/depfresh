@@ -1,3 +1,7 @@
+import { closeSync, fstatSync, lstatSync, openSync, readSync } from 'node:fs'
+
+export const MAX_VISUAL_PLUS_REPORT_BYTES = 256 * 1024
+
 const TRUSTED_FAILURE_CATEGORIES = new Map([
   [
     'Visual+ PTY adapter allocates one PTY for all three child streams at the requested width',
@@ -73,6 +77,61 @@ const TRUSTED_FAILURE_CATEGORIES = new Map([
     'terminal-sanitization',
   ],
 ])
+
+export function visualPlusReplayFailureMessage(reportPath) {
+  const report = readVisualPlusReplayReport(reportPath)
+  const classification = classifyVisualPlusReplayFailure(report)
+  return `Installed Visual+ replay failed (classification: ${classification})`
+}
+
+export function readVisualPlusReplayReport(reportPath) {
+  let expected
+  try {
+    expected = lstatSync(reportPath)
+  } catch {
+    return undefined
+  }
+  if (
+    expected.isSymbolicLink() ||
+    !expected.isFile() ||
+    !Number.isSafeInteger(expected.size) ||
+    expected.size < 1 ||
+    expected.size > MAX_VISUAL_PLUS_REPORT_BYTES
+  ) {
+    return undefined
+  }
+
+  let descriptor
+  try {
+    descriptor = openSync(reportPath, 'r')
+    const opened = fstatSync(descriptor)
+    if (
+      !opened.isFile() ||
+      opened.dev !== expected.dev ||
+      opened.ino !== expected.ino ||
+      opened.size !== expected.size
+    ) {
+      return undefined
+    }
+    const bytes = Buffer.alloc(opened.size)
+    let offset = 0
+    while (offset < bytes.length) {
+      const read = readSync(descriptor, bytes, offset, bytes.length - offset, offset)
+      if (read === 0) return undefined
+      offset += read
+    }
+    if (readSync(descriptor, Buffer.alloc(1), 0, 1, bytes.length) !== 0) return undefined
+    return JSON.parse(bytes.toString('utf8'))
+  } catch {
+    return undefined
+  } finally {
+    if (descriptor !== undefined) {
+      try {
+        closeSync(descriptor)
+      } catch {}
+    }
+  }
+}
 
 export function classifyVisualPlusReplayFailure(report) {
   if (!isRecord(report) || !Number.isSafeInteger(report.numFailedTests)) return 'unclassified'

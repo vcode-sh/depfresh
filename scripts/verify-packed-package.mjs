@@ -13,7 +13,10 @@ import { tmpdir } from 'node:os'
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { gunzipSync } from 'node:zlib'
 import { extractSinglePackEntry } from './pack-manifest.mjs'
-import { classifyVisualPlusReplayFailure } from './visual-plus-replay-failure.mjs'
+import {
+  readVisualPlusReplayReport,
+  visualPlusReplayFailureMessage,
+} from './visual-plus-replay-failure.mjs'
 
 class PackageVerificationError extends Error {}
 
@@ -498,15 +501,9 @@ function verifyVisualPlusReplay(options) {
     createVisualPlusEnvironment(environmentRoot, testEnvironment),
     { timeoutMs: VISUAL_PLUS_REPLAY_TIMEOUT_MS },
   )
-  let report
-  try {
-    report = JSON.parse(readFileSync(reportPath, 'utf8'))
-  } catch {}
   if (replay.error) fail('Installed Visual+ replay failed')
-  if (replay.status !== 0) {
-    const classification = classifyVisualPlusReplayFailure(report)
-    fail(`Installed Visual+ replay failed (classification: ${classification})`)
-  }
+  if (replay.status !== 0) fail(visualPlusReplayFailureMessage(reportPath))
+  const report = readVisualPlusReplayReport(reportPath)
   if (report === undefined) fail('Installed Visual+ replay did not produce machine evidence')
   if (
     !isRecord(report) ||

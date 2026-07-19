@@ -1,5 +1,23 @@
-import { describe, expect, it } from 'vitest'
-import { classifyVisualPlusReplayFailure } from '../scripts/visual-plus-replay-failure.mjs'
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { afterEach, describe, expect, it } from 'vitest'
+import * as replayFailure from '../scripts/visual-plus-replay-failure.mjs'
+
+interface ReplayFailureApi {
+  MAX_VISUAL_PLUS_REPORT_BYTES: number
+  visualPlusReplayFailureMessage(reportPath: string): string
+}
+
+const replayFailureApi = replayFailure as unknown as ReplayFailureApi
+const { classifyVisualPlusReplayFailure } = replayFailure
+const roots: string[] = []
+const expectedReportCap = 256 * 1024
+const unclassifiedMessage = 'Installed Visual+ replay failed (classification: unclassified)'
+
+afterEach(() => {
+  for (const root of roots.splice(0)) rmSync(root, { force: true, recursive: true })
+})
 
 function report(fullNames: string[]) {
   return {
@@ -17,6 +35,12 @@ function report(fullNames: string[]) {
 }
 
 describe('installed Visual+ replay failure classification', () => {
+  it('uses a fixed report byte cap and a fixed bounded failure message', () => {
+    expect(replayFailureApi.MAX_VISUAL_PLUS_REPORT_BYTES).toBe(expectedReportCap)
+    expect(replayFailureApi.visualPlusReplayFailureMessage).toBeTypeOf('function')
+    expect(Buffer.byteLength(unclassifiedMessage)).toBeLessThanOrEqual(64)
+  })
+
   it.each([
     [
       'Visual+ PTY adapter removes a uniquely identified descendant after timeout',
@@ -83,4 +107,68 @@ describe('installed Visual+ replay failure classification', () => {
       ),
     ).toBe('multiple-known')
   })
+
+  it('classifies a bounded regular report without reflecting its private failure message', () => {
+    const root = temporaryRoot()
+    const reportPath = join(root, 'report.json')
+    const privateValue = 'raw-private-child-output'
+    writeFileSync(
+      reportPath,
+      JSON.stringify({
+        ...report(['Visual+ PTY adapter removes a uniquely identified descendant after timeout']),
+        privateValue,
+      }),
+    )
+
+    const message = replayFailureApi.visualPlusReplayFailureMessage(reportPath)
+
+    expect(message).toBe('Installed Visual+ replay failed (classification: pty-process-cleanup)')
+    expect(message).not.toContain(privateValue)
+    expect(Buffer.byteLength(message)).toBeLessThanOrEqual(80)
+  })
+
+  it('rejects unsafe reports before their trusted-looking private content can classify', () => {
+    const root = temporaryRoot()
+    const missingPath = join(root, 'private-missing-report.json')
+    const directoryPath = join(root, 'private-report-directory')
+    const trustedTargetPath = join(root, 'private-trusted-target.json')
+    const symlinkPath = join(root, 'private-report-symlink.json')
+    const oversizedPath = join(root, 'private-oversized-report.json')
+    const untrustedPath = join(root, 'private-untrusted-report.json')
+    const privateValue = '/Users/runner/work/private-secret-child-output'
+    const trustedReport = report([
+      'Visual+ PTY adapter removes a uniquely identified descendant after timeout',
+    ])
+    mkdirSync(directoryPath)
+    writeFileSync(trustedTargetPath, JSON.stringify({ ...trustedReport, privateValue }))
+    symlinkSync(trustedTargetPath, symlinkPath)
+    writeFileSync(
+      oversizedPath,
+      JSON.stringify({
+        ...trustedReport,
+        privateValue: privateValue.repeat(Math.ceil((expectedReportCap + 1) / privateValue.length)),
+      }),
+    )
+    writeFileSync(untrustedPath, JSON.stringify(report([privateValue])))
+
+    for (const reportPath of [
+      missingPath,
+      directoryPath,
+      symlinkPath,
+      oversizedPath,
+      untrustedPath,
+    ]) {
+      const message = replayFailureApi.visualPlusReplayFailureMessage(reportPath)
+      expect(message, reportPath).toBe(unclassifiedMessage)
+      expect(message, reportPath).not.toContain(privateValue)
+      expect(message, reportPath).not.toContain(reportPath)
+      expect(Buffer.byteLength(message), reportPath).toBeLessThanOrEqual(64)
+    }
+  })
 })
+
+function temporaryRoot(): string {
+  const root = mkdtempSync(join(tmpdir(), 'depfresh-visual-plus-replay-failure-'))
+  roots.push(root)
+  return root
+}
