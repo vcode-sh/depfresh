@@ -515,19 +515,72 @@ three times and require identical normalized target hashes and selected IDs.
 
 - Create: `test/helpers/pty-runner.mjs`
 - Create: `test/visual-plus-cli.test.ts`
-- Modify: `.github/workflows/ci.yml` only if the existing matrix lacks a PTY-capable macOS/Linux job
+- Modify: `.github/workflows/ci.yml` (the audited workflow has no macOS PTY job)
+- Modify: `test/release-readiness.test.ts` (its current invariant rejects every non-Ubuntu job)
+- Re-run without changing: `src/commands/check/visual-plus/capabilities.test.ts`
+- Re-run without changing: `src/commands/check/visual-plus/renderer.test.ts`
 
 **Interfaces:**
 
-- Consumes: built `dist/cli.mjs`, fixture paths, exact environment, columns, and input sequence.
+- Consumes: built `dist/cli.mjs`, fixture paths, exact environment, columns, and an explicitly empty
+  input sequence; every Visual+ journey is non-interactive and the adapter rejects non-empty input.
 - Produces: bounded captured terminal bytes, normalized durable transcript, exit code, and timeout
   diagnostics.
+
+**Audited adapter and fallback contract:**
+
+- The adapter supports exactly two detected families. util-linux runs
+  `script -q -e -c 'exec ./run' /dev/null` from a private disposable directory (the actual `-c`
+  argv element is exactly `exec ./run`). BSD runs
+  `script -q -e /dev/null ./run`; when the caller has no controlling terminal, the fixed
+  `/usr/bin/expect` bootstrap supplies one to BSD `script`. util-linux uses the fixed command
+  literal `exec ./run`; Expect uses `spawn -noecho` with an exact fixed argv list, `expect eof`, and
+  `wait`. The bootstrap and `script -c` command are fixed literals. Repository paths, CLI paths,
+  arguments, environment values, and columns are never shell or Tcl source and exist only in a
+  bounded sibling config read by `./run`.
+  Missing or unrecognized `script`, or missing `expect` when BSD needs it, is a hard test failure.
+- `./run` is a generated owner-only executable Node wrapper. It validates a contained regular
+  non-symlink config, applies `stty rows 24 cols <width>` inside the allocated PTY, records
+  stdin/stdout/stderr `isTTY` plus the observed width in an owner-only sidecar, and launches the
+  built CLI with an argument array. A completion sidecar records the exact CLI exit/signal. The
+  outer utility exit is diagnostic only and never substitutes for child evidence.
+- The private harness directory is mode `0700`; wrapper files are created non-symlink with `wx` and
+  mode `0700`; config and sidecars are non-symlink `wx` files with mode `0600`. Config is at most
+  256 KiB, each sidecar is at most 4 KiB, and evidence is exactly one start record plus one
+  completion record. The BSD bootstrap records Expect's spawned `script` PID; the wrapper records
+  its PID/group and the detached CLI PID/group, forwards TERM/HUP to the CLI group, and waits for
+  it. The parent owns the detached outer group, validates every PID before signaling, recursively
+  inventories descendants, then TERM/KILLs and confirms the outer, `script`, wrapper, CLI, and any
+  discovered descendant PID/group are gone within one second. Cleanup always runs in `finally`;
+  missing evidence is itself failure but never prevents cleanup of already known descendants.
+- The parent enforces 30 seconds and 4 MiB across terminal stdout plus outer adapter diagnostics.
+  Terminal stdout is retained separately and is the only channel passed to normalization;
+  `script`/Expect stderr remains bounded private diagnostics. Timeout, overflow, malformed/missing
+  evidence, a surviving exact PID/group, or any setup/cleanup ambiguity fails explicitly.
+- Transcript normalization is a bounded terminal-state projection for the renderer's known CR,
+  LF, cursor-up, erase-line, cursor-visibility, and SGR sequences. It removes overwritten live
+  frames and nonprinting style/control state while retaining the final visible text and scrollback
+  in order. Unknown OSC, CSI, C0/C1, bidi, or direction controls in captured program output are
+  rejected rather than regex-deleted. It fatal-decodes UTF-8, treats CRLF as one line break, uses a
+  fixed 24-by-width screen plus bounded scrollback, reports final cursor visibility, and rejects
+  impossible cursor movement or output growth beyond the bound.
+- Plan 034 intentionally exposed reduced motion only as a pure capability/renderer input; there is
+  no standard terminal signal and the built CLI has no public reduced-motion option. Task 4 must
+  not invent an environment or CLI contract. Re-run the exact pure capability/renderer proofs that
+  reduced motion preserves SGR semantics while removing scheduling, CR, erase-line, and cursor
+  bytes. The built-CLI no-motion matrix covers the real public fallbacks only.
+- Hostile terminal text uses a separate minimal disposable built-CLI repository with valid registry
+  dependency identities and hostile manifest/owner text containing newline, CSI, OSC, bidi,
+  zero-width, and wide grapheme cases. It proves sanitization without changing the exact 66-package
+  Visual+ fixture contract.
 
 - [ ] **Step 1: Write PTY adapter RED tests**
 
 Detect BSD and util-linux `script` argument forms with a read-only capability probe. Launch only a
-generated fixed test wrapper; never interpolate repository/user values into shell code. Require an
-actual child TTY assertion before accepting a capture as PTY proof.
+generated fixed test wrapper; never interpolate repository/user values into shell or Tcl code.
+Require `stdin.isTTY`, `stdout.isTTY`, and `stderr.isTTY` plus the exact observed columns before
+accepting a capture as PTY proof. Characterize timeout, overflow, signal, malformed sidecar,
+unknown control, and cleanup failures.
 
 - [ ] **Step 2: Run PTY adapter RED tests**
 
@@ -537,26 +590,65 @@ adapter returns `isTTY === true` and bounded output.
 - [ ] **Step 3: Implement bounded cross-platform capture**
 
 Use argument-array `spawn`, a disposable wrapper/config file, a 30-second timeout, 4 MiB combined
-output limit, signal cleanup, and transcript normalization that removes only live-frame control
-sequences. Retain final visible text exactly.
+output limit, detached-group signal cleanup, bounded owner-only sidecars, and the terminal-state
+normalizer above. Retain final visible text exactly and expose raw bytes only to test assertions,
+never error messages that could leak hostile or secret fixture values.
 
 - [ ] **Step 4: Write built-CLI success and block journeys**
 
 For 40/60/80/118 columns, assert all 76 rows and 14 targets exactly once, lifecycle resolution,
 insight counts, final copy, exit `0`/`2`, no orphan spinner/cursor state, and exact filesystem
-hashes.
+hashes. Count the 76 change rows by their dedicated `Operation ID` field in the normalized review
+region, not by raw IDs that legitimately recur in transaction evidence. Assert exact topology
+`66/616/612/76/14`, distribution `3/37/36`, 15 owner impacts, 18 shared identities with 39
+occurrences, two major cards, 14 transaction target rows, success totals `76/0/0/0/0`, safety totals
+`0/0/76/0/76` for applied/blocked/not-attempted/failed/unknown, the correct complete/safety copy,
+and `Exit 0`/`Exit 2`. If target totals are asserted, safety is likewise 14 not-attempted and 14
+unknown. Success bytes equal every target's expected-after hash; safety bytes equal every before
+hash, the wrapper counter is exactly two, and neither journey leaves Git dirt or apply residue.
+For every requested width, compute each final projected visible line with the production visual
+length oracle and require it to be no wider than the observed terminal columns. Every raw control
+must be recognized, the final cursor state must be visible, no lifecycle frame remains active in
+the capable final projection, and the last semantic text is exactly `Exit 0` or `Exit 2`.
 
 - [ ] **Step 5: Write no-motion fallback journeys**
 
-Run non-TTY, CI, slow pipe, `TERM=dumb`, `NO_COLOR`, reduced motion, and hostile Unicode/control
-cases. Assert no cursor escapes/repeated frames, complete semantic content, and output drain before
-exit.
+Run built-CLI non-TTY, CI, slow-pipe, `TERM=dumb`, `NO_COLOR`, and hostile Unicode/control cases.
+The unchanged Visual+ repository may be reused only for read-only fallback runs; success/safety
+write fixtures are single-use. Run non-TTY and slow-pipe through direct pipes. Run CI, `TERM=dumb`,
+`NO_COLOR`, and hostile text through an actual PTY; every capable baseline removes inherited `CI`
+and `NO_COLOR`, strips inherited `FORCE_COLOR` and other color overrides, and sets
+`TERM=xterm-256color`, so hosted CI cannot silently force plain mode. Assert the requested width
+and at least one recognized live-frame/cursor sequence in every capable baseline. Direct non-TTY
+and slow-pipe runs require zero ESC and CR bytes. Constrained real-PTY runs allow exactly the CLI
+terminal lifecycle's final cursor-show restoration and require the final cursor state to be
+visible, while forbidding renderer CR, cursor-up, erase-line, cursor-hide, SGR/color, and repeated
+frames. Require complete semantic content, exact projected ASCII behavior for `TERM=dumb`, and
+output drain before exit. `NO_COLOR` intentionally keeps motion: require zero SGR bytes and
+semantic equivalence after terminal projection while accepting only the renderer's recognized
+live-frame controls. Compare it with a matching 80-column,
+read-only, color-capable PTY journey on the same unchanged fixture, not a write receipt. Run the
+hostile case at 80 columns with `NO_COLOR`, require the exact sanitized owner text, and reject any
+hostile OSC/CSI/control as terminal protocol. Constrained append-only scrollback may retain an
+earlier `active` transition; require each identical transition at most once rather than banning the
+word. The slow-pipe harness paces stdout reads, resolves on child `close`, and requires complete
+stdout byte/semantic equivalence through final `Exit 0` with the ordinary direct-pipe read-only
+run; capture and assert the standard non-TTY stderr hint separately. Separately re-run the pure
+reduced-motion capability and renderer tests defined above.
+
+Every write journey invokes `process.execPath` with
+`[dist/cli.mjs, '--cwd', repository, '--recursive', '--write', '--mode', 'major']`; it never passes
+`--output json` and supplies empty input followed by EOF. Read-only fallback journeys use the same
+argv without `--write`.
 
 - [ ] **Step 6: Run PTY/fallback GREEN tests**
 
 Build first, then run `pnpm exec vitest run test/visual-plus-cli.test.ts`. Expected: all journeys
-pass on supported macOS/Linux jobs; unsupported PTY environments fail explicitly rather than skip
-the release gate silently.
+pass in a dedicated `ubuntu-24.04` and `macos-15` matrix with Node `24.15.0`; unsupported PTY
+environments fail explicitly rather than skip the release gate silently. The job installs no new
+runtime/native package and runs the build, focused PTY suite, and pure reduced-motion tests. Revise
+the release-readiness workflow invariant to allow exactly this named PTY job's two runner values
+while retaining literal `ubuntu-24.04` for every other job.
 
 ### Task 5: Documentation and final 2.1.0 candidate gate
 
