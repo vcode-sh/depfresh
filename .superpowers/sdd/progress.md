@@ -379,3 +379,8 @@ full/`--long` rendering now share authoritative Visual+ evidence while applying 
 preview limits only to successful detail. Safety-flagged targets bypass limits, compact recovery
 retains truth without the journal ID, and focused pinned-Node proof passed 154 renderer/section
 tests, 15 input tests, typecheck, and Biome. Independent re-review reported C0/I0/M0.
+Plan 037 Task 2: complete (commits `55b69aa..a374255`, review clean). Visual+ now omits false
+startup placeholders and accepts one contained, post-discovery repository/package-manager context
+before review. Canonical root aliases remain supported without accepting parent traversal;
+out-of-root and symlink-escaped catalog projections cannot alter workspace scope. Focused proof
+passed 89 tests, typecheck, Biome, and diff checks; re-review reported C0/I0/M0.

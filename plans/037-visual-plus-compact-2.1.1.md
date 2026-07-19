@@ -139,21 +139,21 @@ Re-review reported C0/I0/M0.
 - Produces: `deriveVisualPlusRunMetadata(root, packages, detailLevel)` and
   `VisualPlusRenderer.setRunMetadata(metadata)`.
 
-- [ ] **Step 1: Write metadata RED tests**
+- [x] **Step 1: Write metadata RED tests**
 
 Cover one root package, a multi-package workspace, root `packageManager`, coherent duplicate
 declarations, conflicting declarations, one lockfile marker, conflicting markers, absent evidence,
 unreadable/unsafe marker evidence, hostile names, and deterministic source ordering. Assert no
 process-spawn API is called.
 
-- [ ] **Step 2: Write renderer/orchestration RED tests**
+- [x] **Step 2: Write renderer/orchestration RED tests**
 
 Assert startup emits no `Repository unknown` or `Package manager unknown`; one metadata transition
 writes the correct context before review; missing, repeated, late, or conflicting transitions fail
 closed. At command level, assert a Spreadoo-shaped root reports its package name, workspace scope,
 and declared `pnpm` version/source.
 
-- [ ] **Step 3: Run RED tests**
+- [x] **Step 3: Run RED tests**
 
 Run:
 
@@ -163,14 +163,14 @@ pnpm exec vitest run src/commands/check/visual-plus/run-metadata.test.ts src/com
 
 Expected: FAIL because the derivation and renderer transition do not exist.
 
-- [ ] **Step 4: Implement the one-time context transition**
+- [x] **Step 4: Implement the one-time context transition**
 
 Start Visual+ with the check heading and lifecycle only. After `loadPackagesWithLogger()` returns,
 derive metadata from the effective root and package inventory, call `setRunMetadata()` exactly
 once, and use that frozen metadata for every later section input. Reject review before context and
 reject a second transition. Render `unknown` only as post-discovery absence of evidence.
 
-- [ ] **Step 5: Run GREEN and neighboring tests**
+- [x] **Step 5: Run GREEN and neighboring tests**
 
 Run the Step 3 command plus:
 
@@ -182,12 +182,18 @@ pnpm exec biome check src/commands/check/run-check.ts src/commands/check/visual-
 
 Expected: all commands exit 0 with no warnings.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/commands/check/run-check.ts src/commands/check/run-check.orchestration.test.ts src/commands/check/visual-plus
 git commit -m "fix: show discovered Visual Plus repository context"
 ```
+
+**Task 2 evidence (2026-07-20):** Commits `55f8b49` and `a374255` add the one-time discovered
+context transition and contained metadata derivation. Focused proof passed 89 tests, typecheck,
+Biome, and diff checks. Review found two containment edges; regressions now prevent out-of-root or
+symlink-escaped catalogs from changing workspace scope and prevent lexical parent traversal from
+being accepted through canonical fallback. Re-review reported C0/I0/M0.
 
 ### Task 3: CLI, PTY, fallback, and documentation journeys
 
