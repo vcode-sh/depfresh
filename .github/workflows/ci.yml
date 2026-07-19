@@ -37,6 +37,12 @@ jobs:
       - name: Test Visual Plus PTY and fallbacks
         run: pnpm exec vitest run test/visual-plus-cli.test.ts
 
+      - name: Replay Visual Plus against the installed packed artifact
+        run: |
+          mkdir -p artifacts
+          npm pack --json --ignore-scripts --pack-destination artifacts > artifacts/visual-plus-pack.json
+          node scripts/verify-packed-package.mjs artifacts/visual-plus-pack.json --visual-plus
+
       - name: Test pure reduced-motion contracts
         run: pnpm exec vitest run src/commands/check/visual-plus/capabilities.test.ts src/commands/check/visual-plus/renderer.test.ts
 

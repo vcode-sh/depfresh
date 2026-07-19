@@ -13,8 +13,7 @@ import {
 } from 'node:fs'
 import { createServer, type Server } from 'node:http'
 import { tmpdir } from 'node:os'
-import { dirname, join, relative, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { join, relative } from 'node:path'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { visualLength } from '../src/utils/format'
 import {
@@ -24,10 +23,13 @@ import {
   normalizeTerminalCapture,
   runInPty,
 } from './helpers/pty-runner.mjs'
+import { resolveVisualPlusCliPath } from './helpers/visual-plus-artifact-path.mjs'
 import { createVisualPlusFixture } from './helpers/visual-plus-fixture.mjs'
 
-const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
-const cliPath = join(root, 'dist', 'cli.mjs')
+const { cliPath } = resolveVisualPlusCliPath({
+  cliPath: process.env.DEPFRESH_VISUAL_PLUS_CLI_PATH,
+  installRoot: process.env.DEPFRESH_VISUAL_PLUS_INSTALL_ROOT,
+})
 const asOfMs = Date.parse('2026-07-19T00:00:00.000Z')
 let fixtureParent = ''
 const registryResponses: Array<{ get(name: string): Buffer | undefined }> = []
@@ -291,6 +293,14 @@ describe('Visual+ PTY adapter', () => {
 })
 
 describe('Visual+ built CLI', () => {
+  it('executes the selected CLI artifact', () => {
+    const version = execFileSync(process.execPath, [cliPath, '--version'], {
+      encoding: 'utf8',
+    })
+
+    expect(version.trim()).toBe('2.1.0')
+  })
+
   it.each([40, 60, 80, 118])(
     'renders exact success and safety journeys in a %i-column PTY',
     async (columns) => {

@@ -10,7 +10,8 @@ import {
   writeFileSync,
 } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { basename, dirname, join, resolve } from 'node:path'
+import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path'
+import { gunzipSync } from 'node:zlib'
 import { extractSinglePackEntry } from './pack-manifest.mjs'
 
 class PackageVerificationError extends Error {}
@@ -27,13 +28,14 @@ process.once('uncaughtException', (error) => {
 const PUBLIC_REGISTRY = 'https://registry.npmjs.org/'
 const MAX_COMMAND_OUTPUT_BYTES = 1024 * 1024
 const PACKED_COMMAND_TIMEOUT_MS = 120_000
-const manifestArgument = process.argv[2]
-const installSpecIndex = process.argv.indexOf('--install-spec')
-const explicitInstallSpec = installSpecIndex < 0 ? undefined : process.argv[installSpecIndex + 1]
+const MAX_TARBALL_EXPANDED_BYTES = 50 * 1024 * 1024
+const VISUAL_PLUS_PASSED_TESTS = 32
+const command = parseCommand(process.argv.slice(2))
+const manifestArgument = command.manifestPath
+const explicitInstallSpec = command.installSpec
+const visualPlus = command.visualPlus
 
-if (!manifestArgument || (installSpecIndex >= 0 && !explicitInstallSpec)) {
-  fail('Usage: node scripts/verify-packed-package.mjs <pack.json> [--install-spec <exact-spec>]')
-}
+if (!manifestArgument) fail('Usage: node scripts/verify-packed-package.mjs <pack.json> [--visual-plus] [--install-spec <exact-spec>]')
 
 const manifestPath = resolve(manifestArgument)
 const packageJson = JSON.parse(readFileSync(resolve('package.json'), 'utf8'))
@@ -191,6 +193,9 @@ try {
     env: isolatedEnvironment(home, cache, emptyUserConfig, emptyGlobalConfig),
   })
   if (capabilitiesRun.stderr !== '') fail('Packed capabilities command wrote stderr')
+  const visualPlusEvidence = visualPlus
+    ? verifyVisualPlusReplay({ cliPath, installedRoot, tarballBytes, temporaryRoot })
+    : undefined
 
   const runPackedCli = (label, cwd, args, expectedStatus) => {
     const result = spawnSync(process.execPath, [cliPath, ...args], {
@@ -394,6 +399,7 @@ for (const asset of capabilities.assets) {
       size: entry.size,
       unpackedSize: entry.unpackedSize,
       installSource: explicitInstallSpec ? 'public-registry' : 'tarball',
+      ...(visualPlusEvidence === undefined ? {} : { visualPlus: visualPlusEvidence }),
     })}\n`,
   )
 } finally {
@@ -436,6 +442,140 @@ function run(command, args, options) {
     fail(`Verification command failed: ${basename(command)}`)
   }
   return { stdout: result.stdout ?? '', stderr: result.stderr ?? '' }
+}
+
+function verifyVisualPlusReplay(options) {
+  const canonicalInstalledRoot = realpathSync(options.installedRoot)
+  const cliStat = lstatSync(options.cliPath)
+  if (cliStat.isSymbolicLink() || !cliStat.isFile()) fail('Installed Visual+ CLI is not a regular file')
+  const canonicalCliPath = realpathSync(options.cliPath)
+  const containment = relative(canonicalInstalledRoot, canonicalCliPath)
+  if (containment === '' || containment.startsWith('..') || isAbsolute(containment)) {
+    fail('Installed Visual+ CLI is outside the exact installation root')
+  }
+  const tarballCli = extractTarGzipEntry(options.tarballBytes, 'package/dist/cli.mjs')
+  const cliSha256 = createHash('sha256').update(readFileSync(canonicalCliPath)).digest('hex')
+  if (createHash('sha256').update(tarballCli).digest('hex') !== cliSha256) {
+    fail('Installed Visual+ CLI does not match the verified tarball')
+  }
+
+  const fakeCliPath = join(options.temporaryRoot, 'visual-plus-distinct-cli.mjs')
+  writeFileSync(fakeCliPath, 'throw new Error("distinct Visual+ identity control")\n')
+  const testEnvironment = {
+    DEPFRESH_VISUAL_PLUS_CLI_PATH: canonicalCliPath,
+    DEPFRESH_VISUAL_PLUS_INSTALL_ROOT: canonicalInstalledRoot,
+  }
+  const negative = runVisualPlusVitest(
+    [
+      'run',
+      'test/visual-plus-cli.test.ts',
+      '--testNamePattern',
+      'executes the selected CLI artifact',
+    ],
+    { ...testEnvironment, DEPFRESH_VISUAL_PLUS_CLI_PATH: fakeCliPath },
+  )
+  if (negative.error || negative.status === null) fail('Visual+ identity control could not run')
+  if (negative.status === 0) fail('Visual+ identity control unexpectedly passed')
+
+  const reportPath = join(options.temporaryRoot, 'visual-plus-report.json')
+  const replay = runVisualPlusVitest(
+    ['run', 'test/visual-plus-cli.test.ts', '--reporter=json', '--outputFile', reportPath],
+    testEnvironment,
+  )
+  if (replay.error || replay.status !== 0) fail('Installed Visual+ replay failed')
+  let report
+  try {
+    report = JSON.parse(readFileSync(reportPath, 'utf8'))
+  } catch {
+    fail('Installed Visual+ replay did not produce machine evidence')
+  }
+  if (
+    !isRecord(report) ||
+    report.numFailedTests !== 0 ||
+    report.numFailedTestSuites !== 0 ||
+    report.numPassedTests !== VISUAL_PLUS_PASSED_TESTS
+  ) {
+    fail('Installed Visual+ replay evidence is incomplete')
+  }
+  return {
+    cliPath: canonicalCliPath,
+    cliSha256,
+    passedTests: report.numPassedTests,
+  }
+}
+
+function runVisualPlusVitest(args, additions) {
+  return spawnSync(
+    process.execPath,
+    [join(resolve(process.cwd()), 'node_modules', 'vitest', 'vitest.mjs'), ...args],
+    {
+      cwd: resolve(process.cwd()),
+      encoding: 'utf8',
+      env: { ...process.env, ...additions },
+      killSignal: 'SIGKILL',
+      maxBuffer: MAX_COMMAND_OUTPUT_BYTES,
+      shell: false,
+      timeout: PACKED_COMMAND_TIMEOUT_MS,
+    },
+  )
+}
+
+function extractTarGzipEntry(tarball, targetPath) {
+  let archive
+  try {
+    archive = gunzipSync(tarball, { maxOutputLength: MAX_TARBALL_EXPANDED_BYTES })
+  } catch {
+    fail('Could not extract the verified tarball')
+  }
+  for (let offset = 0; offset + 512 <= archive.length; ) {
+    const header = archive.subarray(offset, offset + 512)
+    if (header.every((byte) => byte === 0)) break
+    const size = parseTarSize(header.subarray(124, 136))
+    const name = tarString(header.subarray(0, 100))
+    const prefix = tarString(header.subarray(345, 500))
+    const path = prefix ? `${prefix}/${name}` : name
+    const contentStart = offset + 512
+    const contentEnd = contentStart + size
+    if (contentEnd > archive.length) fail('Could not extract the verified tarball')
+    if (path === targetPath) return Buffer.from(archive.subarray(contentStart, contentEnd))
+    offset = contentStart + Math.ceil(size / 512) * 512
+  }
+  fail('Verified tarball is missing the Visual+ CLI')
+}
+
+function parseTarSize(input) {
+  const value = tarString(input).trim()
+  if (!/^[0-7]+$/u.test(value)) fail('Could not extract the verified tarball')
+  const size = Number.parseInt(value, 8)
+  if (!Number.isSafeInteger(size) || size < 0) fail('Could not extract the verified tarball')
+  return size
+}
+
+function tarString(input) {
+  return input.toString('utf8').replace(/\0.*$/u, '')
+}
+
+function parseCommand(arguments_) {
+  const manifestPath = arguments_[0]
+  if (typeof manifestPath !== 'string') return {}
+  let installSpec
+  let visualPlus = false
+  for (let index = 1; index < arguments_.length; index += 1) {
+    const argument = arguments_[index]
+    if (argument === '--visual-plus' && !visualPlus) {
+      visualPlus = true
+      continue
+    }
+    if (argument === '--install-spec' && installSpec === undefined) {
+      const value = arguments_[index + 1]
+      if (typeof value !== 'string' || value.startsWith('--')) return {}
+      installSpec = value
+      index += 1
+      continue
+    }
+    return {}
+  }
+  return { installSpec, manifestPath, visualPlus }
 }
 
 function isRecord(value) {

@@ -211,6 +211,11 @@ describe('2.1.0 release readiness', () => {
       'pnpm install --frozen-lockfile',
       'pnpm build',
       'pnpm exec vitest run test/visual-plus-cli.test.ts',
+      `${[
+        'mkdir -p artifacts',
+        'npm pack --json --ignore-scripts --pack-destination artifacts > artifacts/visual-plus-pack.json',
+        'node scripts/verify-packed-package.mjs artifacts/visual-plus-pack.json --visual-plus',
+      ].join('\n')}\n`,
       'pnpm exec vitest run src/commands/check/visual-plus/capabilities.test.ts src/commands/check/visual-plus/renderer.test.ts',
     ])
   })
@@ -252,6 +257,7 @@ describe('2.1.0 release readiness', () => {
     expect(ci).toContain(explicitVerifier)
     expect(release).toContain(explicitPack)
     expect(release).toContain(explicitVerifier)
+    expect(release).toContain(`${explicitVerifier} --visual-plus`)
     expect(ci).not.toContain('scripts/verify-local-package.mjs')
     expect(release).not.toContain('scripts/verify-local-package.mjs')
   })

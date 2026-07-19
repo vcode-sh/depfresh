@@ -92,8 +92,24 @@ setInterval(() => {}, 1_000)
     expect(localVerifier).toContain('LOCAL_PACK_TIMEOUT_MS')
     expect(localVerifier).toContain('PACKED_VERIFIER_TIMEOUT_MS')
     expect(localVerifier).not.toMatch(/process\.env\..*TIMEOUT|--timeout/u)
-    expect(packedVerifier.match(/timeout: PACKED_COMMAND_TIMEOUT_MS/gu)).toHaveLength(2)
+    expect(
+      packedVerifier.match(/timeout: PACKED_COMMAND_TIMEOUT_MS/gu).length,
+    ).toBeGreaterThanOrEqual(2)
     expect(packedVerifier).not.toMatch(/process\.env\..*TIMEOUT|--timeout/u)
+  })
+
+  it('keeps the installed-artifact Visual+ replay fixed, path-bound, and private', () => {
+    const packedVerifier = readFileSync('scripts/verify-packed-package.mjs', 'utf8')
+
+    expect(packedVerifier).toContain("'--visual-plus'")
+    expect(packedVerifier).toContain("'package/dist/cli.mjs'")
+    expect(packedVerifier).toContain('DEPFRESH_VISUAL_PLUS_CLI_PATH')
+    expect(packedVerifier).toContain('DEPFRESH_VISUAL_PLUS_INSTALL_ROOT')
+    expect(packedVerifier).toContain('executes the selected CLI artifact')
+    expect(packedVerifier).toContain('test/visual-plus-cli.test.ts')
+    expect(packedVerifier).toContain('cliSha256')
+    expect(packedVerifier).toContain('passedTests')
+    expect(packedVerifier).not.toContain('shell: true')
   })
 })
 
