@@ -170,11 +170,16 @@ describe('Visual+ PTY adapter', () => {
   })
 
   it('keeps one owned ONLCR transform and transports explicit CRLF unchanged', async () => {
+    const adapter = detectScriptAdapter()
+    const requiredModes =
+      adapter.family === 'bsd' ? ['-icanon', '-echo', 'opost', 'onlcr'] : ['opost', 'onlcr']
+    const forbiddenModes =
+      adapter.family === 'bsd' ? ['icanon', 'echo', '-opost', '-onlcr'] : ['-opost', '-onlcr']
     const lineFeed = await runInPty({
       cliPath: process.execPath,
       args: [
         '-e',
-        'const output=require("node:child_process").execFileSync("/bin/stty",["-a"],{encoding:"utf8",stdio:["inherit","pipe","inherit"]});const modes=new Set(output.split(/[\\s;:]+/u));const required=["-icanon","-echo","opost","onlcr"];const forbidden=["icanon","echo","-opost","-onlcr"];if(required.some(mode=>!modes.has(mode))||forbidden.some(mode=>modes.has(mode)))process.exit(86);process.stdout.write("line\\n")',
+        `const output=require("node:child_process").execFileSync("/bin/stty",["-a"],{encoding:"utf8",stdio:["inherit","pipe","inherit"]});const modes=new Set(output.split(/[\\s;:]+/u));const required=${JSON.stringify(requiredModes)};const forbidden=${JSON.stringify(forbiddenModes)};if(required.some(mode=>!modes.has(mode))||forbidden.some(mode=>modes.has(mode)))process.exit(86);process.stdout.write("line\\n")`,
       ],
       columns: 40,
       env: {},
@@ -192,6 +197,7 @@ describe('Visual+ PTY adapter', () => {
     })
 
     for (const result of [lineFeed, explicitCrlf]) {
+      expect(result.adapter.family).toBe(adapter.family)
       expect(result.exitCode).toBe(0)
       expect(result.rawTerminal).toEqual(Buffer.from('line\r\n'))
       expect(result.transcript).toBe('line\n')
