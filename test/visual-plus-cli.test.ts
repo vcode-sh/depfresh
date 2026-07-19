@@ -29,6 +29,7 @@ import {
   observeIdentity,
   observeIdentitySnapshot,
   processScanArguments,
+  processScanFailureReason,
   readPtyTimeoutPhase,
   readPtyTranscriptFailurePhase,
   registerEvidenceIdentity,
@@ -155,6 +156,7 @@ describe('Visual+ PTY adapter', () => {
     expect(processScanArguments(501)).toEqual([
       '-U',
       '501',
+      '-x',
       '-o',
       'pid=',
       '-o',
@@ -164,6 +166,19 @@ describe('Visual+ PTY adapter', () => {
       '-o',
       'lstart=',
     ])
+    expect(processScanFailureReason({ uid: undefined })).toBe('uid')
+    expect(
+      processScanFailureReason({
+        uid: 501,
+        error: Object.assign(new Error(), { code: 'ETIMEDOUT' }),
+      }),
+    ).toBe('timeout')
+    expect(processScanFailureReason({ uid: 501, error: new Error() })).toBe('spawn')
+    expect(processScanFailureReason({ uid: 501, status: 1, stdout: '' })).toBe('status')
+    expect(processScanFailureReason({ uid: 501, status: 0, stdout: 'x'.repeat(1024 * 1024) })).toBe(
+      'oversize',
+    )
+    expect(processScanFailureReason({ uid: 501, status: 0, stdout: '' })).toBeUndefined()
   })
 
   it('matches cleanup identity across reparenting but rejects changed start or group', () => {

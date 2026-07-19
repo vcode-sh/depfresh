@@ -24,6 +24,8 @@ import { visualLength } from '../../src/utils/format/width.ts'
 
 const DEFAULT_TIMEOUT_MS = 30_000
 const DEFAULT_OUTPUT_LIMIT = 4 * 1024 * 1024
+const PROCESS_SCAN_OUTPUT_LIMIT = 1024 * 1024
+const PROCESS_SCAN_TIMEOUT_MS = 1_000
 const CONFIG_LIMIT = 256 * 1024
 const SIDECAR_LIMIT = 4 * 1024
 const TIMEOUT_READINESS_ENV = 'DEPFRESH_PTY_TIMEOUT_READINESS_PATH'
@@ -329,23 +331,28 @@ export function classifyScriptProbe(probe) {
 
 export function createDetachedGroupMonitor(pid) {
   validatePid(pid)
-  const current = scanProcesses()
-  const leader = current?.get(pid)
-  if (!leader || leader.group !== pid) {
-    throw new Error('Detached process-group identity was unavailable or ambiguous')
-  }
-  const observed = new Map([[pid, leader]])
-  observed.probeSucceeded = true
+  const observed = new Map()
+  observed.probeSucceeded = false
   observed.probeFailed = false
+  observed.probeFailure = null
   observed.ambiguous = false
   observed.cleanupFault = null
   observed.missing = new Set()
   observed.reappeared = new Set()
   observed.requiredGroups = new Set([pid])
+  const current = scanProcesses(observed)
+  const leader = current?.get(pid)
+  if (!leader || leader.group !== pid) {
+    throw new Error(
+      `Detached process-group identity was unavailable or ambiguous: ${observed.probeFailure ?? 'identity'}`,
+    )
+  }
+  observed.set(pid, leader)
+  observed.probeSucceeded = true
   observeRequiredGroups(current, observed)
   return Object.freeze({
     observe: () => {
-      const snapshot = scanProcesses()
+      const snapshot = scanProcesses(observed)
       if (!snapshot) {
         observed.probeFailed = true
         return
@@ -639,6 +646,7 @@ export async function runInPty(options) {
   observed.allowWrapperPromotion = true
   observed.probeSucceeded = false
   observed.probeFailed = false
+  observed.probeFailure = null
   observed.ambiguous = false
   observed.authoritative = new Set()
   observed.cleanupFault = cleanupFault
@@ -710,7 +718,7 @@ export async function runInPty(options) {
     validateCompletion(completion)
     requireWrapperIdentityAgreement(wrapperReady, start)
     if (!observed.probeSucceeded || observed.probeFailed) {
-      throw new Error('PTY descendant observation was unavailable or ambiguous')
+      throw new Error(`PTY descendant observation failed: ${observed.probeFailure ?? 'unknown'}`)
     }
     const scriptPid =
       adapter.family === 'bsd' ? readPidSidecar(directory, 'script-pid') : captured.pid
@@ -1441,9 +1449,12 @@ async function cleanupObserved(observed) {
   if (observed.cleanupFault === 'observation-ambiguity') {
     errors.push(new Error('Injected PTY cleanup observation ambiguity'))
   }
-  const termSnapshot = scanProcesses()
-  if (!termSnapshot) errors.push(new Error('PTY cleanup process observation failed before TERM'))
-  else {
+  const termSnapshot = scanProcesses(observed)
+  if (!termSnapshot) {
+    errors.push(
+      new Error(`PTY cleanup process observation failed before TERM: ${observed.probeFailure}`),
+    )
+  } else {
     observeIdentitySnapshot(observed, termSnapshot)
     observeRequiredGroups(termSnapshot, observed)
     signalMatchingIdentities(termSnapshot, observed, 'SIGTERM', errors)
@@ -1453,9 +1464,12 @@ async function cleanupObserved(observed) {
   if (observed.cleanupFault === 'signaling-failure') {
     errors.push(new Error('Injected PTY cleanup signaling failure'))
   }
-  const killSnapshot = scanProcesses()
-  if (!killSnapshot) errors.push(new Error('PTY cleanup process observation failed before KILL'))
-  else {
+  const killSnapshot = scanProcesses(observed)
+  if (!killSnapshot) {
+    errors.push(
+      new Error(`PTY cleanup process observation failed before KILL: ${observed.probeFailure}`),
+    )
+  } else {
     observeIdentitySnapshot(observed, killSnapshot)
     observeRequiredGroups(killSnapshot, observed)
     signalMatchingIdentities(killSnapshot, observed, 'SIGKILL', errors)
@@ -1469,13 +1483,13 @@ async function cleanupObserved(observed) {
   if (observed.cleanupFault === 'survivor') {
     errors.push(new Error('Injected PTY cleanup survivor'))
   }
-  if (
-    !observed.probeSucceeded ||
-    observed.probeFailed ||
-    observed.ambiguous ||
-    (observed.provisionalGroupChanges?.size ?? 0) > 0
-  ) {
-    errors.push(new Error('PTY descendant observation was unavailable or ambiguous'))
+  if (!observed.probeSucceeded || observed.probeFailed) {
+    errors.push(
+      new Error(`PTY descendant observation failed: ${observed.probeFailure ?? 'unknown'}`),
+    )
+  }
+  if (observed.ambiguous || (observed.provisionalGroupChanges?.size ?? 0) > 0) {
+    errors.push(new Error('PTY descendant identity observation was ambiguous'))
   }
   if (errors.length > 0) throw new AggregateError(errors, 'PTY cleanup evidence is ambiguous')
 }
@@ -1530,7 +1544,7 @@ function observeProcessTree(outerPid, directory, observed) {
       }
     } catch {}
   }
-  const current = scanProcesses()
+  const current = scanProcesses(observed)
   if (!current) {
     observed.probeFailed = true
     return undefined
@@ -1600,16 +1614,26 @@ function readPublishedWrapperIdentity(directory) {
   }
 }
 
-function scanProcesses() {
+function scanProcesses(observed) {
   const uid = process.getuid?.()
-  if (!Number.isSafeInteger(uid) || uid < 0) return undefined
+  if (!Number.isSafeInteger(uid) || uid < 0) {
+    recordProcessScanFailure(observed, 'uid')
+    return undefined
+  }
   const probe = spawnSync('/bin/ps', processScanArguments(uid), {
     encoding: 'utf8',
     env: minimalOuterEnvironment(),
-    maxBuffer: 1024 * 1024,
-    timeout: 1_000,
+    maxBuffer: PROCESS_SCAN_OUTPUT_LIMIT,
+    timeout: PROCESS_SCAN_TIMEOUT_MS,
   })
-  if (probe.status !== 0 || probe.error || Buffer.byteLength(probe.stdout) >= 1024 * 1024) {
+  const failure = processScanFailureReason({
+    uid,
+    error: probe.error,
+    status: probe.status,
+    stdout: probe.stdout,
+  })
+  if (failure) {
+    recordProcessScanFailure(observed, failure)
     return undefined
   }
   const current = new Map()
@@ -1625,11 +1649,34 @@ function scanProcesses() {
   return current
 }
 
+export function processScanFailureReason(options) {
+  if (!Number.isSafeInteger(options?.uid) || options.uid < 0) return 'uid'
+  if (options.error) return options.error.code === 'ETIMEDOUT' ? 'timeout' : 'spawn'
+  if (options.status !== 0) return 'status'
+  if (
+    typeof options.stdout !== 'string' ||
+    Buffer.byteLength(options.stdout) >= PROCESS_SCAN_OUTPUT_LIMIT
+  ) {
+    return 'oversize'
+  }
+  return undefined
+}
+
+function recordProcessScanFailure(observed, failure) {
+  if (!observed) return
+  observed.probeFailed = true
+  observed.probeFailure ??= failure
+}
+
 async function confirmIdentitiesGone(observed) {
   const deadline = Date.now() + 1_000
   while (Date.now() < deadline) {
-    const current = scanProcesses()
-    if (!current) throw new Error('PTY cleanup process observation failed during confirmation')
+    const current = scanProcesses(observed)
+    if (!current) {
+      throw new Error(
+        `PTY cleanup process observation failed during confirmation: ${observed.probeFailure}`,
+      )
+    }
     observeIdentitySnapshot(observed, current)
     const survivors = [...matchingObservedIdentities(current, observed)]
     const survivingGroups = [...(observed.requiredGroups ?? [])].filter((group) =>
@@ -2055,7 +2102,7 @@ export function matchingObservedIdentities(current, observed) {
 
 export function processScanArguments(uid) {
   if (!Number.isSafeInteger(uid) || uid < 0) throw new Error('PTY process UID is unavailable')
-  return ['-U', String(uid), '-o', 'pid=', '-o', 'ppid=', '-o', 'pgid=', '-o', 'lstart=']
+  return ['-U', String(uid), '-x', '-o', 'pid=', '-o', 'ppid=', '-o', 'pgid=', '-o', 'lstart=']
 }
 
 function requireObservedIdentity(observed, pid, expected = {}) {
