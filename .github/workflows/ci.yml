@@ -12,6 +12,34 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  visual-plus-pty:
+    name: Visual Plus PTY (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7
+
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320  # v5
+
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e  # v6
+        with:
+          node-version: 24.15.0
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build PTY test distribution
+        run: pnpm build
+
+      - name: Test Visual Plus PTY and fallbacks
+        run: pnpm exec vitest run test/visual-plus-cli.test.ts
+
+      - name: Test pure reduced-motion contracts
+        run: pnpm exec vitest run src/commands/check/visual-plus/capabilities.test.ts src/commands/check/visual-plus/renderer.test.ts
+
   test:
     name: Test (Node 24.15.0)
     runs-on: ubuntu-24.04

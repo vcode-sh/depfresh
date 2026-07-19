@@ -23,6 +23,11 @@ interface WorkflowStep {
 interface WorkflowJob {
   environment?: unknown
   'runs-on'?: unknown
+  strategy?: {
+    matrix?: {
+      os?: unknown
+    }
+  }
   steps?: WorkflowStep[]
 }
 
@@ -39,6 +44,7 @@ const workflowPaths = [
 ] as const
 
 const checkoutV7Commit = '9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0'
+const matrixRunnerExpression = '$' + '{{ matrix.os }}'
 const checkoutConsumerPaths = [
   '.github/workflows/ci.yml',
   '.github/workflows/pr-validation.yml',
@@ -167,9 +173,33 @@ describe('2.0.2 release readiness', () => {
       expect(content, path).not.toContain('self-hosted')
       expect(content, path).not.toMatch(/codecov|CODECOV_TOKEN/iu)
       for (const [jobName, job] of Object.entries(workflow(path).jobs ?? {})) {
-        expect(job['runs-on'], `${path}: ${jobName}`).toBe('ubuntu-24.04')
+        if (path === '.github/workflows/ci.yml' && jobName === 'visual-plus-pty') {
+          expect(job['runs-on'], `${path}: ${jobName}`).toBe(matrixRunnerExpression)
+          expect(job.strategy?.matrix?.os, `${path}: ${jobName}`).toEqual([
+            'ubuntu-24.04',
+            'macos-15',
+          ])
+        } else {
+          expect(job['runs-on'], `${path}: ${jobName}`).toBe('ubuntu-24.04')
+        }
       }
     }
+  })
+
+  it('defines the exact two-platform Visual Plus PTY release gate', () => {
+    const job = workflow('.github/workflows/ci.yml').jobs?.['visual-plus-pty']
+    expect(job).toBeDefined()
+    expect(job?.['runs-on']).toBe(matrixRunnerExpression)
+    expect(job?.strategy?.matrix?.os).toEqual(['ubuntu-24.04', 'macos-15'])
+    const commands = (job?.steps ?? []).flatMap((step) =>
+      step.run === undefined ? [] : [step.run],
+    )
+    expect(commands).toEqual([
+      'pnpm install --frozen-lockfile',
+      'pnpm build',
+      'pnpm exec vitest run test/visual-plus-cli.test.ts',
+      'pnpm exec vitest run src/commands/check/visual-plus/capabilities.test.ts src/commands/check/visual-plus/renderer.test.ts',
+    ])
   })
 
   it.each([
