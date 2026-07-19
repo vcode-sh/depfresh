@@ -125,3 +125,29 @@ typecheck, zero-warning Biome, and diff checks passed. Independent final review 
 RED/GREEN and real Linux GREEN and reported C0/I0/M0. No normalizer, cleanup, raw-output privacy,
 or zero-lone-CR assertion was weakened. This remains local correction evidence pending a new exact
 hosted `main` run; no tag or publication claim is made.
+
+## Installed CI fallback phase isolation
+
+Run `29687703913` at `b8a4f50532e58407a110e979231760e7fc7f66a7` passed the macOS source
+Visual+ suite 36/36 and the complete Ubuntu source/installed lane. Full Test, Lint, Build, and
+Distribution Smoke also passed. The macOS installed replay failed with the fixed
+`fallback-ci-pty` category, and its later reduced-motion step was not reached. The category proves
+only which journey failed. Because the bounded private report was removed during owned cleanup, it
+does not retain enough evidence to identify the historical assertion or claim a root cause.
+
+An exact local workflow-style replay used Node `24.15.0`, isolated npm `11.12.0`, long hosted-like
+HOME/TMPDIR/CLI paths, and installed tarball bytes. It passed 36/36, and 20 subsequent focused
+installed CI fallback controls also passed. This weakens deterministic artifact, path-length,
+isolated-environment, and dependency-install hypotheses but does not convert the hosted failure into
+a pass.
+
+Commit `0280309` keeps one CI fixture and one PTY journey while replacing the aggregate assertion
+title with five sequential, exact title-only phases: execution/evidence, semantic output, terminal
+controls, transition uniqueness, and read-only bytes/Git state. Each phase becomes ready only after
+the previous phase passes, so later checks cannot obscure the first violated contract. Setup/run
+errors become a fixed execution-readiness failure; original errors are neither retained nor
+re-thrown. The classifier continues to ignore failure messages, raw output, paths, environment, and
+stacks. Source and packed replays passed 40/40 with `--retry=0`; focused contracts passed 43/43,
+release gates passed 103/103, and build, schemas, typecheck, zero-warning Biome, artifact identity,
+and diff checks passed. Independent review reported C0/I0/M0. This is diagnostic evidence only; a
+new exact hosted all-job success remains mandatory before tagging.

@@ -300,3 +300,16 @@ packed Visual+ passed 36/36 without retries; focused
 tests passed 39/39; build, schemas, typecheck, zero-warning Biome, diff checks, artifact integrity,
 and CLI SHA remained stable. Independent final re-review closed at C0/I0/M0. The fix is local only;
 Task 3 still requires a new exact hosted `main` success before tagging.
+Exact `main` run `29687703913` at `b8a4f50532e58407a110e979231760e7fc7f66a7` passed macOS source
+Visual+ 36/36, Ubuntu source and installed Visual+, full Test, Lint, Build, and Distribution Smoke.
+The macOS installed replay alone failed with `fallback-ci-pty`; reduced-motion was not reached. The
+fixed category identifies only the CI journey, and its private report was cleaned as designed, so
+the exact historical assertion is unavailable. A workflow-style local installed replay passed
+36/36 under exact Node/npm and hosted-like long paths, followed by 20/20 focused installed CI
+controls. Commit `0280309` adds one-run, title-only phase evidence for execution/evidence,
+semantics, terminal controls, transition uniqueness, and read-only repository state. Sequential
+readiness reports only the first violated phase without inspecting or reflecting messages, raw
+output, paths, or stacks. Fresh source and packed replays passed 40/40 without retries; focused
+contracts passed 43/43, release gates passed 103/103, and all static/artifact checks plus independent
+C0/I0/M0 review passed. This remains local diagnostic evidence. Task 3 and tagging stay blocked
+pending a new exact hosted all-job success.
