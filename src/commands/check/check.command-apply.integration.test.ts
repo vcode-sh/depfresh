@@ -39,6 +39,9 @@ vi.mock('../../io/packages', async () =>
 vi.mock('../../io/resolve', async () =>
   vi.importActual<typeof import('../../io/resolve')>('../../io/resolve'),
 )
+vi.mock('../../io/registry', async () =>
+  vi.importActual<typeof import('../../io/registry')>('../../io/registry'),
+)
 vi.mock('../../io/write', async () =>
   vi.importActual<typeof import('../../io/write')>('../../io/write'),
 )
@@ -54,6 +57,7 @@ vi.mock('../apply/legacy-plan', async () =>
 vi.mock('../../cache/index', async () =>
   vi.importActual<typeof import('../../cache/index')>('../../cache/index'),
 )
+vi.mock('node:sqlite', async () => vi.importActual<typeof import('node:sqlite')>('node:sqlite'))
 vi.mock('../../utils/npmrc', async () =>
   vi.importActual<typeof import('../../utils/npmrc')>('../../utils/npmrc'),
 )
@@ -64,8 +68,17 @@ vi.mock('node:fs', async () => vi.importActual<typeof import('node:fs')>('node:f
 vi.mock('../../io/global', async () =>
   vi.importActual<typeof import('../../io/global')>('../../io/global'),
 )
+vi.mock('../../repository/vcs', async () =>
+  vi.importActual<typeof import('../../repository/vcs')>('../../repository/vcs'),
+)
+vi.mock('../../validate-options', async () =>
+  vi.importActual<typeof import('../../validate-options')>('../../validate-options'),
+)
 vi.mock('../global-apply', async () =>
   vi.importActual<typeof import('../global-apply')>('../global-apply'),
+)
+vi.mock('./post-write-actions', async () =>
+  vi.importActual<typeof import('./post-write-actions')>('./post-write-actions'),
 )
 
 const applyRuntime = vi.hoisted(() => ({
