@@ -94,11 +94,14 @@ export function renderVisualPlusCompactTransaction(
   const restored = new Set(recovery.restoredPaths)
   const unrecovered = new Set(recovery.unrecoveredPaths)
   const requiresDetail = (path: string): boolean => {
-    const outcome = results.get(path)?.outcome
+    const result = results.get(path)
     return (
       restored.has(path) ||
       unrecovered.has(path) ||
-      (outcome !== undefined && outcome !== 'applied' && outcome !== 'skipped')
+      result?.blocked === true ||
+      result?.notAttempted === true ||
+      result?.unknown === true ||
+      (result !== undefined && result.outcome !== 'applied' && result.outcome !== 'skipped')
     )
   }
   const bounded = input.snapshot.targets
@@ -121,8 +124,11 @@ export function renderVisualPlusCompactTransaction(
       : unrecovered.has(target.path)
         ? `${separator}unrecovered`
         : ''
+    const safetyStatus = result
+      ? `${separator}blocked ${result.blocked}${separator}not attempted ${result.notAttempted}${separator}unknown ${result.unknown}`
+      : ''
     logical.push(
-      `Target ${path}${separator}${target.operationIds.length} ${target.operationIds.length === 1 ? 'update' : 'updates'}${separator}${result?.outcome ?? 'pending'}${recoveryStatus}`,
+      `Target ${path}${separator}${target.operationIds.length} ${target.operationIds.length === 1 ? 'update' : 'updates'}${separator}${result?.outcome ?? 'pending'}${safetyStatus}${recoveryStatus}`,
     )
   }
   appendOmitted(logical, input.snapshot.targets.length, selected.length, 'targets', input)

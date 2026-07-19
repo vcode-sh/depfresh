@@ -184,7 +184,11 @@ function retainedEvidenceLines(input: VisualPlusSectionInput, headline: string):
     recovery.unrecoveredPaths.length > 0
       ? `Unrecovered: ${recovery.unrecoveredPaths.map(sanitizeTerminalText).join(', ')}`
       : 'Unrecovered: none'
-  const journal = recovery.journalId ? [`Journal: ${sanitizeTerminalText(recovery.journalId)}`] : []
+  const journal = recovery.journalId
+    ? [
+        `Journal: ${input.run.detailLevel === 'compact' ? 'retained' : sanitizeTerminalText(recovery.journalId)}`,
+      ]
+    : []
   const externalEffects = recovery.externalEffects?.length
     ? [`External effects: ${recovery.externalEffects.map(sanitizeTerminalText).join(', ')}`]
     : []

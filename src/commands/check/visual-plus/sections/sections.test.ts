@@ -795,6 +795,73 @@ describe('Visual+ pure sections', () => {
     expect(blockedLines.join('\n')).not.toMatch(/Operation ID|operation-|IDs /u)
   })
 
+  it('retains over-limit compact targets with independent safety receipts and renders each flag', () => {
+    const source = fixture()
+    const blockedIds = new Set(source.snapshot.targets[8]!.operationIds)
+    const notAttemptedIds = new Set(source.snapshot.targets[9]!.operationIds)
+    const unknownIds = new Set(source.snapshot.targets[10]!.operationIds)
+    const operationResults = source.snapshot.results.operations.map((result) => {
+      if (blockedIds.has(result.operationId)) {
+        return { ...result, outcome: 'skipped' as const, blocked: true, notAttempted: true }
+      }
+      if (notAttemptedIds.has(result.operationId)) {
+        return { ...result, outcome: 'skipped' as const, notAttempted: true }
+      }
+      if (unknownIds.has(result.operationId)) {
+        return { ...result, outcome: 'skipped' as const, unknown: true }
+      }
+      return result
+    })
+    const targetResults = source.snapshot.results.targets.map((result, index) => {
+      if (index === 8) {
+        return { ...result, outcome: 'skipped' as const, blocked: true, notAttempted: true }
+      }
+      if (index === 9) return { ...result, outcome: 'skipped' as const, notAttempted: true }
+      if (index === 10) return { ...result, outcome: 'skipped' as const, unknown: true }
+      return result
+    })
+    const input = createVisualPlusSectionInput({
+      ...source,
+      run: { ...source.run, detailLevel: 'compact' },
+      capabilities: { ...capable, color: false, width: 175 },
+      snapshot: {
+        ...source.snapshot,
+        write: false,
+        results: {
+          operations: operationResults,
+          targets: targetResults,
+          totals: totals({
+            applied: 61,
+            skipped: 15,
+            blocked: 5,
+            notAttempted: 10,
+            unknown: 5,
+          }),
+          targetTotals: totals({
+            applied: 11,
+            skipped: 3,
+            blocked: 1,
+            notAttempted: 2,
+            unknown: 1,
+          }),
+        },
+      },
+      writeReceipt: undefined,
+    })
+    const output = renderVisualPlusCompactTransaction(input).map(stripAnsi).join('\n')
+
+    expect(output).toContain(
+      'Target packages/target-8/package.json · 5 updates · skipped · blocked true · not attempted true · unknown false',
+    )
+    expect(output).toContain(
+      'Target packages/target-9/package.json · 5 updates · skipped · blocked false · not attempted true · unknown false',
+    )
+    expect(output).toContain(
+      'Target packages/target-10/package.json · 5 updates · skipped · blocked false · not attempted false · unknown true',
+    )
+    expect(output).toContain('… 3 more targets')
+  })
+
   it('renders the exact complete hierarchy, every row once, and every transaction target once', () => {
     const input = createVisualPlusSectionInput(fixture())
     const lines = allSections(input).map(stripAnsi)
@@ -1700,6 +1767,37 @@ describe('Visual+ receipt decision table', () => {
     expect(lines).toContain('External effects: install tree may have changed')
     expect(lines).toContain('Applied: none')
     expect(lines.join('\n')).not.toContain('Targets:')
+  })
+
+  it('preserves compact retained-recovery truth without exposing the internal journal ID', () => {
+    const recovery: CheckRunRecovery = {
+      executed: true,
+      status: 'partial',
+      journalId: 'internal-journal-1',
+      restoredPaths: [],
+      unrecoveredPaths: ['package.json'],
+      externalEffects: ['install tree may have changed'],
+    }
+    const base = oneOperation({ outcome: 'reverted', verdict: 'partial', exitCode: 2, recovery })
+    const full = createVisualPlusSectionInput({
+      ...base,
+      writeReceipt: { ...base.writeReceipt!, recovery },
+    })
+    const compact = createVisualPlusSectionInput({
+      ...base,
+      run: { ...base.run, detailLevel: 'compact' },
+      writeReceipt: { ...base.writeReceipt!, recovery },
+    })
+    const fullLines = renderVisualPlusReceipt(full).map(stripAnsi)
+    const compactLines = renderVisualPlusReceipt(compact).map(stripAnsi)
+
+    expect(fullLines).toContain('Journal: internal-journal-1')
+    expect(compactLines).toContain('Recovery incomplete')
+    expect(compactLines).toContain('Restored: none')
+    expect(compactLines).toContain('Unrecovered: package.json')
+    expect(compactLines).toContain('Journal: retained')
+    expect(compactLines).toContain('External effects: install tree may have changed')
+    expect(compactLines.join('\n')).not.toContain('internal-journal-1')
   })
 
   it('separates applied physical targets from restored and unrecovered targets', () => {
