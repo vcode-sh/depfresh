@@ -106,6 +106,7 @@ interface CheckPayload {
 
 describe('command-level check apply integration', () => {
   const roots: string[] = []
+  let checkCommand: typeof import('./index').check | undefined
   let registry: Server | undefined
   let registryUrl = ''
   let originalHome: string | undefined
@@ -133,6 +134,8 @@ describe('command-level check apply integration', () => {
     ]) {
       expect(vi.isMockFunction(productionFunction)).toBe(false)
     }
+
+    ;({ check: checkCommand } = await import('./index'))
   })
 
   beforeEach(async () => {
@@ -595,8 +598,8 @@ await applyPlanWithRuntime(plan, { cwd: ${JSON.stringify(fixture.root)} }, autho
     vi.spyOn(console, 'log').mockImplementation((...values) => lines.push(values.join(' ')))
     vi.spyOn(console, 'warn').mockImplementation((...values) => lines.push(values.join(' ')))
     vi.spyOn(console, 'error').mockImplementation((...values) => lines.push(values.join(' ')))
-    vi.resetModules()
-    const { check } = await import('./index')
+    const check = checkCommand
+    if (!check) throw new Error('Check command was not initialized')
     const options: depfreshOptions = {
       ...(DEFAULT_OPTIONS as depfreshOptions),
       cwd,
