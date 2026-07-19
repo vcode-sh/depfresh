@@ -463,20 +463,20 @@ overflow, hidden relationships, or color-only meaning.
   JSON/YAML templates with only the selected version substitutions. The success journey must prove
   production-written bytes equal this oracle before its hashes are reused for variant comparison.
 
-- [ ] **Step 1: Write fixture invariant RED tests**
+- [x] **Step 1: Write fixture invariant RED tests**
 
 Require the complete contract above. Independently assert the production-discovered
 `64 manifests + 2 catalogs = 66` inventories, all exact counts and relationships, and that the
 complete `git ls-files -z --cached --full-name` output exceeds 1,250,160 bytes while only 14
 selected physical targets participate in planning/apply VCS evidence.
 
-- [ ] **Step 2: Run fixture RED tests**
+- [x] **Step 2: Run fixture RED tests**
 
 Run: `pnpm exec vitest run test/visual-plus-fixture.test.ts`
 
 Expected: FAIL because the fixture builder does not exist.
 
-- [ ] **Step 3: Generate deterministic repository and registry evidence**
+- [x] **Step 3: Generate deterministic repository and registry evidence**
 
 Create 64 manifests, two catalog pseudo-packages, and enough physically present, committed, clean,
 harmless tracked filler paths to cross the old buffer. Keep every ASCII path component at most 240
@@ -495,7 +495,7 @@ range and registry semver `17.0.0` cannot produce `^17`. Align the synthetic tes
 focused insight assertions with these canonical production bytes. Keep
 `nanoid ^5.1.16 -> ^6.0.0` unchanged.
 
-- [ ] **Step 4: Add success and safety variants**
+- [x] **Step 4: Add success and safety variants**
 
 Success keeps all exact target VCS evidence available. Safety uses the child-local, test-harness
 Git wrapper defined above to make the exact apply-time target probe unavailable before replacement,
@@ -503,7 +503,7 @@ without mutating Git. Both variants use identical selected changes so output com
 meaningful. Assert root/cache/registry cleanup and no leaked process/socket on success and setup or
 execution failure.
 
-- [ ] **Step 5: Run fixture GREEN invariants**
+- [x] **Step 5: Run fixture GREEN invariants**
 
 Expected: all exact counts, ownership/relationship membership, isolation, cleanup, Git state, and
 byte boundaries pass on macOS and Linux with stable code-unit ordering. Repeat the invariant suite

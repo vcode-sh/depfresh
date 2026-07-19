@@ -175,3 +175,16 @@ strictly ASCII while color strips to identical semantic bytes. Review-driven RED
 combined hierarchy and weak ASCII-bar assertions. The final broad gate passed 11 files and 275
 tests with typecheck, Biome, diff checks, and independent spec plus quality reviews at C0/I0/M0.
 Task 3 deterministic repository/registry fixture is next.
+Plan 035 Task 3: complete in 6a1afd6 after the reviewed fixture-contract amendments in 516db17 and
+0da37a0 and canonical resolver alignment in 63ed526. The disposable fixture now derives 64 manifests
+plus two named pnpm catalog inventories, 616 declared/612 eligible/76 selected operations, 15 owner
+groups over 14 targets, 18 repeated identities/39 occurrences, and exact 3/37/36 severity through
+the real loader, resolver, legacy plan, run model, and Visual+ insights. A fixed 6,000-file tracked
+boundary exceeds the former Git buffer by more than 10%. Built-CLI success applies all 76 operations
+to independent byte oracles; the child-local occurrence-2 Git seam safety-blocks all 14 targets with
+14 structural `replacementAttempted=false` facts, unchanged bytes, counter 2, clean Git, and no
+residue. HOME/cache/store/Git state, registry bytes, processes, sockets, and cleanup remain bounded
+and isolated under hostile inherited environment tests. Exact Node 24.15.0 fixture/insight gates
+passed 53/53 tests; build, typecheck, focused Biome, selected smoke, and the full 36-check practical
+smoke passed. Final independent spec and quality reviews reported C0/I0/M0. Task 4 real PTY and
+durable fallback proof is next.
