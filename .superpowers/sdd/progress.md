@@ -331,3 +331,14 @@ CLI SHA-256. The complete no-retry suite passed 162 files/2,177 tests, release g
 and schemas, typecheck, build, full zero-warning Biome, and diff checks passed. Two independent final
 reviews reported C0/I0/M0 after direct Darwin and Linux procps probes. A new exact hosted all-job
 success remains mandatory before tagging.
+Exact `main` run `29690064055` at `c091c8d7fe87d35b9beeb1149ad0ccc56195cc20` passed Ubuntu source
+and installed Visual+, full Test, Lint, Build, and Distribution Smoke. macOS source passed 45/46 and
+again failed the first 40-column success journey before installed/reduced-motion proof. The stack now
+identifies CLI evidence registration, but the generic error conflates parent/group/start axes, so no
+identity rule is relaxed. A diagnostic-only TDD slice adds fixed role/axis combination labels while
+preserving all comparisons and ambiguity effects. RED failed 6/6 on the old signature; exact Node
+24.15.0 GREEN passed 9/9 fixed-label/privacy cases and unchanged Visual+ passed 46/46 without retry.
+The labels contain no process values, paths, environment, timestamps, or raw child output. The
+complete no-retry suite passed 163 files/2,186 tests; schemas, typecheck, full zero-warning Biome,
+and diff checks passed. Two independent reviews closed at C0/I0/M0 after one privacy-wording
+correction. A new exact hosted run remains required; Task 3 and tagging stay blocked.

@@ -182,3 +182,24 @@ passed 162 files and 2,177 tests; release gates passed 103/103; schemas, typeche
 zero-warning Biome, and diff checks passed. Two independent final reviews reported C0/I0/M0 after
 direct Darwin and Linux procps same-user probes. This is local correction evidence only; a new exact
 hosted all-job success remains required before tagging.
+
+## CLI identity-axis isolation
+
+Exact `main` run `29690064055` at `c091c8d7fe87d35b9beeb1149ad0ccc56195cc20` passed the complete
+Ubuntu source/installed lane, full Test, Lint, Build, and Distribution Smoke. The macOS source suite
+passed 45/46 tests and again failed the first 40-column success journey. Its installed replay and
+reduced-motion step were skipped. The primary stack now points to CLI evidence registration rather
+than wrapper registration; the cleanup ambiguity remains consequential.
+
+The generic registration error combines parent, group, and start mismatches. The hosted report does
+not retain the compared tuples, so it cannot support an identity-rule change. A diagnostic-only TDD
+slice assigns fixed `wrapper`/`cli` roles and exact allowlisted parent/group/start combination labels
+without changing any comparison, ambiguity flag, matching, signaling, cleanup, or survivor rule.
+RED failed 6/6 against the prior generic signature. Exact Node `24.15.0` GREEN passed all 9
+fixed-label/privacy cases, the unchanged Visual+ suite passed 46/46 with retries disabled, typecheck
+passed, focused zero-warning Biome passed, and diff checks passed. Exact-message tests prove the
+diagnostics contain no PID, parent PID, process-group ID, start timestamp, path, environment value,
+or raw child output value. This is local diagnostic evidence only. The complete no-retry suite
+passed 163 files and 2,186 tests;
+schemas, typecheck, full zero-warning Biome, and diff checks passed. Two independent reviews reported
+C0/I0/M0 after one privacy-wording correction. A new exact hosted run remains mandatory.

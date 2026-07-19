@@ -23,6 +23,16 @@ const CONFIG_LIMIT = 256 * 1024
 const SIDECAR_LIMIT = 4 * 1024
 const TEST_FAULTS = new Set(['start-evidence-failure', 'malformed-start', 'malformed-completion'])
 const CLEANUP_FAULTS = new Set(['observation-ambiguity', 'signaling-failure', 'survivor'])
+const EVIDENCE_ROLES = new Set(['cli', 'unclassified', 'wrapper'])
+const IDENTITY_CHANGE_DIAGNOSTICS = new Map([
+  ['group', 'group-only'],
+  ['parent', 'parent-only'],
+  ['group-parent', 'parent-group'],
+  ['group-parent-start', 'parent-group-start'],
+  ['parent-start', 'parent-start'],
+  ['start', 'start-only'],
+  ['group-start', 'group-start'],
+])
 const KNOWN_SIGNALS = new Set(Object.keys(osConstants.signals))
 const START_KEYS = [
   'cliGroup',
@@ -397,12 +407,12 @@ export async function runInPty(options) {
     }
     requireObservedIdentity(observed, captured.pid, { group: captured.pid })
     requireObservedIdentity(observed, scriptPid)
-    registerEvidenceIdentity(observed, start.wrapperPid, {
+    registerEvidenceIdentity(observed, 'wrapper', start.wrapperPid, {
       parent: start.wrapperParent,
       group: start.wrapperGroup,
       start: start.wrapperStart,
     })
-    registerEvidenceIdentity(observed, start.cliPid, {
+    registerEvidenceIdentity(observed, 'cli', start.cliPid, {
       parent: start.cliParent,
       group: start.cliGroup,
       start: start.cliStart,
@@ -833,18 +843,37 @@ function requireExactKeys(value, expected, label) {
   }
 }
 
-export function registerEvidenceIdentity(observed, pid, identity) {
+export function registerEvidenceIdentity(observed, roleOrPid, pidOrIdentity, maybeIdentity) {
+  const { identity, pid, role } = normalizeEvidenceRegistration(
+    roleOrPid,
+    pidOrIdentity,
+    maybeIdentity,
+  )
   validatePid(pid)
   validateProcessIdentity(identity)
   const previous = observed.get(pid)
-  if (
-    previous &&
-    (!sameProcessIdentity(previous, identity) || previous.parent !== identity.parent)
-  ) {
+  const diagnostic = previous && identityChangeDiagnostic(previous, identity)
+  if (diagnostic) {
     observed.ambiguous = true
-    throw new Error('PTY process identity evidence changed')
+    throw new Error(`PTY process identity evidence changed [${role}-${diagnostic}]`)
   }
   observed.set(pid, identity)
+}
+
+function normalizeEvidenceRegistration(roleOrPid, pidOrIdentity, maybeIdentity) {
+  if (typeof roleOrPid === 'string') {
+    if (!EVIDENCE_ROLES.has(roleOrPid)) throw new Error('PTY evidence role is not recognized')
+    return { identity: maybeIdentity, pid: pidOrIdentity, role: roleOrPid }
+  }
+  return { identity: pidOrIdentity, pid: roleOrPid, role: 'unclassified' }
+}
+
+function identityChangeDiagnostic(previous, identity) {
+  const axes = []
+  if (previous.parent !== identity.parent) axes.push('parent')
+  if (previous.group !== identity.group) axes.push('group')
+  if (previous.start !== identity.start) axes.push('start')
+  return IDENTITY_CHANGE_DIAGNOSTICS.get(axes.sort().join('-'))
 }
 
 export function observeIdentity(observed, pid, identity) {
