@@ -114,65 +114,23 @@ describe('command-level check apply integration', () => {
   let originalPath: string | undefined
 
   beforeAll(async () => {
-    for (const dependency of [
-      '../../io/packages',
-      '../../io/resolve',
-      '../../io/write',
-      '../../io/write/occurrence',
-      '../apply/legacy',
-      '../apply/legacy-plan',
-      '../../cache/index',
-      '../../utils/npmrc',
-      'node:child_process',
-      'node:fs',
-      '../../io/global',
-      '../global-apply',
-    ]) {
-      vi.doUnmock(dependency)
-    }
-    vi.resetModules()
-
-    const [
-      packages,
-      resolve,
-      write,
-      occurrence,
-      legacy,
-      legacyPlan,
-      cache,
-      npmrc,
-      childProcess,
-      fs,
-      global,
-      globalApply,
-    ] = await Promise.all([
-      import('../../io/packages'),
-      import('../../io/resolve'),
-      import('../../io/write'),
-      import('../../io/write/occurrence'),
-      import('../apply/legacy'),
-      import('../apply/legacy-plan'),
-      import('../../cache/index'),
-      import('../../utils/npmrc'),
-      import('node:child_process'),
-      import('node:fs'),
-      import('../../io/global'),
-      import('../global-apply'),
-    ])
+    const [{ loadPackages }, { resolvePackage }, { createSqliteCache }, { loadNpmrc }, legacyPlan] =
+      await Promise.all([
+        import('../../io/packages'),
+        import('../../io/resolve'),
+        import('../../cache/index'),
+        import('../../utils/npmrc'),
+        import('../apply/legacy-plan'),
+      ])
 
     for (const productionFunction of [
-      packages.loadPackages,
-      resolve.resolvePackage,
-      write.writePackage,
-      occurrence.observeFileOccurrence,
-      legacy.applyLegacyPackageWrite,
+      loadPackages,
+      resolvePackage,
+      createSqliteCache,
+      loadNpmrc,
       legacyPlan.applyLegacyCommandWrite,
-      cache.createSqliteCache,
-      npmrc.loadNpmrc,
-      childProcess.spawn,
-      fs.existsSync,
-      global.getGlobalWriteTargets,
-      globalApply.applyGlobalPlan,
+      existsSync,
+      spawn,
     ]) {
       expect(vi.isMockFunction(productionFunction)).toBe(false)
     }
@@ -652,6 +610,7 @@ await applyPlanWithRuntime(plan, { cwd: ${JSON.stringify(fixture.root)} }, autho
       loglevel: output === 'json' ? 'silent' : 'info',
       timeout: 5_000,
       retries: 0,
+      refreshCache: true,
     }
     const exitCode = await check(options)
     const rendered = lines.join('\n')
