@@ -30,6 +30,7 @@ import {
   observeIdentitySnapshot,
   processScanArguments,
   readPtyTimeoutPhase,
+  readPtyTranscriptFailurePhase,
   registerEvidenceIdentity,
   runInPty,
   sameProcessIdentity,
@@ -381,6 +382,11 @@ describe('Visual+ PTY adapter', () => {
       expect(result.rawTerminal).toEqual(Buffer.from('line\r\n'))
       expect(result.transcript).toBe('line\n')
       expect(result.controls).toMatchObject({ carriageReturn: 0, crlf: 1 })
+      if (adapter.family === 'bsd') {
+        expect(result.outerTransportDoubleCrlf).toBe(false)
+      } else {
+        expect(Object.hasOwn(result, 'outerTransportDoubleCrlf')).toBe(false)
+      }
     }
 
     for (const fault of ['start-readiness-missing', 'start-readiness-malformed'] as const) {
@@ -397,6 +403,56 @@ describe('Visual+ PTY adapter', () => {
     }
 
     if (adapter.family === 'bsd') {
+      const postProofOutputProcessing = await runInPty({
+        cliPath: process.execPath,
+        args: ['-e', 'process.stdout.write("line\\n")'],
+        columns: 40,
+        env: {},
+        fault: 'outer-post-proof-output-processing',
+        input: Buffer.alloc(0),
+      })
+      expect(postProofOutputProcessing.outerTransportDoubleCrlf).toBe(true)
+      expect(hasDoubleCarriageReturnLineFeed(postProofOutputProcessing.rawTerminal)).toBe(false)
+      expect(postProofOutputProcessing.rawTerminal).toEqual(Buffer.from('line\r\n'))
+
+      for (const [fault, message] of [
+        ['typescript-missing', 'PTY transcript evidence is invalid'],
+        ['typescript-replaced', 'PTY transcript evidence is invalid'],
+        ['typescript-symlink', 'PTY transcript evidence is invalid'],
+        ['typescript-wrong-mode', 'PTY transcript evidence is invalid'],
+        ['typescript-unstable', 'PTY transcript evidence is invalid'],
+      ] as const) {
+        await expect(
+          runInPty({
+            cliPath: process.execPath,
+            args: ['-e', 'process.stdout.write("line\\n")'],
+            columns: 40,
+            env: {},
+            fault,
+            input: Buffer.alloc(0),
+            outputLimit: 512,
+          }),
+        ).rejects.toThrow(new RegExp(`^${message}$`, 'u'))
+      }
+
+      let transcriptOversize: unknown
+      try {
+        await runInPty({
+          cliPath: process.execPath,
+          args: ['-e', 'process.stdout.write("line\\n")'],
+          columns: 40,
+          env: {},
+          fault: 'typescript-oversize',
+          input: Buffer.alloc(0),
+          outputLimit: 512,
+        })
+      } catch (error) {
+        transcriptOversize = error
+      }
+      expect(transcriptOversize).toBeInstanceOf(Error)
+      expect((transcriptOversize as Error).message).toBe('PTY transcript exceeded output limit')
+      expect(readPtyTranscriptFailurePhase(transcriptOversize)).toBe('after-wrapper-readiness')
+
       for (const fault of [
         'outer-transport-missing',
         'outer-transport-malformed',
@@ -471,6 +527,16 @@ describe('Visual+ PTY adapter', () => {
           input: Buffer.alloc(0),
         }),
       ).rejects.toThrow(/^PTY outer transport fault is not applicable$/u)
+      await expect(
+        runInPty({
+          cliPath: process.execPath,
+          args: ['-e', 'process.exit(0)'],
+          columns: 40,
+          env: {},
+          fault: 'typescript-missing',
+          input: Buffer.alloc(0),
+        }),
+      ).rejects.toThrow(/^PTY transcript fault is not applicable$/u)
     }
   })
 

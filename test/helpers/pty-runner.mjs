@@ -4,13 +4,17 @@ import {
   chmodSync,
   closeSync,
   constants,
+  fstatSync,
+  ftruncateSync,
   lstatSync,
   mkdtempSync,
   openSync,
   readFileSync,
+  readSync,
   realpathSync,
   rmSync,
   statSync,
+  symlinkSync,
   writeSync,
 } from 'node:fs'
 import { constants as osConstants, tmpdir } from 'node:os'
@@ -24,6 +28,8 @@ const SIDECAR_LIMIT = 4 * 1024
 const TIMEOUT_READINESS_ENV = 'DEPFRESH_PTY_TIMEOUT_READINESS_PATH'
 const TIMEOUT_READINESS_SIDECAR = 'timeout-readiness.pid'
 const TIMEOUT_PHASE = Symbol('PTY timeout phase')
+const TRANSCRIPT_FAILURE_PHASE = Symbol('PTY transcript failure phase')
+const TRANSCRIPT_NAME = 'typescript.raw'
 const TEST_FAULTS = new Set([
   'start-evidence-failure',
   'malformed-start',
@@ -40,6 +46,13 @@ const TEST_FAULTS = new Set([
   'wrapper-ready-marker-malformed',
   'wrapper-ready-marker-nonoverwriting',
   'outer-output-processing',
+  'outer-post-proof-output-processing',
+  'typescript-missing',
+  'typescript-oversize',
+  'typescript-replaced',
+  'typescript-symlink',
+  'typescript-unstable',
+  'typescript-wrong-mode',
 ])
 const OUTER_TRANSPORT_FAULTS = new Set([
   'outer-transport-missing',
@@ -52,8 +65,17 @@ const OUTER_TRANSPORT_FAULTS = new Set([
   'wrapper-ready-marker-malformed',
   'wrapper-ready-marker-nonoverwriting',
   'outer-output-processing',
+  'outer-post-proof-output-processing',
 ])
 const CLEANUP_FAULTS = new Set(['observation-ambiguity', 'signaling-failure', 'survivor'])
+const TRANSCRIPT_FAULTS = new Set([
+  'typescript-missing',
+  'typescript-oversize',
+  'typescript-replaced',
+  'typescript-symlink',
+  'typescript-unstable',
+  'typescript-wrong-mode',
+])
 const EVIDENCE_ROLES = new Set(['cli', 'unclassified', 'wrapper'])
 const IDENTITY_CHANGE_DIAGNOSTICS = new Map([
   ['group', 'group-only'],
@@ -117,7 +139,7 @@ proc token_count {tokens expected} {
   }
   return $count
 }
-spawn -noecho /usr/bin/script -q -e /dev/null ./run
+spawn -noecho /usr/bin/script -q -e -F ./${TRANSCRIPT_NAME} ./run
 fconfigure $spawn_id -translation binary -encoding binary
 set channel [open "./script-pid" {WRONLY CREAT EXCL} 0600]
 puts $channel [exp_pid]
@@ -179,6 +201,11 @@ if {[info exists spawn_out(slave,name)]} {
         puts $release_channel "{\\"records\\":1,\\"evidenceClosed\\":true}"
       }
       close $release_channel
+      if {$transport_fault eq "outer-post-proof-output-processing"} {
+        if {[catch {exec /bin/stty opost onlcr < $slave}]} {
+          exit 123
+        }
+      }
       if {$transport_fault eq "outer-release-pre-spawn-signal"} {
         set wrapper_channel [open "./wrapper-ready.json" r]
         set wrapper_record [read $wrapper_channel]
@@ -480,6 +507,11 @@ export function readPtyTimeoutPhase(error) {
   return error[TIMEOUT_PHASE]
 }
 
+export function readPtyTranscriptFailurePhase(error) {
+  if (!(error instanceof Error)) return undefined
+  return error[TRANSCRIPT_FAILURE_PHASE]
+}
+
 function projectLine(line) {
   return line
     .filter((cell) => cell !== null)
@@ -541,8 +573,12 @@ export async function runInPty(options) {
   if (adapter.family !== 'bsd' && OUTER_TRANSPORT_FAULTS.has(fault)) {
     throw new Error('PTY outer transport fault is not applicable')
   }
+  if (adapter.family !== 'bsd' && TRANSCRIPT_FAULTS.has(fault)) {
+    throw new Error('PTY transcript fault is not applicable')
+  }
   const directory = mkdtempSync(join(tmpdir(), 'depfresh-pty-'))
   chmodSync(directory, 0o700)
+  let transcriptEvidence
   let primaryError
   let outcome
   const observed = new Map()
@@ -556,6 +592,9 @@ export async function runInPty(options) {
   observed.provisionalGroupChanges = new Map()
   observed.reappeared = new Set()
   try {
+    if (adapter.family === 'bsd') {
+      transcriptEvidence = createPrivateTranscript(directory)
+    }
     if (timeoutAfterReadyMs !== undefined && Object.hasOwn(env, TIMEOUT_READINESS_ENV)) {
       throw new Error('PTY timeout readiness environment is reserved')
     }
@@ -597,6 +636,8 @@ export async function runInPty(options) {
       env: minimalOuterEnvironment(),
       directory,
       observed,
+      transcriptEvidence,
+      transcriptFault: fault,
     })
     const wrapperReady = requireWrapperReadyEvidence(directory)
     if (adapter.family === 'bsd') requireOuterTransportEvidence(directory)
@@ -634,10 +675,20 @@ export async function runInPty(options) {
       start: start.cliStart,
     })
     await confirmIdentitiesGone(observed)
-    const normalized = normalizeTerminalCapture(captured.stdout, { columns, limit: outputLimit })
+    if (adapter.family === 'bsd') {
+      applyClosedTranscriptFault(transcriptEvidence, fault)
+    }
+    const rawTerminal =
+      adapter.family === 'bsd'
+        ? readValidatedTranscript(transcriptEvidence, outputLimit, fault)
+        : captured.stdout
+    const normalized = normalizeTerminalCapture(rawTerminal, { columns, limit: outputLimit })
     outcome = Object.freeze({
       adapter,
-      rawTerminal: captured.stdout,
+      rawTerminal,
+      ...(adapter.family === 'bsd'
+        ? { outerTransportDoubleCrlf: hasDoubleCarriageReturnLineFeed(captured.stdout) }
+        : {}),
       diagnostics: captured.stderr,
       transcript: normalized.transcript,
       controls: normalized.controls,
@@ -661,6 +712,13 @@ export async function runInPty(options) {
   } catch (error) {
     cleanupError = error
   } finally {
+    if (transcriptEvidence) {
+      try {
+        closeSync(transcriptEvidence.descriptor)
+      } catch {
+        cleanupError ??= new Error('PTY transcript evidence is invalid')
+      }
+    }
     rmSync(directory, { recursive: true, force: true })
   }
   if (primaryError && cleanupError) {
@@ -817,6 +875,7 @@ function captureBounded(path, args, options) {
     let hardTimer
     let readyTimer
     let observer
+    let transcriptOversizeInjected = false
     const fail = async (error) => {
       if (settled) return
       settled = true
@@ -836,6 +895,40 @@ function captureBounded(path, args, options) {
     }
     const observe = () => {
       const current = observeProcessTree(child.pid, options.directory, options.observed)
+      if (!settled && options.transcriptEvidence) {
+        if (options.transcriptFault === 'typescript-oversize' && !transcriptOversizeInjected) {
+          let wrapperReady = false
+          try {
+            requireWrapperReadyEvidence(options.directory)
+            wrapperReady = true
+          } catch {}
+          if (wrapperReady) {
+            try {
+              mutatePrivateTranscript(options.transcriptEvidence, (descriptor) => {
+                ftruncateSync(descriptor, options.outputLimit + 1)
+              })
+              transcriptOversizeInjected = true
+            } catch {
+              void fail(new Error('PTY transcript evidence is invalid'))
+              return
+            }
+          }
+        }
+        try {
+          if (fstatSync(options.transcriptEvidence.descriptor).size > options.outputLimit) {
+            void fail(
+              createTranscriptFailure(
+                'PTY transcript exceeded output limit',
+                transcriptOversizeInjected ? 'after-wrapper-readiness' : undefined,
+              ),
+            )
+            return
+          }
+        } catch {
+          void fail(new Error('PTY transcript evidence is invalid'))
+          return
+        }
+      }
       if (
         settled ||
         options.timeoutAfterReadyMs === undefined ||
@@ -889,6 +982,174 @@ function createPtyTimeoutError(phase) {
   const error = new Error('PTY capture timed out')
   Object.defineProperty(error, TIMEOUT_PHASE, { value: phase })
   return error
+}
+
+function createTranscriptFailure(message, phase) {
+  const error = new Error(message)
+  if (phase !== undefined) Object.defineProperty(error, TRANSCRIPT_FAILURE_PHASE, { value: phase })
+  return error
+}
+
+function createPrivateTranscript(directory) {
+  const path = join(directory, TRANSCRIPT_NAME)
+  let descriptor
+  try {
+    descriptor = openSync(
+      path,
+      constants.O_CREAT | constants.O_EXCL | constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0),
+      0o600,
+    )
+    const stats = fstatSync(descriptor, { bigint: true })
+    if (
+      !stats.isFile() ||
+      (stats.mode & 0o777n) !== 0o600n ||
+      stats.nlink !== 1n ||
+      stats.size !== 0n
+    ) {
+      throw new Error()
+    }
+    return Object.freeze({
+      descriptor,
+      dev: stats.dev,
+      ino: stats.ino,
+      mode: stats.mode & 0o777n,
+      nlink: stats.nlink,
+      path,
+    })
+  } catch {
+    if (descriptor !== undefined) {
+      try {
+        closeSync(descriptor)
+      } catch {}
+    }
+    throw new Error('PTY transcript evidence is invalid')
+  }
+}
+
+function applyClosedTranscriptFault(evidence, fault) {
+  if (fault === 'typescript-missing') rmSync(evidence.path, { force: true })
+  else if (fault === 'typescript-replaced') {
+    rmSync(evidence.path, { force: true })
+    writeExclusive(evidence.path, Buffer.alloc(0), 0o600)
+  } else if (fault === 'typescript-symlink') {
+    rmSync(evidence.path, { force: true })
+    symlinkSync('config.json', evidence.path)
+  } else if (fault === 'typescript-wrong-mode') chmodSync(evidence.path, 0o644)
+}
+
+function readValidatedTranscript(evidence, limit, fault) {
+  let beforeDescriptor
+  let beforePath
+  try {
+    beforeDescriptor = fstatSync(evidence.descriptor, { bigint: true })
+    beforePath = lstatSync(evidence.path, { bigint: true })
+  } catch {
+    throw new Error('PTY transcript evidence is invalid')
+  }
+  if (
+    !(
+      samePrivateTranscript(evidence, beforeDescriptor, beforePath) &&
+      sameTranscriptSnapshot(beforeDescriptor, beforePath)
+    )
+  ) {
+    throw new Error('PTY transcript evidence is invalid')
+  }
+  if (beforeDescriptor.size > BigInt(limit)) {
+    throw new Error('PTY transcript exceeded output limit')
+  }
+  if (fault === 'typescript-unstable') {
+    try {
+      if (beforeDescriptor.size < 1n) throw new Error()
+      const changed = Buffer.alloc(1)
+      if (readSync(evidence.descriptor, changed, 0, 1, 0) !== 1) throw new Error()
+      changed[0] ^= 1
+      mutatePrivateTranscript(evidence, (descriptor) => {
+        if (writeSync(descriptor, changed, 0, 1, 0) !== 1) throw new Error()
+      })
+    } catch {
+      throw new Error('PTY transcript evidence is invalid')
+    }
+  }
+  const bytes = Buffer.alloc(Number(beforeDescriptor.size))
+  let read = 0
+  try {
+    while (read < bytes.byteLength) {
+      const length = readSync(evidence.descriptor, bytes, read, bytes.byteLength - read, read)
+      if (length === 0) throw new Error()
+      read += length
+    }
+    const afterDescriptor = fstatSync(evidence.descriptor, { bigint: true })
+    const afterPath = lstatSync(evidence.path, { bigint: true })
+    if (
+      !(
+        samePrivateTranscript(evidence, afterDescriptor, afterPath) &&
+        sameTranscriptSnapshot(afterDescriptor, afterPath)
+      ) ||
+      afterDescriptor.size !== beforeDescriptor.size ||
+      afterDescriptor.mtimeNs !== beforeDescriptor.mtimeNs ||
+      afterDescriptor.ctimeNs !== beforeDescriptor.ctimeNs ||
+      afterPath.size !== beforePath.size ||
+      afterPath.mtimeNs !== beforePath.mtimeNs ||
+      afterPath.ctimeNs !== beforePath.ctimeNs
+    ) {
+      throw new Error()
+    }
+  } catch {
+    throw new Error('PTY transcript evidence is invalid')
+  }
+  return bytes
+}
+
+function samePrivateTranscript(evidence, descriptorStats, pathStats) {
+  return (
+    descriptorStats.isFile() &&
+    pathStats.isFile() &&
+    !pathStats.isSymbolicLink() &&
+    descriptorStats.dev === evidence.dev &&
+    descriptorStats.ino === evidence.ino &&
+    pathStats.dev === evidence.dev &&
+    pathStats.ino === evidence.ino &&
+    (descriptorStats.mode & 0o777n) === evidence.mode &&
+    (pathStats.mode & 0o777n) === evidence.mode &&
+    descriptorStats.nlink === evidence.nlink &&
+    pathStats.nlink === evidence.nlink &&
+    evidence.mode === 0o600n &&
+    evidence.nlink === 1n
+  )
+}
+
+function sameTranscriptSnapshot(descriptorStats, pathStats) {
+  return (
+    descriptorStats.size === pathStats.size &&
+    descriptorStats.mtimeNs === pathStats.mtimeNs &&
+    descriptorStats.ctimeNs === pathStats.ctimeNs
+  )
+}
+
+function mutatePrivateTranscript(evidence, mutation) {
+  let descriptor
+  let failure
+  try {
+    descriptor = openSync(evidence.path, constants.O_WRONLY | (constants.O_NOFOLLOW ?? 0))
+    const beforeDescriptor = fstatSync(descriptor, { bigint: true })
+    const beforePath = lstatSync(evidence.path, { bigint: true })
+    if (!samePrivateTranscript(evidence, beforeDescriptor, beforePath)) throw new Error()
+    mutation(descriptor)
+    const afterDescriptor = fstatSync(descriptor, { bigint: true })
+    const afterPath = lstatSync(evidence.path, { bigint: true })
+    if (!samePrivateTranscript(evidence, afterDescriptor, afterPath)) throw new Error()
+  } catch {
+    failure = new Error('PTY transcript evidence is invalid')
+  } finally {
+    if (descriptor !== undefined) {
+      try {
+        closeSync(descriptor)
+      } catch {
+        failure ??= new Error('PTY transcript evidence is invalid')
+      }
+    }
+  }
+  if (failure) throw failure
 }
 
 async function cleanupObserved(observed) {
