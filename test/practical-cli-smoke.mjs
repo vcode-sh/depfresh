@@ -11,17 +11,27 @@ import {
   readdirSync,
   readFileSync,
   realpathSync,
+  rmSync,
   statSync,
   writeFileSync,
 } from 'node:fs'
 import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
-import { delimiter, join, relative } from 'node:path'
+import { delimiter, dirname, join, relative } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { createVisualPlusFixture } from './helpers/visual-plus-fixture.mjs'
 
 const CHECK_SELECTOR = '--check'
 const PIPE_RECEIPT_CHECK = 'piped write receipt stays complete and ordered on stdout'
 const COMMAND_TRANSACTION_CHECK = 'command transaction preflights every recursive target'
-const selectableChecks = new Set([PIPE_RECEIPT_CHECK, COMMAND_TRANSACTION_CHECK])
+const VISUAL_PLUS_FIXTURE_CHECK = 'Visual Plus fixture applies or blocks all selected targets'
+const CHILD_TIMEOUT_MS = 30_000
+const CHILD_OUTPUT_LIMIT_BYTES = 8 * 1024 * 1024
+const selectableChecks = new Set([
+  PIPE_RECEIPT_CHECK,
+  COMMAND_TRANSACTION_CHECK,
+  VISUAL_PLUS_FIXTURE_CHECK,
+])
 const selectedCheck = parseCheckSelector(process.argv.slice(2))
 
 function parseCheckSelector(args) {
@@ -47,11 +57,39 @@ function parseCheckSelector(args) {
   return selected
 }
 
-const repoRoot = new URL('..', import.meta.url).pathname.replace(/\/$/, '')
+const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)))
 const cliPath = join(repoRoot, 'dist', 'cli.mjs')
 const pkgVersion = JSON.parse(readFileSync(join(repoRoot, 'package.json'), 'utf8')).version
 
 const tmpRoot = mkdtempSync(join(tmpdir(), 'depfresh-practical-'))
+let server
+await using _fixtureCleanup = {
+  async [Symbol.asyncDispose]() {
+    try {
+      if (server?.listening) {
+        await new Promise((resolve, reject) => {
+          let settled = false
+          const finish = (error) => {
+            if (settled) return
+            settled = true
+            clearTimeout(timer)
+            if (error) reject(error)
+            else resolve()
+          }
+          const timer = setTimeout(() => {
+            server.closeAllConnections?.()
+            finish()
+          }, 1_000)
+          server.close((error) => finish(error))
+          server.closeAllConnections?.()
+        })
+      }
+    } finally {
+      rmSync(tmpRoot, { force: true, recursive: true })
+    }
+  },
+}
+
 const homeDir = join(tmpRoot, 'home')
 const binDir = join(tmpRoot, 'bin')
 const singleRepo = join(tmpRoot, 'single-app')
@@ -59,14 +97,27 @@ const workspaceRoot = join(tmpRoot, 'workspace')
 const emptyRepo = join(tmpRoot, 'empty')
 const vcsOverflowBin = join(tmpRoot, 'vcs-overflow-bin')
 const logFile = join(tmpRoot, 'pm.log')
+const gitXdgCache = join(tmpRoot, 'git-xdg-cache')
+const gitXdgConfig = join(tmpRoot, 'git-xdg-config')
+const gitGlobalConfig = join(tmpRoot, 'git-global-config')
 
 const fixtureDirectories = selectedCheck
-  ? [homeDir, binDir, vcsOverflowBin]
-  : [homeDir, binDir, singleRepo, workspaceRoot, emptyRepo, vcsOverflowBin]
+  ? [homeDir, binDir, vcsOverflowBin, gitXdgCache, gitXdgConfig]
+  : [
+      homeDir,
+      binDir,
+      singleRepo,
+      workspaceRoot,
+      emptyRepo,
+      vcsOverflowBin,
+      gitXdgCache,
+      gitXdgConfig,
+    ]
 for (const dir of fixtureDirectories) {
   mkdirSync(dir, { recursive: true })
 }
 writeFileSync(logFile, '', 'utf8')
+writeFileSync(gitGlobalConfig, '', 'utf8')
 
 const registryData = {
   alpha: {
@@ -145,10 +196,46 @@ function getRegistryMetadata(name) {
 }
 
 const requests = []
-const server = createServer((req, res) => {
+const visualPlusRegistryResponses = []
+server = createServer((req, res) => {
+  const rawUrl = req.url ?? ''
+  let requestBodyBytes = 0
+  req.on('data', (chunk) => {
+    requestBodyBytes += chunk.byteLength
+    if (requestBodyBytes > 1_024) req.destroy()
+  })
+  if (Buffer.byteLength(rawUrl) > 4_096) {
+    res.writeHead(414)
+    res.end()
+    return
+  }
+  const declaredBodyBytes = Number(req.headers['content-length'] ?? 0)
+  if (!Number.isSafeInteger(declaredBodyBytes) || declaredBodyBytes > 1_024) {
+    res.writeHead(413)
+    res.end()
+    return
+  }
   const pathname = new URL(req.url ?? '/', 'http://127.0.0.1').pathname.slice(1)
   const packageName = decodeURIComponent(pathname)
   requests.push(packageName)
+
+  if (req.method !== 'GET' && req.method !== 'HEAD') {
+    res.writeHead(405, { allow: 'GET, HEAD' })
+    res.end()
+    return
+  }
+
+  const fixtureBody = visualPlusRegistryResponses
+    .map((responses) => responses.get(packageName))
+    .find((body) => body !== undefined)
+  if (fixtureBody) {
+    res.writeHead(200, {
+      'content-type': 'application/vnd.npm.install-v1+json',
+      'content-length': fixtureBody.byteLength,
+    })
+    res.end(req.method === 'HEAD' ? undefined : fixtureBody)
+    return
+  }
 
   const body = getRegistryMetadata(packageName)
   if (!body) {
@@ -158,10 +245,22 @@ const server = createServer((req, res) => {
   }
 
   res.writeHead(200, { 'content-type': 'application/json' })
-  res.end(JSON.stringify(body))
+  res.end(req.method === 'HEAD' ? undefined : JSON.stringify(body))
 })
 
-await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
+await new Promise((resolve, reject) => {
+  const onError = (error) => {
+    server.off('listening', onListening)
+    reject(error)
+  }
+  const onListening = () => {
+    server.off('error', onError)
+    resolve()
+  }
+  server.once('error', onError)
+  server.once('listening', onListening)
+  server.listen(0, '127.0.0.1')
+})
 const address = server.address()
 assert.ok(address && typeof address !== 'string', 'Failed to start mock registry server')
 const registryUrl = `http://127.0.0.1:${address.port}/`
@@ -240,7 +339,36 @@ function findExecutable(name) {
 }
 
 function runGit(git, cwd, ...args) {
-  execFileSync(git, args, { cwd, stdio: 'ignore' })
+  execFileSync(git, args, {
+    cwd,
+    env: cleanEnv,
+    stdio: 'ignore',
+    timeout: CHILD_TIMEOUT_MS,
+  })
+}
+
+function runGitOutput(git, cwd, ...args) {
+  return execFileSync(git, args, {
+    cwd,
+    env: cleanEnv,
+    timeout: 30_000,
+    maxBuffer: 8 * 1024 * 1024,
+  })
+}
+
+function assertNoApplyResidue(root) {
+  assert.equal(existsSync(join(root, '.depfresh')), false)
+  const residue = []
+  const visit = (directory) => {
+    for (const entry of readdirSync(directory)) {
+      if (entry === '.git' || entry === 'filler') continue
+      const path = join(directory, entry)
+      if (/\.depfresh-.+\.(?:stage|backup)$/u.test(entry)) residue.push(relative(root, path))
+      else if (statSync(path).isDirectory()) visit(path)
+    }
+  }
+  visit(root)
+  assert.deepEqual(residue, [])
 }
 
 function createPmScript(name) {
@@ -260,87 +388,87 @@ appendFileSync(logFile, JSON.stringify({ pm: '${name}', args }) + '\\n')
 const stateFile = logFile + '.${name}.json'
 const initialDependencies = ${JSON.stringify(initialDependencies)}
 const dependencies = existsSync(stateFile)
-  ? JSON.parse(readFileSync(stateFile, 'utf8'))
-  : initialDependencies
+? JSON.parse(readFileSync(stateFile, 'utf8'))
+: initialDependencies
 
 if (args[0] === '--version') {
-  process.stdout.write('${version}\\n')
-  process.exit(0)
+process.stdout.write('${version}\\n')
+process.exit(0)
 }
 
 if ('${name}' === 'npm' && args[0] === 'install' && !args.includes('-g')) {
-  const manifest = JSON.parse(readFileSync('package.json', 'utf8'))
-  const fields = ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies']
-  const root = {}
-  const packages = { '': root }
-  for (const field of fields) {
-    if (!manifest[field]) continue
-    root[field] = manifest[field]
-    for (const [packageName, specifier] of Object.entries(manifest[field])) {
-      packages['node_modules/' + packageName] = {
-        version: String(specifier).replace(/^[~^=]/, ''),
-      }
+const manifest = JSON.parse(readFileSync('package.json', 'utf8'))
+const fields = ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies']
+const root = {}
+const packages = { '': root }
+for (const field of fields) {
+  if (!manifest[field]) continue
+  root[field] = manifest[field]
+  for (const [packageName, specifier] of Object.entries(manifest[field])) {
+    packages['node_modules/' + packageName] = {
+      version: String(specifier).replace(/^[~^=]/, ''),
     }
   }
-  writeFileSync('package-lock.json', JSON.stringify({
-    name: manifest.name,
-    lockfileVersion: 3,
-    packages,
-  }, null, 2) + '\\n')
-  process.exit(0)
+}
+writeFileSync('package-lock.json', JSON.stringify({
+  name: manifest.name,
+  lockfileVersion: 3,
+  packages,
+}, null, 2) + '\\n')
+process.exit(0)
 }
 
 if ('${name}' === 'npm' && args.join(' ') === 'list -g --depth=0 --json --ignore-scripts') {
-  process.stdout.write(JSON.stringify({
-    dependencies: Object.fromEntries(
-      Object.entries(dependencies).map(([packageName, packageVersion]) => [
-        packageName,
-        { version: packageVersion },
-      ]),
-    ),
-  }))
-  process.exit(0)
+process.stdout.write(JSON.stringify({
+  dependencies: Object.fromEntries(
+    Object.entries(dependencies).map(([packageName, packageVersion]) => [
+      packageName,
+      { version: packageVersion },
+    ]),
+  ),
+}))
+process.exit(0)
 }
 
 if ('${name}' === 'pnpm' && args.join(' ') === 'list -g --depth=0 --json --ignore-scripts') {
-  process.stdout.write(JSON.stringify([{
-    dependencies: Object.fromEntries(
-      Object.entries(dependencies).map(([packageName, packageVersion]) => [
-        packageName,
-        { version: packageVersion },
-      ]),
-    ),
-  }]))
-  process.exit(0)
+process.stdout.write(JSON.stringify([{
+  dependencies: Object.fromEntries(
+    Object.entries(dependencies).map(([packageName, packageVersion]) => [
+      packageName,
+      { version: packageVersion },
+    ]),
+  ),
+}]))
+process.exit(0)
 }
 
 if ('${name}' === 'bun' && args.join(' ') === 'pm ls -g') {
-  process.stdout.write(
-    [logFile + '.bun-global', ...Object.entries(dependencies)
-      .map(([packageName, packageVersion], index, entries) =>
-        (index === entries.length - 1 ? '└' : '├') + '── ' + packageName + '@' + packageVersion,
-      )]
-      .join('\\n') + '\\n',
-  )
-  process.exit(0)
+process.stdout.write(
+  [logFile + '.bun-global', ...Object.entries(dependencies)
+    .map(([packageName, packageVersion], index, entries) =>
+      (index === entries.length - 1 ? '└' : '├') + '── ' + packageName + '@' + packageVersion,
+    )]
+    .join('\\n') + '\\n',
+)
+process.exit(0)
 }
 
 if (('${name}' === 'npm' || '${name}' === 'pnpm') && args.join(' ') === 'root -g') {
-  process.stdout.write(logFile + '.${name}-global\\n')
-  process.exit(0)
+process.stdout.write(logFile + '.${name}-global\\n')
+process.exit(0)
 }
 
 const writeCommand =
-  ('${name}' === 'npm' && args[0] === 'install' && args[1] === '-g') ||
-  (('${name}' === 'pnpm' || '${name}' === 'bun') && args[0] === 'add' && args[1] === '-g')
+('${name}' === 'npm' && args[0] === 'install' && args[1] === '-g') ||
+(('${name}' === 'pnpm' || '${name}' === 'bun') && args[0] === 'add' && args[1] === '-g')
 if (writeCommand) {
-  const spec = args.at(-1) ?? ''
-  const separator = spec.lastIndexOf('@')
-  if (separator > 0) {
-    dependencies[spec.slice(0, separator)] = spec.slice(separator + 1)
-    writeFileSync(stateFile, JSON.stringify(dependencies))
-  }
-  process.exit(0)
+const spec = args.at(-1) ?? ''
+const separator = spec.lastIndexOf('@')
+if (separator > 0) {
+  dependencies[spec.slice(0, separator)] = spec.slice(separator + 1)
+  writeFileSync(stateFile, JSON.stringify(dependencies))
+}
+process.exit(0)
 }
 
 process.exit(0)
@@ -394,22 +522,38 @@ function setupFullSmokeFixtures() {
   writeFileSync(join(workspaceRoot, '.npmrc'), `registry=${registryUrl}\n`, 'utf8')
 }
 
-function stripNpmConfigEnvironment(environment) {
+function stripSensitiveEnvironment(environment) {
   return Object.fromEntries(
-    Object.entries(environment).filter(([name]) => !name.toLowerCase().startsWith('npm_config_')),
+    Object.entries(environment).filter(([name]) => {
+      const normalized = name.toLowerCase()
+      return !(normalized.startsWith('npm_config_') || normalized.startsWith('git_'))
+    }),
   )
 }
 
 if (selectedCheck === undefined) {
   assert.equal(
-    stripNpmConfigEnvironment({ NPM_CONFIG_REGISTRY: 'https://registry.npmjs.org/' })
-      .NPM_CONFIG_REGISTRY,
+    stripSensitiveEnvironment({
+      NPM_CONFIG_REGISTRY: 'https://registry.npmjs.org/',
+      GIT_DIR: '/host/git-dir',
+    }).NPM_CONFIG_REGISTRY,
     undefined,
   )
+  assert.equal(stripSensitiveEnvironment({ GIT_DIR: '/host/git-dir' }).GIT_DIR, undefined)
 }
 
 // Package-manager config from the parent would override the fixture-local .npmrc registry.
-const cleanEnv = stripNpmConfigEnvironment(process.env)
+const cleanEnv = Object.freeze({
+  ...stripSensitiveEnvironment(process.env),
+  HOME: homeDir,
+  XDG_CACHE_HOME: gitXdgCache,
+  XDG_CONFIG_HOME: gitXdgConfig,
+  GIT_CONFIG_GLOBAL: gitGlobalConfig,
+  GIT_CONFIG_NOSYSTEM: '1',
+  LC_ALL: 'C',
+  LANG: 'C',
+  TZ: 'UTC',
+})
 
 async function runCli(args, extra = {}) {
   return await new Promise((resolve, reject) => {
@@ -426,33 +570,93 @@ async function runCli(args, extra = {}) {
       ].includes(a),
     )
     const cacheArgs = needsCache && extra.refreshCache !== false ? ['--refresh-cache'] : []
+    const detached = process.platform !== 'win32'
     const child = spawn(process.execPath, [cliPath, ...cacheArgs, ...args], {
       cwd: repoRoot,
       env: {
         ...cleanEnv,
         HOME: homeDir,
-        PATH: `${binDir}:${process.env.PATH}`,
+        PATH: `${binDir}${delimiter}${process.env.PATH}`,
         DEPFRESH_PM_LOG: logFile,
         ...(extra.env ?? {}),
       },
+      detached,
       stdio: 'pipe',
     })
 
     let stdout = ''
     let stderr = ''
+    let outputBytes = 0
+    let terminalError
+    let settled = false
+    let secondaryTimer
+
+    const finish = (error, result) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      if (secondaryTimer) clearTimeout(secondaryTimer)
+      if (error) reject(error)
+      else resolve(result)
+    }
+
+    const killTree = () => {
+      let killed = false
+      if (detached && child.pid !== undefined) {
+        try {
+          process.kill(-child.pid, 'SIGKILL')
+          killed = true
+        } catch {
+          // Fall back to killing the direct child below.
+        }
+      }
+      if (!killed) child.kill('SIGKILL')
+      child.stdin.destroy()
+      child.stdout.destroy()
+      child.stderr.destroy()
+    }
+
+    const terminate = (error) => {
+      if (terminalError !== undefined || settled) return
+      terminalError = error
+      killTree()
+      secondaryTimer = setTimeout(() => finish(error), 1_000)
+    }
+
+    const timer = setTimeout(
+      () => terminate(new Error(`CLI exceeded ${CHILD_TIMEOUT_MS}ms timeout`)),
+      CHILD_TIMEOUT_MS,
+    )
+
+    const append = (stream, chunk) => {
+      if (terminalError !== undefined) return stream
+      const chunkBytes = Buffer.byteLength(chunk)
+      if (outputBytes + chunkBytes > CHILD_OUTPUT_LIMIT_BYTES) {
+        terminate(new Error(`CLI output exceeded ${CHILD_OUTPUT_LIMIT_BYTES} bytes`))
+        return stream
+      }
+      outputBytes += chunkBytes
+      return stream + chunk
+    }
 
     child.stdout.setEncoding('utf8')
     child.stderr.setEncoding('utf8')
 
     child.stdout.on('data', (chunk) => {
-      stdout += chunk
+      stdout = append(stdout, chunk)
     })
     child.stderr.on('data', (chunk) => {
-      stderr += chunk
+      stderr = append(stderr, chunk)
     })
-    child.on('error', reject)
+    child.on('error', (error) => {
+      finish(error)
+    })
     child.on('close', (status) => {
-      resolve({
+      if (terminalError) {
+        finish(terminalError)
+        return
+      }
+      finish(undefined, {
         status,
         stdout,
         stderr,
@@ -792,8 +996,8 @@ const { spawnSync } = require('node:child_process')
 const { writeSync } = require('node:fs')
 const args = process.argv.slice(2)
 if (args.includes('ls-files')) {
-  writeSync(1, Buffer.alloc(2 * 1024 * 1024, 97))
-  process.exit(0)
+writeSync(1, Buffer.alloc(2 * 1024 * 1024, 97))
+process.exit(0)
 }
 const result = spawnSync(${JSON.stringify(git)}, args, { stdio: 'inherit' })
 process.exit(result.status ?? 1)
@@ -873,12 +1077,12 @@ const args = process.argv.slice(2)
 const counter = ${JSON.stringify(counter)}
 let count = existsSync(counter) ? Number(readFileSync(counter, 'utf8')) : 0
 if (args.includes('ls-files')) {
-  count += 1
-  writeFileSync(counter, String(count))
-  if (count === 3) {
-    writeSync(1, Buffer.alloc(2 * 1024 * 1024, 97))
-    process.exit(0)
-  }
+count += 1
+writeFileSync(counter, String(count))
+if (count === 3) {
+  writeSync(1, Buffer.alloc(2 * 1024 * 1024, 97))
+  process.exit(0)
+}
 }
 const result = spawnSync(${JSON.stringify(git)}, args, { stdio: 'inherit' })
 process.exit(result.status ?? 1)
@@ -925,6 +1129,141 @@ process.exit(result.status ?? 1)
     '^1.0.2',
   )
   assert.equal(existsSync(join(successRepo, '.depfresh')), false)
+})
+
+await record(VISUAL_PLUS_FIXTURE_CHECK, async () => {
+  const asOfMs = Date.parse('2026-07-19T00:00:00.000Z')
+  const fixtureRoots = []
+  const createFixture = (name) => {
+    const root = join(tmpRoot, name)
+    mkdirSync(root)
+    fixtureRoots.push(root)
+    const fixture = createVisualPlusFixture(realpathSync(root), { asOfMs, registryUrl })
+    visualPlusRegistryResponses.push(fixture.registry.responses)
+    return fixture
+  }
+  try {
+    const successFixture = createFixture('visual-plus-success')
+    const safetyFixture = createFixture('visual-plus-safety')
+    const commonPlanArgs = ['plan', '--json', '--recursive', '--mode', 'major']
+    const successPlanResult = await runCli(
+      [...commonPlanArgs, '--cwd', successFixture.repository],
+      {
+        env: successFixture.variants.success.environment,
+      },
+    )
+    const safetyPlanResult = await runCli([...commonPlanArgs, '--cwd', safetyFixture.repository], {
+      env: safetyFixture.variants.success.environment,
+    })
+    assert.equal(successPlanResult.status, 1, JSON.stringify(successPlanResult, null, 2))
+    assert.equal(safetyPlanResult.status, 1, JSON.stringify(safetyPlanResult, null, 2))
+    const successPlan = parseJsonStdout(successPlanResult)
+    const safetyPlan = parseJsonStdout(safetyPlanResult)
+    const normalizeOperations = (plan) =>
+      plan.operations.map(({ id, file, path, current, target }) => ({
+        id,
+        file,
+        path,
+        current,
+        target,
+      }))
+    assert.equal(successPlan.operations.length, 76)
+    assert.equal(new Set(successPlan.operations.map((operation) => operation.file)).size, 14)
+    assert.deepEqual(normalizeOperations(safetyPlan), normalizeOperations(successPlan))
+    assert.deepEqual(
+      safetyFixture.targets.map(({ path, beforeHash }) => ({ path, beforeHash })),
+      successFixture.targets.map(({ path, beforeHash }) => ({ path, beforeHash })),
+    )
+
+    for (const fixture of [successFixture, safetyFixture]) {
+      assert.equal(
+        runGitOutput(fixture.git, fixture.repository, 'status', '--porcelain=v1', '-z').length,
+        0,
+      )
+    }
+
+    const writeArgs = ['--recursive', '--write', '--mode', 'major', '--output', 'json']
+    const successResult = await runCli(['--cwd', successFixture.repository, ...writeArgs], {
+      env: successFixture.variants.success.environment,
+    })
+    assert.equal(successResult.status, 0, JSON.stringify(successResult, null, 2))
+    const successPayload = parseJsonStdout(successResult)
+    assert.deepEqual(
+      {
+        planned: successPayload.summary.plannedUpdates,
+        applied: successPayload.summary.appliedUpdates,
+        failed: successPayload.summary.failedWrites,
+        unknown: successPayload.summary.unknownWrites,
+      },
+      { planned: 76, applied: 76, failed: 0, unknown: 0 },
+    )
+    assert.equal(successPayload.writeOutcomes.length, 76)
+    assert.ok(successPayload.writeOutcomes.every((outcome) => outcome.status === 'applied'))
+    for (const target of successFixture.targets) {
+      const actual = readFileSync(join(successFixture.repository, target.path))
+      assert.deepEqual(
+        actual,
+        target.expectedAfterBytes,
+        `Unexpected success bytes: ${target.path}`,
+      )
+      assert.equal(createHash('sha256').update(actual).digest('hex'), target.expectedAfterHash)
+    }
+    assertNoApplyResidue(successFixture.repository)
+    runGit(successFixture.git, successFixture.repository, 'add', '-A')
+    runGit(
+      successFixture.git,
+      successFixture.repository,
+      'commit',
+      '--quiet',
+      '-m',
+      'expected update',
+    )
+    assert.equal(
+      runGitOutput(successFixture.git, successFixture.repository, 'status', '--porcelain=v1', '-z')
+        .length,
+      0,
+    )
+
+    const safetyResult = await runCli(['--cwd', safetyFixture.repository, ...writeArgs], {
+      env: safetyFixture.variants.safety.environment,
+    })
+    assert.equal(safetyResult.status, 2, JSON.stringify(safetyResult, null, 2))
+    const safetyPayload = parseJsonStdout(safetyResult)
+    assert.deepEqual(
+      {
+        planned: safetyPayload.summary.plannedUpdates,
+        applied: safetyPayload.summary.appliedUpdates,
+        failed: safetyPayload.summary.failedWrites,
+        unknown: safetyPayload.summary.unknownWrites,
+      },
+      { planned: 76, applied: 0, failed: 0, unknown: 76 },
+    )
+    assert.equal(readFileSync(safetyFixture.variants.safety.counter, 'utf8'), '2')
+    assert.equal(safetyPayload.writeOutcomes.length, 76)
+    assert.ok(
+      safetyPayload.writeOutcomes.every(
+        (outcome) => outcome.status === 'unknown' && outcome.reason === 'VCS_UNAVAILABLE',
+      ),
+    )
+    assert.equal(
+      new Set(safetyPayload.writeOutcomes.map((outcome) => outcome.occurrence.file)).size,
+      14,
+    )
+    for (const target of safetyFixture.targets) {
+      const actual = readFileSync(join(safetyFixture.repository, target.path))
+      assert.deepEqual(actual, target.beforeBytes, `Safety variant changed bytes: ${target.path}`)
+      assert.equal(createHash('sha256').update(actual).digest('hex'), target.beforeHash)
+    }
+    assertNoApplyResidue(safetyFixture.repository)
+    assert.equal(
+      runGitOutput(safetyFixture.git, safetyFixture.repository, 'status', '--porcelain=v1', '-z')
+        .length,
+      0,
+    )
+  } finally {
+    visualPlusRegistryResponses.length = 0
+    for (const root of fixtureRoots) rmSync(root, { force: true, recursive: true })
+  }
 })
 
 await record('plan and file-only apply', async () => {
@@ -1149,5 +1488,3 @@ console.log(
     2,
   ),
 )
-
-server.close()
