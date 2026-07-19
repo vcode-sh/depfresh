@@ -327,8 +327,8 @@ describe('Visual+ built CLI', () => {
     120_000,
   )
 
-  it('uses durable public fallbacks without losing read-only semantic output', async () => {
-    const fixture = createFixture('fallbacks')
+  it('uses durable direct and slow-pipe fallbacks without losing read-only semantic output', async () => {
+    const fixture = createFixture('direct-fallbacks')
     const direct = await runDirectFixture(fixture, false)
     const slow = await runDirectFixture(fixture, true)
     expect(direct.exitCode).toBe(0)
@@ -342,11 +342,15 @@ describe('Visual+ built CLI', () => {
     assertReadOnlySemantics(direct.stdout.toString('utf8'), fixture)
     assertReadOnlySemantics(slow.stdout.toString('utf8'), fixture)
 
+    assertFixtureBytes(fixture, 'before')
+    assertGitClean(fixture)
+  }, 120_000)
+
+  it('uses durable capable and no-color PTY fallbacks without losing read-only semantic output', async () => {
+    const fixture = createFixture('capable-fallbacks')
     const baseline = await runReadOnlyPty(fixture, {})
     const noColor = await runReadOnlyPty(fixture, { NO_COLOR: '1' })
-    const ci = await runReadOnlyPty(fixture, { CI: '1' })
-    const dumb = await runReadOnlyPty(fixture, { TERM: 'dumb' })
-    for (const result of [baseline, noColor, ci, dumb]) {
+    for (const result of [baseline, noColor]) {
       expect(result.exitCode).toBe(0)
       expect(result.evidence.columns).toBe(80)
       expect(result.finalCursorVisible).toBe(true)
@@ -358,6 +362,22 @@ describe('Visual+ built CLI', () => {
     expect(noColor.controls.sgr).toBe(0)
     expect(noColor.controls.cursorUp).toBeGreaterThan(0)
     expect(noColor.transcript).toBe(baseline.transcript)
+
+    assertFixtureBytes(fixture, 'before')
+    assertGitClean(fixture)
+  }, 120_000)
+
+  it('uses durable CI and dumb constrained PTY fallbacks without losing read-only semantic output', async () => {
+    const fixture = createFixture('constrained-fallbacks')
+    const ci = await runReadOnlyPty(fixture, { CI: '1' })
+    const dumb = await runReadOnlyPty(fixture, { TERM: 'dumb' })
+    for (const result of [ci, dumb]) {
+      expect(result.exitCode).toBe(0)
+      expect(result.evidence.columns).toBe(80)
+      expect(result.finalCursorVisible).toBe(true)
+      expect(result.transcript.endsWith('Exit 0\n')).toBe(true)
+      assertReadOnlySemantics(result.transcript, fixture)
+    }
     for (const constrained of [ci, dumb]) {
       expect(constrained.controls.sgr).toBe(0)
       expect(constrained.controls.carriageReturn).toBe(0)

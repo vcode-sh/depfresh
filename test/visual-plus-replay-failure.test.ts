@@ -58,6 +58,18 @@ describe('installed Visual+ replay failure classification', () => {
       'Visual+ built CLI renders exact success and safety journeys in a 80-column PTY',
       'product-journey',
     ],
+    [
+      'Visual+ built CLI uses durable direct and slow-pipe fallbacks without losing read-only semantic output',
+      'fallback-direct',
+    ],
+    [
+      'Visual+ built CLI uses durable capable and no-color PTY fallbacks without losing read-only semantic output',
+      'fallback-capable-pty',
+    ],
+    [
+      'Visual+ built CLI uses durable CI and dumb constrained PTY fallbacks without losing read-only semantic output',
+      'fallback-constrained-pty',
+    ],
   ])('maps the trusted exact title %s to %s', (fullName, expected) => {
     expect(classifyVisualPlusReplayFailure(report([fullName]))).toBe(expected)
   })
@@ -102,7 +114,7 @@ describe('installed Visual+ replay failure classification', () => {
       classifyVisualPlusReplayFailure(
         report([
           'Visual+ PTY adapter removes a uniquely identified descendant after overflow',
-          'Visual+ built CLI uses durable public fallbacks without losing read-only semantic output',
+          'Visual+ built CLI uses durable direct and slow-pipe fallbacks without losing read-only semantic output',
         ]),
       ),
     ).toBe('multiple-known')

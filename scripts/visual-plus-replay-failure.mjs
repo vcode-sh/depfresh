@@ -69,8 +69,16 @@ const TRUSTED_FAILURE_CATEGORIES = new Map([
     'product-journey',
   ],
   [
-    'Visual+ built CLI uses durable public fallbacks without losing read-only semantic output',
-    'fallback',
+    'Visual+ built CLI uses durable direct and slow-pipe fallbacks without losing read-only semantic output',
+    'fallback-direct',
+  ],
+  [
+    'Visual+ built CLI uses durable capable and no-color PTY fallbacks without losing read-only semantic output',
+    'fallback-capable-pty',
+  ],
+  [
+    'Visual+ built CLI uses durable CI and dumb constrained PTY fallbacks without losing read-only semantic output',
+    'fallback-constrained-pty',
   ],
   [
     'Visual+ built CLI sanitizes hostile owner text before it can become terminal protocol',
