@@ -87,6 +87,59 @@ describe('deriveVisualPlusRunMetadata', () => {
     })
   })
 
+  it.each(['outside the effective root', 'through a symlink escape'])(
+    'does not let a workspace catalog projection %s change a single-package scope',
+    (location) => {
+      const external = mkdtempSync(join(tmpdir(), 'depfresh-visual-plus-catalog-'))
+      const externalCatalog = join(external, 'pnpm-workspace.yaml')
+      writeFileSync(externalCatalog, 'catalog: {}\n')
+      const filepath =
+        location === 'outside the effective root'
+          ? externalCatalog
+          : join(root, 'pnpm-workspace.yaml')
+      if (location === 'through a symlink escape') symlinkSync(externalCatalog, filepath)
+
+      try {
+        expect(
+          deriveVisualPlusRunMetadata(
+            root,
+            [
+              packageMeta(root, 'package.json', 'solo'),
+              {
+                name: 'catalog',
+                type: 'pnpm-workspace',
+                filepath,
+                deps: [],
+                resolved: [],
+                raw: {},
+                indent: '  ',
+              },
+            ],
+            'compact',
+          ).workspaceScope,
+        ).toBe('single-package')
+      } finally {
+        rmSync(external, { recursive: true, force: true })
+      }
+    },
+  )
+
+  it('does not accept a parent-traversing manifest path through canonical fallback', () => {
+    mkdirSync(join(root, 'nested'))
+    const manifest = packageMeta(root, 'package.json', 'solo')
+
+    expect(
+      deriveVisualPlusRunMetadata(
+        root,
+        [{ ...manifest, filepath: `${root}/nested/../package.json` }],
+        'compact',
+      ),
+    ).toMatchObject({
+      repository: { relativePath: '.' },
+      workspaceScope: 'unknown',
+    })
+  })
+
   it('uses a root packageManager declaration with its exact version and source', () => {
     const metadata = deriveVisualPlusRunMetadata(
       root,

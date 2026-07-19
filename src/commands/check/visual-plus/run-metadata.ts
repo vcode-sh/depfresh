@@ -61,8 +61,10 @@ export function deriveVisualPlusRunMetadata(
   const repositoryNames = [
     ...new Set(repositoryPackages.map((entry) => entry.pkg.name).filter((name) => name.length > 0)),
   ].sort()
-  const hasWorkspaceProjection = packages.some((pkg) =>
-    ['pnpm-workspace', 'bun-workspace', 'yarn-workspace'].includes(pkg.type),
+  const hasWorkspaceProjection = packages.some(
+    (pkg) =>
+      ['pnpm-workspace', 'bun-workspace', 'yarn-workspace'].includes(pkg.type) &&
+      resolvePackagePath(root, pkg.filepath).allowed,
   )
   const workspaceScope =
     packageDirectories.size === 0
@@ -87,6 +89,7 @@ export function deriveVisualPlusRunMetadata(
 function resolvePackagePath(root: string, candidate: string): ContainedPathResult {
   const direct = resolveContainedPath(root, candidate)
   if (direct.allowed) return direct
+  if (direct.reason !== 'OUTSIDE_ROOT') return direct
   try {
     const canonicalCandidate = realpathSync.native(
       isAbsolute(candidate) ? candidate : join(root, candidate),
