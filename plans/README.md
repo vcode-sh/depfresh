@@ -63,7 +63,7 @@ may grant side effects. Unknown state is never reported as success.
 | [033](./033-command-level-local-apply.md) | Command-level local apply | P0 | L | 032 | DONE |
 | [034](./034-visual-plus-v2-core.md) | Visual+ v2 core terminal renderer | P1 | L | 033 | DONE |
 | [035](./035-visual-plus-insights-pty-proof.md) | Visual+ insights and PTY proof | P1 | L | 034 | DONE |
-| [036](./036-v2.1.0-release.md) | Publish and prove depfresh 2.1.0 | P1 | M | 035 | TODO |
+| [036](./036-v2.1.0-release.md) | Publish and prove depfresh 2.1.0 | P1 | M | 035 | DONE |
 
 The implementation order through 016 is present locally. Plans 011 through 013 passed their final
 blocker replays, regression fixes, full gates, and independent re-reviews on 2026-07-16. Plans 014
@@ -271,6 +271,15 @@ visualizations plus full built-CLI PTY/fallback proof against the deterministic 
 616-declaration, 76-update, 14-target acceptance fixture. Plan 036 owns the immutable `2.1.0`
 release and public installed-product replay. Full-screen Focus TUI/OpenTUI is explicitly outside
 this program.
+
+Plan 036 completed from release commit `8c4b9dd`, hosted main run `29699269620`, annotated tag
+object `3f8c74b`, and Release run `29699466746`. npm exposes `latest=2.1.0`; the tarball inside
+Actions artifact `8446072086`, direct registry and exact npm-pack downloads, and GitHub asset
+`482646293` are byte-identical. Exact Node `24.15.0` and npm `11.12.1` passed the public Visual+
+replay
+50/50, capabilities/exports/assets verification, and signature audit with no invalid or missing
+results. SLSA provenance binds the exact package digest to the tag, workflow, commit, run, and
+GitHub-hosted builder. Plans 032-036 and the Safe Write/Visual+ v2 program are DONE.
 
 The new queue is strictly ordered. Do not merge Visual+ output before command-level result truth,
 do not begin the `2.1.0` work before public `2.0.2` proof, and do not collapse unknown evidence or

@@ -342,3 +342,18 @@ The labels contain no process values, paths, environment, timestamps, or raw chi
 complete no-retry suite passed 163 files/2,186 tests; schemas, typecheck, full zero-warning Biome,
 and diff checks passed. Two independent reviews closed at C0/I0/M0 after one privacy-wording
 correction. A new exact hosted run remains required; Task 3 and tagging stay blocked.
+Plan 036 final hosted and public closeout: the BSD inner-transcript correction completed through
+`709dc76`; exact source and packed Visual+ replays passed 50/50 on macOS and Ubuntu in hosted run
+`29699049511`. The final recorded-proof commit `8c4b9dd479e672f0c937946406603c0988f36e37`
+then passed every job in exact hosted run `29699269620`. Annotated tag object
+`3f8c74b3502ee6fe55abddddcb5d03d3df26800f` peels to that commit and triggered Release run
+`29699466746`; verification job `88225931219`, OIDC publish/public-install job `88226561867`, and
+curated GitHub release job `88226641405` all passed on attempt 1.
+Public npm exposes `latest=2.1.0`. The tarball inside Actions artifact `8446072086`, GitHub asset
+`482646293`, exact npm pack, and direct registry downloads are byte-identical at SHA-256
+`5d17e2a43a1c76160f0b95214b956a0d100a2e7e0bcfc2eb0b0c4c6f8143c833`. Exact Node `24.15.0`
+and npm `11.12.1` passed the public installed Visual+ replay 50/50 plus version, capabilities,
+exports, schemas, skill assets, runtime dependency, signature, and attestation gates. SLSA binds the
+exact SHA-512 to `refs/tags/v2.1.0`, `.github/workflows/release.yml`, commit `8c4b9dd`, run
+`29699466746` attempt 1, and the GitHub-hosted builder. No floating `v2` tag, tag movement, or
+manual publication occurred. Plans 032-036 and the Safe Write/Visual+ v2 program are DONE.
