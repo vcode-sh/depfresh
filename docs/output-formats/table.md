@@ -95,7 +95,12 @@ In the interactive detail view (`-I`), shows human-readable release-shape notes 
 unknown repository Node compatibility, and missing signature-metadata warnings. Release shape and
 passive registry presence are not safety or verification results.
 
-## Write Receipts
+## Compatibility Table Write Receipts
+
+This section describes the grouped compatibility receipt used when Visual+ is not eligible, such
+as library `check()` calls and routes with a direct or addon `beforePackageWrite` hook. The
+underlying command-level write safety is shared, but the current eligible CLI journey has a
+different final projection; see [Visual+ result journeys](#visual-result-journeys).
 
 Write mode ends with one receipt grouped by repository-relative physical target, status, and
 reason. Repeated occurrences with the same physical cause do not produce repeated warnings. For
@@ -153,6 +158,214 @@ outcomes remain in their state-machine summary and are never counted as physical
 The complete receipt is one ordered durable stdout block: headline, physical groups and reasons,
 then final exit guidance. Receipt fragments are never split across stdout and stderr, including in
 CI and pipes.
+
+<a id="visual-result-journeys"></a>
+
+## Visual+ Result Journeys
+
+Visual+ is the eligible local CLI table journey. It renders repository topology, update
+distribution, major-risk cards, owner impact, shared dependencies, the complete change list,
+physical targets, lifecycle facts, and one final receipt. The Complete and Safety block examples
+use the deterministic 76-operation, 14-target renderer fixture. Partial and Recovery incomplete
+use smaller renderer-contract inputs; Partial remains the synthetic/future-producer projection
+qualified below. All are exact final-receipt excerpts. Long maps and change rows are omitted from
+this page, not hidden by the command.
+
+The journey is eligible only through CLI progress routing with table output, a non-silent log
+level, local non-global operation, no interactive selection, and no direct or addon
+`beforePackageWrite` hook. Library `check()` calls and veto-capable hook routes use the
+compatibility table surface above.
+
+A capable terminal uses Unicode separators, colour, and replaceable lifecycle frames. A plain
+fallback is append-only and colourless. Its map sections use ASCII, while existing receipt
+punctuation still follows Unicode capability: CI and ordinary pipes can retain `·`, and
+`TERM=dumb` makes the whole journey ASCII. Width changes wrapping only. These snippets pair the
+capable form with the public plain `TERM=dumb` form.
+
+### Complete
+
+Capable terminal:
+
+```text
+Complete · 76 updates applied across 14 files
+Applied 76  Blocked 0  Not attempted 0  Failed 0  Unknown 0
+All 14 target files were observed at the requested values. Recovery was not needed. 2.4s.
+Exit 0
+```
+
+Plain `TERM=dumb` fallback:
+
+```text
+Complete - 76 updates applied across 14 files
+Applied 76  Blocked 0  Not attempted 0  Failed 0  Unknown 0
+All 14 target files were observed at the requested values. Recovery was not needed. 2.4s.
+Exit 0
+```
+
+`Exit 0` means every selected value was observed at its requested final value and recovery was not
+needed. The duration is measured, so its value varies.
+
+### Safety block
+
+Capable terminal:
+
+```text
+Safety block · no files were changed
+Applied 0  Blocked 0  Not attempted 76  Failed 0  Unknown 76
+Preflight could not confirm Git state for packages/target-0/package.json.
+Preflight could not confirm Git state for packages/target-1/package.json.
+Preflight could not confirm Git state for packages/target-2/package.json.
+Preflight could not confirm Git state for packages/target-3/package.json.
+Preflight could not confirm Git state for packages/target-4/package.json.
+Preflight could not confirm Git state for packages/target-5/package.json.
+Preflight could not confirm Git state for packages/target-6/package.json.
+Preflight could not confirm Git state for packages/target-7/package.json.
+Preflight could not confirm Git state for packages/target-8/package.json.
+Preflight could not confirm Git state for packages/target-9/package.json.
+Preflight could not confirm Git state for packages/target-10/package.json.
+Preflight could not confirm Git state for packages/target-11/package.json.
+Preflight could not confirm Git state for packages/target-12/package.json.
+Preflight could not confirm Git state for packages/target-13/package.json.
+Exit 2
+```
+
+Plain `TERM=dumb` fallback:
+
+```text
+Safety block - no files were changed
+Applied 0  Blocked 0  Not attempted 76  Failed 0  Unknown 76
+Preflight could not confirm Git state for packages/target-0/package.json.
+Preflight could not confirm Git state for packages/target-1/package.json.
+Preflight could not confirm Git state for packages/target-2/package.json.
+Preflight could not confirm Git state for packages/target-3/package.json.
+Preflight could not confirm Git state for packages/target-4/package.json.
+Preflight could not confirm Git state for packages/target-5/package.json.
+Preflight could not confirm Git state for packages/target-6/package.json.
+Preflight could not confirm Git state for packages/target-7/package.json.
+Preflight could not confirm Git state for packages/target-8/package.json.
+Preflight could not confirm Git state for packages/target-9/package.json.
+Preflight could not confirm Git state for packages/target-10/package.json.
+Preflight could not confirm Git state for packages/target-11/package.json.
+Preflight could not confirm Git state for packages/target-12/package.json.
+Preflight could not confirm Git state for packages/target-13/package.json.
+Exit 2
+```
+
+This headline is reserved for exact evidence that no replacement was attempted, no selected file
+changed, and no recovery, journal, external-effect, or cleanup uncertainty remains. Here all 76
+operations are both not attempted and unknown because Git evidence could not be confirmed; the 14
+reasons identify physical targets rather than duplicating one line per operation.
+
+### Partial renderer compatibility projection
+
+`Partial` is a canonical renderer projection retained for compatibility with synthetic/internal
+inputs and a possible future producer. The current command apply engine does not produce this
+headline in an eligible Visual+ CLI run: after any replacement starts, a failure enters recovery
+and the renderer prioritizes `Recovered`, `Recovery incomplete`, or `Recovery unknown`. The
+currently reachable human partial surface is the
+[compatibility `Partial result`](#compatibility-table-write-receipts) shown above.
+
+Capable terminal:
+
+```text
+Partial
+Applied 1  Blocked 0  Not attempted 1  Failed 1  Unknown 0
+Applied: package.json
+Restored: none
+Unrecovered: none
+Exit 2
+```
+
+Plain `TERM=dumb` fallback:
+
+```text
+Partial
+Applied 1  Blocked 0  Not attempted 1  Failed 1  Unknown 0
+Applied: package.json
+Restored: none
+Unrecovered: none
+Exit 2
+```
+
+For this renderer contract, `Partial` means at least one requested value was retained while another
+operation remained incomplete. Recovery was not needed or executed in the synthetic projection, so
+there is no journal, restored path, unrecovered path, or external effect. Do not treat this example
+as evidence that the current eligible CLI engine can reach the headline.
+
+### Recovery incomplete
+
+Capable terminal:
+
+```text
+Recovery incomplete
+Applied 1  Blocked 1  Not attempted 1  Failed 0  Unknown 0  Reverted 1
+Applied: mixed/package.json
+Restored: reverted/package.json
+Unrecovered: mixed/package.json
+Journal: journal-mixed
+External effects: install tree may have changed
+Exit 2
+```
+
+Plain `TERM=dumb` fallback:
+
+```text
+Recovery incomplete
+Applied 1  Blocked 1  Not attempted 1  Failed 0  Unknown 0  Reverted 1
+Applied: mixed/package.json
+Restored: reverted/package.json
+Unrecovered: mixed/package.json
+Journal: journal-mixed
+External effects: install tree may have changed
+Exit 2
+```
+
+For the current eligible CLI engine, a post-replacement failure enters recovery and this recovery
+headline takes precedence over the renderer compatibility projection above. A fully restored run
+uses `Recovered`; unobservable recovery uses `Recovery unknown`. Preserve the journal, inspect all
+named paths and external effects, and stop competing writers before retrying. Never delete retained
+evidence merely to make a later run proceed.
+
+### Counts, preflight, and atomicity
+
+The totals line counts selected operations, not files:
+
+- `Applied` -- the requested value was observed after replacement.
+- `Blocked` -- authoritative policy or safety evidence blocked the operation.
+- `Not attempted` -- replacement was proved not to have started.
+- `Failed` -- a known operation failed.
+- `Unknown` -- required evidence or final state could not be confirmed.
+- `Skipped` and `Reverted` appear when nonzero; `Mixed targets` is a physical-target count.
+
+These are evidence flags, not a partition: one operation can be both blocked and not attempted, or
+both unknown and not attempted. Headlines and `across N files` clauses provide physical-file
+counts.
+
+Before the first replacement, one local write command collects and preflights every selected
+physical target, including exact target Git state. It rechecks target evidence before replacement,
+then uses one lock and journal lifecycle. Each file is staged beside its source and replaced by an
+atomic same-directory rename. Multiple renames do not make the repository atomic. A later failure
+therefore starts best-effort recovery across files; unobservable or incomplete recovery stays
+unknown and exits `2`.
+
+### Public fallbacks and separate modes
+
+- A capable local TTY uses colour and motion. `NO_COLOR` removes colour but retains recognized
+  lifecycle motion. A narrow capable TTY changes wrapping only and also retains motion.
+- Non-TTY pipes and CI are colourless, append-only, and complete. Direct table pipes also print a
+  stderr hint recommending `--output json` for structured consumption.
+- `TERM=dumb` is append-only ASCII. Narrow terminals wrap semantic fields rather than dropping
+  rows, targets, paths, counts, or final evidence.
+- `--interactive` uses its selection UI and does not use Visual+.
+- `--output json` keeps the schema-v1 compatibility envelope and `writeOutcomes`; it does not add
+  Visual+ maps, frames, or receipt-only fields.
+- `--global` and `--global-all` keep manager-specific outcomes and non-transactional global
+  semantics. Global items are never counted as local files.
+
+For compatibility and Visual+ local table writes, a complete write exits `0`; a safety block,
+failed result, unknown result, or recovery result exits `2`. A reachable compatibility
+`Partial result` also exits `2`. A read-only check still exits `0` unless `--fail-on-outdated`
+requests `1`. Versioned `apply --json` uses its separate `0`/`1`/`2` machine contract.
 
 ## Contextual Tips
 

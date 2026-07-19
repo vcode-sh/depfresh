@@ -6,6 +6,19 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Semver
 
 ### Changed
 
+- **Visual+ local result journeys** -- eligible CLI progress-routed, non-silent, non-interactive,
+  non-global table runs without before-write hooks now retain topology, severity distribution,
+  major-risk, owner-impact, shared-dependency, complete change-list, physical-target, lifecycle,
+  and final receipt evidence in capable and durable plain terminal profiles. Complete, clean
+  safety-block, and recovery-first journeys use exact operation counts and paths with exit `0`/`2`;
+  the renderer retains a canonical synthetic `Partial` projection, while the current eligible CLI
+  engine reports post-replacement failures as `Recovered`, `Recovery incomplete`, or
+  `Recovery unknown` first. Command-level preflight still covers every selected physical target,
+  replacement remains atomic per file only, and repository recovery remains best effort.
+  `NO_COLOR` and narrow capable layouts retain motion, while pipes, CI, and `TERM=dumb` use
+  append-only fallbacks. Interactive, JSON, global, veto-capable, and public library contracts are
+  unchanged.
+
 - **Command-level local write safety** -- normal local check writes now prepare and preflight every
   selected physical target before the first replacement, then use one lock and journal lifecycle.
   Human receipts consume exact private operation and replacement-attempt evidence, distinguish

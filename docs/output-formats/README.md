@@ -6,7 +6,8 @@ inspect/plan/apply/global machine contracts.
 
 ## Pages
 
-- **[Table](./table.md)** -- The default. Colourful tables, colour-coded diffs, sorting options, and display flags. For humans with eyeballs.
+- **[Table](./table.md)** -- The default. Colourful tables, Visual+ repository maps and result
+  journeys, durable terminal fallbacks, write receipts, sorting options, and display flags.
 
 - **[JSON](./json.md)** -- Compatibility check envelope with packages, summary, volatile metadata,
   and optional write outcomes.
@@ -45,6 +46,16 @@ non-fatal incomplete decisions; `2` means a fatal error prevented a trustworthy 
 Legacy `--global[-all] --write` exits `0` only when every selected global item is observed applied
 or skipped. Any conflicted, failed, or unknown item makes the compatibility command exit `2`; the
 embedded `globalResults` retain the versioned item truth.
+
+Eligible local CLI table runs use Visual+ when progress routing is enabled, output is non-silent,
+operation is non-interactive and non-global, and no direct or addon `beforePackageWrite` hook is
+present. A fully observed write exits `0`; a clean safety block or any other incomplete eligible
+write exits `2`. After replacement starts, eligible CLI failures render `Recovered`,
+`Recovery incomplete`, or `Recovery unknown` before any canonical renderer compatibility
+projection. Capable TTY output and plain pipe/CI/`TERM=dumb` fallbacks retain the same semantic
+review and final result. Library `check()` calls and veto-capable routes retain the reachable
+compatibility `Partial result` surface. JSON, versioned repository apply, interactive, and global
+contracts are unchanged.
 
 `capabilities` exits `0` only for a complete schema-valid descriptor and `2` for a fatal command
 error. It does not use finding-bearing exit `1`.

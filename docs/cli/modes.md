@@ -107,6 +107,29 @@ skipped because the package manager resolves it dynamically.
 - All selected targets are members of the final eligible set and are greater than or equal to the
   normalized current version.
 
+## Presentation does not change mode
+
+For an eligible local CLI table command, Visual+ explains the selected result with topology,
+severity, major-risk, owner, shared-dependency, change-list, transaction, and receipt sections.
+Eligibility requires CLI progress routing, non-silent output, non-interactive and non-global
+operation, and no direct or addon `beforePackageWrite` hook. Capable terminals may use colour and
+replaceable lifecycle frames. `NO_COLOR` changes colour only, while a narrow capable terminal
+changes wrapping only; both retain motion. Pipes, CI, and `TERM=dumb` use durable append-only
+fallbacks. None of these capability choices changes candidate eligibility or the effective update
+mode. Library `check()` calls and veto-capable routes retain the compatibility table surface.
+
+The other command surfaces remain explicit and separate:
+
+- `--interactive` chooses among the same eligible candidates before writing and does not use
+  Visual+.
+- `--output json` emits the compatibility schema rather than terminal maps or frames.
+- `--global` and `--global-all` resolve and observe manager-specific global items; they do not use
+  local physical-file counts or repository atomicity language.
+
+For writes, the selected mode does not weaken command-level preflight. Every local physical target
+must pass before the first replacement, and later evidence checks can still block or trigger
+best-effort recovery.
+
 ## Summary
 
 | Mode | What it does |

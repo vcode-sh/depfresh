@@ -52,6 +52,31 @@ depfresh --no-recursive  # inspect only the root package
 or lifecycle scripts. Use the reviewed plan/apply workflow when lockfile, install, or verification
 phases are required.
 
+For eligible local CLI table runs, the Visual+ review keeps repository topology, severity,
+major-risk, owner, shared-dependency, complete change-list, transaction, and final receipt evidence
+in one terminal journey. Eligibility requires the CLI progress route, non-silent output,
+non-interactive and non-global operation, and no direct or addon `beforePackageWrite` hook. A
+capable terminal uses colour and replaceable lifecycle frames. `NO_COLOR` removes only colour, and
+a narrow capable terminal only wraps; both retain motion. Pipes, CI, and `TERM=dumb` select durable
+append-only fallbacks without removing semantic content. For example, a fully observed write ends
+with:
+
+```text
+Complete · 76 updates applied across 14 files
+Applied 76  Blocked 0  Not attempted 0  Failed 0  Unknown 0
+All 14 target files were observed at the requested values. Recovery was not needed. 2.4s.
+Exit 0
+```
+
+A clean command-level preflight block ends with `Safety block · no files were changed` and
+`Exit 2`. After replacement starts, a failure renders `Recovered`, `Recovery incomplete`, or
+`Recovery unknown` first and names applied, restored, and unrecovered paths. Each file replacement
+is atomic, but the repository is not one atomic transaction and recovery is best effort. See the
+[table output journey reference](docs/output-formats/table.md#visual-result-journeys) for
+capable/plain examples and count definitions. Interactive selection, JSON output, and global writes
+use their existing separate surfaces. Library `check()` calls and veto-capable hook routes retain
+the compatibility table surface.
+
 ## Safe plan and apply
 
 ```bash

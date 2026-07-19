@@ -36,7 +36,10 @@ If you selected nothing (or hit Ctrl+C), nothing gets written.
 
 **Did `beforePackageWrite` return false?** If you're using the programmatic API with a `beforePackageWrite` callback that returns `false`, depfresh skips writing that package. Check your own code. I'm not debugging your callbacks for you.
 
-## "Partial result" or `VCS_UNAVAILABLE`
+## Compatibility "Partial result" or `VCS_UNAVAILABLE`
+
+`Partial result` is the currently reachable grouped compatibility-table headline. Eligible Visual+
+CLI writes use the recovery-first headings described below instead.
 
 Local check writes collect and preflight every selected physical target before the first
 replacement. `VCS_UNAVAILABLE` is an `unknown` outcome, not a write failure; a narrower sanitized
@@ -59,6 +62,37 @@ claiming Git is the only blocker. A preflight-only receipt may say
 blocked target proves replacement was not attempted and no recovery uncertainty remains. Each file
 replacement is atomic, but the repository is not one atomic transaction; recovery across files is
 best effort.
+
+Visual+ retains a synthetic/internal `Partial` renderer projection, but the current eligible CLI
+engine cannot produce it. After replacement starts, a failure renders `Recovered`,
+`Recovery incomplete`, or `Recovery unknown` first and lists `Applied:`, `Restored:`, and
+`Unrecovered:` physical paths. Visual+ operation totals can overlap: for example, an operation
+whose replacement did not start because its Git evidence is unknown is counted in both
+`Not attempted` and `Unknown`. Do not add the columns to infer the number of selected operations;
+use the reviewed update count.
+
+`Safety block · no files were changed` (or the ASCII
+`Safety block - no files were changed` with `TERM=dumb`) is stronger than a generic failure. It
+requires command-level preflight evidence for all selected physical targets and proves no
+replacement, recovery, journal, external effect, or uncertain cleanup occurred. It still exits `2`
+because the requested write was incomplete.
+
+### Visual+ is plain, colourless, or append-only
+
+This can be the expected capability fallback rather than lost output:
+
+- both stdout and stderr must be TTYs, CI must be inactive, and `TERM` must not be `dumb` for the
+  capable local profile;
+- `NO_COLOR` disables colour but retains lifecycle motion when the terminal is otherwise capable;
+- a narrow otherwise-capable terminal wraps fields but retains colour and motion;
+- CI and non-TTY pipes use colourless append-only output;
+- `TERM=dumb` uses append-only ASCII;
+- every profile retains result evidence.
+
+The final semantic content and exit code are unchanged. Direct table pipes print a stderr hint for
+`--output json`; use JSON for machines rather than parsing terminal text. Interactive, JSON, and
+global commands intentionally do not use Visual+. Neither do library `check()` calls or routes
+with a direct or addon `beforePackageWrite` hook; those retain the compatibility table surface.
 
 Global write failures have their own sanitized stdout section, for example:
 
@@ -262,6 +296,14 @@ retained evidence merely to make the next run proceed.
 After any manager command starts, a later manager or verification failure is conservatively
 top-level `unknown` because the declared package-manager-cache effect cannot be rolled back, even if
 the planned source and lockfile bytes were restored exactly.
+
+For an eligible local Visual+ write, any post-replacement failure enters recovery. The final
+headline is `Recovered`, `Recovery incomplete`, or `Recovery unknown`, ahead of the renderer's
+synthetic compatibility `Partial` projection. Read every `Applied:`, `Restored:`, `Unrecovered:`,
+`Journal:`, and `External effects:` line. Preserve the journal and other `.depfresh` evidence,
+inspect named paths, and stop competing writers before a fresh inspect/plan or retry. A
+same-directory rename is atomic for one file only; recovery across the repository and manager
+caches or install trees is not atomic.
 
 ## Performance
 

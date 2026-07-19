@@ -670,11 +670,16 @@ while retaining literal `ubuntu-24.04` for every other job.
 - Consumes: complete Visual+ implementation and PTY proof.
 - Produces: reviewed `2.0.2`-version implementation eligible for Plan 036 release preparation.
 
-- [ ] **Step 1: Document all four result journeys**
+- [x] **Step 1: Document all four result journeys**
 
-Include capable and plain examples for complete, safety block, partial result, and recovery
-incomplete. Define all counts, exit codes, command-level preflight, per-file atomicity, non-atomic
-repository boundary, fallbacks, and explicit interactive/JSON/global differences.
+Include capable and plain examples for complete, safety block, the canonical partial renderer
+branch, and recovery incomplete. The canonical `Partial` branch is a compatibility/future-producer
+projection: the current eligible CLI engine cannot reach it because any applied or reverted result
+mixed with an incomplete result enters recovery, and recovery headlines intentionally take
+precedence. Label that boundary explicitly, point to the currently reachable compatibility-table
+`Partial result`, and never present the synthetic renderer input as a current eligible CLI journey.
+Define all counts, exit codes, command-level preflight, per-file atomicity, non-atomic repository
+boundary, fallbacks, and explicit interactive/JSON/global differences.
 
 - [ ] **Step 2: Run focused terminal proof three times**
 
