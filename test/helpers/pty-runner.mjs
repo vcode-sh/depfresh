@@ -299,6 +299,14 @@ export function normalizeTerminalCapture(bytes, options) {
   })
 }
 
+export function hasDoubleCarriageReturnLineFeed(bytes) {
+  if (!Buffer.isBuffer(bytes)) throw new TypeError('Terminal capture must be a Buffer')
+  for (let index = 0; index + 2 < bytes.byteLength; index += 1) {
+    if (bytes[index] === 13 && bytes[index + 1] === 13 && bytes[index + 2] === 10) return true
+  }
+  return false
+}
+
 function projectLine(line) {
   return line
     .filter((cell) => cell !== null)

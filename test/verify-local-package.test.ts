@@ -117,7 +117,7 @@ setInterval(() => {}, 1_000)
     expect(replayFailure).toContain(['classification: $', '{classification}'].join(''))
     expect(packedVerifier).toContain('cliSha256')
     expect(packedVerifier).toContain('passedTests')
-    expect(packedVerifier).toContain('const VISUAL_PLUS_PASSED_TESTS = 46')
+    expect(packedVerifier).toContain('const VISUAL_PLUS_PASSED_TESTS = 49')
     expect(packedVerifier).toContain('VISUAL_PLUS_REPLAY_TIMEOUT_MS = 15 * 60_000')
     expect(packedVerifier).toContain('timeoutMs: PACKED_COMMAND_TIMEOUT_MS')
     expect(packedVerifier).toContain('timeoutMs: VISUAL_PLUS_REPLAY_TIMEOUT_MS')
@@ -127,6 +127,7 @@ setInterval(() => {}, 1_000)
     expect(packedVerifier).not.toContain('env: { ...process.env')
     expect(packedVerifier).not.toContain('shell: true')
     expect(visualPlusTest).toContain("describe.sequential('CI constrained PTY fallback'")
+    expect(visualPlusTest).toContain("describe.sequential('TERM=dumb constrained PTY fallback'")
     for (const readiness of [
       'journeyReady',
       'executionReady',
@@ -134,6 +135,9 @@ setInterval(() => {}, 1_000)
       'controlsReady',
       'transitionsReady',
     ]) {
+      expect(visualPlusTest, readiness).toContain(`let ${readiness} = false`)
+    }
+    for (const readiness of ['captureReady', 'transportReady', 'lineEndingReady']) {
       expect(visualPlusTest, readiness).toContain(`let ${readiness} = false`)
     }
     expect(visualPlusTest).toContain('expect(journeyReady).toBe(true)')

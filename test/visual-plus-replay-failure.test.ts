@@ -91,8 +91,20 @@ describe('installed Visual+ replay failure classification', () => {
       'fallback-ci-read-only',
     ],
     [
-      'Visual+ built CLI uses durable TERM=dumb constrained PTY fallback without losing read-only semantic output',
-      'fallback-dumb-pty',
+      'Visual+ built CLI TERM=dumb constrained PTY fallback executes with exact PTY evidence and preserves semantic output',
+      'fallback-dumb-journey',
+    ],
+    [
+      'Visual+ built CLI TERM=dumb constrained PTY fallback contains no duplicate CRCRLF transport',
+      'fallback-dumb-transport',
+    ],
+    [
+      'Visual+ built CLI TERM=dumb constrained PTY fallback contains no normalized lone carriage return',
+      'fallback-dumb-lone-cr',
+    ],
+    [
+      'Visual+ built CLI TERM=dumb constrained PTY fallback preserves remaining controls transitions and read-only state',
+      'fallback-dumb-rest',
     ],
   ])('maps the trusted exact title %s to %s', (fullName, expected) => {
     expect(classifyVisualPlusReplayFailure(report([fullName]))).toBe(expected)

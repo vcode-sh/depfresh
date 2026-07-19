@@ -20,6 +20,7 @@ import {
   classifyScriptProbe,
   createDetachedGroupMonitor,
   detectScriptAdapter,
+  hasDoubleCarriageReturnLineFeed,
   matchingObservedIdentities,
   normalizeTerminalCapture,
   observeIdentity,
@@ -207,6 +208,10 @@ describe('Visual+ PTY adapter', () => {
   })
 
   it('projects known renderer controls into durable visible text', () => {
+    expect(hasDoubleCarriageReturnLineFeed(Buffer.from([13, 13, 10]))).toBe(true)
+    expect(hasDoubleCarriageReturnLineFeed(Buffer.from([13, 10]))).toBe(false)
+    expect(hasDoubleCarriageReturnLineFeed(Buffer.from([13, 13]))).toBe(false)
+
     const capture = Buffer.from(
       '\r\u001b[2Kactive\n\u001b[1A\r\u001b[2K\n\u001b[1Acomplete\n\u001b[?25h',
     )
@@ -557,32 +562,64 @@ describe('Visual+ built CLI', () => {
     })
   })
 
-  it('uses durable TERM=dumb constrained PTY fallback without losing read-only semantic output', async () => {
-    const fixture = createFixture('dumb-constrained-fallback')
-    const result = await runReadOnlyPty(fixture, { TERM: 'dumb' })
-    expect(result.exitCode).toBe(0)
-    expect(result.evidence.columns).toBe(80)
-    expect(result.finalCursorVisible).toBe(true)
-    expect(result.transcript.endsWith('Exit 0\n')).toBe(true)
-    assertReadOnlySemantics(result.transcript, fixture)
-    expect(result.controls.sgr).toBe(0)
-    expect(result.controls.carriageReturn).toBe(0)
-    expect(result.controls.cursorUp).toBe(0)
-    expect(result.controls.eraseLine).toBe(0)
-    expect(result.controls.cursorHide).toBe(0)
-    expect(result.controls.cursorShow).toBe(1)
-    const activeTransitions = result.transcript
-      .split('\n')
-      .filter((line) => /\bactive\b/u.test(line))
-    expect(new Set(activeTransitions).size).toBe(activeTransitions.length)
-    expect(result.transcript).toMatch(/66 packages -> 616 declared -> 612 eligible/u)
-    expect([...result.transcript].every((character) => character.codePointAt(0)! <= 0x7f)).toBe(
-      true,
-    )
+  describe.sequential('TERM=dumb constrained PTY fallback', () => {
+    let fixture: ReturnType<typeof createVisualPlusFixture> | undefined
+    let result: Awaited<ReturnType<typeof runInPty>> | undefined
+    let captureReady = false
+    let journeyReady = false
+    let transportReady = false
+    let lineEndingReady = false
 
-    assertFixtureBytes(fixture, 'before')
-    assertGitClean(fixture)
-  }, 120_000)
+    beforeAll(async () => {
+      try {
+        fixture = createFixture('dumb-constrained-fallback')
+        result = await runReadOnlyPty(fixture, { TERM: 'dumb' })
+        captureReady = true
+      } catch {}
+    }, 120_000)
+
+    it('executes with exact PTY evidence and preserves semantic output', () => {
+      expect(captureReady).toBe(true)
+      if (!(captureReady && fixture && result)) return
+      expect(result.exitCode).toBe(0)
+      expect(result.evidence.columns).toBe(80)
+      expect(result.finalCursorVisible).toBe(true)
+      expect(result.transcript.endsWith('Exit 0\n')).toBe(true)
+      assertReadOnlySemantics(result.transcript, fixture)
+      journeyReady = true
+    })
+
+    it('contains no duplicate CRCRLF transport', () => {
+      if (!(journeyReady && result)) return
+      expect(hasDoubleCarriageReturnLineFeed(result.rawTerminal)).toBe(false)
+      transportReady = true
+    })
+
+    it('contains no normalized lone carriage return', () => {
+      if (!(transportReady && result)) return
+      expect(result.controls.carriageReturn).toBe(0)
+      lineEndingReady = true
+    })
+
+    it('preserves remaining controls transitions and read-only state', () => {
+      if (!(lineEndingReady && fixture && result)) return
+      expect(result.controls.sgr).toBe(0)
+      expect(result.controls.cursorUp).toBe(0)
+      expect(result.controls.eraseLine).toBe(0)
+      expect(result.controls.cursorHide).toBe(0)
+      expect(result.controls.cursorShow).toBe(1)
+      const activeTransitions = result.transcript
+        .split('\n')
+        .filter((line) => /\bactive\b/u.test(line))
+      expect(new Set(activeTransitions).size).toBe(activeTransitions.length)
+      expect(result.transcript).toMatch(/66 packages -> 616 declared -> 612 eligible/u)
+      expect([...result.transcript].every((character) => character.codePointAt(0)! <= 0x7f)).toBe(
+        true,
+      )
+      assertFixtureBytes(fixture, 'before')
+      assertGitClean(fixture)
+    })
+  })
 
   it('sanitizes hostile owner text before it can become terminal protocol', async () => {
     const environmentFixture = createFixture('hostile-environment')
