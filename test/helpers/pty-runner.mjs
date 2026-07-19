@@ -21,6 +21,9 @@ const DEFAULT_TIMEOUT_MS = 30_000
 const DEFAULT_OUTPUT_LIMIT = 4 * 1024 * 1024
 const CONFIG_LIMIT = 256 * 1024
 const SIDECAR_LIMIT = 4 * 1024
+const TIMEOUT_READINESS_ENV = 'DEPFRESH_PTY_TIMEOUT_READINESS_PATH'
+const TIMEOUT_READINESS_SIDECAR = 'timeout-readiness.pid'
+const TIMEOUT_PHASE = Symbol('PTY timeout phase')
 const TEST_FAULTS = new Set([
   'start-evidence-failure',
   'malformed-start',
@@ -433,11 +436,48 @@ export function normalizeTerminalCapture(bytes, options) {
 }
 
 export function hasDoubleCarriageReturnLineFeed(bytes) {
+  return classifyRawTerminalTransport(bytes).doubleCrlf
+}
+
+export function classifyRawTerminalTransport(bytes) {
   if (!Buffer.isBuffer(bytes)) throw new TypeError('Terminal capture must be a Buffer')
-  for (let index = 0; index + 2 < bytes.byteLength; index += 1) {
-    if (bytes[index] === 13 && bytes[index + 1] === 13 && bytes[index + 2] === 10) return true
+  if (bytes.byteLength > DEFAULT_OUTPUT_LIMIT) {
+    throw new Error('Terminal capture exceeds the configured bound')
   }
-  return false
+  let doubleCrlf = false
+  let beforeEscape = false
+  let beforeText = false
+  let beforeOtherControl = false
+  let trailing = false
+  for (let index = 0; index < bytes.byteLength; index += 1) {
+    if (bytes[index] !== 13) continue
+    const next = bytes[index + 1]
+    if (next === 13 && bytes[index + 2] === 10) {
+      doubleCrlf = true
+      index += 2
+      continue
+    }
+    if (next === 10) {
+      index += 1
+      continue
+    }
+    if (next === undefined) trailing = true
+    else if (next === 27) beforeEscape = true
+    else if (next < 0x20 || (next >= 0x7f && next <= 0x9f)) beforeOtherControl = true
+    else beforeText = true
+  }
+  return Object.freeze({
+    doubleCrlf,
+    beforeEscape,
+    beforeText,
+    beforeOtherControl,
+    trailing,
+  })
+}
+
+export function readPtyTimeoutPhase(error) {
+  if (!(error instanceof Error)) return undefined
+  return error[TIMEOUT_PHASE]
 }
 
 function projectLine(line) {
@@ -490,6 +530,10 @@ export async function runInPty(options) {
     throw new Error('PTY input must be an explicitly empty Buffer')
   }
   const timeoutMs = requireBound(options?.timeoutMs ?? DEFAULT_TIMEOUT_MS, 'timeout')
+  const timeoutAfterReadyMs =
+    options?.timeoutAfterReadyMs === undefined
+      ? undefined
+      : requireBound(options.timeoutAfterReadyMs, 'timeout after readiness')
   const outputLimit = requireBound(options?.outputLimit ?? DEFAULT_OUTPUT_LIMIT, 'output limit')
   const fault = requireTestFault(options?.fault)
   const cleanupFault = requireCleanupFault(options?.cleanupFault)
@@ -512,11 +556,18 @@ export async function runInPty(options) {
   observed.provisionalGroupChanges = new Map()
   observed.reappeared = new Set()
   try {
+    if (timeoutAfterReadyMs !== undefined && Object.hasOwn(env, TIMEOUT_READINESS_ENV)) {
+      throw new Error('PTY timeout readiness environment is reserved')
+    }
+    const invocationEnv =
+      timeoutAfterReadyMs === undefined
+        ? env
+        : { ...env, [TIMEOUT_READINESS_ENV]: join(directory, TIMEOUT_READINESS_SIDECAR) }
     const config = Buffer.from(
       `${JSON.stringify({
         cliPath,
         args,
-        env,
+        env: invocationEnv,
         columns,
         fault,
         mvPath: '/bin/mv',
@@ -539,6 +590,9 @@ export async function runInPty(options) {
     const captured = await captureBounded(command.path, command.args, {
       cwd: directory,
       timeoutMs,
+      timeoutAfterReadyMs,
+      timeoutReadinessSidecar:
+        timeoutAfterReadyMs === undefined ? undefined : TIMEOUT_READINESS_SIDECAR,
       outputLimit,
       env: minimalOuterEnvironment(),
       directory,
@@ -760,15 +814,15 @@ function captureBounded(path, args, options) {
     const stderr = []
     let bytes = 0
     let settled = false
-    let timer
-    const observe = () => observeProcessTree(child.pid, options.directory, options.observed)
-    observe()
-    const observer = setInterval(observe, 20)
+    let hardTimer
+    let readyTimer
+    let observer
     const fail = async (error) => {
       if (settled) return
       settled = true
-      if (timer) clearTimeout(timer)
-      clearInterval(observer)
+      if (hardTimer) clearTimeout(hardTimer)
+      if (readyTimer) clearTimeout(readyTimer)
+      if (observer) clearInterval(observer)
       observe()
       try {
         child.kill('SIGTERM')
@@ -780,6 +834,28 @@ function captureBounded(path, args, options) {
         rejectPromise(new AggregateError([error, cleanupError], error.message))
       }
     }
+    const observe = () => {
+      const current = observeProcessTree(child.pid, options.directory, options.observed)
+      if (
+        settled ||
+        options.timeoutAfterReadyMs === undefined ||
+        options.timeoutReadinessSidecar === undefined ||
+        readyTimer !== undefined
+      ) {
+        return
+      }
+      try {
+        const readyPid = readPidSidecar(options.directory, options.timeoutReadinessSidecar)
+        if (!canArmTimeoutAfterReadiness(readyPid, current, options.observed)) return
+        readyTimer = setTimeout(
+          () => void fail(createPtyTimeoutError('readiness')),
+          options.timeoutAfterReadyMs,
+        )
+      } catch {}
+    }
+    hardTimer = setTimeout(() => void fail(createPtyTimeoutError('hard')), options.timeoutMs)
+    observe()
+    observer = setInterval(observe, 20)
     const collect = (target) => (chunk) => {
       bytes += chunk.byteLength
       if (bytes > options.outputLimit) void fail(new Error('PTY capture exceeded output limit'))
@@ -794,8 +870,9 @@ function captureBounded(path, args, options) {
     child.once('close', (status, signal) => {
       if (settled) return
       settled = true
-      if (timer) clearTimeout(timer)
-      clearInterval(observer)
+      if (hardTimer) clearTimeout(hardTimer)
+      if (readyTimer) clearTimeout(readyTimer)
+      if (observer) clearInterval(observer)
       observe()
       resolvePromise({
         pid: child.pid,
@@ -805,8 +882,13 @@ function captureBounded(path, args, options) {
         stderr: Buffer.concat(stderr),
       })
     })
-    timer = setTimeout(() => void fail(new Error('PTY capture timed out')), options.timeoutMs)
   })
+}
+
+function createPtyTimeoutError(phase) {
+  const error = new Error('PTY capture timed out')
+  Object.defineProperty(error, TIMEOUT_PHASE, { value: phase })
+  return error
 }
 
 async function cleanupObserved(observed) {
@@ -906,7 +988,7 @@ function observeProcessTree(outerPid, directory, observed) {
   const current = scanProcesses()
   if (!current) {
     observed.probeFailed = true
-    return
+    return undefined
   }
   observed.probeSucceeded = true
   observeIdentitySnapshot(observed, current)
@@ -938,6 +1020,23 @@ function observeProcessTree(outerPid, directory, observed) {
     if (!identity) continue
     observeIdentity(observed, pid, identity)
   }
+  return current
+}
+
+export function canArmTimeoutAfterReadiness(pid, current, observed) {
+  const liveIdentity = current?.get(pid)
+  const observedIdentity = observed.get(pid)
+  return Boolean(
+    liveIdentity &&
+      observedIdentity &&
+      observed.probeSucceeded === true &&
+      !observed.probeFailed &&
+      !observed.ambiguous &&
+      !observed.missing?.has(pid) &&
+      (observed.reappeared?.size ?? 0) === 0 &&
+      (observed.provisionalGroupChanges?.size ?? 0) === 0 &&
+      identityChangeDiagnostic(liveIdentity, observedIdentity) === undefined,
+  )
 }
 
 function readPublishedWrapperIdentity(directory) {

@@ -79,6 +79,10 @@ describe('installed Visual+ replay failure classification', () => {
       'fallback-ci-semantics',
     ],
     [
+      'Visual+ built CLI CI constrained PTY fallback classifies raw terminal transport without exposing capture data',
+      'fallback-ci-transport',
+    ],
+    [
       'Visual+ built CLI CI constrained PTY fallback emits only constrained terminal controls',
       'fallback-ci-controls',
     ],
@@ -128,6 +132,22 @@ describe('installed Visual+ replay failure classification', () => {
     })
 
     expect(classification).toBe('unclassified')
+    expect(classification).not.toContain(privateValue)
+    expect(classification.length).toBeLessThanOrEqual(32)
+  })
+
+  it('classifies the trusted raw transport phase without reflecting private diagnostics', () => {
+    const privateValue = '/Users/runner/work/private-repository raw-terminal-secret'
+    const trustedReport = report([
+      'Visual+ built CLI CI constrained PTY fallback classifies raw terminal transport without exposing capture data',
+    ])
+    const assertion = trustedReport.testResults[0]?.assertionResults[0]
+    if (!assertion) throw new Error('Expected one replay assertion')
+    assertion.failureMessages = [privateValue]
+
+    const classification = classifyVisualPlusReplayFailure(trustedReport)
+
+    expect(classification).toBe('fallback-ci-transport')
     expect(classification).not.toContain(privateValue)
     expect(classification.length).toBeLessThanOrEqual(32)
   })

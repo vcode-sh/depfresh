@@ -117,7 +117,7 @@ setInterval(() => {}, 1_000)
     expect(replayFailure).toContain(['classification: $', '{classification}'].join(''))
     expect(packedVerifier).toContain('cliSha256')
     expect(packedVerifier).toContain('passedTests')
-    expect(packedVerifier).toContain('const VISUAL_PLUS_PASSED_TESTS = 49')
+    expect(packedVerifier).toContain('const VISUAL_PLUS_PASSED_TESTS = 50')
     expect(packedVerifier).toContain('VISUAL_PLUS_REPLAY_TIMEOUT_MS = 15 * 60_000')
     expect(packedVerifier).toContain('timeoutMs: PACKED_COMMAND_TIMEOUT_MS')
     expect(packedVerifier).toContain('timeoutMs: VISUAL_PLUS_REPLAY_TIMEOUT_MS')
@@ -128,10 +128,15 @@ setInterval(() => {}, 1_000)
     expect(packedVerifier).not.toContain('shell: true')
     expect(visualPlusTest).toContain("describe.sequential('CI constrained PTY fallback'")
     expect(visualPlusTest).toContain("describe.sequential('TERM=dumb constrained PTY fallback'")
+    expect(visualPlusTest).toContain(
+      "it('classifies raw terminal transport without exposing capture data'",
+    )
+    expect(replayFailure).toContain("'fallback-ci-transport'")
     for (const readiness of [
       'journeyReady',
       'executionReady',
       'semanticsReady',
+      'rawTransportReady',
       'controlsReady',
       'transitionsReady',
     ]) {

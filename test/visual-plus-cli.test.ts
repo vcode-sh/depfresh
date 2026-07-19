@@ -18,6 +18,8 @@ import { join, relative } from 'node:path'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { visualLength } from '../src/utils/format'
 import {
+  canArmTimeoutAfterReadiness,
+  classifyRawTerminalTransport,
   classifyScriptProbe,
   createDetachedGroupMonitor,
   detectScriptAdapter,
@@ -27,6 +29,7 @@ import {
   observeIdentity,
   observeIdentitySnapshot,
   processScanArguments,
+  readPtyTimeoutPhase,
   registerEvidenceIdentity,
   runInPty,
   sameProcessIdentity,
@@ -192,6 +195,43 @@ describe('Visual+ PTY adapter', () => {
     expect(observed.ambiguous).toBe(true)
     expect(observed.reappeared).toEqual(new Set([300]))
     expect(matchingObservedIdentities(current, observed).has(300)).toBe(false)
+
+    const exactObserved = Object.assign(new Map([[300, original]]), {
+      ambiguous: false,
+      missing: new Set<number>(),
+      probeFailed: false,
+      probeSucceeded: true,
+      provisionalGroupChanges: new Map(),
+      reappeared: new Set<number>(),
+    })
+    const exactCurrent = new Map([[300, original]])
+    expect(canArmTimeoutAfterReadiness(300, exactCurrent, exactObserved)).toBe(true)
+    expect(
+      canArmTimeoutAfterReadiness(
+        300,
+        exactCurrent,
+        Object.assign(new Map(exactObserved), exactObserved, { missing: new Set([400]) }),
+      ),
+    ).toBe(true)
+    for (const unsafeObserved of [
+      Object.assign(new Map(exactObserved), exactObserved, { ambiguous: true }),
+      Object.assign(new Map(exactObserved), exactObserved, { missing: new Set([300]) }),
+      Object.assign(new Map(exactObserved), exactObserved, { probeFailed: true }),
+      Object.assign(new Map(exactObserved), exactObserved, {
+        provisionalGroupChanges: new Map([[300, { group: 301 }]]),
+      }),
+      Object.assign(new Map(exactObserved), exactObserved, { reappeared: new Set([300]) }),
+    ]) {
+      expect(canArmTimeoutAfterReadiness(300, exactCurrent, unsafeObserved)).toBe(false)
+    }
+    expect(canArmTimeoutAfterReadiness(300, new Map(), exactObserved)).toBe(false)
+    expect(
+      canArmTimeoutAfterReadiness(
+        300,
+        new Map([[300, { ...original, start: 'Sun Jul 19 13:20:32 2026' }]]),
+        exactObserved,
+      ),
+    ).toBe(false)
   })
 
   it('detects one supported script family without executing repository values as source', () => {
@@ -209,6 +249,37 @@ describe('Visual+ PTY adapter', () => {
   })
 
   it('projects known renderer controls into durable visible text', () => {
+    const noRawTransportSignal = {
+      doubleCrlf: false,
+      beforeEscape: false,
+      beforeText: false,
+      beforeOtherControl: false,
+      trailing: false,
+    }
+    expect(classifyRawTerminalTransport(Buffer.from('line\r\n'))).toEqual(noRawTransportSignal)
+    expect(classifyRawTerminalTransport(Buffer.from([13, 13, 10]))).toEqual({
+      ...noRawTransportSignal,
+      doubleCrlf: true,
+    })
+    expect(classifyRawTerminalTransport(Buffer.from([13, 27]))).toEqual({
+      ...noRawTransportSignal,
+      beforeEscape: true,
+    })
+    expect(classifyRawTerminalTransport(Buffer.from('\rtext'))).toEqual({
+      ...noRawTransportSignal,
+      beforeText: true,
+    })
+    expect(classifyRawTerminalTransport(Buffer.from([13, 0]))).toEqual({
+      ...noRawTransportSignal,
+      beforeOtherControl: true,
+    })
+    expect(classifyRawTerminalTransport(Buffer.from([13]))).toEqual({
+      ...noRawTransportSignal,
+      trailing: true,
+    })
+    expect(() => classifyRawTerminalTransport(Buffer.alloc(4 * 1024 * 1024 + 1))).toThrow(
+      'Terminal capture exceeds the configured bound',
+    )
     expect(hasDoubleCarriageReturnLineFeed(Buffer.from([13, 13, 10]))).toBe(true)
     expect(hasDoubleCarriageReturnLineFeed(Buffer.from([13, 10]))).toBe(false)
     expect(hasDoubleCarriageReturnLineFeed(Buffer.from([13, 13]))).toBe(false)
@@ -427,23 +498,31 @@ describe('Visual+ PTY adapter', () => {
       }),
     ).rejects.toThrow(/output limit/u)
 
-    await expect(
-      runInPty({
+    let hardTimeout: unknown
+    try {
+      await runInPty({
         cliPath: process.execPath,
         args: ['-e', 'setInterval(()=>{},1000)'],
         columns: 40,
         env: {},
         input: Buffer.alloc(0),
         timeoutMs: 100,
-      }),
-    ).rejects.toThrow(/timed out/u)
+      })
+    } catch (error) {
+      hardTimeout = error
+    }
+    expect(hardTimeout).toBeInstanceOf(Error)
+    expect(hardTimeout).not.toBeInstanceOf(AggregateError)
+    expect((hardTimeout as Error).message).toBe('PTY capture timed out')
+    expect(readPtyTimeoutPhase(hardTimeout)).toBe('hard')
 
     const adapter = detectScriptAdapter()
     if (adapter.family === 'bsd') {
       const marker = join(fixtureParent, `pre-release-timeout-${fixtureSequence}`)
       fixtureSequence += 1
-      await expect(
-        runInPty({
+      let delayedHardTimeout: unknown
+      try {
+        await runInPty({
           cliPath: process.execPath,
           args: ['-e', `require("node:fs").writeFileSync(${JSON.stringify(marker)}, "spawned")`],
           columns: 40,
@@ -451,8 +530,14 @@ describe('Visual+ PTY adapter', () => {
           fault: 'outer-release-publication-delay',
           input: Buffer.alloc(0),
           timeoutMs: 100,
-        }),
-      ).rejects.toThrow(/timed out/u)
+        })
+      } catch (error) {
+        delayedHardTimeout = error
+      }
+      expect(delayedHardTimeout).toBeInstanceOf(Error)
+      expect(delayedHardTimeout).not.toBeInstanceOf(AggregateError)
+      expect((delayedHardTimeout as Error).message).toBe('PTY capture timed out')
+      expect(readPtyTimeoutPhase(delayedHardTimeout)).toBe('hard')
       expect(existsSync(marker)).toBe(false)
     }
   }, 20_000)
@@ -460,16 +545,23 @@ describe('Visual+ PTY adapter', () => {
   it.each(['overflow', 'timeout'] as const)(
     'removes a uniquely identified descendant after %s',
     async (failure) => {
+      const adapter = detectScriptAdapter()
       const marker = join(fixtureParent, `descendant-${failure}-${fixtureSequence}`)
       fixtureSequence += 1
       const source = [
         'const {spawn}=require("node:child_process")',
-        'const {writeFileSync}=require("node:fs")',
+        'const {closeSync,constants,openSync,writeFileSync,writeSync}=require("node:fs")',
         'const child=spawn(process.execPath,["-e","setInterval(()=>{},1000)"],{stdio:"ignore"})',
         `writeFileSync(${JSON.stringify(marker)},String(child.pid))`,
         failure === 'overflow'
           ? 'setTimeout(()=>process.stdout.write("x".repeat(4096)),50)'
-          : 'setInterval(()=>{},1000)',
+          : [
+              'const readiness=process.env.DEPFRESH_PTY_TIMEOUT_READINESS_PATH',
+              'if(!readiness)process.exit(87)',
+              'const descriptor=openSync(readiness,constants.O_CREAT|constants.O_EXCL|constants.O_WRONLY,0o600)',
+              'try{writeSync(descriptor,String(child.pid)+"\\n")}finally{closeSync(descriptor)}',
+              'setInterval(()=>{},1000)',
+            ].join(';'),
       ].join(';')
       const promise = runInPty({
         cliPath: process.execPath,
@@ -477,9 +569,29 @@ describe('Visual+ PTY adapter', () => {
         columns: 40,
         env: {},
         input: Buffer.alloc(0),
-        ...(failure === 'overflow' ? { outputLimit: 512 } : { timeoutMs: 150 }),
+        ...(failure === 'overflow'
+          ? { outputLimit: 512 }
+          : {
+              ...(adapter.family === 'bsd'
+                ? { fault: 'outer-release-publication-delay' as const }
+                : {}),
+              timeoutAfterReadyMs: 150,
+              timeoutMs: 10_000,
+            }),
       })
-      await expect(promise).rejects.toThrow(failure === 'overflow' ? /output limit/u : /timed out/u)
+      if (failure === 'overflow') await expect(promise).rejects.toThrow(/output limit/u)
+      else {
+        let readinessTimeout: unknown
+        try {
+          await promise
+        } catch (error) {
+          readinessTimeout = error
+        }
+        expect(readinessTimeout).toBeInstanceOf(Error)
+        expect(readinessTimeout).not.toBeInstanceOf(AggregateError)
+        expect((readinessTimeout as Error).message).toBe('PTY capture timed out')
+        expect(readPtyTimeoutPhase(readinessTimeout)).toBe('readiness')
+      }
       const descendantPid = Number(readFileSync(marker, 'utf8'))
       expectProcessGone(descendantPid)
     },
@@ -625,6 +737,7 @@ describe('Visual+ built CLI', () => {
     let journeyReady = false
     let executionReady = false
     let semanticsReady = false
+    let rawTransportReady = false
     let controlsReady = false
     let transitionsReady = false
 
@@ -652,8 +765,20 @@ describe('Visual+ built CLI', () => {
       semanticsReady = true
     })
 
-    it('emits only constrained terminal controls', () => {
+    it('classifies raw terminal transport without exposing capture data', () => {
       if (!(semanticsReady && result)) return
+      expect(classifyRawTerminalTransport(result.rawTerminal)).toEqual({
+        doubleCrlf: false,
+        beforeEscape: false,
+        beforeText: false,
+        beforeOtherControl: false,
+        trailing: false,
+      })
+      rawTransportReady = true
+    })
+
+    it('emits only constrained terminal controls', () => {
+      if (!(rawTransportReady && result)) return
       expect(result.controls.sgr).toBe(0)
       expect(result.controls.carriageReturn).toBe(0)
       expect(result.controls.cursorUp).toBe(0)

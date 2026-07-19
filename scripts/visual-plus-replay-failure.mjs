@@ -89,6 +89,10 @@ const TRUSTED_FAILURE_CATEGORIES = new Map([
     'fallback-ci-semantics',
   ],
   [
+    'Visual+ built CLI CI constrained PTY fallback classifies raw terminal transport without exposing capture data',
+    'fallback-ci-transport',
+  ],
+  [
     'Visual+ built CLI CI constrained PTY fallback emits only constrained terminal controls',
     'fallback-ci-controls',
   ],
