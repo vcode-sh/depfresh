@@ -204,20 +204,23 @@ describe('2.1.0 release readiness', () => {
     expect(job).toBeDefined()
     expect(job?.['runs-on']).toBe(matrixRunnerExpression)
     expect(job?.strategy?.matrix?.os).toEqual(['ubuntu-24.04', 'macos-15'])
-    const commands = (job?.steps ?? []).flatMap((step) =>
-      step.run === undefined ? [] : [step.run],
+    const steps = job?.steps ?? []
+    const isolatedNpm = steps.find((step) => step.name === 'Install exact isolated npm')?.run
+    expect(isolatedNpm).toContain('depfresh-visual-plus-npm.XXXXXX')
+    expect(isolatedNpm).toContain('npm@11.12.0')
+    expect(isolatedNpm).toContain('"$NPM_TOOL_ROOT/prefix/bin/npm" --version)" == \'11.12.0\'')
+    expect(isolatedNpm).toContain('printf \'%s\\n\' "$NPM_TOOL_ROOT/prefix/bin" >> "$GITHUB_PATH"')
+    expect(isolatedNpm).toContain('NPM_CONFIG_USERCONFIG')
+    expect(isolatedNpm).toContain('NPM_CONFIG_GLOBALCONFIG')
+    const replay = steps.find(
+      (step) => step.name === 'Replay Visual Plus against the installed packed artifact',
+    )?.run
+    expect(replay).toContain(
+      'node scripts/verify-packed-package.mjs artifacts/visual-plus-pack.json --visual-plus',
     )
-    expect(commands).toEqual([
-      'pnpm install --frozen-lockfile',
-      'pnpm build',
-      'pnpm exec vitest run test/visual-plus-cli.test.ts',
-      `${[
-        'mkdir -p artifacts',
-        'npm pack --json --ignore-scripts --pack-destination artifacts > artifacts/visual-plus-pack.json',
-        'node scripts/verify-packed-package.mjs artifacts/visual-plus-pack.json --visual-plus',
-      ].join('\n')}\n`,
-      'pnpm exec vitest run src/commands/check/visual-plus/capabilities.test.ts src/commands/check/visual-plus/renderer.test.ts',
-    ])
+    const cleanup = steps.find((step) => step.name === 'Clean isolated npm')
+    expect(cleanup?.if).toBe(['$', '{{ always() }}'].join(''))
+    expect(cleanup?.run).toContain('rm -rf -- "$NPM_TOOL_ROOT"')
   })
 
   it.each([

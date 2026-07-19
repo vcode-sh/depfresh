@@ -28,6 +28,7 @@ process.once('uncaughtException', (error) => {
 const PUBLIC_REGISTRY = 'https://registry.npmjs.org/'
 const MAX_COMMAND_OUTPUT_BYTES = 1024 * 1024
 const PACKED_COMMAND_TIMEOUT_MS = 120_000
+const VISUAL_PLUS_REPLAY_TIMEOUT_MS = 15 * 60_000
 const MAX_TARBALL_EXPANDED_BYTES = 50 * 1024 * 1024
 const VISUAL_PLUS_PASSED_TESTS = 32
 const command = parseCommand(process.argv.slice(2))
@@ -460,6 +461,8 @@ function verifyVisualPlusReplay(options) {
   }
 
   const fakeCliPath = join(options.temporaryRoot, 'visual-plus-distinct-cli.mjs')
+  const environmentRoot = join(options.temporaryRoot, 'visual-plus-environment')
+  mkdirSync(environmentRoot)
   writeFileSync(fakeCliPath, 'throw new Error("distinct Visual+ identity control")\n')
   const testEnvironment = {
     DEPFRESH_VISUAL_PLUS_CLI_PATH: canonicalCliPath,
@@ -472,7 +475,11 @@ function verifyVisualPlusReplay(options) {
       '--testNamePattern',
       'executes the selected CLI artifact',
     ],
-    { ...testEnvironment, DEPFRESH_VISUAL_PLUS_CLI_PATH: fakeCliPath },
+    createVisualPlusEnvironment(environmentRoot, {
+      ...testEnvironment,
+      DEPFRESH_VISUAL_PLUS_CLI_PATH: fakeCliPath,
+    }),
+    { timeoutMs: PACKED_COMMAND_TIMEOUT_MS },
   )
   if (negative.error || negative.status === null) fail('Visual+ identity control could not run')
   if (negative.status === 0) fail('Visual+ identity control unexpectedly passed')
@@ -480,7 +487,8 @@ function verifyVisualPlusReplay(options) {
   const reportPath = join(options.temporaryRoot, 'visual-plus-report.json')
   const replay = runVisualPlusVitest(
     ['run', 'test/visual-plus-cli.test.ts', '--reporter=json', '--outputFile', reportPath],
-    testEnvironment,
+    createVisualPlusEnvironment(environmentRoot, testEnvironment),
+    { timeoutMs: VISUAL_PLUS_REPLAY_TIMEOUT_MS },
   )
   if (replay.error || replay.status !== 0) fail('Installed Visual+ replay failed')
   let report
@@ -504,20 +512,43 @@ function verifyVisualPlusReplay(options) {
   }
 }
 
-function runVisualPlusVitest(args, additions) {
+function runVisualPlusVitest(args, environment, options) {
   return spawnSync(
     process.execPath,
     [join(resolve(process.cwd()), 'node_modules', 'vitest', 'vitest.mjs'), ...args],
     {
       cwd: resolve(process.cwd()),
       encoding: 'utf8',
-      env: { ...process.env, ...additions },
+      env: environment,
       killSignal: 'SIGKILL',
       maxBuffer: MAX_COMMAND_OUTPUT_BYTES,
       shell: false,
-      timeout: PACKED_COMMAND_TIMEOUT_MS,
+      timeout: options.timeoutMs,
     },
   )
+}
+
+function createVisualPlusEnvironment(root, additions) {
+  const home = join(root, 'home')
+  const temporary = join(root, 'tmp')
+  const cache = join(root, 'cache')
+  mkdirSync(home, { recursive: true })
+  mkdirSync(temporary, { recursive: true })
+  mkdirSync(cache, { recursive: true })
+  const inherited = {}
+  for (const name of ['PATH', 'SystemRoot', 'ComSpec', 'PATHEXT', 'LANG', 'LC_ALL']) {
+    if (process.env[name]) inherited[name] = process.env[name]
+  }
+  return {
+    ...inherited,
+    ...additions,
+    HOME: home,
+    NPM_CONFIG_CACHE: cache,
+    TEMP: temporary,
+    TMP: temporary,
+    TMPDIR: temporary,
+    XDG_CACHE_HOME: cache,
+  }
 }
 
 function extractTarGzipEntry(tarball, targetPath) {

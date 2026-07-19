@@ -28,3 +28,9 @@
 - `mise exec node@24.15.0 -- pnpm exec biome check --error-on-warnings .` passed.
 - `mise exec node@24.15.0 -- pnpm test:release` passed: 103 tests.
 - `git diff --check` passed.
+
+## Review follow-up
+
+- The Ubuntu/macOS Visual+ CI matrix now bootstraps exact npm `11.12.0` in a disposable runner root, exports only its isolated configuration, and removes it in an always cleanup step.
+- The verifier now creates a minimal allowlisted Visual+ test environment with verifier-owned HOME, temporary, and cache paths; it does not inherit the complete parent environment.
+- The focused identity control retains the fixed 120-second bound, while the unchanged complete replay has a fixed 15-minute bound with no environment or CLI override.

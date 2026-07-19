@@ -37,6 +37,33 @@ jobs:
       - name: Test Visual Plus PTY and fallbacks
         run: pnpm exec vitest run test/visual-plus-cli.test.ts
 
+      - name: Install exact isolated npm
+        shell: bash
+        run: |
+          set -euo pipefail
+          NPM_TOOL_ROOT=$(mktemp -d "$RUNNER_TEMP/depfresh-visual-plus-npm.XXXXXX")
+          printf 'NPM_TOOL_ROOT=%s\n' "$NPM_TOOL_ROOT" >> "$GITHUB_ENV"
+          mkdir -p "$NPM_TOOL_ROOT/home" "$NPM_TOOL_ROOT/cache" "$NPM_TOOL_ROOT/prefix" "$NPM_TOOL_ROOT/xdg-cache"
+          : > "$NPM_TOOL_ROOT/user.npmrc"
+          : > "$NPM_TOOL_ROOT/global.npmrc"
+          NODE_CLI=$(command -v node)
+          NPM_BOOTSTRAP=$(command -v npm)
+          env -i HOME="$NPM_TOOL_ROOT/home" PATH="$(dirname "$NODE_CLI"):/usr/bin:/bin" \
+            "$NPM_BOOTSTRAP" install --global --ignore-scripts --no-audit --no-fund \
+            --registry https://registry.npmjs.org/ --userconfig "$NPM_TOOL_ROOT/user.npmrc" \
+            --globalconfig "$NPM_TOOL_ROOT/global.npmrc" --cache "$NPM_TOOL_ROOT/cache" \
+            --prefix "$NPM_TOOL_ROOT/prefix" npm@11.12.0
+          [[ "$("$NPM_TOOL_ROOT/prefix/bin/npm" --version)" == '11.12.0' ]]
+          printf '%s\n' "$NPM_TOOL_ROOT/prefix/bin" >> "$GITHUB_PATH"
+          {
+            printf 'HOME=%s\n' "$NPM_TOOL_ROOT/home"
+            printf 'NPM_CONFIG_CACHE=%s\n' "$NPM_TOOL_ROOT/cache"
+            printf 'NPM_CONFIG_GLOBALCONFIG=%s\n' "$NPM_TOOL_ROOT/global.npmrc"
+            printf 'NPM_CONFIG_REGISTRY=https://registry.npmjs.org/\n'
+            printf 'NPM_CONFIG_USERCONFIG=%s\n' "$NPM_TOOL_ROOT/user.npmrc"
+            printf 'XDG_CACHE_HOME=%s\n' "$NPM_TOOL_ROOT/xdg-cache"
+          } >> "$GITHUB_ENV"
+
       - name: Replay Visual Plus against the installed packed artifact
         run: |
           mkdir -p artifacts
@@ -45,6 +72,11 @@ jobs:
 
       - name: Test pure reduced-motion contracts
         run: pnpm exec vitest run src/commands/check/visual-plus/capabilities.test.ts src/commands/check/visual-plus/renderer.test.ts
+
+      - name: Clean isolated npm
+        if: ${{ always() }}
+        run: |
+          if [[ -n "${NPM_TOOL_ROOT:-}" ]]; then rm -rf -- "$NPM_TOOL_ROOT"; fi
 
   test:
     name: Test (Node 24.15.0)
