@@ -30,12 +30,24 @@ const TEST_FAULTS = new Set([
   'outer-transport-missing',
   'outer-transport-malformed',
   'outer-transport-ambiguous',
+  'outer-release-publication-delay',
+  'outer-release-pre-spawn-signal',
+  'outer-release-ready-malformed',
+  'outer-release-ready-ambiguous',
+  'wrapper-ready-marker-malformed',
+  'wrapper-ready-marker-nonoverwriting',
   'outer-output-processing',
 ])
 const OUTER_TRANSPORT_FAULTS = new Set([
   'outer-transport-missing',
   'outer-transport-malformed',
   'outer-transport-ambiguous',
+  'outer-release-publication-delay',
+  'outer-release-pre-spawn-signal',
+  'outer-release-ready-malformed',
+  'outer-release-ready-ambiguous',
+  'wrapper-ready-marker-malformed',
+  'wrapper-ready-marker-nonoverwriting',
   'outer-output-processing',
 ])
 const CLEANUP_FAULTS = new Set(['observation-ambiguity', 'signaling-failure', 'survivor'])
@@ -68,12 +80,25 @@ const START_KEYS = [
 ]
 const COMPLETION_KEYS = ['exitCode', 'records', 'signal']
 const OUTER_TRANSPORT_KEYS = ['outerRaw', 'records']
+const OUTER_TRANSPORT_READY_KEYS = ['evidenceClosed', 'records']
 const START_READINESS_KEYS = ['records', 'startPublished']
+const WRAPPER_READY_KEYS = [
+  'columns',
+  'nodeVersion',
+  'records',
+  'stderr',
+  'stdin',
+  'stdout',
+  'wrapperGroup',
+  'wrapperParent',
+  'wrapperPid',
+  'wrapperStart',
+]
+const WRAPPER_READY_MARKER_KEYS = ['evidenceClosed', 'records']
 
 function createExpectSource(fault) {
   const transportFault = OUTER_TRANSPORT_FAULTS.has(fault) ? fault : 'none'
-  const readinessWaitMs =
-    fault === 'start-evidence-failure' || fault === 'start-readiness-missing' ? 100 : 5_000
+  const readinessWaitMs = fault === 'outer-transport-missing' ? 100 : 5_000
   return `#!/usr/bin/expect -f
 set timeout -1
 log_user 0
@@ -91,20 +116,23 @@ proc token_count {tokens expected} {
 }
 spawn -noecho /usr/bin/script -q -e /dev/null ./run
 fconfigure $spawn_id -translation binary -encoding binary
+set channel [open "./script-pid" {WRONLY CREAT EXCL} 0600]
+puts $channel [exp_pid]
+close $channel
 set transport_configured 0
 if {[info exists spawn_out(slave,name)]} {
   set slave $spawn_out(slave,name)
   set transport_configured [expr {![catch {exec /bin/stty raw -echo -opost < $slave}]}]
-  set start_ready 0
-  set start_deadline [expr {[clock milliseconds] + ${readinessWaitMs}}]
-  while {[clock milliseconds] < $start_deadline} {
-    if {[file exists "./start-ready.json"]} {
-      set start_ready 1
+  set wrapper_ready 0
+  set wrapper_deadline [expr {[clock milliseconds] + ${readinessWaitMs}}]
+  while {[clock milliseconds] < $wrapper_deadline} {
+    if {[file exists "./wrapper-ready-complete.json"]} {
+      set wrapper_ready 1
       break
     }
     after 10
   }
-  if {$start_ready} {
+  if {$wrapper_ready} {
     set transport_configured [expr {![catch {exec /bin/stty raw -echo -opost < $slave}]}]
     if {$transport_fault eq "outer-output-processing"} {
       if {[catch {exec /bin/stty opost onlcr < $slave}]} {
@@ -139,12 +167,32 @@ if {[info exists spawn_out(slave,name)]} {
         puts $transport_channel "{\\"records\\":1,\\"outerRaw\\":$outer_raw_json}"
       }
       close $transport_channel
+      set release_channel [open "./outer-transport-ready.pending" {WRONLY CREAT EXCL} 0600]
+      if {$transport_fault eq "outer-release-ready-malformed"} {
+        puts $release_channel "{\\"records\\":1}"
+      } elseif {$transport_fault eq "outer-release-ready-ambiguous"} {
+        puts $release_channel "{\\"records\\":1,\\"evidenceClosed\\":true,\\"ambiguous\\":true}"
+      } else {
+        puts $release_channel "{\\"records\\":1,\\"evidenceClosed\\":true}"
+      }
+      close $release_channel
+      if {$transport_fault eq "outer-release-pre-spawn-signal"} {
+        set wrapper_channel [open "./wrapper-ready.json" r]
+        set wrapper_record [read $wrapper_channel]
+        close $wrapper_channel
+        if {![regexp {"wrapperPid":([0-9]+)} $wrapper_record -> wrapper_pid]} {
+          exit 124
+        }
+        exec /bin/kill -TERM $wrapper_pid
+        after 100
+      }
+      if {$transport_fault eq "outer-release-publication-delay"} {
+        after 250
+      }
+      file rename -- "./outer-transport-ready.pending" "./outer-transport-ready.json"
     }
   }
 }
-set channel [open "./script-pid" {WRONLY CREAT EXCL} 0600]
-puts $channel [exp_pid]
-close $channel
 expect {
   -re {(?s).+} {
     puts -nonewline stdout $expect_out(buffer)
@@ -465,7 +513,18 @@ export async function runInPty(options) {
   observed.reappeared = new Set()
   try {
     const config = Buffer.from(
-      `${JSON.stringify({ cliPath, args, env, columns, fault, psPath: '/bin/ps', sttyPath: '/bin/stty' })}\n`,
+      `${JSON.stringify({
+        cliPath,
+        args,
+        env,
+        columns,
+        fault,
+        mvPath: '/bin/mv',
+        psPath: '/bin/ps',
+        releaseWaitMs: fault === 'outer-transport-missing' ? 100 : 5_000,
+        requiresOuterTransport: adapter.family === 'bsd',
+        sttyPath: '/bin/stty',
+      })}\n`,
     )
     if (config.byteLength > CONFIG_LIMIT) throw new Error('PTY config exceeds 256 KiB')
     writeExclusive(join(directory, 'config.json'), config, 0o600)
@@ -485,12 +544,14 @@ export async function runInPty(options) {
       directory,
       observed,
     })
-    requireStartReadinessEvidence(directory)
+    const wrapperReady = requireWrapperReadyEvidence(directory)
     if (adapter.family === 'bsd') requireOuterTransportEvidence(directory)
+    requireStartReadinessEvidence(directory)
     const start = readSidecar(directory, 'start.json')
     const completion = readSidecar(directory, 'completion.json')
     validateStart(start)
     validateCompletion(completion)
+    requireWrapperIdentityAgreement(wrapperReady, start)
     if (!observed.probeSucceeded || observed.probeFailed) {
       throw new Error('PTY descendant observation was unavailable or ambiguous')
     }
@@ -508,10 +569,10 @@ export async function runInPty(options) {
     }
     requireObservedIdentity(observed, captured.pid, { group: captured.pid })
     requireObservedIdentity(observed, scriptPid)
-    registerEvidenceIdentity(observed, 'wrapper', start.wrapperPid, {
-      parent: start.wrapperParent,
-      group: start.wrapperGroup,
-      start: start.wrapperStart,
+    registerEvidenceIdentity(observed, 'wrapper', wrapperReady.wrapperPid, {
+      parent: wrapperReady.wrapperParent,
+      group: wrapperReady.wrapperGroup,
+      start: wrapperReady.wrapperStart,
     })
     registerEvidenceIdentity(observed, 'cli', start.cliPid, {
       parent: start.cliParent,
@@ -559,13 +620,16 @@ export async function runInPty(options) {
 function createWrapperSource() {
   return `#!${realpathSync(process.execPath)}
 import { execFileSync, spawn } from 'node:child_process'
-import { closeSync, constants, lstatSync, openSync, readFileSync, writeSync } from 'node:fs'
+import { closeSync, constants, fstatSync, lstatSync, openSync, readFileSync, writeSync } from 'node:fs'
 const fail = (message) => { process.stderr.write('PTY wrapper failure: ' + message + '\\n'); process.exit(125) }
 const configPath = new URL('./config.json', import.meta.url)
 const stats = lstatSync(configPath)
 if (!stats.isFile() || stats.isSymbolicLink() || (stats.mode & 0o777) !== 0o600 || stats.size > ${CONFIG_LIMIT}) fail('invalid config')
 const config = JSON.parse(readFileSync(configPath, 'utf8'))
 if (!Number.isSafeInteger(config.columns) || config.columns < 1 || config.columns > 1000) fail('invalid columns')
+if (config.mvPath !== '/bin/mv') fail('invalid marker publisher')
+if (typeof config.requiresOuterTransport !== 'boolean') fail('invalid transport requirement')
+if (!Number.isSafeInteger(config.releaseWaitMs) || config.releaseWaitMs < 1 || config.releaseWaitMs > 5000) fail('invalid release wait')
 execFileSync(config.sttyPath, ['opost', 'onlcr', 'rows', '24', 'cols', String(config.columns)], { stdio: 'inherit' })
 const processIdentity = (pid) => {
   const value = execFileSync(config.psPath, ['-o', 'ppid=', '-o', 'pgid=', '-o', 'lstart=', '-p', String(pid)], { encoding: 'utf8', maxBuffer: 4096, timeout: 1000 })
@@ -577,18 +641,84 @@ const writeRecord = (name, value) => {
   const descriptor = openSync(new URL('./' + name, import.meta.url), constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY, 0o600)
   try { writeSync(descriptor, JSON.stringify(value) + '\\n') } finally { closeSync(descriptor) }
 }
+const publishRecord = (pendingName, finalName, value) => {
+  writeRecord(pendingName, value)
+  try {
+    execFileSync(config.mvPath, ['-n', pendingName, finalName], { stdio: 'ignore' })
+    try { lstatSync(pendingName); throw new Error() } catch (error) { if (error?.code !== 'ENOENT') throw error }
+  } catch {
+    fail('marker publication failure')
+  }
+}
+const readRecord = (name, keys) => {
+  const path = new URL('./' + name, import.meta.url)
+  let descriptor
+  try {
+    descriptor = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW)
+    const recordStats = fstatSync(descriptor)
+    if (!recordStats.isFile() || (recordStats.mode & 0o777) !== 0o600 || recordStats.size < 1 || recordStats.size > ${SIDECAR_LIMIT}) throw new Error()
+    const text = readFileSync(descriptor, 'utf8')
+    if (!/^[^\\n]+\\n$/u.test(text)) throw new Error()
+    const value = JSON.parse(text)
+    if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error()
+    const actualKeys = Object.keys(value).sort()
+    if (actualKeys.length !== keys.length || actualKeys.some((key, index) => key !== keys[index])) throw new Error()
+    return value
+  } catch {
+    throw new Error('invalid transport release')
+  } finally {
+    if (descriptor !== undefined) closeSync(descriptor)
+  }
+}
+const waitForRecord = (name) => {
+  const path = new URL('./' + name, import.meta.url)
+  const deadline = Date.now() + config.releaseWaitMs
+  while (Date.now() < deadline) {
+    try { lstatSync(path); return } catch {}
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10)
+  }
+  throw new Error('transport release timeout')
+}
 let child
 let childClosed = false
 let forwarded = false
 const killChild = (signal) => { if (!child?.pid || childClosed) return; try { process.kill(-child.pid, signal) } catch {} }
 const forward = (signal) => { if (forwarded) return; forwarded = true; killChild(signal) }
+const wrapperIdentity = processIdentity(process.pid)
+writeRecord('wrapper-ready.json', { records: 1, wrapperPid: process.pid, wrapperParent: wrapperIdentity.parent, wrapperGroup: wrapperIdentity.group, wrapperStart: wrapperIdentity.start, stdin: Boolean(process.stdin.isTTY), stdout: Boolean(process.stdout.isTTY), stderr: Boolean(process.stderr.isTTY), columns: process.stdout.columns, nodeVersion: process.version })
+if (config.fault === 'wrapper-ready-marker-nonoverwriting') {
+  writeRecord('wrapper-ready-complete.json', { records: 1 })
+}
+publishRecord(
+  'wrapper-ready-complete.pending',
+  'wrapper-ready-complete.json',
+  config.fault === 'wrapper-ready-marker-malformed'
+    ? { records: 1 }
+    : { records: 1, evidenceClosed: true },
+)
+try {
+  const wrapperReadyMarker = readRecord('wrapper-ready-complete.json', ['evidenceClosed', 'records'])
+  if (wrapperReadyMarker.records !== 1 || wrapperReadyMarker.evidenceClosed !== true) throw new Error()
+} catch {
+  fail('wrapper readiness marker failure')
+}
+if (config.requiresOuterTransport) {
+  try {
+    waitForRecord('outer-transport-ready.json')
+    const releaseReady = readRecord('outer-transport-ready.json', ['evidenceClosed', 'records'])
+    if (releaseReady.records !== 1 || releaseReady.evidenceClosed !== true) throw new Error()
+    const release = readRecord('outer-transport.json', ['outerRaw', 'records'])
+    if (release.records !== 1 || release.outerRaw !== true) throw new Error()
+  } catch {
+    fail('transport release failure')
+  }
+}
 process.once('SIGTERM', () => forward('SIGTERM'))
 process.once('SIGHUP', () => forward('SIGHUP'))
 process.once('exit', () => killChild('SIGKILL'))
 try {
   child = spawn(config.cliPath, config.args, { cwd: '/', detached: true, env: config.env, stdio: 'inherit' })
   child.once('error', (error) => { killChild('SIGKILL'); fail(error.code ?? 'spawn error') })
-  const wrapperIdentity = processIdentity(process.pid)
   const childIdentity = processIdentity(child.pid)
   if (config.fault === 'start-evidence-failure') throw new Error('injected start evidence failure')
   const start = config.fault === 'malformed-start'
@@ -763,13 +893,13 @@ function signalMatchingIdentities(current, observed, signal, errors) {
 function observeProcessTree(outerPid, directory, observed) {
   const roots = new Set([outerPid])
   const publishedWrapper = readPublishedWrapperIdentity(directory)
-  for (const name of ['script-pid', 'start.json']) {
+  for (const name of ['script-pid', 'wrapper-ready.json', 'start.json']) {
     try {
       if (name === 'script-pid') roots.add(readPidSidecar(directory, name))
       else {
-        const start = readSidecar(directory, name)
-        if (Number.isSafeInteger(start.wrapperPid)) roots.add(start.wrapperPid)
-        if (Number.isSafeInteger(start.cliPid)) roots.add(start.cliPid)
+        const evidence = readSidecar(directory, name)
+        if (Number.isSafeInteger(evidence.wrapperPid)) roots.add(evidence.wrapperPid)
+        if (Number.isSafeInteger(evidence.cliPid)) roots.add(evidence.cliPid)
       }
     } catch {}
   }
@@ -812,15 +942,13 @@ function observeProcessTree(outerPid, directory, observed) {
 
 function readPublishedWrapperIdentity(directory) {
   try {
-    requireStartReadinessEvidence(directory)
-    const start = readSidecar(directory, 'start.json')
-    validateStart(start)
+    const wrapperReady = requireWrapperReadyEvidence(directory)
     return {
-      pid: start.wrapperPid,
+      pid: wrapperReady.wrapperPid,
       identity: {
-        parent: start.wrapperParent,
-        group: start.wrapperGroup,
-        start: start.wrapperStart,
+        parent: wrapperReady.wrapperParent,
+        group: wrapperReady.wrapperGroup,
+        start: wrapperReady.wrapperStart,
       },
     }
   } catch {
@@ -960,6 +1088,9 @@ function requireStartReadinessEvidence(directory) {
 
 function requireOuterTransportEvidence(directory) {
   try {
+    const ready = readSidecar(directory, 'outer-transport-ready.json')
+    requireExactKeys(ready, OUTER_TRANSPORT_READY_KEYS, 'outer transport readiness')
+    if (ready.records !== 1 || ready.evidenceClosed !== true) throw new Error()
     const evidence = readSidecar(directory, 'outer-transport.json')
     requireExactKeys(evidence, OUTER_TRANSPORT_KEYS, 'outer transport')
     if (evidence.records !== 1 || evidence.outerRaw !== true) {
@@ -967,6 +1098,54 @@ function requireOuterTransportEvidence(directory) {
     }
   } catch {
     throw new Error('PTY outer transport evidence is invalid')
+  }
+}
+
+function requireWrapperReadyEvidence(directory) {
+  try {
+    const marker = readSidecar(directory, 'wrapper-ready-complete.json')
+    requireExactKeys(marker, WRAPPER_READY_MARKER_KEYS, 'wrapper readiness marker')
+    if (marker.records !== 1 || marker.evidenceClosed !== true) throw new Error()
+    const evidence = readSidecar(directory, 'wrapper-ready.json')
+    requireExactKeys(evidence, WRAPPER_READY_KEYS, 'wrapper readiness')
+    validatePid(evidence.wrapperPid)
+    validateProcessIdentity({
+      parent: evidence.wrapperParent,
+      group: evidence.wrapperGroup,
+      start: evidence.wrapperStart,
+    })
+    if (
+      evidence.records !== 1 ||
+      evidence.stdin !== true ||
+      evidence.stdout !== true ||
+      evidence.stderr !== true ||
+      !Number.isSafeInteger(evidence.columns) ||
+      evidence.columns < 1 ||
+      typeof evidence.nodeVersion !== 'string'
+    ) {
+      throw new Error()
+    }
+    return evidence
+  } catch {
+    throw new Error('PTY wrapper readiness evidence is invalid')
+  }
+}
+
+function requireWrapperIdentityAgreement(wrapperReady, start) {
+  for (const key of [
+    'wrapperPid',
+    'wrapperParent',
+    'wrapperGroup',
+    'wrapperStart',
+    'stdin',
+    'stdout',
+    'stderr',
+    'columns',
+    'nodeVersion',
+  ]) {
+    if (wrapperReady[key] !== start[key]) {
+      throw new Error('PTY wrapper readiness evidence disagrees with start evidence')
+    }
   }
 }
 

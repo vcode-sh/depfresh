@@ -1,6 +1,7 @@
 import { execFileSync, spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -294,8 +295,16 @@ describe('Visual+ PTY adapter', () => {
       env: {},
       input: Buffer.alloc(0),
     })
+    const delayedImmediateLineFeed = await runInPty({
+      cliPath: process.execPath,
+      args: ['-e', 'process.stdout.write("line\\n")'],
+      columns: 40,
+      env: {},
+      ...(adapter.family === 'bsd' ? { fault: 'outer-release-publication-delay' as const } : {}),
+      input: Buffer.alloc(0),
+    })
 
-    for (const result of [lineFeed, explicitCrlf]) {
+    for (const result of [lineFeed, explicitCrlf, delayedImmediateLineFeed]) {
       expect(result.adapter.family).toBe(adapter.family)
       expect(result.exitCode).toBe(0)
       expect(result.rawTerminal).toEqual(Buffer.from('line\r\n'))
@@ -323,16 +332,62 @@ describe('Visual+ PTY adapter', () => {
         'outer-transport-ambiguous',
         'outer-output-processing',
       ] as const) {
+        const marker = join(fixtureParent, `transport-release-${fault}-${fixtureSequence}`)
+        fixtureSequence += 1
         await expect(
           runInPty({
             cliPath: process.execPath,
-            args: ['-e', 'process.stdout.write("private-transport-bytes\\n")'],
+            args: ['-e', `require("node:fs").writeFileSync(${JSON.stringify(marker)}, "spawned")`],
             columns: 40,
             env: {},
             fault,
             input: Buffer.alloc(0),
           }),
         ).rejects.toThrow(/^PTY outer transport evidence is invalid$/u)
+        expect(existsSync(marker)).toBe(false)
+      }
+
+      const signalMarker = join(fixtureParent, `pre-release-signal-${fixtureSequence}`)
+      fixtureSequence += 1
+      const signalCli = join(fixtureParent, `pre-release-signal-cli-${fixtureSequence}`)
+      fixtureSequence += 1
+      writeFileSync(signalCli, '#!/bin/sh\nprintf spawned > "$1"\n/bin/sleep 1\n')
+      chmodSync(signalCli, 0o700)
+      let signalError: unknown
+      try {
+        await runInPty({
+          cliPath: realpathSync(signalCli),
+          args: [signalMarker],
+          columns: 40,
+          env: {},
+          fault: 'outer-release-pre-spawn-signal',
+          input: Buffer.alloc(0),
+        })
+      } catch (error) {
+        signalError = error
+      }
+      expect(existsSync(signalMarker)).toBe(false)
+      expect(signalError).toEqual(new Error('PTY start readiness evidence is invalid'))
+
+      for (const [fault, message] of [
+        ['outer-release-ready-malformed', 'PTY outer transport evidence is invalid'],
+        ['outer-release-ready-ambiguous', 'PTY outer transport evidence is invalid'],
+        ['wrapper-ready-marker-malformed', 'PTY wrapper readiness evidence is invalid'],
+        ['wrapper-ready-marker-nonoverwriting', 'PTY wrapper readiness evidence is invalid'],
+      ] as const) {
+        const marker = join(fixtureParent, `publication-${fault}-${fixtureSequence}`)
+        fixtureSequence += 1
+        await expect(
+          runInPty({
+            cliPath: process.execPath,
+            args: ['-e', `require("node:fs").writeFileSync(${JSON.stringify(marker)}, "spawned")`],
+            columns: 40,
+            env: {},
+            fault,
+            input: Buffer.alloc(0),
+          }),
+        ).rejects.toThrow(new RegExp(`^${message}$`, 'u'))
+        expect(existsSync(marker)).toBe(false)
       }
     } else {
       await expect(
@@ -382,6 +437,24 @@ describe('Visual+ PTY adapter', () => {
         timeoutMs: 100,
       }),
     ).rejects.toThrow(/timed out/u)
+
+    const adapter = detectScriptAdapter()
+    if (adapter.family === 'bsd') {
+      const marker = join(fixtureParent, `pre-release-timeout-${fixtureSequence}`)
+      fixtureSequence += 1
+      await expect(
+        runInPty({
+          cliPath: process.execPath,
+          args: ['-e', `require("node:fs").writeFileSync(${JSON.stringify(marker)}, "spawned")`],
+          columns: 40,
+          env: {},
+          fault: 'outer-release-publication-delay',
+          input: Buffer.alloc(0),
+          timeoutMs: 100,
+        }),
+      ).rejects.toThrow(/timed out/u)
+      expect(existsSync(marker)).toBe(false)
+    }
   }, 20_000)
 
   it.each(['overflow', 'timeout'] as const)(
