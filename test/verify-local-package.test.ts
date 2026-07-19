@@ -101,6 +101,7 @@ setInterval(() => {}, 1_000)
   it('keeps the installed-artifact Visual+ replay fixed, path-bound, and private', () => {
     const packedVerifier = readFileSync('scripts/verify-packed-package.mjs', 'utf8')
     const replayFailure = readFileSync('scripts/visual-plus-replay-failure.mjs', 'utf8')
+    const visualPlusTest = readFileSync('test/visual-plus-cli.test.ts', 'utf8')
 
     expect(packedVerifier).toContain("'--visual-plus'")
     expect(packedVerifier).toContain("'package/dist/cli.mjs'")
@@ -116,7 +117,7 @@ setInterval(() => {}, 1_000)
     expect(replayFailure).toContain(['classification: $', '{classification}'].join(''))
     expect(packedVerifier).toContain('cliSha256')
     expect(packedVerifier).toContain('passedTests')
-    expect(packedVerifier).toContain('const VISUAL_PLUS_PASSED_TESTS = 36')
+    expect(packedVerifier).toContain('const VISUAL_PLUS_PASSED_TESTS = 40')
     expect(packedVerifier).toContain('VISUAL_PLUS_REPLAY_TIMEOUT_MS = 15 * 60_000')
     expect(packedVerifier).toContain('timeoutMs: PACKED_COMMAND_TIMEOUT_MS')
     expect(packedVerifier).toContain('timeoutMs: VISUAL_PLUS_REPLAY_TIMEOUT_MS')
@@ -125,6 +126,19 @@ setInterval(() => {}, 1_000)
     expect(packedVerifier).toContain('XDG_CACHE_HOME')
     expect(packedVerifier).not.toContain('env: { ...process.env')
     expect(packedVerifier).not.toContain('shell: true')
+    expect(visualPlusTest).toContain("describe.sequential('CI constrained PTY fallback'")
+    for (const readiness of [
+      'journeyReady',
+      'executionReady',
+      'semanticsReady',
+      'controlsReady',
+      'transitionsReady',
+    ]) {
+      expect(visualPlusTest, readiness).toContain(`let ${readiness} = false`)
+    }
+    expect(visualPlusTest).toContain('expect(journeyReady).toBe(true)')
+    expect(visualPlusTest).toContain('catch {}')
+    expect(visualPlusTest).not.toContain('let runError: unknown')
   })
 })
 

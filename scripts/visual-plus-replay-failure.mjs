@@ -81,8 +81,24 @@ const TRUSTED_FAILURE_CATEGORIES = new Map([
     'fallback-capable-pty',
   ],
   [
-    'Visual+ built CLI uses durable CI constrained PTY fallback without losing read-only semantic output',
-    'fallback-ci-pty',
+    'Visual+ built CLI CI constrained PTY fallback executes with exact PTY evidence and exit 0',
+    'fallback-ci-execution',
+  ],
+  [
+    'Visual+ built CLI CI constrained PTY fallback preserves read-only semantic output',
+    'fallback-ci-semantics',
+  ],
+  [
+    'Visual+ built CLI CI constrained PTY fallback emits only constrained terminal controls',
+    'fallback-ci-controls',
+  ],
+  [
+    'Visual+ built CLI CI constrained PTY fallback emits each active transition once',
+    'fallback-ci-transitions',
+  ],
+  [
+    'Visual+ built CLI CI constrained PTY fallback leaves fixture bytes and Git unchanged',
+    'fallback-ci-read-only',
   ],
   [
     'Visual+ built CLI uses durable TERM=dumb constrained PTY fallback without losing read-only semantic output',

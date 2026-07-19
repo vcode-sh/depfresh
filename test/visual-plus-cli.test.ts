@@ -403,28 +403,65 @@ describe('Visual+ built CLI', () => {
     assertGitClean(fixture)
   }, 120_000)
 
-  it('uses durable CI constrained PTY fallback without losing read-only semantic output', async () => {
-    const fixture = createFixture('ci-constrained-fallback')
-    const result = await runReadOnlyPty(fixture, { CI: '1' })
-    expect(result.exitCode).toBe(0)
-    expect(result.evidence.columns).toBe(80)
-    expect(result.finalCursorVisible).toBe(true)
-    expect(result.transcript.endsWith('Exit 0\n')).toBe(true)
-    assertReadOnlySemantics(result.transcript, fixture)
-    expect(result.controls.sgr).toBe(0)
-    expect(result.controls.carriageReturn).toBe(0)
-    expect(result.controls.cursorUp).toBe(0)
-    expect(result.controls.eraseLine).toBe(0)
-    expect(result.controls.cursorHide).toBe(0)
-    expect(result.controls.cursorShow).toBe(1)
-    const activeTransitions = result.transcript
-      .split('\n')
-      .filter((line) => /\bactive\b/u.test(line))
-    expect(new Set(activeTransitions).size).toBe(activeTransitions.length)
+  describe.sequential('CI constrained PTY fallback', () => {
+    let fixture: ReturnType<typeof createVisualPlusFixture> | undefined
+    let result: Awaited<ReturnType<typeof runInPty>> | undefined
+    let journeyReady = false
+    let executionReady = false
+    let semanticsReady = false
+    let controlsReady = false
+    let transitionsReady = false
 
-    assertFixtureBytes(fixture, 'before')
-    assertGitClean(fixture)
-  }, 120_000)
+    beforeAll(async () => {
+      try {
+        fixture = createFixture('ci-constrained-fallback')
+        result = await runReadOnlyPty(fixture, { CI: '1' })
+        journeyReady = true
+      } catch {}
+    }, 120_000)
+
+    it('executes with exact PTY evidence and exit 0', () => {
+      expect(journeyReady).toBe(true)
+      if (!(journeyReady && result)) return
+      expect(result.exitCode).toBe(0)
+      expect(result.evidence.columns).toBe(80)
+      expect(result.finalCursorVisible).toBe(true)
+      executionReady = true
+    })
+
+    it('preserves read-only semantic output', () => {
+      if (!(executionReady && fixture && result)) return
+      expect(result.transcript.endsWith('Exit 0\n')).toBe(true)
+      assertReadOnlySemantics(result.transcript, fixture)
+      semanticsReady = true
+    })
+
+    it('emits only constrained terminal controls', () => {
+      if (!(semanticsReady && result)) return
+      expect(result.controls.sgr).toBe(0)
+      expect(result.controls.carriageReturn).toBe(0)
+      expect(result.controls.cursorUp).toBe(0)
+      expect(result.controls.eraseLine).toBe(0)
+      expect(result.controls.cursorHide).toBe(0)
+      expect(result.controls.cursorShow).toBe(1)
+      controlsReady = true
+    })
+
+    it('emits each active transition once', () => {
+      if (!(controlsReady && result)) return
+      const activeTransitions = result.transcript
+        .split('\n')
+        .filter((line) => /\bactive\b/u.test(line))
+      expect(new Set(activeTransitions).size).toBe(activeTransitions.length)
+      transitionsReady = true
+    })
+
+    it('leaves fixture bytes and Git unchanged', () => {
+      if (!(transitionsReady && fixture)) return
+      assertFixtureBytes(fixture, 'before')
+      assertGitClean(fixture)
+    })
+  })
 
   it('uses durable TERM=dumb constrained PTY fallback without losing read-only semantic output', async () => {
     const fixture = createFixture('dumb-constrained-fallback')
