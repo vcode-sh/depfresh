@@ -19,6 +19,7 @@ import {
 } from 'node:fs'
 import { constants as osConstants, tmpdir } from 'node:os'
 import { delimiter, isAbsolute, join, resolve } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { visualLength } from '../../src/utils/format/width.ts'
 
 const DEFAULT_TIMEOUT_MS = 30_000
@@ -30,7 +31,13 @@ const TIMEOUT_READINESS_SIDECAR = 'timeout-readiness.pid'
 const TIMEOUT_PHASE = Symbol('PTY timeout phase')
 const TRANSCRIPT_FAILURE_PHASE = Symbol('PTY transcript failure phase')
 const TRANSCRIPT_NAME = 'typescript.raw'
+const CHILD_WRITE_DIAGNOSTIC_NAME = 'child-write-diagnostic.mjs'
+const CHILD_WRITE_EVIDENCE_NAME = 'child-write.json'
+const INNER_MODE_EVIDENCE_NAME = 'inner-modes.json'
 const TEST_FAULTS = new Set([
+  'child-write-evidence-malformed',
+  'child-write-evidence-missing',
+  'child-write-evidence-unclosed',
   'start-evidence-failure',
   'malformed-start',
   'malformed-completion',
@@ -76,6 +83,11 @@ const TRANSCRIPT_FAULTS = new Set([
   'typescript-unstable',
   'typescript-wrong-mode',
 ])
+const CHILD_WRITE_FAULTS = new Set([
+  'child-write-evidence-malformed',
+  'child-write-evidence-missing',
+  'child-write-evidence-unclosed',
+])
 const EVIDENCE_ROLES = new Set(['cli', 'unclassified', 'wrapper'])
 const IDENTITY_CHANGE_DIAGNOSTICS = new Map([
   ['group', 'group-only'],
@@ -120,6 +132,23 @@ const WRAPPER_READY_KEYS = [
   'wrapperStart',
 ]
 const WRAPPER_READY_MARKER_KEYS = ['evidenceClosed', 'records']
+const LINE_ENDING_KEYS = [
+  'bareLf',
+  'beforeEscape',
+  'beforeOtherControl',
+  'beforeText',
+  'doubleCrlf',
+  'singleCrlf',
+  'trailing',
+]
+const OUTPUT_MODE_KEYS = ['available', 'newlineMapping', 'outputProcessing']
+const WRITE_MODE_KEYS = [
+  'available',
+  'newlineMapping',
+  'observed',
+  'outputProcessing',
+  'stateChanged',
+]
 
 function createExpectSource(fault) {
   const transportFault = OUTER_TRANSPORT_FAULTS.has(fault) ? fault : 'none'
@@ -555,6 +584,13 @@ function nextGrapheme(text, index) {
 export async function runInPty(options) {
   const cliPath = requireAbsoluteRegularFile(options?.cliPath, 'CLI')
   const args = requireStringArray(options?.args, 'arguments')
+  const diagnoseChildWrites = options?.diagnoseChildWrites ?? false
+  if (typeof diagnoseChildWrites !== 'boolean') {
+    throw new Error('PTY child-write diagnostic option must be boolean')
+  }
+  if (diagnoseChildWrites && cliPath !== realpathSync(process.execPath)) {
+    throw new Error('PTY child-write diagnostics require the current Node executable')
+  }
   const env = requireEnvironment(options?.env)
   const columns = requireColumns(options?.columns)
   const input = options?.input ?? Buffer.alloc(0)
@@ -575,6 +611,9 @@ export async function runInPty(options) {
   }
   if (adapter.family !== 'bsd' && TRANSCRIPT_FAULTS.has(fault)) {
     throw new Error('PTY transcript fault is not applicable')
+  }
+  if (CHILD_WRITE_FAULTS.has(fault) && !diagnoseChildWrites) {
+    throw new Error('PTY child-write diagnostic fault is not applicable')
   }
   const directory = mkdtempSync(join(tmpdir(), 'depfresh-pty-'))
   chmodSync(directory, 0o700)
@@ -602,10 +641,15 @@ export async function runInPty(options) {
       timeoutAfterReadyMs === undefined
         ? env
         : { ...env, [TIMEOUT_READINESS_ENV]: join(directory, TIMEOUT_READINESS_SIDECAR) }
+    const diagnosticPath = join(directory, CHILD_WRITE_DIAGNOSTIC_NAME)
+    const invocationArgs = diagnoseChildWrites
+      ? ['--import', pathToFileURL(diagnosticPath).href, ...args]
+      : args
     const config = Buffer.from(
       `${JSON.stringify({
         cliPath,
-        args,
+        args: invocationArgs,
+        diagnoseChildWrites,
         env: invocationEnv,
         columns,
         fault,
@@ -619,6 +663,9 @@ export async function runInPty(options) {
     if (config.byteLength > CONFIG_LIMIT) throw new Error('PTY config exceeds 256 KiB')
     writeExclusive(join(directory, 'config.json'), config, 0o600)
     writeExclusive(join(directory, 'run'), Buffer.from(createWrapperSource()), 0o700)
+    if (diagnoseChildWrites) {
+      writeExclusive(diagnosticPath, Buffer.from(createChildWriteDiagnosticSource(fault)), 0o600)
+    }
     if (adapter.family === 'bsd')
       writeExclusive(join(directory, 'bootstrap'), Buffer.from(createExpectSource(fault)), 0o700)
 
@@ -683,6 +730,9 @@ export async function runInPty(options) {
         ? readValidatedTranscript(transcriptEvidence, outputLimit, fault)
         : captured.stdout
     const normalized = normalizeTerminalCapture(rawTerminal, { columns, limit: outputLimit })
+    const writeBoundary = diagnoseChildWrites
+      ? requireWriteBoundaryEvidence(directory, rawTerminal)
+      : undefined
     outcome = Object.freeze({
       adapter,
       rawTerminal,
@@ -690,6 +740,7 @@ export async function runInPty(options) {
         ? { outerTransportDoubleCrlf: hasDoubleCarriageReturnLineFeed(captured.stdout) }
         : {}),
       diagnostics: captured.stderr,
+      ...(writeBoundary === undefined ? {} : { writeBoundary }),
       transcript: normalized.transcript,
       controls: normalized.controls,
       finalCursorVisible: normalized.finalCursorVisible,
@@ -729,6 +780,125 @@ export async function runInPty(options) {
   return outcome
 }
 
+function createChildWriteDiagnosticSource(fault) {
+  const diagnosticFault = CHILD_WRITE_FAULTS.has(fault) ? fault : 'none'
+  return `import { execFileSync } from 'node:child_process'
+import { closeSync, constants, openSync, renameSync, writeSync } from 'node:fs'
+const fault = ${JSON.stringify(diagnosticFault)}
+const emptyFlags = () => ({ bareLf: false, beforeEscape: false, beforeOtherControl: false, beforeText: false, doubleCrlf: false, singleCrlf: false, trailing: false })
+const emptyState = () => ({ flags: emptyFlags(), pendingCarriageReturns: 0 })
+const states = { combined: emptyState(), stderr: emptyState(), stdout: emptyState() }
+const writes = { available: true, newlineMapping: true, observed: false, outputProcessing: true, stateChanged: false }
+let closed = false
+let firstLineFeedSampled = false
+let lastPublished = ''
+const tokenCount = (tokens, expected) => tokens.filter((token) => token === expected).length
+const readOutputModes = () => {
+  try {
+    const output = execFileSync('/bin/stty', ['-a'], { encoding: 'utf8', maxBuffer: 4096, stdio: [1, 'pipe', 'ignore'], timeout: 1000 })
+    const tokens = output.replaceAll(';', ' ').replaceAll(':', ' ').split(/\\s+/u)
+    const outputOn = tokenCount(tokens, 'opost')
+    const outputOff = tokenCount(tokens, '-opost')
+    const mappingOn = tokenCount(tokens, 'onlcr')
+    const mappingOff = tokenCount(tokens, '-onlcr')
+    if (outputOn + outputOff !== 1 || mappingOn + mappingOff !== 1) throw new Error()
+    return { available: true, newlineMapping: mappingOn === 1, outputProcessing: outputOn === 1 }
+  } catch {
+    return { available: false, newlineMapping: false, outputProcessing: false }
+  }
+}
+const observeModes = (modes) => {
+  writes.observed = true
+  writes.available &&= modes.available
+  writes.newlineMapping &&= modes.newlineMapping
+  writes.outputProcessing &&= modes.outputProcessing
+  writes.stateChanged ||= !modes.available || !modes.newlineMapping || !modes.outputProcessing
+}
+const classifyPending = (state, next) => {
+  if (state.pendingCarriageReturns > 1) state.flags.beforeOtherControl = true
+  if (next === 27) state.flags.beforeEscape = true
+  else if (next < 0x20 || (next >= 0x7f && next <= 0x9f)) state.flags.beforeOtherControl = true
+  else state.flags.beforeText = true
+  state.pendingCarriageReturns = 0
+}
+const accept = (state, bytes) => {
+  for (const byte of bytes) {
+    if (byte === 13) {
+      state.pendingCarriageReturns = Math.min(2, state.pendingCarriageReturns + 1)
+      continue
+    }
+    if (byte === 10) {
+      if (state.pendingCarriageReturns > 1) state.flags.doubleCrlf = true
+      else if (state.pendingCarriageReturns === 1) state.flags.singleCrlf = true
+      else state.flags.bareLf = true
+      state.pendingCarriageReturns = 0
+      continue
+    }
+    if (state.pendingCarriageReturns > 0) classifyPending(state, byte)
+  }
+}
+const toBytes = (chunk, encoding) => {
+  if (typeof chunk === 'string') return Buffer.from(chunk, typeof encoding === 'string' ? encoding : undefined)
+  if (ArrayBuffer.isView(chunk)) return Buffer.from(chunk.buffer, chunk.byteOffset, chunk.byteLength)
+  return undefined
+}
+const record = () => ({ closed, combined: states.combined.flags, stderr: states.stderr.flags, stdout: states.stdout.flags, writes })
+const writeAll = (descriptor, bytes) => {
+  let offset = 0
+  while (offset < bytes.byteLength) offset += writeSync(descriptor, bytes, offset, bytes.byteLength - offset)
+}
+const publish = () => {
+  if (fault === 'child-write-evidence-missing') return
+  const value = fault === 'child-write-evidence-malformed'
+    ? { ...record(), combined: { ...states.combined.flags, ambiguous: true } }
+    : record()
+  const text = JSON.stringify(value) + '\\n'
+  if (text === lastPublished) return
+  const pending = new URL('./child-write.pending', import.meta.url)
+  const final = new URL('./${CHILD_WRITE_EVIDENCE_NAME}', import.meta.url)
+  const descriptor = openSync(pending, constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY, 0o600)
+  try { writeAll(descriptor, Buffer.from(text)) } finally { closeSync(descriptor) }
+  renameSync(pending, final)
+  lastPublished = text
+}
+const install = (stream, name) => {
+  const original = stream.write
+  stream.write = function (chunk, encoding, callback) {
+    const bytes = toBytes(chunk, encoding)
+    let modes
+    if (bytes) {
+      const hasCarriageReturn = bytes.includes(13)
+      const hasLineFeed = bytes.includes(10)
+      if (hasCarriageReturn || (hasLineFeed && !firstLineFeedSampled)) {
+        modes = readOutputModes()
+        if (hasLineFeed) firstLineFeedSampled = true
+      }
+    }
+    const result = Reflect.apply(original, this, arguments)
+    if (bytes) {
+      if (modes) observeModes(modes)
+      accept(states[name], bytes)
+      accept(states.combined, bytes)
+      publish()
+    }
+    return result
+  }
+}
+install(process.stdout, 'stdout')
+install(process.stderr, 'stderr')
+publish()
+process.once('exit', () => {
+  closed = fault !== 'child-write-evidence-unclosed'
+  for (const state of Object.values(states)) {
+    if (state.pendingCarriageReturns > 1) state.flags.beforeOtherControl = true
+    if (state.pendingCarriageReturns > 0) state.flags.trailing = true
+    state.pendingCarriageReturns = 0
+  }
+  publish()
+})
+`
+}
+
 function createWrapperSource() {
   return `#!${realpathSync(process.execPath)}
 import { execFileSync, spawn } from 'node:child_process'
@@ -739,10 +909,27 @@ const stats = lstatSync(configPath)
 if (!stats.isFile() || stats.isSymbolicLink() || (stats.mode & 0o777) !== 0o600 || stats.size > ${CONFIG_LIMIT}) fail('invalid config')
 const config = JSON.parse(readFileSync(configPath, 'utf8'))
 if (!Number.isSafeInteger(config.columns) || config.columns < 1 || config.columns > 1000) fail('invalid columns')
+if (typeof config.diagnoseChildWrites !== 'boolean') fail('invalid child-write diagnostic option')
 if (config.mvPath !== '/bin/mv') fail('invalid marker publisher')
 if (typeof config.requiresOuterTransport !== 'boolean') fail('invalid transport requirement')
 if (!Number.isSafeInteger(config.releaseWaitMs) || config.releaseWaitMs < 1 || config.releaseWaitMs > 5000) fail('invalid release wait')
 execFileSync(config.sttyPath, ['opost', 'onlcr', 'rows', '24', 'cols', String(config.columns)], { stdio: 'inherit' })
+const tokenCount = (tokens, expected) => tokens.filter((token) => token === expected).length
+const readOutputModes = () => {
+  try {
+    const output = execFileSync(config.sttyPath, ['-a'], { encoding: 'utf8', maxBuffer: 4096, stdio: ['inherit', 'pipe', 'ignore'], timeout: 1000 })
+    const tokens = output.replaceAll(';', ' ').replaceAll(':', ' ').split(/\\s+/u)
+    const outputOn = tokenCount(tokens, 'opost')
+    const outputOff = tokenCount(tokens, '-opost')
+    const mappingOn = tokenCount(tokens, 'onlcr')
+    const mappingOff = tokenCount(tokens, '-onlcr')
+    if (outputOn + outputOff !== 1 || mappingOn + mappingOff !== 1) throw new Error()
+    return { available: true, newlineMapping: mappingOn === 1, outputProcessing: outputOn === 1 }
+  } catch {
+    return { available: false, newlineMapping: false, outputProcessing: false }
+  }
+}
+const innerModeStart = config.diagnoseChildWrites ? readOutputModes() : undefined
 const processIdentity = (pid) => {
   const value = execFileSync(config.psPath, ['-o', 'ppid=', '-o', 'pgid=', '-o', 'lstart=', '-p', String(pid)], { encoding: 'utf8', maxBuffer: 4096, timeout: 1000 })
   const match = /^\\s*(\\d+)\\s+(\\d+)\\s+(.+?)\\s*$/.exec(value)
@@ -851,6 +1038,9 @@ try {
 }
 child.once('close', (exitCode, signal) => {
   childClosed = true
+  if (config.diagnoseChildWrites) {
+    writeRecord('${INNER_MODE_EVIDENCE_NAME}', { start: innerModeStart, end: readOutputModes() })
+  }
   const completion = config.fault === 'malformed-completion'
     ? { records: 1, exitCode: 'invalid', signal: null }
     : { records: 1, exitCode, signal }
@@ -1393,6 +1583,82 @@ function readSidecar(directory, name) {
   } catch {
     throw new Error('PTY sidecar is missing or malformed')
   }
+}
+
+function requireWriteBoundaryEvidence(directory, rawTerminal) {
+  try {
+    const child = readSidecar(directory, CHILD_WRITE_EVIDENCE_NAME)
+    requireExactKeys(
+      child,
+      ['closed', 'combined', 'stderr', 'stdout', 'writes'],
+      'child write evidence',
+    )
+    if (child.closed !== true) throw new Error()
+    const combined = requireBooleanRecord(child.combined, LINE_ENDING_KEYS)
+    const stderr = requireBooleanRecord(child.stderr, LINE_ENDING_KEYS)
+    const stdout = requireBooleanRecord(child.stdout, LINE_ENDING_KEYS)
+    const writes = requireBooleanRecord(child.writes, WRITE_MODE_KEYS)
+    const modes = readSidecar(directory, INNER_MODE_EVIDENCE_NAME)
+    requireExactKeys(modes, ['end', 'start'], 'inner mode evidence')
+    const start = requireBooleanRecord(modes.start, OUTPUT_MODE_KEYS)
+    const end = requireBooleanRecord(modes.end, OUTPUT_MODE_KEYS)
+    const stateChanged =
+      writes.stateChanged ||
+      start.available !== end.available ||
+      start.newlineMapping !== end.newlineMapping ||
+      start.outputProcessing !== end.outputProcessing
+    return Object.freeze({
+      child: Object.freeze({ combined, stderr, stdout }),
+      inner: classifyLineEndingEvidence(rawTerminal),
+      modes: Object.freeze({ end, start, stateChanged, writes }),
+    })
+  } catch {
+    throw new Error('PTY child write evidence is invalid')
+  }
+}
+
+function requireBooleanRecord(value, keys) {
+  requireExactKeys(value, keys, 'boolean evidence')
+  if (keys.some((key) => typeof value[key] !== 'boolean')) throw new Error()
+  return Object.freeze(Object.fromEntries(keys.map((key) => [key, value[key]])))
+}
+
+function classifyLineEndingEvidence(bytes) {
+  if (!Buffer.isBuffer(bytes)) throw new TypeError('Terminal capture must be a Buffer')
+  const evidence = {
+    bareLf: false,
+    beforeEscape: false,
+    beforeOtherControl: false,
+    beforeText: false,
+    doubleCrlf: false,
+    singleCrlf: false,
+    trailing: false,
+  }
+  for (let index = 0; index < bytes.byteLength; index += 1) {
+    if (bytes[index] === 10) {
+      evidence.bareLf = true
+      continue
+    }
+    if (bytes[index] !== 13) continue
+    let end = index
+    while (bytes[end + 1] === 13) end += 1
+    const carriageReturns = end - index + 1
+    const next = bytes[end + 1]
+    if (next === 10) {
+      if (carriageReturns > 1) evidence.doubleCrlf = true
+      else evidence.singleCrlf = true
+      index = end + 1
+      continue
+    }
+    if (carriageReturns > 1) evidence.beforeOtherControl = true
+    if (next === undefined) evidence.trailing = true
+    else if (next === 27) evidence.beforeEscape = true
+    else if (next < 0x20 || (next >= 0x7f && next <= 0x9f)) {
+      evidence.beforeOtherControl = true
+    } else evidence.beforeText = true
+    index = end
+  }
+  return Object.freeze(evidence)
 }
 
 function readPidSidecar(directory, name) {

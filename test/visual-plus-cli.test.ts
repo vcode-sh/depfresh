@@ -341,6 +341,145 @@ describe('Visual+ PTY adapter', () => {
     expect(result.exitCode).toBe(0)
   })
 
+  it('diagnoses child writes before the owned ONLCR transform', async () => {
+    const bareLineFeed = await runInPty({
+      cliPath: process.execPath,
+      args: [
+        '-e',
+        'if(process.stdout.write.length!==3)process.exit(86);process.stdout.write("line\\n")',
+      ],
+      columns: 40,
+      diagnoseChildWrites: true,
+      env: {},
+      input: Buffer.alloc(0),
+    })
+    expect(bareLineFeed.writeBoundary).toEqual(
+      expectedWriteBoundary({ childStdout: { bareLf: true }, inner: { singleCrlf: true } }),
+    )
+
+    const splitExplicitCrlf = await runInPty({
+      cliPath: process.execPath,
+      args: ['-e', 'process.stdout.write("line\\r");process.stdout.write("\\n")'],
+      columns: 40,
+      diagnoseChildWrites: true,
+      env: {},
+      input: Buffer.alloc(0),
+    })
+    expect(splitExplicitCrlf.writeBoundary).toEqual(
+      expectedWriteBoundary({
+        childStdout: { singleCrlf: true },
+        inner: { doubleCrlf: true },
+      }),
+    )
+
+    const childDoubleCrlf = await runInPty({
+      cliPath: process.execPath,
+      args: ['-e', 'process.stdout.write("line\\r\\r\\n")'],
+      columns: 40,
+      diagnoseChildWrites: true,
+      env: {},
+      input: Buffer.alloc(0),
+    })
+    expect(childDoubleCrlf.writeBoundary).toEqual(
+      expectedWriteBoundary({
+        childStdout: { doubleCrlf: true },
+        inner: { doubleCrlf: true },
+      }),
+    )
+  })
+
+  it('diagnoses owned output-mode changes at child write time and process close', async () => {
+    const disabled = await runInPty({
+      cliPath: process.execPath,
+      args: [
+        '-e',
+        'require("node:child_process").execFileSync("/bin/stty",["-opost"],{stdio:"inherit"});process.stdout.write("line\\r\\n")',
+      ],
+      columns: 40,
+      diagnoseChildWrites: true,
+      env: {},
+      input: Buffer.alloc(0),
+    })
+    expect(disabled.writeBoundary).toEqual(
+      expectedWriteBoundary({
+        childStdout: { singleCrlf: true },
+        inner: { singleCrlf: true },
+        stateChanged: true,
+        writeModes: { newlineMapping: true, outputProcessing: false },
+      }),
+    )
+
+    const changedAndRestored = await runInPty({
+      cliPath: process.execPath,
+      args: [
+        '-e',
+        'const {execFileSync}=require("node:child_process");execFileSync("/bin/stty",["-opost"],{stdio:"inherit"});process.stdout.write("line\\r\\n");execFileSync("/bin/stty",["opost","onlcr"],{stdio:"inherit"})',
+      ],
+      columns: 40,
+      diagnoseChildWrites: true,
+      env: {},
+      input: Buffer.alloc(0),
+    })
+    expect(changedAndRestored.writeBoundary).toEqual(
+      expectedWriteBoundary({
+        childStdout: { singleCrlf: true },
+        inner: { singleCrlf: true },
+        stateChanged: true,
+        writeModes: { newlineMapping: true, outputProcessing: false },
+      }),
+    )
+  })
+
+  it('separates child, inner, and outer output transforms', async () => {
+    const adapter = detectScriptAdapter()
+    if (adapter.family !== 'bsd') return
+    const result = await runInPty({
+      cliPath: process.execPath,
+      args: ['-e', 'process.stdout.write("line\\n")'],
+      columns: 40,
+      diagnoseChildWrites: true,
+      env: {},
+      fault: 'outer-post-proof-output-processing',
+      input: Buffer.alloc(0),
+    })
+
+    expect(result.writeBoundary).toEqual(
+      expectedWriteBoundary({ childStdout: { bareLf: true }, inner: { singleCrlf: true } }),
+    )
+    expect(result.outerTransportDoubleCrlf).toBe(true)
+  })
+
+  it('fails closed when child-write evidence is absent or malformed', async () => {
+    for (const fault of [
+      'child-write-evidence-missing',
+      'child-write-evidence-malformed',
+      'child-write-evidence-unclosed',
+    ] as const) {
+      await expect(
+        runInPty({
+          cliPath: process.execPath,
+          args: ['-e', 'process.stdout.write("line\\n")'],
+          columns: 40,
+          diagnoseChildWrites: true,
+          env: {},
+          fault,
+          input: Buffer.alloc(0),
+        }),
+      ).rejects.toThrow(/^PTY child write evidence is invalid$/u)
+    }
+
+    await expect(
+      runInPty({
+        cliPath: realpathSync('/bin/sh'),
+        args: ['-c', 'printf line'],
+        columns: 40,
+        diagnoseChildWrites: true,
+        env: {},
+        input: Buffer.alloc(0),
+      }),
+    ).rejects.toThrow(/^PTY child-write diagnostics require the current Node executable$/u)
+  })
+
   it('keeps one owned ONLCR transform and transports explicit CRLF unchanged', async () => {
     const adapter = detectScriptAdapter()
     const requiredModes =
@@ -881,7 +1020,7 @@ describe('Visual+ built CLI', () => {
     beforeAll(async () => {
       try {
         fixture = createFixture('dumb-constrained-fallback')
-        result = await runReadOnlyPty(fixture, { TERM: 'dumb' })
+        result = await runReadOnlyPty(fixture, { TERM: 'dumb' }, true)
         captureReady = true
       } catch {}
     }, 120_000)
@@ -899,6 +1038,9 @@ describe('Visual+ built CLI', () => {
 
     it('contains no duplicate CRCRLF transport', () => {
       if (!(journeyReady && result)) return
+      expect(result.writeBoundary).toEqual(
+        expectedWriteBoundary({ childStdout: { bareLf: true }, inner: { singleCrlf: true } }),
+      )
       expect(hasDoubleCarriageReturnLineFeed(result.rawTerminal)).toBe(false)
       transportReady = true
     })
@@ -1270,14 +1412,55 @@ function runFixture(
 function runReadOnlyPty(
   fixture: ReturnType<typeof createVisualPlusFixture>,
   overrides: Record<string, string>,
+  diagnoseChildWrites = false,
 ) {
   return runInPty({
     cliPath: process.execPath,
     args: [cliPath, '--cwd', fixture.repository, '--recursive', '--mode', 'major'],
     columns: 80,
+    diagnoseChildWrites,
     env: capableEnvironment(fixture.variants.success.environment, overrides),
     input: Buffer.alloc(0),
   })
+}
+
+function expectedWriteBoundary(options: {
+  childStdout?: Partial<ReturnType<typeof emptyLineEndingEvidence>>
+  inner?: Partial<ReturnType<typeof emptyLineEndingEvidence>>
+  stateChanged?: boolean
+  writeModes?: { newlineMapping: boolean; outputProcessing: boolean }
+}) {
+  const stdout = { ...emptyLineEndingEvidence(), ...options.childStdout }
+  const stderr = emptyLineEndingEvidence()
+  const start = availableOutputModes(true, true)
+  const writes = {
+    available: true,
+    observed: true,
+    stateChanged: options.stateChanged ?? false,
+    ...(options.writeModes ?? { newlineMapping: true, outputProcessing: true }),
+  }
+  const end = availableOutputModes(true, true)
+  return {
+    child: { combined: { ...stdout }, stderr, stdout },
+    inner: { ...emptyLineEndingEvidence(), ...options.inner },
+    modes: { end, start, stateChanged: options.stateChanged ?? false, writes },
+  }
+}
+
+function emptyLineEndingEvidence() {
+  return {
+    bareLf: false,
+    beforeEscape: false,
+    beforeOtherControl: false,
+    beforeText: false,
+    doubleCrlf: false,
+    singleCrlf: false,
+    trailing: false,
+  }
+}
+
+function availableOutputModes(newlineMapping: boolean, outputProcessing: boolean) {
+  return { available: true, newlineMapping, outputProcessing }
 }
 
 function runDirectFixture(fixture: ReturnType<typeof createVisualPlusFixture>, slow: boolean) {
