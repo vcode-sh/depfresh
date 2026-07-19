@@ -1104,7 +1104,7 @@ describe('run-check orchestration paths', () => {
     }
   })
 
-  it('keeps redirected table stdout, stderr, and cursor bytes stable', async () => {
+  it('keeps redirected table streams and cursor output stable across color modes', async () => {
     const update = makeResolved({
       name: 'needs-update',
       currentVersion: '^1.0.0',
@@ -1126,7 +1126,7 @@ describe('run-check orchestration paths', () => {
       expect(exitCode).toBe(0)
       expect({
         stdout: stdoutWriteSpy.mock.calls.map((call) => String(call[0])),
-        logs: logSpy.mock.calls.map((call) => call.map(String)),
+        logs: logSpy.mock.calls.map((call) => call.map((value) => stripAnsi(String(value)))),
         errors: errorSpy.mock.calls.map((call) => call.map(String)),
       }).toEqual({
         stdout: [],
