@@ -31,56 +31,6 @@ import { DEFAULT_OPTIONS } from '../../types'
 import type { ApplyRuntime } from '../apply/types'
 import { check } from './index'
 
-// This suite is a real integration boundary. Some focused check suites register process-global
-// mocks through test-helpers.ts, so replace each one with an actual passthrough before imports.
-vi.mock('../../io/packages', async () =>
-  vi.importActual<typeof import('../../io/packages')>('../../io/packages'),
-)
-vi.mock('../../io/resolve', async () =>
-  vi.importActual<typeof import('../../io/resolve')>('../../io/resolve'),
-)
-vi.mock('../../io/registry', async () =>
-  vi.importActual<typeof import('../../io/registry')>('../../io/registry'),
-)
-vi.mock('../../io/write', async () =>
-  vi.importActual<typeof import('../../io/write')>('../../io/write'),
-)
-vi.mock('../../io/write/occurrence', async () =>
-  vi.importActual<typeof import('../../io/write/occurrence')>('../../io/write/occurrence'),
-)
-vi.mock('../apply/legacy', async () =>
-  vi.importActual<typeof import('../apply/legacy')>('../apply/legacy'),
-)
-vi.mock('../apply/legacy-plan', async () =>
-  vi.importActual<typeof import('../apply/legacy-plan')>('../apply/legacy-plan'),
-)
-vi.mock('../../cache/index', async () =>
-  vi.importActual<typeof import('../../cache/index')>('../../cache/index'),
-)
-vi.mock('node:sqlite', async () => vi.importActual<typeof import('node:sqlite')>('node:sqlite'))
-vi.mock('../../utils/npmrc', async () =>
-  vi.importActual<typeof import('../../utils/npmrc')>('../../utils/npmrc'),
-)
-vi.mock('node:child_process', async () =>
-  vi.importActual<typeof import('node:child_process')>('node:child_process'),
-)
-vi.mock('node:fs', async () => vi.importActual<typeof import('node:fs')>('node:fs'))
-vi.mock('../../io/global', async () =>
-  vi.importActual<typeof import('../../io/global')>('../../io/global'),
-)
-vi.mock('../../repository/vcs', async () =>
-  vi.importActual<typeof import('../../repository/vcs')>('../../repository/vcs'),
-)
-vi.mock('../../validate-options', async () =>
-  vi.importActual<typeof import('../../validate-options')>('../../validate-options'),
-)
-vi.mock('../global-apply', async () =>
-  vi.importActual<typeof import('../global-apply')>('../global-apply'),
-)
-vi.mock('./post-write-actions', async () =>
-  vi.importActual<typeof import('./post-write-actions')>('./post-write-actions'),
-)
-
 const applyRuntime = vi.hoisted(() => ({
   overrides: undefined as Partial<ApplyRuntime> | undefined,
   result: undefined as unknown,
@@ -146,6 +96,8 @@ describe('command-level check apply integration', () => {
   let registryUrl = ''
   let originalHome: string | undefined
   let originalNpmConfig: string | undefined
+  let originalNpmRegistry: string | undefined
+  let originalNpmRegistryUpper: string | undefined
   let originalPath: string | undefined
 
   beforeEach(async () => {
@@ -154,7 +106,11 @@ describe('command-level check apply integration', () => {
     applyRuntime.evidence = []
     originalHome = process.env.HOME
     originalNpmConfig = process.env.npm_config_userconfig
+    originalNpmRegistry = process.env.npm_config_registry
+    originalNpmRegistryUpper = process.env.NPM_CONFIG_REGISTRY
     originalPath = process.env.PATH
+    delete process.env.npm_config_registry
+    delete process.env.NPM_CONFIG_REGISTRY
 
     const started = await startRegistry()
     registry = started.server
@@ -168,6 +124,8 @@ describe('command-level check apply integration', () => {
     vi.restoreAllMocks()
     restoreEnvironment('HOME', originalHome)
     restoreEnvironment('npm_config_userconfig', originalNpmConfig)
+    restoreEnvironment('npm_config_registry', originalNpmRegistry)
+    restoreEnvironment('NPM_CONFIG_REGISTRY', originalNpmRegistryUpper)
     restoreEnvironment('PATH', originalPath)
     if (registry) await closeServer(registry)
     for (const root of roots) rmSync(root, { recursive: true, force: true })
