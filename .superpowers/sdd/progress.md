@@ -313,3 +313,21 @@ output, paths, or stacks. Fresh source and packed replays passed 40/40 without r
 contracts passed 43/43, release gates passed 103/103, and all static/artifact checks plus independent
 C0/I0/M0 review passed. This remains local diagnostic evidence. Task 3 and tagging stay blocked
 pending a new exact hosted all-job success.
+Exact `main` run `29688672949` at `601c932012053b31da42a3611352bf39bb50c2aa` passed Ubuntu source
+and installed Visual+, full Test, Lint, Build, and Distribution Smoke. The macOS source lane passed
+39/40, including every CI fallback diagnostic phase, then failed the first 40-column journey at
+wrapper identity registration with `PTY process identity evidence changed`; installed replay and
+reduced-motion proof were skipped. The cleanup ambiguity was consequential. Independent audits
+identified a deterministic model contradiction consistent with the hosted symptom: a same
+PID/start/group snapshot after legitimate reparenting can overwrite the first parent, which the
+historical sidecar then correctly disagrees with. The private hosted evidence does not retain those
+tuples, so the exact transition is not claimed as recovered. TDD now
+preserves the first topology and exact sidecar-parent check, scopes fixed `/bin/ps` inventory to the
+current numeric UID, and rejects start/group mutation or absent-then-reappeared PID evidence without
+adopting/signaling the changed tuple. RED failed three exact contracts; focused GREEN passed 6/6.
+Exact Node 24.15.0 source/verifier/readiness passed 66/66, source Visual+ passed 46/46, and isolated
+npm 11.12.0 installed replay passed 46/46 with unchanged 56-file/332890-byte artifact identity and
+CLI SHA-256. The complete no-retry suite passed 162 files/2,177 tests, release gates passed 103/103,
+and schemas, typecheck, build, full zero-warning Biome, and diff checks passed. Two independent final
+reviews reported C0/I0/M0 after direct Darwin and Linux procps probes. A new exact hosted all-job
+success remains mandatory before tagging.

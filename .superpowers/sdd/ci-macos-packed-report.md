@@ -151,3 +151,34 @@ stacks. Source and packed replays passed 40/40 with `--retry=0`; focused contrac
 release gates passed 103/103, and build, schemas, typecheck, zero-warning Biome, artifact identity,
 and diff checks passed. Independent review reported C0/I0/M0. This is diagnostic evidence only; a
 new exact hosted all-job success remains mandatory before tagging.
+
+## Process identity lifecycle correction
+
+Exact `main` run `29688672949` at `601c932012053b31da42a3611352bf39bb50c2aa` passed the complete
+Ubuntu source and installed Visual+ lane, full Test, Lint, Build, and Distribution Smoke. The macOS
+source lane passed 39/40 tests, including all five CI fallback diagnostic phases, then failed the
+first 40-column success journey at `registerEvidenceIdentity` with
+`PTY process identity evidence changed`. The installed replay and reduced-motion step were skipped.
+The cleanup aggregate was a consequence of the primary path setting the ambiguity flag.
+
+Two independent read-only audits agreed on a deterministic control-flow mechanism consistent with
+the hosted symptom. The observer defines stable identity as PID plus start token and process group,
+so a parent-only transition is the same process. It nevertheless overwrote the first parent after a
+valid macOS wrapper reparenting, and the final sidecar check then compared that terminal parent with
+the wrapper's historical parent. The private hosted report does not retain the compared tuples, so
+the exact transition is not claimed as recovered from that run. The TDD fix
+records the first topology only, retains the exact historical-parent check, limits `/bin/ps` to the
+current numeric UID, and marks changed start/group or absent-then-reappeared PID evidence ambiguous
+without adopting or signaling it. Cleanup remains parent-insensitive only for the unchanged exact
+PID/start/group tuple and retains TERM/KILL, survivor, and aggregate-error behavior.
+
+The deterministic focused RED failed three contracts: first-parent preservation, same-user scan
+arguments, and absent-then-reappeared lifecycle state. Focused GREEN passed 6/6. Exact Node
+`24.15.0` source/verifier/readiness passed 66/66, source Visual+ passed 46/46 without retries, and an
+isolated npm `11.12.0` packed replay passed 46/46. The latter retained 56 files, 332890 packed bytes,
+the reviewed SHA-512 integrity, and installed CLI SHA-256
+`3a7980e4be50ff11e732ac1c9e47c1e4b6583abf573d036b6326fc5ab6dcbdfd`. The complete no-retry suite
+passed 162 files and 2,177 tests; release gates passed 103/103; schemas, typecheck, build, full
+zero-warning Biome, and diff checks passed. Two independent final reviews reported C0/I0/M0 after
+direct Darwin and Linux procps same-user probes. This is local correction evidence only; a new exact
+hosted all-job success remains required before tagging.

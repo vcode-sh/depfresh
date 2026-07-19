@@ -122,6 +122,8 @@ export function createDetachedGroupMonitor(pid) {
   observed.probeFailed = false
   observed.ambiguous = false
   observed.cleanupFault = null
+  observed.missing = new Set()
+  observed.reappeared = new Set()
   observed.requiredGroups = new Set([pid])
   observeRequiredGroups(current, observed)
   return Object.freeze({
@@ -132,6 +134,7 @@ export function createDetachedGroupMonitor(pid) {
         return
       }
       observed.probeSucceeded = true
+      observeIdentitySnapshot(observed, snapshot)
       observeRequiredGroups(snapshot, observed)
     },
     cleanup: () => cleanupObserved(observed),
@@ -349,6 +352,8 @@ export async function runInPty(options) {
   observed.probeFailed = false
   observed.ambiguous = false
   observed.cleanupFault = cleanupFault
+  observed.missing = new Set()
+  observed.reappeared = new Set()
   try {
     const config = Buffer.from(
       `${JSON.stringify({ cliPath, args, env, columns, fault, psPath: '/bin/ps', sttyPath: '/bin/stty' })}\n`,
@@ -563,6 +568,7 @@ async function cleanupObserved(observed) {
   const termSnapshot = scanProcesses()
   if (!termSnapshot) errors.push(new Error('PTY cleanup process observation failed before TERM'))
   else {
+    observeIdentitySnapshot(observed, termSnapshot)
     observeRequiredGroups(termSnapshot, observed)
     signalMatchingIdentities(termSnapshot, observed, 'SIGTERM', errors)
   }
@@ -574,6 +580,7 @@ async function cleanupObserved(observed) {
   const killSnapshot = scanProcesses()
   if (!killSnapshot) errors.push(new Error('PTY cleanup process observation failed before KILL'))
   else {
+    observeIdentitySnapshot(observed, killSnapshot)
     observeRequiredGroups(killSnapshot, observed)
     signalMatchingIdentities(killSnapshot, observed, 'SIGKILL', errors)
   }
@@ -596,17 +603,13 @@ function observeRequiredGroups(current, observed) {
   for (const group of observed.requiredGroups ?? []) {
     for (const [pid, identity] of current) {
       if (identity.group !== group) continue
-      const previous = observed.get(pid)
-      if (previous && !sameProcessIdentity(previous, identity)) observed.ambiguous = true
-      else observed.set(pid, identity)
+      observeIdentity(observed, pid, identity)
     }
   }
 }
 
 function signalMatchingIdentities(current, observed, signal, errors) {
-  const matching = new Map(
-    [...observed].filter(([pid, identity]) => sameProcessIdentity(current.get(pid), identity)),
-  )
+  const matching = matchingObservedIdentities(current, observed)
   const groups = new Set([...matching.values()].map((identity) => identity.group))
   for (const group of groups) {
     if (!(Number.isSafeInteger(group) && group > 1)) continue
@@ -651,6 +654,7 @@ function observeProcessTree(outerPid, directory, observed) {
     return
   }
   observed.probeSucceeded = true
+  observeIdentitySnapshot(observed, current)
   const descendants = new Set(roots)
   let changed = true
   while (changed) {
@@ -665,23 +669,19 @@ function observeProcessTree(outerPid, directory, observed) {
   for (const pid of descendants) {
     const identity = current.get(pid)
     if (!identity) continue
-    const previous = observed.get(pid)
-    if (previous && !sameProcessIdentity(previous, identity)) observed.ambiguous = true
-    else observed.set(pid, identity)
+    observeIdentity(observed, pid, identity)
   }
 }
 
 function scanProcesses() {
-  const probe = spawnSync(
-    '/bin/ps',
-    ['-ax', '-o', 'pid=', '-o', 'ppid=', '-o', 'pgid=', '-o', 'lstart='],
-    {
-      encoding: 'utf8',
-      env: minimalOuterEnvironment(),
-      maxBuffer: 1024 * 1024,
-      timeout: 1_000,
-    },
-  )
+  const uid = process.getuid?.()
+  if (!Number.isSafeInteger(uid) || uid < 0) return undefined
+  const probe = spawnSync('/bin/ps', processScanArguments(uid), {
+    encoding: 'utf8',
+    env: minimalOuterEnvironment(),
+    maxBuffer: 1024 * 1024,
+    timeout: 1_000,
+  })
   if (probe.status !== 0 || probe.error || Buffer.byteLength(probe.stdout) >= 1024 * 1024) {
     return undefined
   }
@@ -703,9 +703,8 @@ async function confirmIdentitiesGone(observed) {
   while (Date.now() < deadline) {
     const current = scanProcesses()
     if (!current) throw new Error('PTY cleanup process observation failed during confirmation')
-    const survivors = [...observed].filter(([pid, identity]) =>
-      sameProcessIdentity(current.get(pid), identity),
-    )
+    observeIdentitySnapshot(observed, current)
+    const survivors = [...matchingObservedIdentities(current, observed)]
     const survivingGroups = [...(observed.requiredGroups ?? [])].filter((group) =>
       [...current.values()].some((identity) => identity.group === group),
     )
@@ -715,7 +714,7 @@ async function confirmIdentitiesGone(observed) {
   throw new Error('PTY observed process identity survived cleanup')
 }
 
-function sameProcessIdentity(left, right) {
+export function sameProcessIdentity(left, right) {
   return Boolean(
     left &&
       right &&
@@ -834,7 +833,7 @@ function requireExactKeys(value, expected, label) {
   }
 }
 
-function registerEvidenceIdentity(observed, pid, identity) {
+export function registerEvidenceIdentity(observed, pid, identity) {
   validatePid(pid)
   validateProcessIdentity(identity)
   const previous = observed.get(pid)
@@ -846,6 +845,43 @@ function registerEvidenceIdentity(observed, pid, identity) {
     throw new Error('PTY process identity evidence changed')
   }
   observed.set(pid, identity)
+}
+
+export function observeIdentity(observed, pid, identity) {
+  const previous = observed.get(pid)
+  if (previous && !sameProcessIdentity(previous, identity)) observed.ambiguous = true
+  else if (!previous) observed.set(pid, identity)
+}
+
+export function observeIdentitySnapshot(observed, current) {
+  observed.missing ??= new Set()
+  observed.reappeared ??= new Set()
+  for (const [pid, identity] of observed) {
+    const currentIdentity = current.get(pid)
+    if (!currentIdentity) {
+      observed.missing.add(pid)
+      continue
+    }
+    if (observed.missing.has(pid)) {
+      observed.ambiguous = true
+      observed.reappeared.add(pid)
+    }
+    if (!sameProcessIdentity(identity, currentIdentity)) observed.ambiguous = true
+  }
+}
+
+export function matchingObservedIdentities(current, observed) {
+  return new Map(
+    [...observed].filter(
+      ([pid, identity]) =>
+        !observed.reappeared?.has(pid) && sameProcessIdentity(current.get(pid), identity),
+    ),
+  )
+}
+
+export function processScanArguments(uid) {
+  if (!Number.isSafeInteger(uid) || uid < 0) throw new Error('PTY process UID is unavailable')
+  return ['-U', String(uid), '-o', 'pid=', '-o', 'ppid=', '-o', 'pgid=', '-o', 'lstart=']
 }
 
 function requireObservedIdentity(observed, pid, expected = {}) {

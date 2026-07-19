@@ -20,8 +20,14 @@ import {
   classifyScriptProbe,
   createDetachedGroupMonitor,
   detectScriptAdapter,
+  matchingObservedIdentities,
   normalizeTerminalCapture,
+  observeIdentity,
+  observeIdentitySnapshot,
+  processScanArguments,
+  registerEvidenceIdentity,
   runInPty,
+  sameProcessIdentity,
 } from './helpers/pty-runner.mjs'
 import { resolveVisualPlusCliPath } from './helpers/visual-plus-artifact-path.mjs'
 import { createVisualPlusFixture } from './helpers/visual-plus-fixture.mjs'
@@ -98,6 +104,94 @@ async function cleanupFixtures() {
 }
 
 describe('Visual+ PTY adapter', () => {
+  it('preserves the first parent when the same process is reparented', () => {
+    const observed = Object.assign(new Map(), { ambiguous: false })
+    const original = { parent: 200, group: 300, start: 'Sun Jul 19 13:20:31 2026' }
+
+    observeIdentity(observed, 300, original)
+    observeIdentity(observed, 300, { ...original, parent: 1 })
+
+    expect(observed.get(300)).toEqual(original)
+    expect(observed.ambiguous).toBe(false)
+    expect(() => registerEvidenceIdentity(observed, 300, original)).not.toThrow()
+  })
+
+  it('rejects sidecar topology when observation starts after reparenting', () => {
+    const observed = Object.assign(new Map(), { ambiguous: false })
+    const original = { parent: 200, group: 300, start: 'Sun Jul 19 13:20:31 2026' }
+
+    observeIdentity(observed, 300, { ...original, parent: 1 })
+
+    expect(() => registerEvidenceIdentity(observed, 300, original)).toThrow(
+      'PTY process identity evidence changed',
+    )
+    expect(observed.ambiguous).toBe(true)
+  })
+
+  it('retains first evidence and marks start or group mutation ambiguous', () => {
+    const observed = Object.assign(new Map(), { ambiguous: false })
+    const original = { parent: 200, group: 300, start: 'Sun Jul 19 13:20:31 2026' }
+
+    for (const changed of [
+      { parent: 200, group: 300, start: 'Sun Jul 19 13:20:32 2026' },
+      { parent: 200, group: 301, start: 'Sun Jul 19 13:20:31 2026' },
+    ]) {
+      observed.ambiguous = false
+      observeIdentity(observed, 300, original)
+      observeIdentity(observed, 300, changed)
+
+      expect(observed.get(300)).toEqual(original)
+      expect(observed.ambiguous).toBe(true)
+    }
+  })
+
+  it('scopes process inventory to the exact current numeric user', () => {
+    expect(processScanArguments(501)).toEqual([
+      '-U',
+      '501',
+      '-o',
+      'pid=',
+      '-o',
+      'ppid=',
+      '-o',
+      'pgid=',
+      '-o',
+      'lstart=',
+    ])
+  })
+
+  it('matches cleanup identity across reparenting but rejects changed start or group', () => {
+    const original = { parent: 200, group: 300, start: 'Sun Jul 19 13:20:31 2026' }
+
+    expect(sameProcessIdentity(original, { ...original, parent: 1 })).toBe(true)
+    expect(
+      sameProcessIdentity(original, {
+        ...original,
+        parent: 1,
+        start: 'Sun Jul 19 13:20:32 2026',
+      }),
+    ).toBe(false)
+    expect(sameProcessIdentity(original, { ...original, parent: 1, group: 301 })).toBe(false)
+  })
+
+  it('rejects an exact coarse identity that disappears and later reappears', () => {
+    const observed = Object.assign(new Map(), { ambiguous: false })
+    const original = { parent: 200, group: 300, start: 'Sun Jul 19 13:20:31 2026' }
+
+    observeIdentity(observed, 300, original)
+    observeIdentitySnapshot(observed, new Map())
+    expect(observed.missing).toEqual(new Set([300]))
+
+    const reparented = { ...original, parent: 1 }
+    const current = new Map([[300, reparented]])
+    observeIdentitySnapshot(observed, current)
+
+    expect(observed.get(300)).toEqual(original)
+    expect(observed.ambiguous).toBe(true)
+    expect(observed.reappeared).toEqual(new Set([300]))
+    expect(matchingObservedIdentities(current, observed).has(300)).toBe(false)
+  })
+
   it('detects one supported script family without executing repository values as source', () => {
     const adapter = detectScriptAdapter()
 
