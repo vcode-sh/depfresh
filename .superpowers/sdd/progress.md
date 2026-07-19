@@ -287,3 +287,16 @@ capable/no-color PTY, and CI/dumb constrained PTY categories. Exact-Node focused
 and isolated source plus installed replays passed 34/34 without retries; independent review closed
 at C0/I0/M0. The diagnostic candidate is local only; a new exact hosted `main` success is required
 before tagging.
+Exact `main` run `29685720822` at `158ed25f944197053b53fd57d038622c0f2498c0` then passed every
+Ubuntu source/installed, full-test, lint, build, and distribution-smoke job, while the no-retry
+macOS source lane isolated one forbidden lone carriage return in the CI fallback contract. Idle and
+bounded-load controls did not reproduce it locally. A deterministic BSD nested-PTY characterization
+instead demonstrated a local mechanism consistent with that symptom: `CRCRLF` normalizes to one
+lone carriage return. Commits `054dea9`, `66f6d81`, and `29cc9c6` now make the outer Expect PTY
+raw/no-echo, give the inner CLI PTY sole `opost onlcr` ownership, split CI from TERM=dumb fallback
+evidence, and enforce a platform-scoped live termios regression. The test is RED on the pre-fix
+macOS adapter and GREEN on fixed BSD plus real Linux util-linux Node `24.15.0`. Fresh source and
+packed Visual+ passed 36/36 without retries; focused
+tests passed 39/39; build, schemas, typecheck, zero-warning Biome, diff checks, artifact integrity,
+and CLI SHA remained stable. Independent final re-review closed at C0/I0/M0. The fix is local only;
+Task 3 still requires a new exact hosted `main` success before tagging.

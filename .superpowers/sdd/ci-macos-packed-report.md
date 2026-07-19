@@ -100,3 +100,28 @@ Fresh final gate:
 - `git diff --check`: passed.
 
 No push, tag, publication, registry mutation, or release-evidence completion claim occurred.
+
+## Subsequent no-retry isolation and adapter correction
+
+The hardened no-retry run `29685151490` isolated the macOS installed replay to the fixed fallback
+category. Splitting the fallback journeys then made the next exact run `29685720822` expose the
+specific failure in the macOS source CI fallback: the normalized capture observed one lone carriage
+return where the contract requires zero. Ubuntu source and installed Visual+, full Test, Lint,
+Build, and Distribution Smoke passed on that exact SHA; the macOS installed replay was not reached.
+
+Repeated isolated CI and TERM=dumb controls, including bounded CPU load, retained zero lone carriage
+returns locally. A synthetic BSD nested-PTY control demonstrated a deterministic local mechanism
+consistent with the hosted symptom: the pre-fix Expect/script adapter could transform one line
+ending into `CRCRLF`, which normalizes to one lone carriage return. The raw hosted bytes remain
+private, so this does not claim recovery of their exact sequence or a uniquely proven hosted root
+cause. The correction in `054dea9` makes the outer Expect PTY raw/no-echo and explicitly gives the
+inner CLI PTY the one `opost onlcr` transform. Commits `66f6d81` and `29cc9c6` strengthen the live
+termios regression so it fails on the pre-fix macOS adapter while retaining the correct, narrower
+output-mode contract on Linux util-linux.
+
+Fresh exact-Node source and packed Visual+ replays each passed 36/36 with `--retry=0`; the packed
+integrity and CLI SHA-256 remained unchanged. Focused tests passed 39/39, and build, schemas,
+typecheck, zero-warning Biome, and diff checks passed. Independent final review reproduced macOS
+RED/GREEN and real Linux GREEN and reported C0/I0/M0. No normalizer, cleanup, raw-output privacy,
+or zero-lone-CR assertion was weakened. This remains local correction evidence pending a new exact
+hosted `main` run; no tag or publication claim is made.
