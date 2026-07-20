@@ -1,8 +1,14 @@
-import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { basename, join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { PackageManagerField, PackageMeta, PackageType } from '../../../types'
+import { loadPackage } from '../../../io/packages/load-package'
+import {
+  DEFAULT_OPTIONS,
+  type depfreshOptions,
+  type PackageManagerField,
+  type PackageMeta,
+} from '../../../types'
 import { deriveVisualPlusRunMetadata } from './run-metadata'
 
 const processMocks = vi.hoisted(() => ({
@@ -12,7 +18,21 @@ const processMocks = vi.hoisted(() => ({
   spawnSync: vi.fn(),
 }))
 
+const filesystemHooks = vi.hoisted(() => ({
+  beforeOpen: undefined as ((path: string) => void) | undefined,
+}))
+
 vi.mock('node:child_process', () => processMocks)
+vi.mock('node:fs', async (importOriginal) => {
+  const original = await importOriginal<typeof import('node:fs')>()
+  return {
+    ...original,
+    openSync: ((path: string, flags: string | number, mode?: number) => {
+      filesystemHooks.beforeOpen?.(path)
+      return original.openSync(path, flags, mode)
+    }) as typeof original.openSync,
+  }
+})
 
 function packageMeta(
   root: string,
@@ -21,15 +41,14 @@ function packageMeta(
   packageManager?: PackageManagerField,
 ): PackageMeta {
   const filepath = join(root, filename)
-  writeFileSync(filepath, filename === 'package.json' ? '{}\n' : '{}\n')
-  return {
-    name,
-    type: filename as PackageType,
+  writeFileSync(
     filepath,
-    deps: [],
-    resolved: [],
-    raw: {},
-    indent: '  ',
+    filename === 'package.json'
+      ? `${JSON.stringify({ name })}\n`
+      : `name: ${JSON.stringify(name)}\n`,
+  )
+  return {
+    ...loadPackage(filepath, { ...DEFAULT_OPTIONS, cwd: root } as depfreshOptions),
     ...(packageManager ? { packageManager } : {}),
   }
 }
@@ -49,6 +68,7 @@ describe('deriveVisualPlusRunMetadata', () => {
 
   beforeEach(() => {
     root = mkdtempSync(join(tmpdir(), 'depfresh-visual-plus-metadata-'))
+    filesystemHooks.beforeOpen = undefined
     vi.clearAllMocks()
   })
 
@@ -70,6 +90,24 @@ describe('deriveVisualPlusRunMetadata', () => {
       packageManager: { status: 'unknown', sources: [] },
     })
   })
+
+  it.each([
+    ['package.json', '{}\n'],
+    ['package.yaml', '{}\n'],
+  ] as const)(
+    'uses the controlled root basename for an unnamed %s manifest without exposing its absolute fallback',
+    (filename, content) => {
+      const filepath = join(root, filename)
+      writeFileSync(filepath, content)
+      const pkg = loadPackage(filepath, { ...DEFAULT_OPTIONS, cwd: root } as depfreshOptions)
+
+      expect(pkg.name).toBe(root)
+      const metadata = deriveVisualPlusRunMetadata(root, [pkg], 'compact')
+
+      expect(metadata.repository).toEqual({ name: basename(root), relativePath: '.' })
+      expect(JSON.stringify(metadata)).not.toContain(root)
+    },
+  )
 
   it('describes a multi-package workspace from physical manifest owners', () => {
     const rootPackage = packageMeta(root, 'package.json', 'workspace-root')
@@ -190,6 +228,61 @@ describe('deriveVisualPlusRunMetadata', () => {
         'compact',
       ).packageManager,
     ).toEqual({ status: 'observed', name: 'pnpm', sources: ['pnpm-lock.yaml'] })
+  })
+
+  it('rejects a lexical lockfile symlink whose target remains contained', () => {
+    const target = join(root, 'contained-pnpm-lock.yaml')
+    writeFileSync(target, "lockfileVersion: '9.0'\n")
+    symlinkSync(target, join(root, 'pnpm-lock.yaml'))
+
+    expect(
+      deriveVisualPlusRunMetadata(
+        root,
+        [packageMeta(root, 'package.json', 'contained-symlink')],
+        'compact',
+      ).packageManager,
+    ).toEqual({ status: 'unavailable', sources: ['pnpm-lock.yaml'] })
+  })
+
+  it('rejects lockfile marker evidence replaced between lexical inspection and open', () => {
+    const marker = join(root, 'pnpm-lock.yaml')
+    const replacement = join(root, 'replacement-pnpm-lock.yaml')
+    writeFileSync(marker, "lockfileVersion: '9.0'\n")
+    writeFileSync(replacement, "lockfileVersion: '9.0'\n")
+    let replaced = false
+    filesystemHooks.beforeOpen = (path) => {
+      if (!path.endsWith('/pnpm-lock.yaml')) return
+      filesystemHooks.beforeOpen = undefined
+      renameSync(replacement, marker)
+      replaced = true
+    }
+
+    const packageManager = deriveVisualPlusRunMetadata(
+      root,
+      [packageMeta(root, 'package.json', 'replacement-race')],
+      'compact',
+    ).packageManager
+
+    expect(replaced).toBe(true)
+    expect(packageManager).toEqual({ status: 'unavailable', sources: ['pnpm-lock.yaml'] })
+  })
+
+  it('does not collapse a lockfile marker removed before open into absent evidence', () => {
+    const marker = join(root, 'pnpm-lock.yaml')
+    writeFileSync(marker, "lockfileVersion: '9.0'\n")
+    filesystemHooks.beforeOpen = (path) => {
+      if (!path.endsWith('/pnpm-lock.yaml')) return
+      filesystemHooks.beforeOpen = undefined
+      rmSync(marker)
+    }
+
+    expect(
+      deriveVisualPlusRunMetadata(
+        root,
+        [packageMeta(root, 'package.json', 'removal-race')],
+        'compact',
+      ).packageManager,
+    ).toEqual({ status: 'unavailable', sources: ['pnpm-lock.yaml'] })
   })
 
   it('retains conflicting markers as deterministic ambiguous candidates', () => {

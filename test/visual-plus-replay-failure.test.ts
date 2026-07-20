@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -59,7 +59,7 @@ describe('installed Visual+ replay failure classification', () => {
       'pty-transport',
     ],
     [
-      'Visual+ built CLI renders exact success and safety journeys in a 80-column PTY',
+      'Visual+ built CLI renders compact success and exact safety journeys in a 80-column PTY by default',
       'product-journey',
     ],
     [
@@ -112,6 +112,30 @@ describe('installed Visual+ replay failure classification', () => {
     ],
   ])('maps the trusted exact title %s to %s', (fullName, expected) => {
     expect(classifyVisualPlusReplayFailure(report([fullName]))).toBe(expected)
+  })
+
+  it('keeps all five product-journey classifications coupled to the current compact test titles', () => {
+    const visualPlusTest = readFileSync('test/visual-plus-cli.test.ts', 'utf8')
+    const declaration = visualPlusTest.match(
+      /it\.each\(\[([^\]]+)\]\)\(\s*'([^']*compact success[^']*)'/u,
+    )
+    expect(declaration).not.toBeNull()
+    const widths = declaration?.[1]?.split(',').map((value) => Number(value.trim())) ?? []
+    const title = declaration?.[2]
+    expect(widths).toEqual([40, 60, 80, 118, 175])
+    expect(title).toBeTypeOf('string')
+    const fullNames = widths.map(
+      (width) => `Visual+ built CLI ${title?.replace('%i', String(width))}`,
+    )
+
+    expect(
+      fullNames.map((fullName) => classifyVisualPlusReplayFailure(report([fullName]))),
+    ).toEqual(fullNames.map(() => 'product-journey'))
+    expect(
+      classifyVisualPlusReplayFailure(
+        report(['Visual+ built CLI renders exact success and safety journeys in a 80-column PTY']),
+      ),
+    ).toBe('unclassified')
   })
 
   it('fails closed without reflecting untrusted report content', () => {

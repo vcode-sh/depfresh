@@ -169,7 +169,7 @@ describe('2.1.1 release readiness', () => {
     expect(currentInstructions).not.toContain('bunx depfresh@2.1.0')
   })
 
-  it('ships a dedicated local-only 2.1.1 candidate record', () => {
+  it('ships a dedicated local-only 2.1.1 source candidate record with stale artifacts explicit', () => {
     expect(existsSync(join(root, 'docs/releases/v2.1.1.md'))).toBe(true)
     const release = read('docs/releases/v2.1.1.md')
 
@@ -183,7 +183,14 @@ describe('2.1.1 release readiness', () => {
     ]) {
       expect(release, bullet).toContain(`- ${bullet}`)
     }
-    expect(release).toContain('Status: local candidate only.')
+    expect(release).toContain(
+      'Status: corrected local source candidate; artifact regeneration pending.',
+    )
+    expect(release).toContain('Superseded local artifact evidence from `41f0002`')
+    expect(release).toContain('none of the historical evidence below describes the corrected HEAD')
+    expect(release.replace(/\s+/gu, ' ')).toContain(
+      'did not rebuild, repack, reinstall, publish, tag, push, run hosted workflows, or repeat the live',
+    )
     expect(release).toContain(
       'No npm publication, Git tag, GitHub release, hosted workflow, or public artifact is claimed.',
     )

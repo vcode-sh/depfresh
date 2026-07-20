@@ -1,5 +1,14 @@
-import { closeSync, lstatSync, openSync, realpathSync } from 'node:fs'
+import {
+  type BigIntStats,
+  closeSync,
+  constants,
+  fstatSync,
+  lstatSync,
+  openSync,
+  realpathSync,
+} from 'node:fs'
 import { basename, dirname, isAbsolute, join, relative, sep } from 'node:path'
+import { isDocument } from 'yaml'
 import { type ContainedPathResult, resolveContainedPath } from '../../../io/packages/containment'
 import type { PackageManagerName, PackageMeta } from '../../../types'
 import type { VisualPlusPackageManagerMetadata, VisualPlusRunMetadata } from './input'
@@ -59,8 +68,14 @@ export function deriveVisualPlusRunMetadata(
     rootPackages.length > 0 ? rootPackages : packageDirectories.size === 1 ? containedPackages : []
   const repositoryDirectory = repositoryPackages[0]?.directory ?? rootResolution.path
   const repositoryNames = [
-    ...new Set(repositoryPackages.map((entry) => entry.pkg.name).filter((name) => name.length > 0)),
+    ...new Set(repositoryPackages.flatMap((entry) => explicitManifestName(entry.pkg) ?? [])),
   ].sort()
+  const repositoryName =
+    repositoryNames.length === 1
+      ? repositoryNames[0]
+      : repositoryPackages.length > 0
+        ? basename(rootResolution.path)
+        : undefined
   const hasWorkspaceProjection = packages.some(
     (pkg) =>
       ['pnpm-workspace', 'bun-workspace', 'yarn-workspace'].includes(pkg.type) &&
@@ -78,12 +93,23 @@ export function deriveVisualPlusRunMetadata(
   return {
     ...detail,
     repository: {
-      ...(repositoryNames.length === 1 ? { name: repositoryNames[0] } : {}),
+      ...(repositoryName ? { name: repositoryName } : {}),
       relativePath: repositoryPath(rootResolution.path, repositoryDirectory),
     },
     workspaceScope,
     packageManager: derivePackageManager(rootResolution.path, rootPackages),
   }
+}
+
+function explicitManifestName(pkg: PackageMeta): string | undefined {
+  let name: unknown
+  if (pkg.type === 'package.json' && isRecord(pkg.raw)) name = pkg.raw.name
+  else if (pkg.type === 'package.yaml' && isDocument(pkg.raw)) name = pkg.raw.get('name')
+  return typeof name === 'string' && name.length > 0 ? name : undefined
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 function resolvePackagePath(root: string, candidate: string): ContainedPathResult {
@@ -151,20 +177,38 @@ function derivePackageManager(
 
 function inspectMarker(root: string, source: string): 'absent' | 'observed' | 'unavailable' {
   const lexicalPath = join(root, source)
+  let lexical: BigIntStats
   try {
-    lstatSync(lexicalPath)
+    lexical = lstatSync(lexicalPath, { bigint: true })
   } catch (error) {
     return isMissingPath(error) ? 'absent' : 'unavailable'
   }
-  const contained = resolveContainedPath(root, lexicalPath)
-  if (!contained.allowed) return 'unavailable'
+  if (!lexical.isFile() || lexical.isSymbolicLink()) return 'unavailable'
+
+  let descriptor: number | undefined
   try {
-    if (!lstatSync(contained.path).isFile()) return 'unavailable'
-    const descriptor = openSync(contained.path, 'r')
-    closeSync(descriptor)
+    const contained = resolveContainedPath(root, lexicalPath)
+    if (!contained.allowed) return 'unavailable'
+    descriptor = openSync(lexicalPath, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0))
+    const opened = fstatSync(descriptor, { bigint: true })
+    const fileTypeMask = BigInt(constants.S_IFMT)
+    if (
+      !opened.isFile() ||
+      opened.dev !== lexical.dev ||
+      opened.ino !== lexical.ino ||
+      (opened.mode & fileTypeMask) !== (lexical.mode & fileTypeMask)
+    ) {
+      return 'unavailable'
+    }
     return 'observed'
   } catch {
     return 'unavailable'
+  } finally {
+    if (descriptor !== undefined) {
+      try {
+        closeSync(descriptor)
+      } catch {}
+    }
   }
 }
 

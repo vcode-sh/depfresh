@@ -104,19 +104,23 @@ const TRUSTED_FAILURE_CATEGORIES = new Map([
   ],
   ['Visual+ built CLI executes the selected CLI artifact', 'artifact-identity'],
   [
-    'Visual+ built CLI renders exact success and safety journeys in a 40-column PTY',
+    'Visual+ built CLI renders compact success and exact safety journeys in a 40-column PTY by default',
     'product-journey',
   ],
   [
-    'Visual+ built CLI renders exact success and safety journeys in a 60-column PTY',
+    'Visual+ built CLI renders compact success and exact safety journeys in a 60-column PTY by default',
     'product-journey',
   ],
   [
-    'Visual+ built CLI renders exact success and safety journeys in a 80-column PTY',
+    'Visual+ built CLI renders compact success and exact safety journeys in a 80-column PTY by default',
     'product-journey',
   ],
   [
-    'Visual+ built CLI renders exact success and safety journeys in a 118-column PTY',
+    'Visual+ built CLI renders compact success and exact safety journeys in a 118-column PTY by default',
+    'product-journey',
+  ],
+  [
+    'Visual+ built CLI renders compact success and exact safety journeys in a 175-column PTY by default',
     'product-journey',
   ],
   [

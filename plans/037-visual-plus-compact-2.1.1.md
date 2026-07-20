@@ -383,3 +383,26 @@ Spreadoo true-PTY compact smoke exited 0 with truthful current repository/manage
 internal IDs, and unchanged Git state. Initial independent findings C1/I2/M0 were fixed with
 fault-injected release-pin and executable replay-completeness tests; re-review reported C0/I0/M0.
 No publish, tag, push, hosted workflow, GitHub release, or public-artifact claim was made.
+
+### Final-review correction after `41f0002`
+
+Final review found three retained gaps. Repository display names trusted the loader's absolute
+`PackageMeta.name` fallback for unnamed manifests; lockfile marker inspection accepted contained
+lexical symlinks and did not bind the opened regular file to the lstat identity; and the installed
+replay classifier retained four obsolete width-journey titles instead of the five current compact
+titles. Strict RED/GREEN tests now cover unnamed JSON and YAML manifests without absolute-path
+exposure, contained symlinks, replacement and disappearance races, and exact coupling to the
+40/60/80/118/175-column test titles.
+
+Fresh corrected-source verification passed 7 focused files and 159 tests, the 5-file/106-test
+release suite, typecheck, a schema-checked build, focused Biome, and full zero-warning Biome across
+358 files. RED evidence was 2/16 unnamed-manifest failures, 2/18 symlink/replacement failures, 1/19
+post-lstat disappearance failure, and 2/29 replay-title failures before each focused suite passed
+GREEN.
+
+These corrections change package bytes. The Task 4 artifact hashes, sizes, installed CLI hash,
+Bun installation, and live Spreadoo smoke above are retained only as historical `41f0002` evidence
+and do not match the corrected HEAD. Regenerating the full source/package gate, one exact tarball,
+artifact metrics, Bun global replacement, and the final Spreadoo smoke remains pending in the root
+release-evidence pass. Plan 037 is therefore reopened for artifact refresh. No publish, tag, push,
+hosted workflow, GitHub release, or public-artifact proof is claimed.

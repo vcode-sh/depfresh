@@ -390,3 +390,18 @@ proof passed 58 built-CLI Visual+ tests without retry, 100 compact section tests
 tests, build, typecheck, lint, and diff checks. A fixture-local, exact-path-gated Node preload proves
 real partial recovery through the built CLI with restored/unrecovered truth, retained journal/lock,
 exit 2, and exact final bytes; production code has no fault seam. Re-review reported C0/I0/M0.
+Plan 037 final-review correction is implemented after `41f0002`. RED proved that unnamed JSON and
+YAML manifests exposed the loader's absolute `PackageMeta.name` fallback, contained lockfile
+symlinks and replacement races were accepted, and all five current compact width-journey titles
+were unclassified. GREEN now derives repository names only from explicit raw manifest names or the
+controlled effective-root basename, binds readable regular lockfile markers across lexical lstat
+and no-follow open/fstat identity, and couples failure classification to the exact
+40/60/80/118/175-column titles. The source and replay-script changes alter package bytes.
+Fresh corrected-source verification passed 7 focused files/159 tests, the 5-file/106-test release
+suite, typecheck, a schema-checked build, focused Biome, and full zero-warning Biome across 358
+files. RED evidence was 2/16 unnamed-manifest failures, 2/18 symlink/replacement failures, 1/19
+post-lstat disappearance failure, and 2/29 replay-title failures before focused GREEN.
+All recorded 2.1.1 artifact hashes, sizes, Bun installation, and live Spreadoo evidence are
+historical `41f0002` evidence only; rebuild, repack, exact verification, Bun replacement, and a
+fresh Spreadoo smoke remain pending in the root pass. No publish, tag, push, hosted workflow,
+GitHub release, or public-artifact proof is claimed.
