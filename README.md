@@ -192,7 +192,7 @@ and `.git`.
 - deterministic inspect, plan, apply, and global-operation JSON contracts
 - SQLite registry cache with an automatic in-memory fallback
 - runtime, peer, cohort, release, deprecation, and evidence-completeness signals
-- optional exact public-npm artifact verification with npm 11.12.x
+- optional exact public-npm artifact verification with npm 11.12.x or verified npm 12.0.x
 
 Deliberate limits are documented rather than hidden: manager execution is supported on Linux and
 macOS; Yarn manager execution, Windows manager execution, and legacy `bun.lockb` are unsupported.

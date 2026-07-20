@@ -1,6 +1,6 @@
 export const NPM_ARTIFACT_VERIFIER_SUPPORT = {
   manager: 'npm',
-  versionRange: '>=11.12.0 <12.0.0',
+  versionRange: '>=11.12.0 <12.0.0 || >=12.0.0 <12.1.0',
   registry: 'https://registry.npmjs.org/',
   integrity: 'sha512',
 } as const

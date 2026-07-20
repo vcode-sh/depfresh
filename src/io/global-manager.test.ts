@@ -83,7 +83,8 @@ describe('strict global manager inventory', () => {
 
   it('enforces the reviewed manager version matrix', () => {
     expect(supportsManagerVersion('npm', '10.9.0')).toBe(true)
-    expect(supportsManagerVersion('npm', '12.0.0')).toBe(false)
+    expect(supportsManagerVersion('npm', '12.0.1')).toBe(true)
+    expect(supportsManagerVersion('npm', '13.0.0')).toBe(false)
     expect(supportsManagerVersion('pnpm', '11.0.0')).toBe(true)
     expect(supportsManagerVersion('bun', '1.2.0')).toBe(true)
     expect(supportsManagerVersion('bun', '2.0.0')).toBe(false)

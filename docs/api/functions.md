@@ -195,9 +195,9 @@ if (!validateApplyResult(applied)) throw new Error('Unsupported apply contract')
 `plan()` reads only declarative JSON configuration. Set `asOf` to a canonical UTC timestamp when
 cooldown is positive. `syncLockfile` or `install` fingerprints one supported manager phase;
 `verifyArgv` fingerprints one exact non-empty argv array, and `phaseTimeout` bounds every planned
-process. With install, `verifyArtifacts` fingerprints exact npm 11.12.x public-registry artifact
-targets and policy; it runs no process during planning. These values express future intent and grant
-no authority. See
+process. With install, `verifyArtifacts` fingerprints exact npm 11.12.x or verified npm 12.0.x
+public-registry artifact targets and policy; it runs no process during planning. These values express
+future intent and grant no authority. See
 [Inspect and Plan Contracts](../output-formats/inspect-plan.md) for the schemas, fingerprints,
 terminal vocabulary, and compatibility boundary.
 

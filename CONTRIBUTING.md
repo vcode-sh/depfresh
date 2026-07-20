@@ -12,7 +12,7 @@ cd depfresh
 pnpm install
 ```
 
-**Requirements:** Node.js >= 24.15.0 and pnpm 10.33.0. Use the exact Node version from `.nvmrc`
+**Requirements:** Node.js >= 24.15.0 and pnpm 11.15.1. Use the exact Node version from `.nvmrc`
 for release-facing verification.
 
 ## Commands
@@ -20,7 +20,7 @@ for release-facing verification.
 | Command | What it does |
 |---------|-------------|
 | `pnpm dev` | Run CLI in dev mode via tsx |
-| `pnpm build` | Build with unbuild |
+| `pnpm build` | Build with tsdown |
 | `pnpm test` | Vitest watch mode |
 | `pnpm test:run` | Single test run |
 | `pnpm test:release` | Release contracts, Action, package assets, and official workflow |

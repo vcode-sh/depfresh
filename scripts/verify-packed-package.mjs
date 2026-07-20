@@ -4,6 +4,7 @@ import {
   lstatSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   realpathSync,
   rmSync,
@@ -181,9 +182,13 @@ try {
   )
 
   const installedRoot = join(project, 'node_modules', packageJson.name)
-  const installedIndex = readFileSync(join(installedRoot, 'dist', 'index.mjs'), 'utf8')
-  if (!installedIndex.includes('node:sqlite')) fail('Packed library does not retain node:sqlite')
-  if (installedIndex.includes('better-sqlite3')) fail('Packed library contains an obsolete cache')
+  const installedJavaScript = readInstalledDistribution(join(installedRoot, 'dist'))
+  if (!installedJavaScript.includes('node:sqlite')) {
+    fail('Packed library does not retain node:sqlite')
+  }
+  if (installedJavaScript.includes('better-sqlite3')) {
+    fail('Packed library contains an obsolete cache')
+  }
   const installedDeclarations = readFileSync(join(installedRoot, 'dist', 'index.d.ts'), 'utf8')
   for (const typeName of [
     'ArtifactTrustDimensionResult',
@@ -466,6 +471,35 @@ function run(command, args, options) {
     fail(`Verification command failed: ${basename(command)}`)
   }
   return { stdout: result.stdout ?? '', stderr: result.stderr ?? '' }
+}
+
+function readInstalledDistribution(distRoot) {
+  const canonicalRoot = realpathSync(distRoot)
+  const moduleNames = readdirSync(canonicalRoot)
+    .filter((name) => name.endsWith('.mjs'))
+    .sort((left, right) => left.localeCompare(right))
+  if (moduleNames.length === 0) fail('Packed library has no JavaScript distribution')
+
+  let totalBytes = 0
+  const modules = []
+  for (const name of moduleNames) {
+    const modulePath = join(canonicalRoot, name)
+    const moduleStat = lstatSync(modulePath)
+    if (moduleStat.isSymbolicLink() || !moduleStat.isFile()) {
+      fail('Packed library distribution contains a non-regular JavaScript file')
+    }
+    const canonicalModulePath = realpathSync(modulePath)
+    const containment = relative(canonicalRoot, canonicalModulePath)
+    if (containment === '' || containment.startsWith('..') || isAbsolute(containment)) {
+      fail('Packed library distribution contains an out-of-root JavaScript file')
+    }
+    totalBytes += moduleStat.size
+    if (totalBytes > MAX_TARBALL_EXPANDED_BYTES) {
+      fail('Packed library JavaScript distribution exceeds the verification limit')
+    }
+    modules.push(readFileSync(canonicalModulePath, 'utf8'))
+  }
+  return modules.join('\n')
 }
 
 function verifyVisualPlusReplay(options) {

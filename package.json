@@ -65,7 +65,7 @@
   ],
   "scripts": {
     "prebuild": "pnpm schemas:check",
-    "build": "unbuild",
+    "build": "tsdown",
     "dev": "tsx src/cli/index.ts",
     "start": "tsx src/cli/index.ts",
     "test": "vitest",
@@ -91,7 +91,7 @@
     "defu": "^6.1.7",
     "detect-indent": "^7.0.2",
     "find-up-simple": "^1.0.1",
-    "ini": "^6.0.0",
+    "ini": "^7.0.0",
     "jiti": "^2.7.0",
     "jsonc-parser": "^3.3.1",
     "p-limit": "^7.3.0",
@@ -99,7 +99,7 @@
     "pnpm-workspace-yaml": "^1.6.1",
     "semver": "^7.8.5",
     "tinyglobby": "^0.2.17",
-    "undici": "^7.28.0",
+    "undici": "^8.8.0",
     "yaml": "^2.9.0"
   },
   "devDependencies": {
@@ -109,17 +109,12 @@
     "@types/semver": "^7.7.1",
     "@vitest/coverage-v8": "^4.1.10",
     "json-schema-to-ts": "^3.1.1",
+    "tsdown": "^0.22.12",
     "tsx": "^4.23.1",
-    "typescript": "^5.9.3",
-    "unbuild": "^3.6.1",
+    "typescript": "^7.0.2",
     "vitest": "^4.1.10"
   },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "esbuild"
-    ]
-  },
-  "packageManager": "pnpm@10.33.0",
+  "packageManager": "pnpm@11.15.1",
   "engines": {
     "node": ">=24.15.0"
   }

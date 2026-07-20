@@ -81,6 +81,31 @@ function steps(path: string): WorkflowStep[] {
 }
 
 describe('2.1.1 release readiness', () => {
+  it('pins the current Node 24 compatible dependency and build toolchain', () => {
+    const packageJson = JSON.parse(read('package.json')) as {
+      packageManager?: string
+      dependencies?: Record<string, string>
+      devDependencies?: Record<string, string>
+      scripts?: Record<string, string>
+    }
+    const pnpmWorkspace = parse(read('pnpm-workspace.yaml')) as {
+      allowBuilds?: Record<string, boolean>
+      minimumReleaseAgeExclude?: string[]
+    }
+
+    expect(packageJson.packageManager).toBe('pnpm@11.15.1')
+    expect(packageJson.dependencies).toMatchObject({ ini: '^7.0.0', undici: '^8.8.0' })
+    expect(packageJson.devDependencies).toMatchObject({
+      '@types/node': '^24.13.3',
+      tsdown: '^0.22.12',
+      typescript: '^7.0.2',
+    })
+    expect(packageJson.devDependencies).not.toHaveProperty('unbuild')
+    expect(packageJson.scripts?.build).toBe('tsdown')
+    expect(pnpmWorkspace.allowBuilds).toEqual({ esbuild: true })
+    expect(pnpmWorkspace.minimumReleaseAgeExclude).toEqual(['undici@8.8.0', 'tsdown@0.22.12'])
+  })
+
   it('moves compact Visual+ work into the dated 2.1.1 changelog section', () => {
     const changelog = read('CHANGELOG.md')
     const unreleased = changelog.slice(
@@ -432,8 +457,8 @@ describe('2.1.1 release readiness', () => {
     const steps = job?.steps ?? []
     const isolatedNpm = steps.find((step) => step.name === 'Install exact isolated npm')?.run
     expect(isolatedNpm).toContain('depfresh-visual-plus-npm.XXXXXX')
-    expect(isolatedNpm).toContain('npm@11.12.0')
-    expect(isolatedNpm).toContain('"$NPM_TOOL_ROOT/prefix/bin/npm" --version)" == \'11.12.0\'')
+    expect(isolatedNpm).toContain('npm@12.0.1')
+    expect(isolatedNpm).toContain('"$NPM_TOOL_ROOT/prefix/bin/npm" --version)" == \'12.0.1\'')
     expect(isolatedNpm).toContain('printf \'%s\\n\' "$NPM_TOOL_ROOT/prefix/bin" >> "$GITHUB_PATH"')
     expect(isolatedNpm).toContain('NPM_CONFIG_USERCONFIG')
     expect(isolatedNpm).toContain('NPM_CONFIG_GLOBALCONFIG')
@@ -508,7 +533,7 @@ describe('2.1.1 release readiness', () => {
     ]) {
       expect(release, gate).toContain(gate)
     }
-    expect(release).toContain('npm@11.12.0')
+    expect(release).toContain('npm@12.0.1')
     expect(release).toContain('refs/tags/v$' + '{PACKAGE_VERSION}')
     expect(release).toContain(
       'npm publish "file:$GITHUB_WORKSPACE/$PACKAGE_TARBALL" --access public --ignore-scripts',

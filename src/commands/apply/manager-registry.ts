@@ -1,7 +1,7 @@
 export const MANAGER_PHASE_SUPPORT = [
   {
     name: 'npm',
-    versionRange: '>=10.0.0 <12.0.0',
+    versionRange: '>=10.0.0 <13.0.0',
     lockfiles: ['package-lock.json', 'npm-shrinkwrap.json'],
   },
   {

@@ -107,7 +107,7 @@ exists. For an `npm:` alias, proof binds both the manifest alias key and the exa
 package identity; matching only the version is insufficient.
 
 With `verifyArtifacts`, an install plan also fingerprints one verification unit per npm boundary:
-confirmed npm 11.12.x identity, public npm registry, fixed
+confirmed npm 11.12.x or verified npm 12.0.x identity, public npm registry, fixed
 `["audit","signatures","--json","--include-attestations","--ignore-scripts"]` argv, timeout,
 policy rules, and every physical artifact's exact package/version/SHA-512 integrity plus occurrence
 consumers and passive-presence evidence. Artifact identity excludes consumers and presence, so it

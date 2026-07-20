@@ -33,6 +33,15 @@ describe('Plan 020 manager adapters', () => {
       externalEffects: ['package-manager-cache'],
     },
     {
+      manager: 'npm' as const,
+      version: '12.0.1',
+      lockfile: 'package-lock.json',
+      syncArgs: ['install', '--package-lock-only', '--ignore-scripts', '--no-audit', '--no-fund'],
+      installArgs: ['install', '--ignore-scripts', '--no-audit', '--no-fund'],
+      lifecycle: 'disabled-by-flag',
+      externalEffects: ['package-manager-cache'],
+    },
+    {
       manager: 'pnpm' as const,
       version: '10.33.0',
       lockfile: 'pnpm-lock.yaml',
@@ -134,7 +143,7 @@ describe('Plan 020 manager adapters', () => {
 
   it.each([
     ['npm', '9.9.4', 'package-lock.json', 'MANAGER_VERSION_UNSUPPORTED'],
-    ['npm', '12.0.0', 'package-lock.json', 'MANAGER_VERSION_UNSUPPORTED'],
+    ['npm', '13.0.0', 'package-lock.json', 'MANAGER_VERSION_UNSUPPORTED'],
     ['pnpm', '9.15.0', 'pnpm-lock.yaml', 'MANAGER_VERSION_UNSUPPORTED'],
     ['bun', '1.1.99', 'bun.lock', 'MANAGER_VERSION_UNSUPPORTED'],
     ['bun', '2.0.0', 'bun.lock', 'MANAGER_VERSION_UNSUPPORTED'],

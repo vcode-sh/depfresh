@@ -86,10 +86,11 @@ is a mismatch for npm, pnpm, and Bun.
 
 ## Exact npm artifact verification
 
-Artifact verification is optional and currently supports only public-registry npm artifacts with
-npm `>=11.12.0 <12.0.0`. Apply reuses the executable pinned during manager preflight and runs the
-plan's fixed `npm audit signatures --json --include-attestations --ignore-scripts` argv after a
-successful install. It never runs lifecycle scripts. Each expected artifact is rebound to the final
+Artifact verification is optional and currently supports only public-registry npm artifacts with npm
+`>=11.12.0 <12.0.0 || >=12.0.0 <12.1.0`. Apply reuses the executable pinned during manager
+preflight and runs the plan's fixed
+`npm audit signatures --json --include-attestations --ignore-scripts` argv after a successful
+install. It never runs lifecycle scripts. Each expected artifact is rebound to the final
 `package-lock.json` or `npm-shrinkwrap.json` entry, exact SHA-512 integrity, installed location, and
 contained non-symlink package manifest with the exact physical name/version before the verifier is
 started.

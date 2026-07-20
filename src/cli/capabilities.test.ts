@@ -101,7 +101,7 @@ describe('getCliCapabilities', () => {
     expect(capabilities.registries.managers).toEqual([
       {
         name: 'npm',
-        versionRange: '>=10.0.0 <12.0.0',
+        versionRange: '>=10.0.0 <13.0.0',
         lockfiles: ['package-lock.json', 'npm-shrinkwrap.json'],
       },
       {
@@ -113,7 +113,7 @@ describe('getCliCapabilities', () => {
     ])
     expect(capabilities.registries.artifactVerification).toEqual({
       manager: 'npm',
-      versionRange: '>=11.12.0 <12.0.0',
+      versionRange: '>=11.12.0 <12.0.0 || >=12.0.0 <12.1.0',
       registry: 'https://registry.npmjs.org/',
       integrity: 'sha512',
     })

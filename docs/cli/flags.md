@@ -199,7 +199,7 @@ apply flags grant only that reviewed intent.
 |------|-------|------|---------|-------------|
 | `--sync-lockfile` | -- | boolean | `false` | On `plan`, fingerprint a supported lifecycle-disabled lockfile-only adapter; on `apply`, grant its process and lockfile writes. |
 | `--install` | `-i` | boolean | `false` | On `plan`, fingerprint the stronger full-install adapter; on `apply`, grant process, lockfile, install-tree, and cache effects. |
-| `--verify-artifacts` | -- | boolean | `false` | With `--install`, fingerprint or grant exact npm 11.12.x public-registry artifact verification. Configuration cannot supply this authority. |
+| `--verify-artifacts` | -- | boolean | `false` | With `--install`, fingerprint or grant exact npm 11.12.x or verified npm 12.0.x public-registry artifact verification. Configuration cannot supply this authority. |
 | `--verify-argv <json>` | -- | string | -- | On `plan`, fingerprint one non-empty public JSON string array such as `'["pnpm","test"]'`; absolute paths and credential/auth-shaped flags, headers, or values are rejected with `INVALID_OPTION_VALUE`. Never inferred from scripts. |
 | `--verify` | -- | boolean | `false` | On `apply`, grant only the exact verification argv already in the plan. |
 | `--phase-timeout <ms>` | -- | integer | `120000` | Fingerprinted timeout for manager version, manager execution, generic verification, and artifact verification; maximum `600000`. |

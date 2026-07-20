@@ -46,8 +46,8 @@ jobs:
             "$NPM_BOOTSTRAP" install --global --ignore-scripts --no-audit --no-fund \
             --registry https://registry.npmjs.org/ --userconfig "$NPM_TOOL_ROOT/user.npmrc" \
             --globalconfig "$NPM_TOOL_ROOT/global.npmrc" --cache "$NPM_TOOL_ROOT/cache" \
-            --prefix "$NPM_TOOL_ROOT/prefix" npm@11.12.0
-          [[ "$("$NPM_TOOL_ROOT/prefix/bin/npm" --version)" == '11.12.0' ]]
+            --prefix "$NPM_TOOL_ROOT/prefix" npm@12.0.1
+          [[ "$("$NPM_TOOL_ROOT/prefix/bin/npm" --version)" == '12.0.1' ]]
           printf '%s\n' "$NPM_TOOL_ROOT/prefix/bin" >> "$GITHUB_PATH"
           {
             printf 'HOME=%s\n' "$NPM_TOOL_ROOT/home"
@@ -178,8 +178,8 @@ jobs:
             "$NPM_BOOTSTRAP" install --global --ignore-scripts --no-audit --no-fund \
             --registry https://registry.npmjs.org/ --userconfig "$NPM_TOOL_ROOT/user.npmrc" \
             --globalconfig "$NPM_TOOL_ROOT/global.npmrc" --cache "$NPM_TOOL_ROOT/cache" \
-            --prefix "$NPM_TOOL_ROOT/prefix" npm@11.12.0
-          [[ "$("$NPM_TOOL_ROOT/prefix/bin/npm" --version)" == '11.12.0' ]]
+            --prefix "$NPM_TOOL_ROOT/prefix" npm@12.0.1
+          [[ "$("$NPM_TOOL_ROOT/prefix/bin/npm" --version)" == '12.0.1' ]]
           printf '%s\n' "$NPM_TOOL_ROOT/prefix/bin" >> "$GITHUB_PATH"
           {
             printf 'HOME=%s\n' "$NPM_TOOL_ROOT/home"

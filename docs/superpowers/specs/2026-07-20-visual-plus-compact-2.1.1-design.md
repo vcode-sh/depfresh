@@ -116,7 +116,7 @@ Document the compact/default and `--long` audit journeys in the CLI help, table-
 README, changelog, and a dedicated `docs/releases/v2.1.1.md` candidate note.
 
 After all implementation, source, PTY, coverage, lint, typecheck, build, package, and distribution
-tests pass under the pinned Node `24.15.0`, npm `11.12.1`, and pnpm `10.33.0` toolchain:
+tests pass under the pinned Node `24.15.0`, npm `12.0.1`, and pnpm `11.15.1` toolchain:
 
 - bump `package.json` and maintained current-version surfaces from `2.1.0` to `2.1.1` while
   leaving the versionless root `pnpm-lock.yaml` unchanged;

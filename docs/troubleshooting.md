@@ -296,8 +296,8 @@ Verification uses only the fingerprinted JSON argv and may not mutate repository
 execution currently fails closed on Windows because equivalent process-tree observation is not
 available.
 
-For `artifact-verify`, first confirm the immutable plan selected npm 11.12.x, public npm registry
-artifacts, canonical SHA-512 integrity, and full install. Pnpm, Bun, JSR, private registries,
+For `artifact-verify`, first confirm the immutable plan selected npm 11.12.x or verified npm 12.0.x,
+public npm registry artifacts, canonical SHA-512 integrity, and full install. Pnpm, Bun, JSR, private registries,
 unsupported npm versions, or missing integrity block planning. A project `.npmrc` produces
 verifier-unavailable apply evidence rather than being inherited.
 Offline network codes and expired signature-key evidence are reported as distinct unknown states;

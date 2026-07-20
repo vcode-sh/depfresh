@@ -40,8 +40,9 @@ Two entry points: `src/cli/index.ts` (CLI via citty) and `src/index.ts` (library
 - **Signals** (`src/signals/`) — Pure repository-runtime, complete planned-peer-graph, explicit and
   inferred cohort, fixed-clock release/deprecation, evidence completeness, and passive-presence
   evaluation with separate ordered policy effects
-- **Artifact trust** (`src/trust/`) — Bounded parser for fixed npm 11.12.x public-registry signature
-  and SLSA provenance verification, with exact installed-artifact binding and no raw-output export
+- **Artifact trust** (`src/trust/`) — Bounded parser for verified npm 11.12.x and 12.0.x
+  public-registry signature and SLSA provenance verification, with exact installed-artifact binding
+  and no raw-output export
 
 ### Key types (`src/types/`)
 
@@ -88,7 +89,7 @@ pnpm test:run --coverage  # With coverage
 ## Commands
 
 ```bash
-pnpm build             # unbuild -> dist/ (cli.mjs + index.mjs)
+pnpm build             # tsdown -> dist/ (cli.mjs + index.mjs)
 pnpm dev               # Run CLI via tsx
 pnpm test              # Vitest watch
 pnpm test:run          # Single test run
@@ -102,9 +103,10 @@ pnpm typecheck         # tsc --noEmit
 
 **Runtime:** @clack/prompts, ajv, ansis, citty, defu, detect-indent, find-up-simple, ini, jiti, jsonc-parser, p-limit, pathe, pnpm-workspace-yaml, semver, tinyglobby, undici, yaml
 
-**Dev:** @biomejs/biome, @vitest/coverage-v8, json-schema-to-ts, tsx, typescript, unbuild, vitest
+**Dev:** @biomejs/biome, @vitest/coverage-v8, json-schema-to-ts, tsdown, tsx, typescript, vitest
 
-**Build:** unbuild with rollup and inlined dependencies; `node:sqlite` remains a built-in import
+**Build:** tsdown with Rolldown and external declared dependencies; `node:sqlite` remains a built-in
+import
 
 **Package manager:** pnpm — see the `packageManager` field in `package.json` for the pinned version
 
@@ -143,10 +145,11 @@ pnpm typecheck         # tsc --noEmit
   targets. Unknown never becomes success, an override never changes state, and passive signature
   or provenance presence never claims verification.
 - **Artifact trust** — Exact verification is currently limited to public npm artifacts with npm
-  11.12.x. Bind final lockfile SHA-512 integrity and contained installed location before the fixed
-  lifecycle-disabled audit command. Isolate npm home/cache/config, keep stdout/stderr private and
-  bounded, retain signature/provenance truth independently, and require explicit artifact/network
-  authority. Unsupported, offline, stale, unavailable, or ambiguous evidence never passes.
+  11.12.x or verified npm 12.0.x. Bind final lockfile SHA-512 integrity and contained installed
+  location before the fixed lifecycle-disabled audit command. Isolate npm home/cache/config, keep
+  stdout/stderr private and bounded, retain signature/provenance truth independently, and require
+  explicit artifact/network authority. Unsupported, offline, stale, unavailable, or ambiguous
+  evidence never passes.
 - **Official automation** — Discover the supported machine surface with
   `depfresh capabilities --json`. Prefer the exported
   `depfresh/skills/depfresh/SKILL.md` instructions and its two-tier runner priority (locked local

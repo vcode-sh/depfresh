@@ -801,100 +801,103 @@ describe('plan contract', () => {
     expect(sync.planFingerprint).not.toBe(install.planFingerprint)
   })
 
-  it('fingerprints exact npm artifact verification intent without treating presence as proof', async () => {
-    const root = mkdtempSync(join(tmpdir(), 'depfresh-plan-artifact-verification-'))
-    const integrity = `sha512-${Buffer.alloc(64, 5).toString('base64')}`
-    writeFileSync(
-      join(root, 'package.json'),
-      JSON.stringify({
-        name: 'fixture',
-        packageManager: 'npm@11.12.1',
-        dependencies: { alpha: '^1.0.0' },
-      }),
-    )
-    writeFileSync(
-      join(root, 'package-lock.json'),
-      JSON.stringify({ name: 'fixture', lockfileVersion: 3, packages: {} }),
-    )
-    fetchPackageData.mockResolvedValue({
-      name: 'alpha',
-      versions: ['1.0.0', '2.0.0'],
-      distTags: { latest: '2.0.0' },
-      registry: 'https://registry.npmjs.org/',
-      artifactIntegrity: { '2.0.0': integrity },
-      signaturePresence: { '2.0.0': 'present' },
-      provenancePresence: { '2.0.0': 'present' },
-    })
-
-    const result = await plan({
-      cwd: root,
-      mode: 'latest',
-      install: true,
-      verifyArtifacts: true,
-      phaseTimeout: 30_000,
-    })
-
-    expect(result.execution.artifactVerification).toEqual({
-      kind: 'npm-audit-signatures-v1',
-      timeoutMs: 30_000,
-      isolatedHome: true,
-      policySource: 'config',
-      rules: [],
-      targets: [
-        {
-          boundaryId: expect.any(String),
-          cwd: '.',
-          verifier: { name: 'npm', version: '11.12.1' },
-          executable: 'npm',
-          args: ['audit', 'signatures', '--json', '--include-attestations', '--ignore-scripts'],
-          artifacts: [
-            expect.objectContaining({
-              occurrenceIds: [expect.any(String)],
-              packageName: 'alpha',
-              version: '2.0.0',
-              registry: 'https://registry.npmjs.org/',
-              integrity,
-              signaturePresence: 'present',
-              provenancePresence: 'present',
-              evidenceRef: expect.stringMatching(/^signal-evidence-[a-f0-9]{24}$/u),
-            }),
-          ],
-        },
-      ],
-    })
-    const artifact = result.execution.artifactVerification?.targets[0]?.artifacts[0]
-    const evidence = result.signalEvidence?.find((item) => item.id === artifact?.evidenceRef)
-    expect(evidence).toMatchObject({
-      kind: 'registry-artifact',
-      status: 'observed',
-      subject: artifact?.id,
-      sourceRefs: artifact?.occurrenceIds,
-      facts: {
-        packageName: 'alpha',
-        targetVersion: '2.0.0',
+  it.each(['11.12.1', '12.0.1'])(
+    'fingerprints exact npm %s artifact verification intent without treating presence as proof',
+    async (npmVersion) => {
+      const root = mkdtempSync(join(tmpdir(), 'depfresh-plan-artifact-verification-'))
+      const integrity = `sha512-${Buffer.alloc(64, 5).toString('base64')}`
+      writeFileSync(
+        join(root, 'package.json'),
+        JSON.stringify({
+          name: 'fixture',
+          packageManager: `npm@${npmVersion}`,
+          dependencies: { alpha: '^1.0.0' },
+        }),
+      )
+      writeFileSync(
+        join(root, 'package-lock.json'),
+        JSON.stringify({ name: 'fixture', lockfileVersion: 3, packages: {} }),
+      )
+      fetchPackageData.mockResolvedValue({
+        name: 'alpha',
+        versions: ['1.0.0', '2.0.0'],
+        distTags: { latest: '2.0.0' },
         registry: 'https://registry.npmjs.org/',
-        integrity,
-        signaturePresence: 'present',
-        provenancePresence: 'present',
-      },
-    })
-    expect(result.requiredCapabilities).toEqual(
-      expect.arrayContaining(['artifact-verify', 'network-access', 'process-execute', 'install']),
-    )
-    expect(validatePlanResult(result)).toBe(true)
+        artifactIntegrity: { '2.0.0': integrity },
+        signaturePresence: { '2.0.0': 'present' },
+        provenancePresence: { '2.0.0': 'present' },
+      })
 
-    const forged = structuredClone(result)
-    const forgedArtifact = forged.execution.artifactVerification?.targets[0]?.artifacts[0]
-    expect(forgedArtifact).toBeDefined()
-    if (forgedArtifact) forgedArtifact.signaturePresence = 'absent'
-    const { planFingerprint: _fingerprint, ...forgedSemantic } = forged
-    expect(
-      validatePlanResult({
-        ...forgedSemantic,
-        planFingerprint: createPlanFingerprint(forgedSemantic),
-      }),
-    ).toBe(false)
-  })
+      const result = await plan({
+        cwd: root,
+        mode: 'latest',
+        install: true,
+        verifyArtifacts: true,
+        phaseTimeout: 30_000,
+      })
+
+      expect(result.execution.artifactVerification).toEqual({
+        kind: 'npm-audit-signatures-v1',
+        timeoutMs: 30_000,
+        isolatedHome: true,
+        policySource: 'config',
+        rules: [],
+        targets: [
+          {
+            boundaryId: expect.any(String),
+            cwd: '.',
+            verifier: { name: 'npm', version: npmVersion },
+            executable: 'npm',
+            args: ['audit', 'signatures', '--json', '--include-attestations', '--ignore-scripts'],
+            artifacts: [
+              expect.objectContaining({
+                occurrenceIds: [expect.any(String)],
+                packageName: 'alpha',
+                version: '2.0.0',
+                registry: 'https://registry.npmjs.org/',
+                integrity,
+                signaturePresence: 'present',
+                provenancePresence: 'present',
+                evidenceRef: expect.stringMatching(/^signal-evidence-[a-f0-9]{24}$/u),
+              }),
+            ],
+          },
+        ],
+      })
+      const artifact = result.execution.artifactVerification?.targets[0]?.artifacts[0]
+      const evidence = result.signalEvidence?.find((item) => item.id === artifact?.evidenceRef)
+      expect(evidence).toMatchObject({
+        kind: 'registry-artifact',
+        status: 'observed',
+        subject: artifact?.id,
+        sourceRefs: artifact?.occurrenceIds,
+        facts: {
+          packageName: 'alpha',
+          targetVersion: '2.0.0',
+          registry: 'https://registry.npmjs.org/',
+          integrity,
+          signaturePresence: 'present',
+          provenancePresence: 'present',
+        },
+      })
+      expect(result.requiredCapabilities).toEqual(
+        expect.arrayContaining(['artifact-verify', 'network-access', 'process-execute', 'install']),
+      )
+      expect(validatePlanResult(result)).toBe(true)
+
+      const forged = structuredClone(result)
+      const forgedArtifact = forged.execution.artifactVerification?.targets[0]?.artifacts[0]
+      expect(forgedArtifact).toBeDefined()
+      if (forgedArtifact) forgedArtifact.signaturePresence = 'absent'
+      const { planFingerprint: _fingerprint, ...forgedSemantic } = forged
+      expect(
+        validatePlanResult({
+          ...forgedSemantic,
+          planFingerprint: createPlanFingerprint(forgedSemantic),
+        }),
+      ).toBe(false)
+    },
+  )
 
   it('keeps unsupported manager execution blocked without weakening file operations', async () => {
     const root = mkdtempSync(join(tmpdir(), 'depfresh-plan-phase-blocked-'))

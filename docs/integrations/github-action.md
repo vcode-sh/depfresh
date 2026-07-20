@@ -86,7 +86,7 @@ CLI with an argument array when that separately reviewed capability is required.
 ## Release coupling
 
 The repository release workflow accepts only `v${package.json.version}`, uses exact Node 24.15.0
-and an isolated npm 11.12.0 tool, then runs schemas, types, zero-warning lint, adversarial and full
+and an isolated npm 12.0.1 tool, then runs schemas, types, zero-warning lint, adversarial and full
 tests, coverage, build, smoke, the deterministic WUN-shaped workspace proof, dry-run packaging, and
 installed-tarball verification. It uploads one verified tarball and publishes only those exact
 bytes through npm trusted publishing.
