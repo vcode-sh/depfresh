@@ -6,7 +6,6 @@ import { validateVisualPlusSectionInput } from '../input'
 import {
   createVisualPlusTheme,
   formatVisualPlusAge,
-  indentVisualPlusLines,
   type VisualPlusSeverity,
   visualPlusSeparator,
   wrapVisualPlusIndented,
@@ -149,7 +148,8 @@ function buildLedgerLayout(
   ]
   for (const row of rows) {
     const { dependency, continuations } = dependencyCell(row, columns[0]!.width, input)
-    const cells = columns.map((column, index) => (index === 0 ? [dependency] : column.value(row)))
+    const displayRow = dependency === row.name ? row : { ...row, name: dependency }
+    const cells = columns.map((column) => column.value(displayRow))
     const height = Math.max(...cells.map((cell) => cell.length))
     for (let lineIndex = 0; lineIndex < height; lineIndex += 1) {
       lines.push(
@@ -330,18 +330,7 @@ function renderNarrow(
       else continuations.push(item)
     }
     lines.push(...wrapVisualPlusWords(dependency, width, theme))
-    const transition = `${row.current}${theme.arrow}${row.target}`
-    const transitionLines = wrapVisualPlusJoined(
-      [
-        transition,
-        theme.severity(row.diff),
-        ...(input.run.display.timediff ? [formatVisualPlusAge(row.ageMs)] : []),
-      ],
-      separator,
-      Math.max(1, width - 2),
-      theme,
-    )
-    lines.push(...indentVisualPlusLines(transitionLines, width, theme))
+    lines.push(...narrowTransitionLines(row, input.run.display.timediff, width, separator, theme))
     for (const continuation of continuations) {
       lines.push(
         ...wrapVisualPlusIndented(continuation, width, theme).map((line) => theme.muted(line)),
@@ -349,6 +338,80 @@ function renderNarrow(
     }
   }
   return lines
+}
+
+interface NarrowSemanticLine {
+  plain: string
+  rendered: string
+}
+
+function narrowTransitionLines(
+  row: VisualPlusLedgerRow,
+  timediff: boolean,
+  width: number,
+  separator: string,
+  theme: ReturnType<typeof createVisualPlusTheme>,
+): readonly string[] {
+  const prefix = ' '.repeat(Math.min(2, Math.max(0, width - 1)))
+  const contentWidth = Math.max(1, width - visualLength(prefix))
+  const transition = `${row.current}${theme.arrow}${row.target}`
+  const targetStart = row.current.length + theme.arrow.length
+  const targetEnd = targetStart + row.target.length
+  let transitionOffset = 0
+  const lines: NarrowSemanticLine[] = wrapVisualPlusText(transition, contentWidth, theme).map(
+    (fragment) => {
+      const rendered = styleFragmentRange(
+        fragment,
+        transitionOffset,
+        targetStart,
+        targetEnd,
+        (value) => theme.styleSeverity(row.diff, value),
+      )
+      transitionOffset += fragment.length
+      return { plain: fragment, rendered }
+    },
+  )
+  appendNarrowSemantic(lines, capitalize(row.diff), separator, contentWidth, theme, (fragment) =>
+    theme.styleSeverity(row.diff, fragment),
+  )
+  if (timediff) {
+    appendNarrowSemantic(lines, formatVisualPlusAge(row.ageMs), separator, contentWidth, theme)
+  }
+  return lines.map((line) => `${prefix}${line.rendered}`)
+}
+
+function appendNarrowSemantic(
+  lines: NarrowSemanticLine[],
+  value: string,
+  separator: string,
+  width: number,
+  theme: ReturnType<typeof createVisualPlusTheme>,
+  style?: (fragment: string) => string,
+): void {
+  const fragments = wrapVisualPlusText(value, width, theme)
+  const first = fragments[0]!
+  const last = lines.at(-1)!
+  if (fragments.length === 1 && visualLength(`${last.plain}${separator}${first}`) <= width) {
+    last.plain = `${last.plain}${separator}${first}`
+    last.rendered = `${last.rendered}${separator}${style ? style(first) : first}`
+    return
+  }
+  for (const fragment of fragments) {
+    lines.push({ plain: fragment, rendered: style ? style(fragment) : fragment })
+  }
+}
+
+function styleFragmentRange(
+  fragment: string,
+  offset: number,
+  rangeStart: number,
+  rangeEnd: number,
+  style: (value: string) => string,
+): string {
+  const start = Math.max(0, rangeStart - offset)
+  const end = Math.min(fragment.length, rangeEnd - offset)
+  if (start >= end) return fragment
+  return `${fragment.slice(0, start)}${style(fragment.slice(start, end))}${fragment.slice(end)}`
 }
 
 function textColumn(

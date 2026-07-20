@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { createRepositoryId } from '../../../../repository/identity'
 import type { SortOption } from '../../../../types'
 import { stripAnsi, visualLength } from '../../../../utils/format'
 import type { VisualPlusCapabilities } from '../capabilities'
@@ -40,6 +41,49 @@ function internalIdentifiers(input: VisualPlusSectionInput): ReadonlySet<string>
     if ('id' in insight.catalog) identifiers.add(insight.catalog.id)
   }
   return identifiers
+}
+
+function withDependencyName(
+  input: VisualPlusSectionInput,
+  operationId: string,
+  name: string,
+): VisualPlusSectionInput {
+  return {
+    ...input,
+    snapshot: {
+      ...input.snapshot,
+      changes: input.snapshot.changes.map((change) => {
+        if (change.id !== operationId) return change
+        const insight = change.insight!
+        const occurrencePath = [...insight.occurrencePath]
+        occurrencePath[occurrencePath.length - 1] = name
+        return {
+          ...change,
+          name,
+          insight: {
+            ...insight,
+            dependencyId: createRepositoryId('dependency', name),
+            rawName: name,
+            occurrencePath,
+          },
+        }
+      }),
+    },
+  }
+}
+
+function reassembleFirstDependency(lines: readonly string[], name: string): string {
+  const heading = lines.find((line) => line.startsWith('dependency'))!
+  const dependencyWidth = heading.indexOf('current') - 2
+  const firstFragment = name.slice(0, dependencyWidth)
+  const rowIndex = lines.findIndex((line) => line.startsWith(firstFragment))
+  let reassembled = ''
+  for (let index = rowIndex; index < lines.length && reassembled.length < name.length; index += 1) {
+    const line = lines[index]!
+    if (index > rowIndex && line.startsWith(' ')) break
+    reassembled += line.slice(0, dependencyWidth).trimEnd()
+  }
+  return reassembled
 }
 
 describe('Visual+ hybrid ledger row model', () => {
@@ -184,6 +228,32 @@ describe('Visual+ hybrid ledger row model', () => {
 
     expect(lines.every((line) => visualLength(line) <= 1)).toBe(true)
     expect(lines.join('\n')).not.toMatch(/…|\.\.\./u)
+  })
+
+  it.each([60, 118])('wraps long scoped dependency names losslessly at %i columns', (width) => {
+    const name = '@review/extraordinarily-long-dependency-name-that-must-wrap-losslessly'
+    const fixture = createVisualPlusHybridFixtureInput(capabilities(width))
+    const input = withDependencyName(fixture, 'hybrid-0', name)
+    const lines = renderVisualPlusLedger(input, createVisualPlusLedgerRows(input))
+    const plainLines = lines.map(stripAnsi)
+
+    expect(lines.every((line) => visualLength(line) <= width)).toBe(true)
+    expect(reassembleFirstDependency(plainLines, name)).toBe(name)
+    expect(plainLines.join('\n')).not.toMatch(/…|\.\.\./u)
+  })
+
+  it('preserves target severity styling in raw narrow transition output', () => {
+    const input = createVisualPlusHybridFixtureInput(capabilities(40))
+    const lines = renderVisualPlusLedger(input, createVisualPlusLedgerRows(input))
+    const transition = lines.find((line) =>
+      stripAnsi(line).includes('^15.0.0 → ^17.0.0 · Major · ~5d'),
+    )
+
+    expect(transition).toMatchInlineSnapshot(
+      `"  ^15.0.0 → \u001b[31m^17.0.0\u001b[39m · \u001b[31mMajor\u001b[39m · ~5d"`,
+    )
+    expect(stripAnsi(transition!)).toBe('  ^15.0.0 → ^17.0.0 · Major · ~5d')
+    expect(visualLength(transition!)).toBeLessThanOrEqual(40)
   })
 })
 
