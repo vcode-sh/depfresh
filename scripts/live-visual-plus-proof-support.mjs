@@ -109,10 +109,12 @@ export function analyzeHybridRun(result, columns, argv, repositoryName) {
       line.includes('major') &&
       line.includes('read-only'),
   )
-  const topology = lines.findIndex((line) => /\b[0-9]+ updates\b/u.test(line))
-  const severity = lines.findIndex((line) =>
-    /^Major [0-9]+ .*Minor [0-9]+ .*Patch [0-9]+$/u.test(line),
-  )
+  const topologyPattern =
+    /^([0-9]+) packages (?:·|-) ([0-9]+) declared (?:·|-) ([0-9]+) eligible (?:·|-) ([0-9]+) updates (?:·|-) ([0-9]+) files$/u
+  const severityPattern =
+    /^Major ([0-9]+) (?:·|-) Minor ([0-9]+) (?:·|-) Patch ([0-9]+)$/u
+  const topology = lines.findIndex((line) => topologyPattern.test(line))
+  const severity = lines.findIndex((line) => severityPattern.test(line))
   const breaking = lines.findIndex((line) => line === 'Breaking changes')
   const ledger = lines.findIndex((line, index) => index > breaking && isLedgerHeader(line))
   const indexes = [context, topology, severity, breaking, ledger]
@@ -122,8 +124,12 @@ export function analyzeHybridRun(result, columns, argv, repositoryName) {
   ) {
     throw new Error('Live Visual+ hierarchy is incomplete')
   }
-  const topologyMatch = lines[topology].match(/\b([0-9]+) updates\b/u)
-  const declared = Number(topologyMatch?.[1])
+  const topologyMatch = topologyPattern.exec(lines[topology])
+  const severityMatch = severityPattern.exec(lines[severity])
+  const topologyCounts = topologyMatch?.slice(1).map(Number) ?? []
+  const severityCounts = severityMatch?.slice(1).map(Number) ?? []
+  const declared = topologyCounts[3]
+  const topologyFiles = topologyCounts[4]
   const receiptIndex = lines.findIndex(
     (line, index) => index > ledger && /^Review complete\b/u.test(line),
   )
@@ -131,12 +137,35 @@ export function analyzeHybridRun(result, columns, argv, repositoryName) {
     throw new Error('Live Visual+ update membership is incomplete')
   }
   const rows = parseLedgerRows(lines.slice(breaking + 1, receiptIndex))
-  const distinctRows = new Set(rows.map((row) => JSON.stringify(row)))
+  const distinctRows = new Set(rows.map(semanticLedgerRowKey))
   const receiptMatch = /^Review complete (?:·|-) ([0-9]+) updates across ([0-9]+) files? (?:·|-) write not attempted$/u.exec(
     lines[receiptIndex],
   )
   const receiptUpdates = Number(receiptMatch?.[1])
-  if (rows.length !== declared || distinctRows.size !== declared || receiptUpdates !== declared) {
+  const receiptFiles = Number(receiptMatch?.[2])
+  const physicalFiles = new Set(rows.map(({ file }) => file))
+  const rowSeverity = {
+    major: rows.filter(({ severity }) => severity === 'Major').length,
+    minor: rows.filter(({ severity }) => severity === 'Minor').length,
+    patch: rows.filter(({ severity }) => severity === 'Patch').length,
+  }
+  if (
+    topologyCounts.length !== 5 ||
+    severityCounts.length !== 3 ||
+    [...topologyCounts, ...severityCounts, receiptUpdates, receiptFiles].some(
+      (value) => !Number.isSafeInteger(value) || value < 0,
+    ) ||
+    declared < 1 ||
+    rows.length !== declared ||
+    distinctRows.size !== declared ||
+    rows.some((row) => !hasCompleteCatalogContext(row)) ||
+    receiptUpdates !== declared ||
+    topologyFiles !== physicalFiles.size ||
+    receiptFiles !== physicalFiles.size ||
+    severityCounts[0] !== rowSeverity.major ||
+    severityCounts[1] !== rowSeverity.minor ||
+    severityCounts[2] !== rowSeverity.patch
+  ) {
     throw new Error('Live Visual+ update membership differs from the summary')
   }
   if (
@@ -154,7 +183,13 @@ export function analyzeHybridRun(result, columns, argv, repositoryName) {
     finalCursorVisible: result.finalCursorVisible,
     controls: result.controls,
     rawControl: classifyRawTerminalTransport(result.rawTerminal),
-    operationRows: { declared, rendered: rows.length, complete: true },
+    operationRows: {
+      declared,
+      rendered: rows.length,
+      files: physicalFiles.size,
+      severity: rowSeverity,
+      complete: true,
+    },
     hierarchyTokens: ['context', 'topology', 'severity', 'breaking-changes', 'update-ledger'],
     finalScreen: screen,
   }
@@ -184,14 +219,14 @@ export function analyzeLongRun(result, columns, argv, expectedOperations) {
   const owners = parseOwnerMembership(ownerSection)
   const shared = parseSharedMembership(sharedSection)
   const operations = reviewOperationFields(operationSection)
-  const majorDependencies = exactPrefixedValues(riskSection, 'Dependency ')
+  const majorCards = parseMajorMembership(riskSection)
   const targets = parseTargetMembership(targetSection)
   const receipt = /^([0-9]+) updates reviewed across ([0-9]+) targets?\.$/mu.exec(
     screen.slice(screen.indexOf('Review complete\n') + 'Review complete\n'.length),
   )
   const membership = {
     dependencies: shared.dependencies.length,
-    majorCards: countExactLines(screen, 'Major card'),
+    majorCards: majorCards.length,
     occurrences: shared.occurrences.length,
     operations: operations.operationIds.length,
     owners: owners.length,
@@ -239,6 +274,15 @@ export function analyzeLongRun(result, columns, argv, expectedOperations) {
     operations.records,
     ({ diff, owner, target }) => JSON.stringify([owner, target, diff]),
   )
+  const riskMajorDependencies = aggregateCounts(
+    majorCards,
+    ({ dependency }) => dependency,
+    ({ occurrences }) => occurrences,
+  )
+  const operationMajorDependencies = aggregateCounts(
+    operations.records.filter(({ diff }) => diff === 'major'),
+    ({ dependency }) => dependency,
+  )
   const allFields = [
     ...owners.flatMap(({ id, label, target }) => [id, label, target]),
     ...shared.dependencies.flatMap(({ id, name }) => [id, name]),
@@ -253,7 +297,7 @@ export function analyzeLongRun(result, columns, argv, expectedOperations) {
     ...operations.records.map(({ diff }) => diff),
     ...operations.groups.flatMap(({ label, target }) => [label, target]),
     ...targets.map(({ path }) => path),
-    ...majorDependencies,
+    ...majorCards.map(({ dependency }) => dependency),
   ]
   if (
     Number(topology[1]) !== expectedOperations ||
@@ -275,6 +319,7 @@ export function analyzeLongRun(result, columns, argv, expectedOperations) {
     !allDistinct(shared.occurrences.map((occurrence) => JSON.stringify(occurrence))) ||
     !allDistinct(operations.operationIds) ||
     !allDistinct(targets.map(({ path }) => path)) ||
+    new Set(majorCards.map(({ dependency }) => dependency)).size !== majorCards.length ||
     !sameCountMap(ownerTargets, reviewedTargets) ||
     !sameCountMap(ownerGroups, operationGroups) ||
     !sameCountMap(expectedSharedDependencies, sharedDependencies) ||
@@ -284,12 +329,11 @@ export function analyzeLongRun(result, columns, argv, expectedOperations) {
       shared.occurrences.map(({ owner }) => owner),
       owners.map(({ label }) => label),
     ) ||
-    membership.majorCards !== majorDependencies.length ||
+    !sameCountMap(riskMajorDependencies, operationMajorDependencies) ||
     !isSubset(
       shared.dependencies.map(({ name }) => name),
       operations.dependencies,
-    ) ||
-    !isSubset(majorDependencies, operations.dependencies)
+    )
   ) {
     throw new Error('Live Visual+ long membership is incomplete')
   }
@@ -332,34 +376,95 @@ function sameIdentity(left, right) {
 function parseLedgerRows(lines) {
   const rows = []
   let owner = ''
+  let file = ''
   let source = ''
+  let lastRow
   let paragraphStart = 0
   let rowSection = false
   for (let index = 0; index < lines.length; index += 1) {
     const line = lines[index]
     if (line === '') {
       paragraphStart = index + 1
+      lastRow = undefined
       rowSection = false
       continue
     }
     if (/^  (?:dependencies|devDependencies|optionalDependencies|peerDependencies|catalog)$/u.test(line)) {
       const ownerLines = lines.slice(paragraphStart, index).filter((value) => value !== '')
-      if (ownerLines.length > 0) owner = ownerLines.join('\n')
+      if (ownerLines.length > 0) {
+        const context = parseLedgerOwner(ownerLines.join(''))
+        owner = context.owner
+        file = context.file
+      }
       source = line.slice(2)
+      lastRow = undefined
       paragraphStart = index + 1
       rowSection = false
       continue
     }
     if (isLedgerHeader(line)) {
-      if (owner === '' || source === '') throw new Error('Live Visual+ ledger context is incomplete')
+      if (owner === '' || file === '' || source === '') {
+        throw new Error('Live Visual+ ledger context is incomplete')
+      }
       rowSection = true
       continue
     }
     if (!rowSection) continue
     const row = parseLedgerRow(line)
-    if (row) rows.push({ owner, source, ...row })
+    if (row) {
+      lastRow = { context: [], file, owner, source, ...row }
+      rows.push(lastRow)
+    } else if (lastRow && line.startsWith('  ')) {
+      lastRow.context.push(line.trim())
+    }
   }
   return rows
+}
+
+function semanticLedgerRowKey(row) {
+  return JSON.stringify([
+    row.owner,
+    row.file,
+    row.source,
+    row.dependency,
+    row.current,
+    row.target,
+    row.severity,
+    row.context,
+  ])
+}
+
+function hasCompleteCatalogContext(row) {
+  if (row.source !== 'catalog') return true
+  const expected = `catalog ${row.owner}: ${row.file}`
+  const evidence = parseTypedLedgerEvidence(row)
+  const catalogs = evidence?.filter((value) => value.startsWith('catalog ')) ?? []
+  return catalogs.length === 1 && catalogs[0] === expected
+}
+
+function parseTypedLedgerEvidence(row) {
+  const evidence = [...row.dependency.matchAll(/\[([^\]\n]+)\]/gu)].map((match) => match[1])
+  for (const fragment of row.context) {
+    if (/^(?:catalog|compat) /u.test(fragment)) {
+      evidence.push(fragment)
+    } else if (evidence.length > 0) {
+      evidence[evidence.length - 1] += ` ${fragment}`
+    } else {
+      return undefined
+    }
+  }
+  return evidence
+}
+
+function parseLedgerOwner(value) {
+  const unicode = value.lastIndexOf(' · ')
+  const ascii = value.lastIndexOf(' - ')
+  const separatorIndex = Math.max(unicode, ascii)
+  if (separatorIndex < 1) throw new Error('Live Visual+ ledger owner is incomplete')
+  const owner = value.slice(0, separatorIndex)
+  const file = value.slice(separatorIndex + 3)
+  if (owner === '' || file === '') throw new Error('Live Visual+ ledger owner is incomplete')
+  return { file, owner }
 }
 
 function isLedgerHeader(line) {
@@ -401,26 +506,37 @@ function exactSectionLine(screen, pattern) {
   return match
 }
 
-function wrappedValues(input, label, nextLabel) {
+function parseMajorMembership(input) {
   const lines = input.split('\n')
-  const values = []
-  for (let index = 0; index < lines.length; index += 1) {
-    if (!lines[index].startsWith(label)) continue
-    let value = lines[index].slice(label.length)
-    while (lines[index + 1] && !lines[index + 1].startsWith(nextLabel)) {
-      value += lines[index + 1]
-      index += 1
-    }
-    values.push(value)
+  const starts = fieldStarts(lines, (line) => line === 'Major card')
+  if (starts.length === 0) {
+    if (lines.filter((line) => line === 'No major updates').length === 1) return []
+    throw new Error('Live Visual+ major membership is incomplete')
   }
-  return values
-}
-
-function exactPrefixedValues(input, prefix, excludedPrefix) {
-  return input
-    .split('\n')
-    .filter((line) => line.startsWith(prefix) && !line.startsWith(excludedPrefix ?? '\0'))
-    .map((line) => line.slice(prefix.length))
+  return starts.map((start, position) => {
+    const block = lines.slice(start, starts[position + 1] ?? lines.length)
+    const dependencyIndex = block.findIndex((line) => line.startsWith('Dependency '))
+    const transitionIndex = block.findIndex(
+      (line, index) => index > dependencyIndex && line.startsWith('Transition '),
+    )
+    const occurrenceLines = block.flatMap((line) => {
+      const match = /^Occurrences ([0-9]+)$/u.exec(line)
+      return match ? [Number(match[1])] : []
+    })
+    if (
+      dependencyIndex !== 1 ||
+      transitionIndex <= dependencyIndex ||
+      occurrenceLines.length !== 1 ||
+      !Number.isSafeInteger(occurrenceLines[0]) ||
+      occurrenceLines[0] < 1
+    ) {
+      throw new Error('Live Visual+ major membership is incomplete')
+    }
+    return {
+      dependency: joinField(block, dependencyIndex, transitionIndex, 'Dependency '),
+      occurrences: occurrenceLines[0],
+    }
+  })
 }
 
 function parseOwnerMembership(input) {

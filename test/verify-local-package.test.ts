@@ -44,10 +44,12 @@ interface ReplayEvidenceApi {
     tarballSha256: string
     publicationHooks?: {
       afterPendingCreated?: (input: { parentPath: string; pendingPath: string }) => unknown
+      beforePendingChmod?: (input: { pendingDescriptor: number; pendingPath: string }) => void
       beforeDescriptorClose?: (input: {
         parentDescriptor: number
         pendingDescriptor: number
       }) => void
+      beforePendingInitialStat?: (input: { pendingDescriptor: number; pendingPath: string }) => void
       beforePendingCleanup?: () => void
     }
   }) => unknown
@@ -420,6 +422,31 @@ setInterval(() => {}, 1_000)
     expect(() => readFileSync(cleanupFault.outputPath)).toThrow()
     expect(pendingNames(cleanupFault.root)).toEqual([])
   })
+
+  it.each(['initial-stat', 'chmod'] as const)(
+    'removes the pending file when early %s setup fails',
+    (fault) => {
+      const writeEvidence = replayEvidenceApi.writeVisualPlusReplayEvidence
+      expect(writeEvidence).toBeTypeOf('function')
+      if (!writeEvidence) return
+      const cleanupFault = replayFixture()
+      const closePending = ({ pendingDescriptor }: { pendingDescriptor: number }) => {
+        closeSync(pendingDescriptor)
+      }
+
+      expect(() =>
+        writeEvidence({
+          ...cleanupFault.options,
+          publicationHooks:
+            fault === 'initial-stat'
+              ? { beforePendingInitialStat: closePending }
+              : { beforePendingChmod: closePending },
+        }),
+      ).toThrow()
+      expect(() => readFileSync(cleanupFault.outputPath)).toThrow()
+      expect(pendingNames(cleanupFault.root)).toEqual([])
+    },
+  )
 
   it('rejects lstat-to-open replacement even when replacement bytes are identical', () => {
     const readStable = replayEvidenceApi.readStableRegularFile

@@ -21,6 +21,7 @@ import {
   parseLiveVisualPlusProofCommand,
   runLiveVisualPlusProof,
 } from '../scripts/live-visual-plus-proof.mjs'
+import { analyzeHybridRun } from '../scripts/live-visual-plus-proof-support.mjs'
 import * as replayEvidence from '../scripts/visual-plus-replay-failure.mjs'
 
 interface ReplayEvidenceApi {
@@ -54,6 +55,44 @@ afterEach(() => {
 })
 
 describe('live Visual+ proof harness', () => {
+  it('counts shared catalog owners as one physical file while retaining their contexts', () => {
+    const transcript = sharedCatalogHybridScreen()
+    const analyze = (value: string) =>
+      analyzeHybridRun(
+        {
+          controls: {},
+          evidence: { columns: 80 },
+          exitCode: 0,
+          finalCursorVisible: true,
+          rawTerminal: Buffer.from(value.replaceAll('\n', '\r\n')),
+          signal: null,
+          transcript: value,
+        },
+        80,
+        ['--no-install', 'depfresh', 'major'],
+        'spreadu',
+      )
+    const result = analyze(transcript)
+
+    expect(result.operationRows).toEqual({
+      complete: true,
+      declared: 2,
+      files: 1,
+      rendered: 2,
+      severity: { major: 1, minor: 1, patch: 0 },
+    })
+    for (const malformed of [
+      transcript.replace('catalog catalog-b:', 'catalog catalog-c:'),
+      transcript.replace('catalog catalog-b:', 'compat unknown: catalog catalog-b:'),
+      transcript.replace(
+        'catalog catalog-b: pnpm-workspace.yaml',
+        'catalog catalog-b: pnpm-workspace.yaml-extra',
+      ),
+    ]) {
+      expect(() => analyze(malformed)).toThrow()
+    }
+  })
+
   it('requires the exact artifact, repository, widths, and output arguments', () => {
     expect(
       parseLiveVisualPlusProofCommand([
@@ -112,7 +151,7 @@ describe('live Visual+ proof harness', () => {
       bunx: {
         path: fixture.bunxPath,
         realpath: fixture.bunPath,
-        launchIdentity: { method: 'inode-bound-bunx' },
+        launchIdentity: { method: 'inode-bound-bun-and-bunx' },
       },
       bunGlobal: {
         binRealpath: fixture.globalBin,
@@ -141,7 +180,13 @@ describe('live Visual+ proof harness', () => {
         doubleCrlf: false,
         trailing: false,
       })
-      expect(run.operationRows).toEqual({ declared: 3, rendered: 3, complete: true })
+      expect(run.operationRows).toEqual({
+        declared: 3,
+        rendered: 3,
+        files: 1,
+        severity: { major: 1, minor: 1, patch: 1 },
+        complete: true,
+      })
       expect(run.hierarchyTokens).toEqual([
         'context',
         'topology',
@@ -173,6 +218,7 @@ describe('live Visual+ proof harness', () => {
       })
     }
     expect(evidence.repository.before).toEqual(evidence.repository.after)
+    expect(() => readFileSync(fixture.packageRunnerMarker)).toThrow()
     expect(
       readFileSync(fixture.invocationsPath, 'utf8')
         .trim()
@@ -251,6 +297,11 @@ describe('live Visual+ proof harness', () => {
   it.each([
     'missing-row-with-severity-note',
     'duplicate-row',
+    'duplicate-row-different-age',
+    'default-topology-file-mismatch',
+    'default-receipt-file-mismatch',
+    'default-severity-mismatch',
+    'default-physical-file-mismatch',
     'duplicate-long-ids',
     'long-owner-mismatch',
     'long-shared-mismatch',
@@ -262,6 +313,8 @@ describe('live Visual+ proof harness', () => {
     'long-operation-owner-mismatch',
     'long-empty-owner-id',
     'long-duplicate-section',
+    'long-major-risk-mismatch',
+    'long-duplicate-major-card',
   ])(
     'rejects malformed %s membership with unchanged summary counts',
     async (fault) => {
@@ -407,6 +460,7 @@ function liveProofFixture(
   const bunPath = join(fakeBin, 'bun')
   const bunxPath = join(fakeBin, 'bunx')
   const invocationsPath = join(root, 'invocations.jsonl')
+  const packageRunnerMarker = join(root, 'package-runner-attempted')
   const packJsonPath = join(artifactRoot, 'pack.json')
   const replayEvidencePath = join(artifactRoot, 'installed-replay.json')
   const outputPath = join(artifactRoot, 'spreadoo-live.json')
@@ -477,7 +531,9 @@ function liveProofFixture(
     bunPath,
     `#!${process.execPath}
 import { appendFileSync, chmodSync, copyFileSync, readFileSync, renameSync, statSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
+import { basename } from 'node:path'
 const args = process.argv.slice(2)
+const launcherName = basename(process.argv[1])
 appendFileSync(${JSON.stringify(invocationsPath)}, JSON.stringify(args) + '\\n')
 const invocationCount = readFileSync(${JSON.stringify(invocationsPath)}, 'utf8').trim().split('\\n').length
 const replaceSameBytes = (path) => {
@@ -488,9 +544,12 @@ const replaceSameBytes = (path) => {
   chmodSync(path, mode)
   unlinkSync(oldPath)
 }
-if (JSON.stringify(args) === JSON.stringify(['pm', 'bin', '-g'])) {
+if (launcherName === 'bunx' && args[0] === 'pm') {
+  writeFileSync(${JSON.stringify(packageRunnerMarker)}, 'package runner mode was invoked')
+  process.exitCode = 17
+} else if (launcherName === 'bun' && JSON.stringify(args) === JSON.stringify(['pm', 'bin', '-g'])) {
   process.stdout.write(${JSON.stringify(`${globalBin}\n`)})
-} else if (args[0] === '--no-install' && args[1] === 'depfresh' && args[2] === 'major' && args[3] === '--cwd' && args[4] === ${JSON.stringify(repository)}) {
+} else if (launcherName === 'bunx' && args[0] === '--no-install' && args[1] === 'depfresh' && args[2] === 'major' && args[3] === '--cwd' && args[4] === ${JSON.stringify(repository)}) {
   if (process.env.DEPFRESH_LIVE_TEST_MUTATE === '1') writeFileSync(${JSON.stringify(join(repository, 'bun.lock'))}, 'changed\\n')
   if (invocationCount === 2 && process.env.DEPFRESH_LIVE_TEST_IDENTITY_FAULT === 'regular-bunx-replacement') replaceSameBytes(${JSON.stringify(bunxPath)})
   if (invocationCount === 2 && process.env.DEPFRESH_LIVE_TEST_IDENTITY_FAULT === 'global-link-replacement') {
@@ -514,10 +573,17 @@ if (JSON.stringify(args) === JSON.stringify(['pm', 'bin', '-g'])) {
     else if (fault === 'long-operation-owner-mismatch') process.stdout.write(${JSON.stringify(crossRelationshipLongScreen('operation-owner'))})
     else if (fault === 'long-empty-owner-id') process.stdout.write(${JSON.stringify(longScreen('empty-owner-id'))})
     else if (fault === 'long-duplicate-section') process.stdout.write(${JSON.stringify(longScreen('duplicate-section'))})
+    else if (fault === 'long-major-risk-mismatch') process.stdout.write(${JSON.stringify(majorRiskMismatchScreen())})
+    else if (fault === 'long-duplicate-major-card') process.stdout.write(${JSON.stringify(duplicateMajorCardScreen())})
     else process.stdout.write(${JSON.stringify(longScreen())})
   }
   else if (process.env.DEPFRESH_LIVE_TEST_SCREEN_FAULT === 'missing-row-with-severity-note') process.stdout.write(${JSON.stringify(hybridScreen('missing-row-with-severity-note'))})
   else if (process.env.DEPFRESH_LIVE_TEST_SCREEN_FAULT === 'duplicate-row') process.stdout.write(${JSON.stringify(hybridScreen('duplicate-row'))})
+  else if (process.env.DEPFRESH_LIVE_TEST_SCREEN_FAULT === 'duplicate-row-different-age') process.stdout.write(${JSON.stringify(hybridScreen('duplicate-row-different-age'))})
+  else if (process.env.DEPFRESH_LIVE_TEST_SCREEN_FAULT === 'default-topology-file-mismatch') process.stdout.write(${JSON.stringify(hybridScreen('topology-file-mismatch'))})
+  else if (process.env.DEPFRESH_LIVE_TEST_SCREEN_FAULT === 'default-receipt-file-mismatch') process.stdout.write(${JSON.stringify(hybridScreen('receipt-file-mismatch'))})
+  else if (process.env.DEPFRESH_LIVE_TEST_SCREEN_FAULT === 'default-severity-mismatch') process.stdout.write(${JSON.stringify(hybridScreen('severity-mismatch'))})
+  else if (process.env.DEPFRESH_LIVE_TEST_SCREEN_FAULT === 'default-physical-file-mismatch') process.stdout.write(${JSON.stringify(hybridScreen('physical-file-mismatch'))})
   else process.stdout.write(process.stdout.columns >= 100 ? ${JSON.stringify(hybridScreen('wide'))} : ${JSON.stringify(hybridScreen())})
 } else {
   process.exitCode = 17
@@ -554,6 +620,7 @@ if (JSON.stringify(args) === JSON.stringify(['pm', 'bin', '-g'])) {
     bunPath,
     bunxPath,
     invocationsPath,
+    packageRunnerMarker,
     options: {
       columns: [80, 118],
       cwd: repository,
@@ -587,42 +654,77 @@ function completeReplayReport() {
   }
 }
 
-function hybridScreen(fault?: 'duplicate-row' | 'missing-row-with-severity-note' | 'wide') {
+function hybridScreen(
+  fault?:
+    | 'duplicate-row'
+    | 'duplicate-row-different-age'
+    | 'missing-row-with-severity-note'
+    | 'physical-file-mismatch'
+    | 'receipt-file-mismatch'
+    | 'severity-mismatch'
+    | 'topology-file-mismatch'
+    | 'wide',
+) {
   const rows =
     fault === 'duplicate-row'
       ? `alpha       ^1.0.0 → ^2.0.0   Major     ~1d
 beta        ^1.0.0 → ^1.1.0   Minor     ~1d
 alpha       ^1.0.0 → ^2.0.0   Major     ~1d`
-      : fault === 'missing-row-with-severity-note'
+      : fault === 'duplicate-row-different-age'
         ? `alpha       ^1.0.0 → ^2.0.0   Major     ~1d
 beta        ^1.0.0 → ^1.1.0   Minor     ~1d
+alpha       ^1.0.0 → ^2.0.0   Major     ~2d`
+        : fault === 'missing-row-with-severity-note'
+          ? `alpha       ^1.0.0 → ^2.0.0   Major     ~1d
+beta        ^1.0.0 → ^1.1.0   Minor     ~1d
 Release note Major migration`
-        : fault === 'wide'
-          ? `alpha       ^1.0.0  ^2.0.0  Major     ~1d
+          : fault === 'wide'
+            ? `alpha       ^1.0.0  ^2.0.0  Major     ~1d
 beta        ^1.0.0  ^1.1.0  Minor     ~1d
 gamma       ^1.0.0  ^1.0.1  Patch     ~1d`
-          : `alpha       ^1.0.0 → ^2.0.0   Major     ~1d
+            : `alpha       ^1.0.0 → ^2.0.0   Major     ~1d
 beta        ^1.0.0 → ^1.1.0   Minor     ~1d
 gamma       ^1.0.0 → ^1.0.1   Patch     ~1d`
   const heading =
     fault === 'wide'
       ? 'dependency  current  target  severity  age'
       : 'dependency  current → target  severity  age'
-  return `spreadu · bun 1.3.14 · workspace · major · read-only
-1 packages · 3 declared · 3 eligible · 3 updates · 1 files
+  const topologyFiles = fault === 'topology-file-mismatch' ? 2 : 1
+  const receiptFiles = fault === 'receipt-file-mismatch' ? 2 : 1
+  const severity =
+    fault === 'severity-mismatch'
+      ? 'Major 2 · Minor 0 · Patch 1'
+      : fault === 'duplicate-row-different-age'
+        ? 'Major 2 · Minor 1 · Patch 0'
+        : 'Major 1 · Minor 1 · Patch 1'
+  const ledger =
+    fault === 'physical-file-mismatch'
+      ? `spreadu-a · packages/a/package.json
+  dependencies
+${heading}
+alpha       ^1.0.0 → ^2.0.0   Major     ~1d
+beta        ^1.0.0 → ^1.1.0   Minor     ~1d
 
-Major 1 · Minor 1 · Patch 1
+spreadu-b · packages/b/package.json
+  dependencies
+${heading}
+gamma       ^1.0.0 → ^1.0.1   Patch     ~1d`
+      : `spreadu · package.json
+  dependencies
+${heading}
+${rows}`
+  return `spreadu · bun 1.3.14 · workspace · major · read-only
+1 packages · 3 declared · 3 eligible · 3 updates · ${topologyFiles} files
+
+${severity}
 ████████████████████████████████████████
 
 Breaking changes
 alpha
   ^1.0.0 → ^2.0.0 · root
 
-spreadu · package.json
-  dependencies
-${heading}
-${rows}
-Review complete · 3 updates across 1 files · write not attempted
+${ledger}
+Review complete · 3 updates across ${receiptFiles} files · write not attempted
 Exit 0
 `
 }
@@ -650,9 +752,9 @@ ${riskHeading}
 Major card
 Dependency alpha
 Transition ^1.0.0 → ^2.0.0
-Occurrences 3
+Occurrences 1
 Age ~1d
-Compatibility compatible 0 · incompatible 0 · unknown 3
+Compatibility compatible 0 · incompatible 0 · unknown 1
 ├ Owner spreadu
 ├ Target package.json
 Owner impact
@@ -711,9 +813,9 @@ Risk focus
 Major card
 Dependency alpha
 Transition ^1.0.0 → ^2.0.0
-Occurrences 2
+Occurrences 1
 Age ~1d
-Compatibility compatible 0 · incompatible 0 · unknown 2
+Compatibility compatible 0 · incompatible 0 · unknown 1
 ├ Owner owner-a
 ├ Target a.json
 Owner impact
@@ -753,6 +855,135 @@ Target a.json · ${targetUpdates[0]} updates
 Target b.json · ${targetUpdates[1]} update
 Review complete
 3 updates reviewed across 2 targets.
+Exit 0
+`
+}
+
+function majorRiskMismatchScreen() {
+  return `spreadu · bun 1.3.14 · workspace · major · read-only
+1 packages → 3 declared → 3 eligible → 3 updates → 1 files
+Risk focus
+Major card
+Dependency beta
+Transition ^1.0.0 → ^2.0.0
+Occurrences 1
+Age ~1d
+Compatibility compatible 0 · incompatible 0 · unknown 1
+├ Owner spreadu
+├ Target package.json
+Owner impact
+Owner ID owner-1
+Owner spreadu
+Target package.json
+├ Updates 3 · Major 1 · Minor 1 · Patch 1
+Shared dependencies
+Dependency ID dependency-1
+Dependency beta
+Occurrence
+├ Owner spreadu
+├ Source dependencies
+├ Path dependencies / beta-1
+Occurrence
+├ Owner spreadu
+├ Source dependencies
+├ Path dependencies / beta-2
+Complete change list
+Owner spreadu · package.json
+Operation ID operation-1
+Dependency alpha
+Diff major
+Operation ID operation-2
+Dependency beta
+Diff minor
+Operation ID operation-3
+Dependency beta
+Diff patch
+Reviewed physical targets
+Target package.json · 3 updates
+Review complete
+3 updates reviewed across 1 targets.
+Exit 0
+`
+}
+
+function duplicateMajorCardScreen() {
+  return `spreadu · bun 1.3.14 · workspace · major · read-only
+1 packages → 3 declared → 3 eligible → 3 updates → 1 files
+Risk focus
+Major card
+Dependency alpha
+Transition ^1.0.0 → ^2.0.0
+Occurrences 1
+Age ~1d
+Compatibility compatible 0 · incompatible 0 · unknown 1
+├ Owner spreadu
+├ Target package.json
+Major card
+Dependency alpha
+Transition ^1.0.0 → ^2.0.0
+Occurrences 1
+Age ~1d
+Compatibility compatible 0 · incompatible 0 · unknown 1
+├ Owner spreadu
+├ Target package.json
+Owner impact
+Owner ID owner-1
+Owner spreadu
+Target package.json
+├ Updates 3 · Major 2 · Minor 0 · Patch 1
+Shared dependencies
+Dependency ID dependency-1
+Dependency alpha
+Occurrence
+├ Owner spreadu
+├ Source dependencies
+├ Path dependencies / alpha-1
+Occurrence
+├ Owner spreadu
+├ Source dependencies
+├ Path dependencies / alpha-2
+Complete change list
+Owner spreadu · package.json
+Operation ID operation-1
+Dependency alpha
+Diff major
+Operation ID operation-2
+Dependency alpha
+Diff major
+Operation ID operation-3
+Dependency beta
+Diff patch
+Reviewed physical targets
+Target package.json · 3 updates
+Review complete
+3 updates reviewed across 1 targets.
+Exit 0
+`
+}
+
+function sharedCatalogHybridScreen() {
+  return `spreadu · bun 1.3.14 · workspace · major · read-only
+1 packages · 2 declared · 2 eligible · 2 updates · 1 files
+
+Major 1 · Minor 1 · Patch 0
+████████████████████████████████████████
+
+Breaking changes
+alpha
+  ^1.0.0 → ^2.0.0 · root
+
+catalog-a · pnpm-workspace.yaml
+  catalog
+dependency  current → target  severity  age
+alpha       ^1.0.0 → ^2.0.0   Major     ~1d
+  catalog catalog-a: pnpm-workspace.yaml
+
+catalog-b · pnpm-workspace.yaml
+  catalog
+dependency  current → target  severity  age
+beta        ^1.0.0 → ^1.1.0   Minor     ~1d
+  catalog catalog-b: pnpm-workspace.yaml
+Review complete · 2 updates across 1 file · write not attempted
 Exit 0
 `
 }

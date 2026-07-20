@@ -512,6 +512,7 @@ export function publishJsonAtomicNoReplace(path, value, options = {}) {
   let expectedParent
   let parentDescriptor
   let pendingDescriptor
+  let pendingCreated = false
   let pendingIdentity
   let relocatedParentPath
   let primaryError
@@ -533,17 +534,32 @@ export function publishJsonAtomicNoReplace(path, value, options = {}) {
         (constants.O_NOFOLLOW ?? 0),
       0o600,
     )
-    fchmodSync(pendingDescriptor, 0o600)
+    pendingCreated = true
+    options.hooks?.beforePendingInitialStat?.({ pendingDescriptor, pendingPath })
     pendingIdentity = fstatSync(pendingDescriptor)
     if (
       !pendingIdentity.isFile() ||
       pendingIdentity.isSymbolicLink() ||
       pendingIdentity.dev !== expectedParent.dev ||
       pendingIdentity.nlink !== 1 ||
-      (pendingIdentity.mode & 0o777) !== 0o600
+      pendingIdentity.size !== 0
     ) {
       throw new Error(`${errorPrefix} pending file is unsafe`)
     }
+    options.hooks?.beforePendingChmod?.({ pendingDescriptor, pendingPath })
+    fchmodSync(pendingDescriptor, 0o600)
+    const securedIdentity = fstatSync(pendingDescriptor)
+    if (
+      securedIdentity.dev !== pendingIdentity.dev ||
+      securedIdentity.ino !== pendingIdentity.ino ||
+      (securedIdentity.mode & ~0o777) !== (pendingIdentity.mode & ~0o777) ||
+      securedIdentity.nlink !== 1 ||
+      securedIdentity.size !== 0 ||
+      (securedIdentity.mode & 0o777) !== 0o600
+    ) {
+      throw new Error(`${errorPrefix} pending file is unsafe`)
+    }
+    pendingIdentity = securedIdentity
     requireDirectoryPathIdentity(parentPath, expectedParent, parentDescriptor, errorPrefix)
     let offset = 0
     while (offset < bytes.byteLength) {
@@ -585,6 +601,16 @@ export function publishJsonAtomicNoReplace(path, value, options = {}) {
   } catch (error) {
     primaryError = error
   } finally {
+    if (pendingCreated && pendingIdentity === undefined) {
+      pendingIdentity = recoverCreatedPendingIdentity(
+        pendingDescriptor,
+        pendingPath,
+        expectedParent,
+        parentDescriptor,
+        errorPrefix,
+        cleanupErrors,
+      )
+    }
     try {
       options.hooks?.beforePendingCleanup?.()
     } catch (error) {
@@ -696,6 +722,55 @@ export function publishJsonAtomicNoReplace(path, value, options = {}) {
   if (primaryError !== undefined) {
     throw new Error(`${errorPrefix} could not be published`, { cause: primaryError })
   }
+}
+
+function recoverCreatedPendingIdentity(
+  descriptor,
+  path,
+  expectedParent,
+  parentDescriptor,
+  label,
+  errors,
+) {
+  if (descriptor !== undefined && expectedParent !== undefined) {
+    try {
+      const identity = fstatSync(descriptor)
+      if (
+        identity.isFile() &&
+        !identity.isSymbolicLink() &&
+        identity.dev === expectedParent.dev &&
+        identity.nlink === 1 &&
+        identity.size === 0
+      ) {
+        requirePendingPathIdentity(path, identity, label)
+        return identity
+      }
+    } catch {}
+  }
+  if (expectedParent === undefined || parentDescriptor === undefined) {
+    errors.push(new Error(`${label} pending identity is unavailable for cleanup`))
+    return undefined
+  }
+  try {
+    requireDirectoryPathIdentity(dirname(path), expectedParent, parentDescriptor, label)
+    const actual = lstatSync(path)
+    if (
+      !actual.isFile() ||
+      actual.isSymbolicLink() ||
+      actual.dev !== expectedParent.dev ||
+      actual.nlink !== 1 ||
+      actual.size !== 0 ||
+      (actual.mode & 0o177) !== 0
+    ) {
+      errors.push(new Error(`${label} unverified pending path remains after early failure`))
+      return undefined
+    }
+    unlinkSync(path)
+    fsyncSync(parentDescriptor)
+  } catch (error) {
+    if (!isMissing(error)) errors.push(error)
+  }
+  return undefined
 }
 
 function requireSameDirectoryIdentity(expected, actual, label) {

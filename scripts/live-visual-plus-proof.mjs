@@ -1,6 +1,8 @@
 import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import {
+  accessSync,
+  constants,
   linkSync,
   lstatSync,
   mkdtempSync,
@@ -128,15 +130,16 @@ export async function runLiveVisualPlusProof(options) {
   const environment = requireEnvironment(command.environment ?? process.env)
   let bunx = resolveUniqueBunx(environment.PATH)
   const before = repositorySnapshot(cwd)
-  const launcher = createBunxPtyLauncher(bunx)
+  const launcher = createBoundBunLaunchers(bunx)
   bunx = requireBoundBunxIdentity(bunx, MAX_IDENTITY_FILE_BYTES)
   const runs = []
   const longRuns = []
   let bunGlobal
   try {
     requireBunxIdentity(bunx, MAX_IDENTITY_FILE_BYTES)
+    requireBoundLauncherIdentity(launcher.bunPath, bunx)
     bunGlobal = resolveBunGlobalIdentity(
-      launcher.path,
+      launcher.bunPath,
       cwd,
       environment,
       artifact.replay.cli.sha256,
@@ -147,6 +150,7 @@ export async function runLiveVisualPlusProof(options) {
       artifact.replay.cli.sha256,
       MAX_IDENTITY_FILE_BYTES,
     )
+    requireBoundLauncherIdentity(launcher.bunPath, bunx)
     requireUnchanged(before, repositorySnapshot(cwd))
     for (const columns of command.columns) {
       requireExecutionIdentity(
@@ -155,10 +159,11 @@ export async function runLiveVisualPlusProof(options) {
         artifact.replay.cli.sha256,
         MAX_IDENTITY_FILE_BYTES,
       )
+      requireBoundLauncherIdentity(launcher.bunxPath, bunx)
       const argv = fixedArgv(cwd, false)
       const result = await runInPty({
         args: argv,
-        cliPath: launcher.path,
+        cliPath: launcher.bunxPath,
         columns,
         env: capableEnvironment(environment),
         input: Buffer.alloc(0),
@@ -172,6 +177,7 @@ export async function runLiveVisualPlusProof(options) {
         artifact.replay.cli.sha256,
         MAX_IDENTITY_FILE_BYTES,
       )
+      requireBoundLauncherIdentity(launcher.bunxPath, bunx)
       requireUnchanged(before, repositorySnapshot(cwd))
     }
     if (command.includeLong) {
@@ -183,10 +189,11 @@ export async function runLiveVisualPlusProof(options) {
           artifact.replay.cli.sha256,
           MAX_IDENTITY_FILE_BYTES,
         )
+        requireBoundLauncherIdentity(launcher.bunxPath, bunx)
         const argv = fixedArgv(cwd, true)
         const result = await runInPty({
           args: argv,
-          cliPath: launcher.path,
+          cliPath: launcher.bunxPath,
           columns,
           env: capableEnvironment(environment),
           input: Buffer.alloc(0),
@@ -200,6 +207,7 @@ export async function runLiveVisualPlusProof(options) {
           artifact.replay.cli.sha256,
           MAX_IDENTITY_FILE_BYTES,
         )
+        requireBoundLauncherIdentity(launcher.bunxPath, bunx)
         requireUnchanged(before, repositorySnapshot(cwd))
       }
     }
@@ -400,25 +408,21 @@ function resolveBunGlobalIdentity(executable, cwd, environment, expectedCliSha25
   }
 }
 
-function createBunxPtyLauncher(bunx) {
+function createBoundBunLaunchers(bunx) {
   const lexicalRoot = mkdtempSync(join(tmpdir(), 'depfresh-live-bunx-'))
   const root = realpathSync.native(lexicalRoot)
-  const launcherPath = join(root, 'bunx')
+  const bunPath = join(root, 'bun')
+  const bunxPath = join(root, 'bunx')
   try {
-    linkSync(bunx.realpath, launcherPath)
-    const launcherStats = lstatSync(launcherPath)
-    if (
-      !launcherStats.isFile() ||
-      launcherStats.isSymbolicLink() ||
-      String(launcherStats.dev) !== bunx.targetIdentity.device ||
-      String(launcherStats.ino) !== bunx.targetIdentity.inode
-    ) {
-      throw new Error()
-    }
+    linkSync(bunx.realpath, bunPath)
+    linkSync(bunx.realpath, bunxPath)
+    requireBoundLauncherIdentity(bunPath, bunx)
+    requireBoundLauncherIdentity(bunxPath, bunx)
     return {
-      path: launcherPath,
+      bunPath,
+      bunxPath,
       identity: {
-        method: 'inode-bound-bunx',
+        method: 'inode-bound-bun-and-bunx',
         device: bunx.targetIdentity.device,
         inode: bunx.targetIdentity.inode,
       },
@@ -429,6 +433,26 @@ function createBunxPtyLauncher(bunx) {
   } catch {
     rmSync(root, { force: true, recursive: true })
     throw new Error('Resolved bunx executable could not be bound for PTY execution')
+  }
+}
+
+function requireBoundLauncherIdentity(path, bunx) {
+  let stats
+  try {
+    stats = lstatSync(path)
+    accessSync(path, constants.X_OK)
+  } catch {
+    throw new Error('Bound Bun launcher identity changed')
+  }
+  if (
+    !stats.isFile() ||
+    stats.isSymbolicLink() ||
+    String(stats.dev) !== bunx.targetIdentity.device ||
+    String(stats.ino) !== bunx.targetIdentity.inode ||
+    stats.mode !== bunx.targetIdentity.mode ||
+    stats.size !== bunx.targetIdentity.bytes
+  ) {
+    throw new Error('Bound Bun launcher identity changed')
   }
 }
 
