@@ -264,6 +264,36 @@ describe('2.1.1 release readiness', () => {
     )
   })
 
+  it('keeps the primary table example as one count-consistent five-region hybrid journey', () => {
+    const table = read('docs/output-formats/table.md')
+    const startMarker = '<!-- visual-plus-default-example:start -->'
+    const endMarker = '<!-- visual-plus-default-example:end -->'
+    const start = table.indexOf(startMarker)
+    const end = table.indexOf(endMarker)
+
+    expect(start).toBeGreaterThanOrEqual(0)
+    expect(end).toBeGreaterThan(start)
+
+    const example = table.slice(start + startMarker.length, end)
+    const regionPositions = [
+      'spreadu · bun workspace · major · read-only',
+      '3 packages · 8 declared · 6 eligible · 3 updates · 2 files',
+      'Breaking changes',
+      'dependency',
+      'Review complete · 3 updates across 2 files · write not attempted',
+    ].map((region) => example.indexOf(region))
+
+    expect(regionPositions.every((position) => position >= 0)).toBe(true)
+    expect(regionPositions).toEqual([...regionPositions].sort((left, right) => left - right))
+    expect(example).toContain('Major 1   Minor 1   Patch 1')
+
+    const ledger = example.slice(example.indexOf('dependency'), example.indexOf('Review complete'))
+    expect(ledger.match(/ → /gu)).toHaveLength(3)
+    expect(ledger.match(/\bMajor\b/gu)).toHaveLength(1)
+    expect(ledger.match(/\bMinor\b/gu)).toHaveLength(1)
+    expect(ledger.match(/\bPatch\b/gu)).toHaveLength(1)
+  })
+
   it('preserves the dedicated published 2.1.0 release record', () => {
     const release = read('docs/releases/v2.1.0.md')
 

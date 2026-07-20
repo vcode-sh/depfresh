@@ -1,6 +1,7 @@
 # Table Output
 
-The default format. A colourful table that makes your outdated dependencies look like a traffic light system for poor life choices.
+The eligible local CLI default is the five-region hybrid review described below. Compatibility
+routes retain the grouped table and receipts documented separately on this page.
 
 ```bash
 depfresh --output table   # default -- for humans with eyeballs
@@ -39,23 +40,36 @@ Age colouring follows a similar scheme: green for recent (< 90 days), yellow for
 
 ## Example
 
+This representative wide read-only journey shows the five durable regions in order. Risk focus
+repeats the one major update for attention; the complete ledger still counts each selected update
+exactly once, so its three rows match both the overview and receipt.
+
+<!-- visual-plus-default-example:start -->
+```text
+spreadu · bun workspace · major · read-only
+3 packages · 8 declared · 6 eligible · 3 updates · 2 files
+
+Major 1   Minor 1   Patch 1
+████████████████   ████████████████   ████████████████
+
+Breaking changes
+react-dropzone  ^15.0.0 → ^19.1.1  ~0d  web  compat unknown
+
+web · apps/web/package.json
+dependency       current       target        severity  age
+──────────────────────────────────────────────────────────
+react-dropzone   ^15.0.0   →   ^19.1.1      Major     ~0d
+posthog-js       ^1.300.0  →   ^1.302.0     Minor     ~1d
+
+cli · packages/cli/package.json
+dependency       current       target        severity  age
+──────────────────────────────────────────────────────────
+nanoid           ^5.1.16   →   ^5.1.17      Patch     ~2d
+
+Review complete · 3 updates across 2 files · write not attempted
+Exit 0
 ```
-my-project
-
-  dependencies
-    name              current   target    diff     age
-    --------------------------------------------------
-    express           4.18.2 -> 4.21.0    minor    ~45d
-    lodash            4.17.20-> 4.17.21   patch    ~2d
-
-  devDependencies
-    name              current   target    diff     age
-    --------------------------------------------------
-    typescript        5.3.2  -> 5.7.3     minor    ~12d
-    vitest            1.2.0  -> 2.1.8     major    ~30d
-
-  2 major | 1 minor | 1 patch  (4 total)
-```
+<!-- visual-plus-default-example:end -->
 
 *(Actual output has ANSI colours. Your terminal is fancier than this markdown file.)*
 
