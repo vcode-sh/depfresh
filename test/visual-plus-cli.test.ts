@@ -1031,6 +1031,21 @@ describe('Visual+ built CLI', () => {
     expect(expectedFixtureAge(fixture, dayMs, clockMs)).toBe('~2d')
   })
 
+  it('normalizes only proven age tokens for parity across a rounding boundary', () => {
+    const beforeBoundary = 'major · ~6d\npatch · ~2d\nunproven · ~99d\nreceipt exact\n'
+    const afterBoundary = 'major · ~7d\npatch · ~3d\nunproven · ~99d\nreceipt exact\n'
+    const nonAgeDifference = afterBoundary.replace('receipt exact', 'receipt changed')
+
+    const beforeParity = normalizeProvenAgeTokensForParity(beforeBoundary, ['~6d', '~2d'])
+    const afterParity = normalizeProvenAgeTokensForParity(afterBoundary, ['~7d', '~3d'])
+
+    expect(beforeParity).toBe(afterParity)
+    expect(beforeParity).toContain('unproven · ~99d')
+    expect(normalizeProvenAgeTokensForParity(nonAgeDifference, ['~7d', '~3d'])).not.toBe(
+      beforeParity,
+    )
+  })
+
   it.each([40, 60, 80, 118, 175])(
     'renders hybrid success and exact safety journeys in a %i-column PTY by default',
     async (columns) => {
@@ -1087,16 +1102,28 @@ describe('Visual+ built CLI', () => {
     const fixture = createFixture('direct-fallbacks')
     const direct = await runDirectFixture(fixture, false)
     const slow = await runDirectFixture(fixture, true)
+    const directTranscript = direct.stdout.toString('utf8')
+    const slowTranscript = slow.stdout.toString('utf8')
     expect(direct.exitCode).toBe(0)
     expect(slow.exitCode).toBe(0)
-    expect(slow.stdout).toEqual(direct.stdout)
     expect(direct.stdout.includes(0x1b)).toBe(false)
     expect(direct.stdout.includes(0x0d)).toBe(false)
     expect(direct.stderr.toString('utf8')).toContain('Tip: Use --output json')
     expect(slow.stderr).toEqual(direct.stderr)
-    expect(direct.stdout.toString('utf8').endsWith('Exit 0\n')).toBe(true)
-    assertHybridReadOnlySemantics(direct.stdout.toString('utf8'), fixture, 80, direct.launchClockMs)
-    assertHybridReadOnlySemantics(slow.stdout.toString('utf8'), fixture, 80, slow.launchClockMs)
+    expect(directTranscript.endsWith('Exit 0\n')).toBe(true)
+    assertHybridReadOnlySemantics(directTranscript, fixture, 80, direct.launchClockMs)
+    assertHybridReadOnlySemantics(slowTranscript, fixture, 80, slow.launchClockMs)
+    expect(
+      normalizeProvenAgeTokensForParity(
+        slowTranscript,
+        expectedFixtureAgeTokens(fixture, slow.launchClockMs),
+      ),
+    ).toBe(
+      normalizeProvenAgeTokensForParity(
+        directTranscript,
+        expectedFixtureAgeTokens(fixture, direct.launchClockMs),
+      ),
+    )
 
     assertFixtureBytes(fixture, 'before')
     assertGitClean(fixture)
@@ -1204,7 +1231,17 @@ describe('Visual+ built CLI', () => {
     expect(baseline.controls.cursorUp).toBeGreaterThan(0)
     expect(noColor.controls.sgr).toBe(0)
     expect(noColor.controls.cursorUp).toBeGreaterThan(0)
-    expect(noColor.transcript).toBe(baseline.transcript)
+    expect(
+      normalizeProvenAgeTokensForParity(
+        noColor.transcript,
+        expectedFixtureAgeTokens(fixture, noColor.launchClockMs),
+      ),
+    ).toBe(
+      normalizeProvenAgeTokensForParity(
+        baseline.transcript,
+        expectedFixtureAgeTokens(fixture, baseline.launchClockMs),
+      ),
+    )
 
     assertFixtureBytes(fixture, 'before')
     assertGitClean(fixture)
@@ -1768,6 +1805,30 @@ function expectedFixtureAge(
   if (days < 365) return `~${Math.round(days / 30)}mo`
   const years = days / 365
   return years >= 10 ? `~${Math.round(years)}y` : `~${years.toFixed(1)}y`
+}
+
+function expectedFixtureAgeTokens(
+  fixture: ReturnType<typeof createVisualPlusFixture>,
+  launchClockMs: number,
+) {
+  return [
+    expectedFixtureAge(fixture, 432_000_000, launchClockMs),
+    expectedFixtureAge(fixture, 86_400_000, launchClockMs),
+  ] as const
+}
+
+function normalizeProvenAgeTokensForParity(transcript: string, provenAgeTokens: readonly string[]) {
+  let normalized = transcript
+  for (const token of new Set(provenAgeTokens)) {
+    if (!/^~(?:\d+d|\d+mo|\d+(?:\.\d+)?y)$/u.test(token)) {
+      throw new Error(`Invalid proven age token: ${token}`)
+    }
+    normalized = normalized.replace(
+      new RegExp(`(?<![\\p{L}\\p{N}_])${escapeRegExp(token)}(?![\\p{L}\\p{N}_])`, 'gu'),
+      '<proven-age>',
+    )
+  }
+  return normalized
 }
 
 function exactTranscriptLines(transcript: string) {
