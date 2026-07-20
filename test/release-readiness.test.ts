@@ -545,7 +545,14 @@ describe('2.1.1 release readiness', () => {
       'npm publish "file:$GITHUB_WORKSPACE/$PACKAGE_TARBALL" --access public --ignore-scripts',
     )
     expect(release).not.toContain('npm publish "$PACKAGE_TARBALL" --access public --ignore-scripts')
-    expect(release).toContain('body_path: docs/releases/v2.1.1.md')
+    expect(release).toContain('body_path: docs/releases/v2.1.2.md')
+    expect(
+      release.match(/node scripts\/read-pack-manifest\.mjs artifacts\/pack\.json filename/gu),
+    ).toHaveLength(1)
+    expect(
+      release.match(/node scripts\/read-pack-manifest\.mjs artifacts\/pack\.json integrity/gu),
+    ).toHaveLength(3)
+    expect(release).not.toContain('const [entry] = JSON.parse')
     expect(release).toContain('npm view "depfresh@$' + '{PACKAGE_VERSION}" dist.integrity')
     expect(release).toContain('--install-spec "depfresh@$PACKAGE_VERSION"')
     expect(release).toContain(

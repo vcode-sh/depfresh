@@ -113,8 +113,8 @@ jobs:
           set -euo pipefail
           npm pack --json --ignore-scripts --pack-destination artifacts > artifacts/pack.json
           node scripts/verify-packed-package.mjs artifacts/pack.json --visual-plus
-          PACKAGE_TARBALL=$(node --input-type=module -e "import { readFileSync } from 'node:fs'; const [entry] = JSON.parse(readFileSync('artifacts/pack.json', 'utf8')); process.stdout.write(entry.filename)")
-          PACKAGE_INTEGRITY=$(node --input-type=module -e "import { readFileSync } from 'node:fs'; const [entry] = JSON.parse(readFileSync('artifacts/pack.json', 'utf8')); process.stdout.write(entry.integrity)")
+          PACKAGE_TARBALL=$(node scripts/read-pack-manifest.mjs artifacts/pack.json filename)
+          PACKAGE_INTEGRITY=$(node scripts/read-pack-manifest.mjs artifacts/pack.json integrity)
           printf 'package-tarball=%s\n' "$PACKAGE_TARBALL" >> "$GITHUB_OUTPUT"
           printf 'package-integrity=%s\n' "$PACKAGE_INTEGRITY" >> "$GITHUB_OUTPUT"
 
@@ -208,7 +208,7 @@ jobs:
           [[ "$GITHUB_REF" == "$EXPECTED_REF" ]]
           [[ "$(node --input-type=module -e "import packageJson from './package.json' with { type: 'json' }; process.stdout.write(packageJson.version)")" == "$PACKAGE_VERSION" ]]
           [[ -f "artifacts/$PACKAGE_TARBALL" ]]
-          [[ "$(node --input-type=module -e "import { readFileSync } from 'node:fs'; const [entry] = JSON.parse(readFileSync('artifacts/pack.json', 'utf8')); process.stdout.write(entry.integrity)")" == "$PACKAGE_INTEGRITY" ]]
+          [[ "$(node scripts/read-pack-manifest.mjs artifacts/pack.json integrity)" == "$PACKAGE_INTEGRITY" ]]
           node scripts/verify-packed-package.mjs artifacts/pack.json
 
       - name: Publish exact verified tarball
@@ -218,7 +218,7 @@ jobs:
           PACKAGE_TARBALL: artifacts/${{ needs.verify.outputs.package-tarball }}
         run: |
           set -euo pipefail
-          EXPECTED_INTEGRITY=$(node --input-type=module -e "import { readFileSync } from 'node:fs'; const [entry] = JSON.parse(readFileSync('artifacts/pack.json', 'utf8')); process.stdout.write(entry.integrity)")
+          EXPECTED_INTEGRITY=$(node scripts/read-pack-manifest.mjs artifacts/pack.json integrity)
           OBSERVED_INTEGRITY=$(npm view "depfresh@${PACKAGE_VERSION}" dist.integrity --registry=https://registry.npmjs.org/ 2>/dev/null || true)
           if [[ -n "$OBSERVED_INTEGRITY" ]]; then
             [[ "$OBSERVED_INTEGRITY" == "$EXPECTED_INTEGRITY" ]] || {
@@ -268,6 +268,6 @@ jobs:
       - name: Create curated GitHub release
         uses: softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b  # v3.0.1
         with:
-          body_path: docs/releases/v2.1.1.md
+          body_path: docs/releases/v2.1.2.md
           files: artifacts/${{ needs.verify.outputs.package-tarball }}
           generate_release_notes: false

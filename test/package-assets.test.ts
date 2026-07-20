@@ -1,4 +1,6 @@
-import { existsSync, readFileSync } from 'node:fs'
+import { spawnSync } from 'node:child_process'
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
@@ -97,5 +99,51 @@ describe('npm pack manifest compatibility', () => {
     { unexpected: entry },
   ])('rejects ambiguous or malformed manifests: %j', (manifest) => {
     expect(() => extractSinglePackEntry(manifest)).toThrow()
+  })
+})
+
+describe('read pack manifest script', () => {
+  const entry = {
+    filename: 'depfresh-2.1.2.tgz',
+    integrity: 'sha512-pack-integrity',
+    name: 'depfresh',
+  }
+
+  function readPackManifest(manifest: unknown, field: 'filename' | 'integrity') {
+    const directory = mkdtempSync(join(tmpdir(), 'depfresh-pack-manifest-'))
+    const manifestPath = join(directory, 'pack.json')
+    try {
+      writeFileSync(manifestPath, JSON.stringify(manifest))
+      return spawnSync(process.execPath, ['scripts/read-pack-manifest.mjs', manifestPath, field], {
+        cwd: root,
+        encoding: 'utf8',
+      })
+    } finally {
+      rmSync(directory, { force: true, recursive: true })
+    }
+  }
+
+  it.each([
+    ['npm 11 array', [entry]],
+    ['npm 12 keyed object', { depfresh: entry }],
+  ])('returns matching validated fields for the %s manifest', (_name, manifest) => {
+    for (const field of ['filename', 'integrity'] as const) {
+      const result = readPackManifest(manifest, field)
+
+      expect(result.status).toBe(0)
+      expect(result.stderr).toBe('')
+      expect(result.stdout).toBe(entry[field])
+    }
+  })
+
+  it.each([
+    ['ambiguous', [entry, entry], 'filename'],
+    ['missing field', [{ ...entry, integrity: '' }], 'integrity'],
+  ] as const)('fails without output for a %s manifest', (_name, manifest, field) => {
+    const result = readPackManifest(manifest, field)
+
+    expect(result.status).not.toBe(0)
+    expect(result.stderr).toBe('')
+    expect(result.stdout).toBe('')
   })
 })
