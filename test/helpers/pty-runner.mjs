@@ -20,7 +20,7 @@ import {
 import { constants as osConstants, tmpdir } from 'node:os'
 import { delimiter, isAbsolute, join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { visualLength } from '../../src/utils/format/width.ts'
+import { visualLength } from './visual-width.mjs'
 
 const DEFAULT_TIMEOUT_MS = 30_000
 const DEFAULT_OUTPUT_LIMIT = 4 * 1024 * 1024

@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process'
+import { execFileSync, spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import {
   chmodSync,
@@ -16,6 +16,7 @@ import {
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
   parseLiveVisualPlusProofCommand,
@@ -48,6 +49,7 @@ interface ReplayEvidenceApi {
 }
 
 const replayEvidenceApi = replayEvidence as unknown as ReplayEvidenceApi
+const repositoryRoot = dirname(dirname(fileURLToPath(import.meta.url)))
 const roots: string[] = []
 
 afterEach(() => {
@@ -55,6 +57,17 @@ afterEach(() => {
 })
 
 describe('live Visual+ proof harness', () => {
+  it('loads under the pinned Node runtime without a TypeScript loader', () => {
+    const result = spawnSync(process.execPath, ['scripts/live-visual-plus-proof.mjs'], {
+      cwd: repositoryRoot,
+      encoding: 'utf8',
+    })
+
+    expect(result.status).toBe(1)
+    expect(result.stdout).toBe('')
+    expect(result.stderr).toBe('Live Visual+ proof failed\n')
+  })
+
   it('counts shared catalog owners as one physical file while retaining their contexts', () => {
     const transcript = sharedCatalogHybridScreen()
     const analyze = (value: string) =>
