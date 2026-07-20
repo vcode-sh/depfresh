@@ -56,6 +56,32 @@ verification compatibility remains supported alongside the verified npm 12.0.x p
 - Node remains `>=24.15.0`; package manager remains `pnpm@11.15.1`; add no runtime dependency.
 - Do not publish, push, tag, create a GitHub release, run a hosted workflow, or claim public proof.
 
+## Exact local toolchain
+
+`mise exec node@24.15.0 npm@12.0.1` does not replace the npm bundled with the Node installation on
+this host. Bootstrap and retain an isolated npm/pnpm prefix instead, then use `exact` for every
+current command in this plan:
+
+```bash
+TOOL_ROOT=$(mktemp -d /private/tmp/depfresh-plan038-tools.XXXXXX)
+mkdir -p "$TOOL_ROOT/home" "$TOOL_ROOT/cache" "$TOOL_ROOT/prefix"
+touch "$TOOL_ROOT/user.npmrc" "$TOOL_ROOT/global.npmrc"
+NODE_BIN=$(mise exec node@24.15.0 -- command -v node)
+BOOTSTRAP_NPM=$(mise exec node@24.15.0 -- command -v npm)
+HOME="$TOOL_ROOT/home" "$BOOTSTRAP_NPM" install --global --ignore-scripts --no-audit \
+  --no-fund --registry https://registry.npmjs.org/ \
+  --userconfig "$TOOL_ROOT/user.npmrc" --globalconfig "$TOOL_ROOT/global.npmrc" \
+  --cache "$TOOL_ROOT/cache" --prefix "$TOOL_ROOT/prefix" npm@12.0.1 pnpm@11.15.1
+EXACT_TOOL_PATH="$TOOL_ROOT/prefix/bin:$(dirname "$NODE_BIN"):/usr/bin:/bin"
+exact() { env PATH="$EXACT_TOOL_PATH" "$@"; }
+exact node --version
+exact npm --version
+exact pnpm --version
+```
+
+Expected: `v24.15.0`, `12.0.1`, and `11.15.1`. Keep npm user/global configs distinct and retain
+`TOOL_ROOT` through the package, installed-replay, Bun, and live-proof gates.
+
 ## Execution Waves
 
 - **Wave 1:** Task 1 only; it defines the evidence consumed by every visual task.
@@ -92,7 +118,7 @@ verification compatibility remains supported alongside the verified npm 12.0.x p
   pnpm `11.15.1`, TypeScript `7.0.2`, ini `7.0.0`, and undici `8.8.0` are the active release
   candidates. The tsdown build, generated schemas, frozen install, peer check, typecheck,
   zero-warning Biome gate, focused/release tests, and isolated-npm packed verifier passed. The
-  verified candidate contains 87 manifest files in a 282,885-byte tarball; Task 6 must create fresh
+  verified candidate contains 87 manifest files in a 282,910-byte tarball; Task 6 must create fresh
   retained evidence from these exact source and package bytes.
 - **Task 6:** pending. Task 4 provides reviewed local proof infrastructure and deterministic source
   evidence only, not a retained Plan 038 artifact, Bun replacement, or live Spreadoo proof.
@@ -154,7 +180,7 @@ on `source` return `INCONSISTENT_SELECTION_EVIDENCE`.
 Run:
 
 ```bash
-mise exec node@24.15.0 npm@12.0.1 -- pnpm exec vitest run \
+exact pnpm exec vitest run \
   src/utils/sort.test.ts \
   src/commands/apply/legacy-plan.test.ts --retry=0
 ```
@@ -223,7 +249,7 @@ Assert copy/freeze retains the exact display contract.
 Run:
 
 ```bash
-mise exec node@24.15.0 npm@12.0.1 -- pnpm exec vitest run \
+exact pnpm exec vitest run \
   src/commands/check/visual-plus/input.test.ts \
   src/commands/check/visual-plus/run-metadata.test.ts --retry=0
 ```
@@ -280,7 +306,7 @@ change index, then operation ID. Assert input evidence order and objects remain 
 Run:
 
 ```bash
-mise exec node@24.15.0 npm@12.0.1 -- pnpm exec vitest run \
+exact pnpm exec vitest run \
   src/commands/check/visual-plus/integration.test.ts \
   src/commands/check/run-check.orchestration.test.ts --retry=0
 ```
@@ -314,15 +340,15 @@ run-model or JSON schemas.
 Run:
 
 ```bash
-mise exec node@24.15.0 npm@12.0.1 -- pnpm exec vitest run \
+exact pnpm exec vitest run \
   src/utils/sort.test.ts \
   src/commands/apply/legacy-plan.test.ts \
   src/commands/check/visual-plus/input.test.ts \
   src/commands/check/visual-plus/integration.test.ts \
   src/commands/check/visual-plus/run-metadata.test.ts \
   src/commands/check/run-check.orchestration.test.ts --retry=0
-mise exec node@24.15.0 npm@12.0.1 -- pnpm typecheck
-mise exec node@24.15.0 npm@12.0.1 -- pnpm exec biome check \
+exact pnpm typecheck
+exact pnpm exec biome check \
   src/utils/sort.ts src/utils/sort.test.ts \
   src/commands/apply/legacy-plan.ts src/commands/apply/legacy-plan.test.ts \
   src/commands/check/visual-plus/input.ts src/commands/check/visual-plus/input.test.ts \
@@ -407,7 +433,7 @@ audit previews, and omitted-count tokens at all four canonical widths.
 Run:
 
 ```bash
-mise exec node@24.15.0 npm@12.0.1 -- pnpm exec vitest run \
+exact pnpm exec vitest run \
   src/commands/check/visual-plus/sections/hybrid.test.ts \
   src/commands/check/visual-plus/sections/ledger.test.ts --retry=0
 ```
@@ -510,7 +536,7 @@ Confirm the RED matrix created in Step 1 now passes at widths `40/60/80/118`:
 Run:
 
 ```bash
-mise exec node@24.15.0 npm@12.0.1 -- pnpm exec vitest run \
+exact pnpm exec vitest run \
   src/commands/check/visual-plus/sections/ledger.test.ts \
   src/commands/check/visual-plus/sections/hybrid.test.ts \
   src/commands/check/visual-plus/sections/insights.test.ts \
@@ -524,11 +550,11 @@ Expected: PASS with reviewable exact snapshots and no snapshot update flag.
 Run:
 
 ```bash
-mise exec node@24.15.0 npm@12.0.1 -- pnpm exec vitest run \
+exact pnpm exec vitest run \
   src/commands/check/visual-plus/sections/sections.test.ts \
   src/commands/check/visual-plus/renderer.test.ts --retry=0
-mise exec node@24.15.0 npm@12.0.1 -- pnpm typecheck
-mise exec node@24.15.0 npm@12.0.1 -- pnpm exec biome check \
+exact pnpm typecheck
+exact pnpm exec biome check \
   src/commands/check/visual-plus/sections \
   src/commands/check/visual-plus/test-fixture.ts \
   src/commands/check/visual-plus/theme.ts \
@@ -603,8 +629,8 @@ startup/context/lifecycle/finalization bytes exactly.
 Build first, then run:
 
 ```bash
-mise exec node@24.15.0 npm@12.0.1 -- pnpm build
-mise exec node@24.15.0 npm@12.0.1 -- pnpm exec vitest run \
+exact pnpm build
+exact pnpm exec vitest run \
   test/visual-plus-cli.test.ts \
   src/commands/check/visual-plus/renderer.test.ts \
   src/commands/check/visual-plus/sections/sections.test.ts --retry=0
@@ -685,15 +711,15 @@ only when a modeled non-complete phase has that terminal status.
 Run:
 
 ```bash
-mise exec node@24.15.0 npm@12.0.1 -- pnpm exec vitest run \
+exact pnpm exec vitest run \
   test/visual-plus-cli.test.ts \
   src/commands/check/visual-plus/renderer.test.ts \
   src/commands/check/visual-plus/sections/sections.test.ts \
   src/commands/check/run-check.orchestration.test.ts \
   src/commands/check/check.interactive-fallback.test.ts \
   src/commands/check/check.json-output.test.ts --retry=0
-mise exec node@24.15.0 npm@12.0.1 -- pnpm typecheck
-mise exec node@24.15.0 npm@12.0.1 -- pnpm exec biome check \
+exact pnpm typecheck
+exact pnpm exec biome check \
   src/commands/check/visual-plus/renderer.ts \
   src/commands/check/visual-plus/renderer.test.ts \
   src/commands/check/visual-plus/sections/lifecycle.ts \
@@ -778,7 +804,7 @@ repeatable `--columns`, and `--output` arguments. Its tests must prove the harne
 Run:
 
 ```bash
-mise exec node@24.15.0 npm@12.0.1 -- pnpm exec vitest run \
+exact pnpm exec vitest run \
   test/visual-plus-replay-failure.test.ts \
   test/verify-local-package.test.ts \
   test/live-visual-plus-proof.test.ts --retry=0
@@ -807,15 +833,15 @@ suites, and `58` tests.
 Run:
 
 ```bash
-mise exec node@24.15.0 npm@12.0.1 -- pnpm build
-mise exec node@24.15.0 npm@12.0.1 -- pnpm exec vitest run \
+exact pnpm build
+exact pnpm exec vitest run \
   test/visual-plus-cli.test.ts \
   test/visual-plus-replay-failure.test.ts \
   test/verify-local-package.test.ts \
   test/live-visual-plus-proof.test.ts \
   test/package-assets.test.ts --retry=0
-mise exec node@24.15.0 npm@12.0.1 -- pnpm typecheck
-mise exec node@24.15.0 npm@12.0.1 -- pnpm exec biome check \
+exact pnpm typecheck
+exact pnpm exec biome check \
   test/visual-plus-cli.test.ts \
   test/visual-plus-replay-failure.test.ts \
   test/verify-local-package.test.ts \
@@ -890,7 +916,7 @@ Update release-readiness tests to require:
 Run:
 
 ```bash
-mise exec node@24.15.0 npm@12.0.1 -- pnpm exec vitest run \
+exact pnpm exec vitest run \
   test/release-readiness.test.ts --retry=0
 ```
 
@@ -919,9 +945,9 @@ note, Plan 038, registry, and progress ledger, then run:
 Run:
 
 ```bash
-mise exec node@24.15.0 npm@12.0.1 -- pnpm exec vitest run \
+exact pnpm exec vitest run \
   test/release-readiness.test.ts --retry=0
-mise exec node@24.15.0 npm@12.0.1 -- pnpm exec biome check \
+exact pnpm exec biome check \
   test/release-readiness.test.ts
 git diff --check
 ```
@@ -984,19 +1010,20 @@ git status --short --branch
 git status --porcelain=v1
 git rev-parse HEAD
 git diff --check
-mise exec node@24.15.0 npm@12.0.1 -- node --version
-mise exec node@24.15.0 npm@12.0.1 -- npm --version
-mise exec node@24.15.0 npm@12.0.1 -- pnpm --version
-mise exec node@24.15.0 npm@12.0.1 -- pnpm install --frozen-lockfile
-mise exec node@24.15.0 npm@12.0.1 -- pnpm schemas:check
-mise exec node@24.15.0 npm@12.0.1 -- pnpm typecheck
-mise exec node@24.15.0 npm@12.0.1 -- pnpm lint
-mise exec node@24.15.0 npm@12.0.1 -- pnpm build
-mise exec node@24.15.0 npm@12.0.1 -- pnpm test:run --coverage --retry=0
-mise exec node@24.15.0 npm@12.0.1 -- pnpm test:release -- --retry=0
-mise exec node@24.15.0 npm@12.0.1 -- pnpm test:smoke
-mise exec node@24.15.0 npm@12.0.1 -- pnpm test:demo
-mise exec node@24.15.0 npm@12.0.1 -- pnpm verify:package
+exact node --version
+exact npm --version
+exact pnpm --version
+exact env CI=true pnpm install --frozen-lockfile
+exact pnpm schemas:check
+exact pnpm typecheck
+exact pnpm lint
+exact pnpm exec biome check --error-on-warnings .
+exact pnpm build
+exact pnpm test:run --coverage --retry=0
+exact pnpm test:release -- --retry=0
+exact pnpm test:smoke
+exact pnpm test:demo
+exact pnpm verify:package
 ```
 
 Expected: exact Node `v24.15.0`, npm `12.0.1`, pnpm `11.15.1`; every gate exits `0`; full tests
@@ -1011,7 +1038,7 @@ Create one retained root and two distinct empty npm configs:
 ```bash
 PACK_ROOT=$(mktemp -d /private/tmp/depfresh-2.1.1-hybrid.XXXXXX)
 touch "$PACK_ROOT/user.npmrc" "$PACK_ROOT/global.npmrc"
-mise exec node@24.15.0 npm@12.0.1 -- env \
+exact env \
   XDG_CACHE_HOME="$PACK_ROOT/xdg-cache" \
   npm_config_cache="$PACK_ROOT/cache" \
   npm_config_userconfig="$PACK_ROOT/user.npmrc" \
@@ -1030,7 +1057,7 @@ packed/unpacked bytes, SHA-1, SHA-256, and SHA-512 integrity in the final report
 Run:
 
 ```bash
-mise exec node@24.15.0 npm@12.0.1 -- env \
+exact env \
   XDG_CACHE_HOME="$PACK_ROOT/xdg-cache" \
   npm_config_cache="$PACK_ROOT/cache" \
   npm_config_userconfig="$PACK_ROOT/user.npmrc" \
@@ -1041,9 +1068,8 @@ mise exec node@24.15.0 npm@12.0.1 -- env \
     --evidence "$PACK_ROOT/installed-replay.json"
 ```
 
-Expected: exit `0`, exact installed CLI/tarball identity, exact `1` file/`5` suites/`58` tests unless
-Task 4 reviewed a different fixed total, zero failed/pending/todo/retry, and all hybrid goldens run
-against the installed CLI.
+Expected: exit `0`, exact installed CLI/tarball identity, exact `1` file/`5` suites/`69` tests,
+zero failed/pending/todo/retry, and all hybrid goldens run against the installed CLI.
 
 - [ ] **Step 4: Replace only the local global Bun depfresh candidate**
 
@@ -1071,7 +1097,7 @@ claim.
 Use the reviewed fixed-argv harness; do not run an ad hoc terminal command:
 
 ```bash
-mise exec node@24.15.0 npm@12.0.1 -- node scripts/live-visual-plus-proof.mjs \
+exact node scripts/live-visual-plus-proof.mjs \
   --cwd /Users/tomrobak/_projects_/spreadoo \
   --pack-json "$PACK_ROOT/pack.json" \
   --replay-evidence "$PACK_ROOT/installed-replay.json" \
@@ -1103,13 +1129,13 @@ Run:
 
 ```bash
 git diff --check
-mise exec node@24.15.0 npm@12.0.1 -- pnpm exec vitest run \
+exact pnpm exec vitest run \
   test/release-readiness.test.ts \
   test/verify-local-package.test.ts \
   test/live-visual-plus-proof.test.ts \
   test/package-assets.test.ts \
   test/visual-plus-replay-failure.test.ts --retry=0
-mise exec node@24.15.0 npm@12.0.1 -- pnpm verify:package
+exact pnpm verify:package
 git status --short --branch
 ```
 
