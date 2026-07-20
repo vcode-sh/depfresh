@@ -23,6 +23,11 @@ const defaultOptions = {
   logger: mockLogger,
 }
 
+const REGISTRY_RESPONSE_LIMIT_BYTES = 64 * 1024 * 1024
+const GITHUB_MAX_PAGES = 100
+const GITHUB_MAX_RECORDS = 10_000
+const GITHUB_ELAPSED_LIMIT_MS = 30_000
+
 function mockFetchResponse(body: unknown, status = 200, statusText = 'OK') {
   return vi.fn().mockResolvedValue({
     ok: status >= 200 && status < 300,
@@ -236,6 +241,155 @@ describe('fetchPackageData', () => {
     expect(result.versions).toEqual(['3.1.4'])
     expect(result.distTags.latest).toBe('3.1.4')
   })
+
+  it('fails GitHub traversal without partial candidates after the maximum page count', async () => {
+    let callCount = 0
+    globalThis.fetch = vi.fn().mockImplementation(() => {
+      callCount++
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: () =>
+          Promise.resolve(
+            callCount <= GITHUB_MAX_PAGES
+              ? Array.from({ length: 100 }, (_, index) => ({
+                  name: index === 0 ? 'v1.0.0' : 'not-a-version',
+                }))
+              : [{ name: 'v2.0.0' }],
+          ),
+      })
+    })
+
+    const { fetchPackageData } = await import('./registry')
+
+    await expect(fetchPackageData('github:owner/repo', defaultOptions)).rejects.toThrow(
+      `exceeded ${GITHUB_MAX_PAGES}-page limit`,
+    )
+    expect(globalThis.fetch).toHaveBeenCalledTimes(GITHUB_MAX_PAGES)
+  })
+
+  it('fails GitHub traversal without partial candidates after the maximum record count', async () => {
+    let callCount = 0
+    globalThis.fetch = vi.fn().mockImplementation(() => {
+      callCount++
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: () =>
+          Promise.resolve(
+            callCount === 1
+              ? Array.from({ length: GITHUB_MAX_RECORDS + 1 }, (_, index) => ({
+                  name: index === 0 ? 'v1.0.0' : 'not-a-version',
+                }))
+              : [],
+          ),
+      })
+    })
+
+    const { fetchPackageData } = await import('./registry')
+
+    await expect(fetchPackageData('github:owner/repo', defaultOptions)).rejects.toThrow(
+      `exceeded ${GITHUB_MAX_RECORDS}-record limit`,
+    )
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1)
+  })
+
+  it('fails GitHub traversal when its aggregate monotonic elapsed budget is exhausted', async () => {
+    let elapsed = 0
+    let callCount = 0
+    globalThis.fetch = vi.fn().mockImplementation(() => {
+      callCount++
+      elapsed = GITHUB_ELAPSED_LIMIT_MS + 1
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: () =>
+          Promise.resolve(
+            callCount === 1
+              ? Array.from({ length: 100 }, (_, index) => ({
+                  name: index === 0 ? 'v1.0.0' : 'not-a-version',
+                }))
+              : [{ name: 'v2.0.0' }],
+          ),
+      })
+    })
+
+    const { fetchPackageData } = await import('./registry')
+
+    await expect(
+      fetchPackageData('github:owner/repo', {
+        ...defaultOptions,
+        monotonicNow: () => elapsed,
+      }),
+    ).rejects.toThrow(`exceeded ${GITHUB_ELAPSED_LIMIT_MS}ms elapsed-time limit`)
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1)
+  })
+
+  it('rejects an oversized declared success body and cancels it before reading', async () => {
+    const cancel = vi.fn()
+    let emitted = false
+    const body = new ReadableStream<Uint8Array>({
+      cancel,
+      pull(controller) {
+        if (emitted) controller.close()
+        else {
+          emitted = true
+          controller.enqueue(new TextEncoder().encode('{"versions":{"1.0.0":{}}}'))
+        }
+      },
+    })
+    globalThis.fetch = vi.fn().mockResolvedValue(
+      new Response(body, {
+        headers: { 'content-length': String(REGISTRY_RESPONSE_LIMIT_BYTES + 1) },
+      }),
+    )
+
+    const { fetchPackageData } = await import('./registry')
+
+    await expect(
+      fetchPackageData('oversized-package', { ...defaultOptions, retries: 0 }),
+    ).rejects.toThrow(`exceeds ${REGISTRY_RESPONSE_LIMIT_BYTES}-byte limit`)
+    expect(cancel).toHaveBeenCalledTimes(1)
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1)
+  })
+
+  it.each([
+    ['missing', undefined],
+    ['invalid', 'not-a-byte-count'],
+  ])(
+    'enforces the streamed success-body limit when content-length is %s',
+    async (_description, contentLength) => {
+      const cancel = vi.fn()
+      const chunk = new Uint8Array(1024 * 1024)
+      let emitted = 0
+      const body = new ReadableStream<Uint8Array>(
+        {
+          cancel,
+          pull(controller) {
+            if (emitted > REGISTRY_RESPONSE_LIMIT_BYTES / chunk.byteLength) controller.close()
+            else {
+              controller.enqueue(chunk)
+              emitted++
+            }
+          },
+        },
+        { highWaterMark: 0 },
+      )
+      const headers = contentLength === undefined ? undefined : { 'content-length': contentLength }
+      globalThis.fetch = vi.fn().mockResolvedValue(new Response(body, { headers }))
+
+      const { fetchPackageData } = await import('./registry')
+
+      await expect(
+        fetchPackageData('streamed-package', { ...defaultOptions, retries: 0 }),
+      ).rejects.toThrow(`exceeds ${REGISTRY_RESPONSE_LIMIT_BYTES}-byte limit`)
+      expect(cancel).toHaveBeenCalledTimes(1)
+      expect(globalThis.fetch).toHaveBeenCalledTimes(1)
+    },
+  )
 
   it('encodes scoped package names correctly', async () => {
     const npmResponse = {

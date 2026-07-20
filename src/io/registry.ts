@@ -20,6 +20,21 @@ interface FetchOptions {
   timeout: number
   retries: number
   logger: Logger
+  monotonicNow?: () => number
+}
+
+const MAX_SUCCESS_BODY_BYTES = 64 * 1024 * 1024
+const GITHUB_MAX_PAGES = 100
+const GITHUB_MAX_RECORDS = 10_000
+const GITHUB_MAX_ELAPSED_MS = 30_000
+
+interface FetchBudget {
+  assertActive(): number
+  limitError(): ResolveError
+}
+
+interface JsonResponseDouble {
+  json(): Promise<unknown>
 }
 
 export async function fetchPackageData(name: string, options: FetchOptions): Promise<PackageData> {
@@ -346,14 +361,24 @@ async function fetchGithubPackage(repository: string, options: FetchOptions): Pr
   }
 
   const versions = new Set<string>()
+  const traversalBudget = createGithubTraversalBudget(repository, options.monotonicNow)
+  let recordCount = 0
 
   // Fetch tags until GitHub returns an empty page.
-  for (let page = 1; ; page++) {
+  for (let page = 1; page <= GITHUB_MAX_PAGES; page++) {
+    traversalBudget.assertActive()
     const url = `https://api.github.com/repos/${encodedRepository}/tags?per_page=100&page=${page}`
-    const payload = await fetchWithRetry(url, headers, options)
+    const payload = await fetchWithRetry(url, headers, options, 0, traversalBudget)
     if (!Array.isArray(payload)) {
       throw new ResolveError(`Unexpected GitHub tags payload shape for ${url}`)
     }
+
+    if (recordCount + payload.length > GITHUB_MAX_RECORDS) {
+      throw new ResolveError(
+        `GitHub tag traversal for github:${repository} exceeded ${GITHUB_MAX_RECORDS}-record limit`,
+      )
+    }
+    recordCount += payload.length
 
     if (payload.length === 0) {
       break
@@ -371,6 +396,12 @@ async function fetchGithubPackage(repository: string, options: FetchOptions): Pr
 
     if (payload.length < 100) {
       break
+    }
+
+    if (page === GITHUB_MAX_PAGES) {
+      throw new ResolveError(
+        `GitHub tag traversal for github:${repository} exceeded ${GITHUB_MAX_PAGES}-page limit`,
+      )
     }
   }
 
@@ -409,9 +440,14 @@ async function fetchWithRetry(
   headers: Record<string, string>,
   options: FetchOptions,
   attempt = 0,
+  budget?: FetchBudget,
 ): Promise<unknown> {
   const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), options.timeout)
+  const remainingBudgetMs = budget?.assertActive()
+  const aggregateOwnsTimeout =
+    remainingBudgetMs !== undefined && remainingBudgetMs <= options.timeout
+  const timeout = Math.min(options.timeout, remainingBudgetMs ?? options.timeout)
+  const timer = setTimeout(() => controller.abort(), timeout)
 
   try {
     const transportInit = getFetchTransportInit(url, options.npmrc, options.logger)
@@ -435,7 +471,9 @@ async function fetchWithRetry(
       )
     }
 
-    return await response.json()
+    const payload = await readSuccessJson(response, url)
+    budget?.assertActive()
+    return payload
   } catch (error) {
     // This attempt has settled. Do not let its timeout abort the response or connection while a
     // retry is waiting in backoff; the recursive attempt owns an independent timeout.
@@ -459,11 +497,12 @@ async function fetchWithRetry(
 
     if (attempt < options.retries) {
       const delay = Math.min(1000 * 2 ** attempt, 5000)
+      if (budget && budget.assertActive() <= delay) throw budget.limitError()
       options.logger.debug(
         `Retry ${attempt + 1}/${options.retries} for ${redactSensitiveText(url)} in ${delay}ms`,
       )
       await sleep(delay)
-      return fetchWithRetry(url, headers, options, attempt + 1)
+      return fetchWithRetry(url, headers, options, attempt + 1, budget)
     }
 
     if (error instanceof RegistryError) {
@@ -471,6 +510,7 @@ async function fetchWithRetry(
     }
 
     if (isAbortError(error)) {
+      if (aggregateOwnsTimeout && budget) throw budget.limitError()
       throw new ResolveError(`Request timeout after ${options.timeout}ms for ${url}`, {
         cause: error,
       })
@@ -481,6 +521,96 @@ async function fetchWithRetry(
   } finally {
     clearTimeout(timer)
   }
+}
+
+async function readSuccessJson(
+  response: Response | JsonResponseDouble,
+  url: string,
+): Promise<unknown> {
+  // Fetch always returns a native Response in production. Existing focused tests use minimal
+  // response doubles, so keep their json() seam without allowing native bodies to bypass the cap.
+  if (!(response instanceof Response)) {
+    try {
+      return await response.json()
+    } catch (error) {
+      throw invalidJsonResponse(url, error)
+    }
+  }
+
+  const contentLength = response.headers.get('content-length')
+  if (contentLength !== null && /^\d+$/u.test(contentLength)) {
+    const declaredBytes = Number(contentLength)
+    if (!Number.isSafeInteger(declaredBytes) || declaredBytes > MAX_SUCCESS_BODY_BYTES) {
+      await response.body?.cancel().catch(() => undefined)
+      throw responseBodyLimitError(url)
+    }
+  }
+
+  const reader = response.body?.getReader()
+  const chunks: Uint8Array[] = []
+  let byteLength = 0
+
+  if (reader) {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      byteLength += value.byteLength
+      if (byteLength > MAX_SUCCESS_BODY_BYTES) {
+        await reader.cancel().catch(() => undefined)
+        throw responseBodyLimitError(url)
+      }
+      chunks.push(value)
+    }
+  }
+
+  const body = Buffer.concat(chunks, byteLength).toString('utf8')
+  try {
+    return JSON.parse(body) as unknown
+  } catch (error) {
+    throw invalidJsonResponse(url, error)
+  }
+}
+
+function responseBodyLimitError(url: string): ResolveError {
+  return new ResolveError(
+    `Registry response body for ${url} exceeds ${MAX_SUCCESS_BODY_BYTES}-byte limit`,
+  )
+}
+
+function invalidJsonResponse(url: string, cause: unknown): ResolveError {
+  return new ResolveError(`Invalid JSON response from ${url}`, { cause })
+}
+
+function createGithubTraversalBudget(repository: string, injectedNow?: () => number): FetchBudget {
+  const now = injectedNow ?? (() => performance.now())
+  const startedAt = readMonotonicClock(now)
+  let lastObservedAt = startedAt
+  const limitError = (): ResolveError =>
+    new ResolveError(
+      `GitHub tag traversal for github:${repository} exceeded ${GITHUB_MAX_ELAPSED_MS}ms elapsed-time limit`,
+    )
+
+  return {
+    assertActive: () => {
+      const observedAt = readMonotonicClock(now)
+      if (observedAt < lastObservedAt) {
+        throw new ResolveError('GitHub tag traversal monotonic clock moved backwards')
+      }
+      lastObservedAt = observedAt
+      const remaining = GITHUB_MAX_ELAPSED_MS - (observedAt - startedAt)
+      if (remaining <= 0) throw limitError()
+      return remaining
+    },
+    limitError,
+  }
+}
+
+function readMonotonicClock(now: () => number): number {
+  const value = now()
+  if (!Number.isFinite(value)) {
+    throw new ResolveError('GitHub tag traversal monotonic clock must return a finite number')
+  }
+  return value
 }
 
 function isAbortError(error: unknown): boolean {

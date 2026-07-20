@@ -23,6 +23,8 @@ const defaultOptions = {
   logger: mockLogger,
 }
 
+const REGISTRY_RESPONSE_LIMIT_BYTES = 64 * 1024 * 1024
+
 function mockFetchResponse(body: unknown, status = 200, statusText = 'OK') {
   return vi.fn().mockResolvedValue({
     ok: status >= 200 && status < 300,
@@ -168,6 +170,53 @@ describe('fetchWithRetry', () => {
     expect(cancel).toHaveBeenCalledTimes(1)
     expect(globalThis.fetch).toHaveBeenCalledTimes(2)
   }, 10_000)
+
+  it('does NOT retry a deterministic successful-body limit violation', async () => {
+    const cancel = vi.fn()
+    let emitted = false
+    globalThis.fetch = vi.fn().mockImplementation(() =>
+      Promise.resolve(
+        new Response(
+          new ReadableStream<Uint8Array>({
+            cancel,
+            pull(controller) {
+              if (emitted) controller.close()
+              else {
+                emitted = true
+                controller.enqueue(new TextEncoder().encode('{}'))
+              }
+            },
+          }),
+          { headers: { 'content-length': String(REGISTRY_RESPONSE_LIMIT_BYTES + 1) } },
+        ),
+      ),
+    )
+
+    const { fetchPackageData } = await import('./registry')
+
+    await expect(fetchPackageData('oversized-package', defaultOptions)).rejects.toThrow(
+      `exceeds ${REGISTRY_RESPONSE_LIMIT_BYTES}-byte limit`,
+    )
+    expect(cancel).toHaveBeenCalledTimes(1)
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1)
+  })
+
+  it('does NOT retry malformed JSON from a successful response', async () => {
+    globalThis.fetch = vi.fn().mockImplementation(() =>
+      Promise.resolve(
+        new Response('{"versions":', {
+          headers: { 'content-type': 'application/json' },
+        }),
+      ),
+    )
+
+    const { fetchPackageData } = await import('./registry')
+
+    await expect(fetchPackageData('malformed-package', defaultOptions)).rejects.toThrow(
+      'Invalid JSON response',
+    )
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1)
+  })
 
   it('does NOT retry on 404', async () => {
     globalThis.fetch = vi.fn().mockResolvedValue({

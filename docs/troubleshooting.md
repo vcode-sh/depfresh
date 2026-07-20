@@ -186,6 +186,20 @@ If you hit GitHub API rate limits:
 - Retry after the reset time shown in the error.
 - Lower concurrency if you're scanning a lot of GitHub-sourced deps at once.
 
+### Registry response and GitHub traversal limits
+
+Successful npm, JSR, and GitHub JSON response bodies are limited to 64 MiB (67,108,864 bytes).
+depfresh cancels a body whose valid declared `content-length` is larger before reading it. A missing
+or invalid length does not disable the boundary: streamed bytes are accumulated only up to the same
+fixed limit before JSON parsing. This leaves broad headroom for real full npm package metadata while
+placing a fixed ceiling on parser input and accumulated response bytes. Malformed JSON and
+body-limit violations are deterministic resolution failures and are not retried.
+
+One GitHub tag lookup is additionally limited to 100 API pages, 10,000 returned tag records, and
+30,000 ms of aggregate monotonic elapsed time. The elapsed budget includes requests and retry
+backoff, while the configured request timeout still bounds each individual attempt. Exceeding any
+traversal limit fails the dependency resolution without returning tags collected from earlier pages.
+
 ## Workspace issues
 
 ### Repository inspection says evidence is ambiguous or unavailable
