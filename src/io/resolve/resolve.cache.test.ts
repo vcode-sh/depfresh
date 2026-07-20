@@ -399,6 +399,143 @@ describe('resolvePackage - cache behavior', () => {
     await expect(Promise.all(resolutions)).resolves.toHaveLength(2)
   })
 
+  it.each([
+    {
+      label: 'userinfo and password',
+      url: 'https://alice:url-password@packages.example.com/npm/',
+      sensitive: ['alice', 'url-password'],
+    },
+    {
+      label: 'query',
+      url: 'https://packages.example.com/npm/?access=query-secret',
+      sensitive: ['access', 'query-secret'],
+    },
+    {
+      label: 'fragment',
+      url: 'https://packages.example.com/npm/#fragment-secret',
+      sensitive: ['fragment-secret'],
+    },
+  ])(
+    'keeps a tokenless registry URL with $label transient and opaque',
+    async ({ url, sensitive }) => {
+      const { fetchPackageData } = await import('../registry')
+      const { createResolveContext, resolvePackage } = await import('./index')
+
+      const cache = createMockCache()
+      const options = makeOptions({ mode: 'latest' })
+      const context = createResolveContext(options)
+      let completeFetch: ((data: PackageData) => void) | undefined
+      vi.mocked(fetchPackageData).mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            completeFetch = resolve
+          }),
+      )
+      const sensitiveNpmrc: NpmrcConfig = {
+        registries: new Map(),
+        defaultRegistry: url,
+        strictSsl: true,
+      }
+
+      const resolution = resolvePackage(
+        makePkg([makeDep()]),
+        options,
+        cache,
+        sensitiveNpmrc,
+        undefined,
+        undefined,
+        context,
+      )
+      await vi.waitFor(() => expect(fetchPackageData).toHaveBeenCalledTimes(1))
+
+      expect(cache.get).not.toHaveBeenCalled()
+      expect(cache.set).not.toHaveBeenCalled()
+      expect(context.inFlight.size).toBe(1)
+      const transientKeys = [...context.inFlight.keys()].join('\n')
+      for (const secret of sensitive) expect(transientKeys).not.toContain(secret)
+
+      expect(completeFetch).toBeDefined()
+      completeFetch?.(mockPkgData)
+      await expect(resolution).resolves.toHaveLength(1)
+      expect(cache.set).not.toHaveBeenCalled()
+    },
+  )
+
+  it.each(['GITHUB_TOKEN', 'GH_TOKEN'] as const)(
+    'bypasses persistent and shared in-flight GitHub metadata when %s is present',
+    async (tokenVariable) => {
+      const { fetchPackageData } = await import('../registry')
+      const { createResolveContext, resolvePackage } = await import('./index')
+
+      const originalGithubToken = process.env.GITHUB_TOKEN
+      const originalGhToken = process.env.GH_TOKEN
+      delete process.env.GITHUB_TOKEN
+      delete process.env.GH_TOKEN
+      const cache = createMockCache()
+      vi.mocked(cache.get).mockReturnValue(mockPkgData)
+      const options = makeOptions({ mode: 'latest' })
+      const context = createResolveContext(options)
+      const pending: Array<(data: PackageData) => void> = []
+      vi.mocked(fetchPackageData).mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            pending.push(resolve)
+          }),
+      )
+      const githubPackage = makePkg([makeDep({ name: 'github:owner/repository' })])
+
+      try {
+        process.env[tokenVariable] = 'github-token-a'
+        const firstAuthenticated = resolvePackage(
+          githubPackage,
+          options,
+          cache,
+          npmrc,
+          undefined,
+          undefined,
+          context,
+        )
+        await vi.waitFor(() => expect(fetchPackageData).toHaveBeenCalledTimes(1))
+
+        process.env[tokenVariable] = 'github-token-b'
+        const secondAuthenticated = resolvePackage(
+          githubPackage,
+          options,
+          cache,
+          npmrc,
+          undefined,
+          undefined,
+          context,
+        )
+        await vi.waitFor(() => expect(fetchPackageData).toHaveBeenCalledTimes(2))
+
+        expect(context.inFlight.size).toBe(0)
+        expect([...context.inFlight.keys()].join('\n')).not.toContain('github-token')
+        expect(cache.get).not.toHaveBeenCalled()
+        expect(cache.set).not.toHaveBeenCalled()
+
+        for (const resolve of pending) resolve(mockPkgData)
+        await expect(Promise.all([firstAuthenticated, secondAuthenticated])).resolves.toHaveLength(
+          2,
+        )
+        expect(cache.set).not.toHaveBeenCalled()
+
+        delete process.env[tokenVariable]
+        await expect(
+          resolvePackage(githubPackage, options, cache, npmrc, undefined, undefined, context),
+        ).resolves.toHaveLength(1)
+        expect(cache.get).toHaveBeenCalledOnce()
+        expect(cache.get).toHaveBeenCalledWith('github|github:owner/repository')
+        expect(fetchPackageData).toHaveBeenCalledTimes(2)
+      } finally {
+        if (originalGithubToken === undefined) delete process.env.GITHUB_TOKEN
+        else process.env.GITHUB_TOKEN = originalGithubToken
+        if (originalGhToken === undefined) delete process.env.GH_TOKEN
+        else process.env.GH_TOKEN = originalGhToken
+      }
+    },
+  )
+
   it('calls onDependencyResolved callback per dep', async () => {
     const { fetchPackageData } = await import('../registry')
     const { resolvePackage } = await import('./index')

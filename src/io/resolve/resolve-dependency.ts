@@ -92,7 +92,9 @@ export async function resolveDependency(
 
   if (!pkgData) {
     try {
-      const inFlight = resolveContext?.inFlight.get(cacheIdentity.inFlightKey)
+      const inFlight = cacheIdentity.inFlightKey
+        ? resolveContext?.inFlight.get(cacheIdentity.inFlightKey)
+        : undefined
 
       if (inFlight) {
         if (resolveContext) {
@@ -109,10 +111,14 @@ export async function resolveDependency(
           retries: options.retries,
           logger,
         }).finally(() => {
-          resolveContext?.inFlight.delete(cacheIdentity.inFlightKey)
+          if (cacheIdentity.inFlightKey) {
+            resolveContext?.inFlight.delete(cacheIdentity.inFlightKey)
+          }
         })
 
-        resolveContext?.inFlight.set(cacheIdentity.inFlightKey, fetchPromise)
+        if (cacheIdentity.inFlightKey) {
+          resolveContext?.inFlight.set(cacheIdentity.inFlightKey, fetchPromise)
+        }
         pkgData = await fetchPromise
       }
 
@@ -319,8 +325,9 @@ function normalizeWorkspaceCurrentVersion(
 function buildResolveCacheIdentity(
   packageName: string,
   npmrc: ReturnType<typeof loadNpmrc>,
-): { persistentKey?: string; inFlightKey: string } {
+): { persistentKey?: string; inFlightKey?: string } {
   if (packageName.startsWith('github:')) {
+    if (process.env.GITHUB_TOKEN || process.env.GH_TOKEN) return {}
     const key = `github|${packageName}`
     return { persistentKey: key, inFlightKey: key }
   }
