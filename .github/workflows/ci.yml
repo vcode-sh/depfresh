@@ -12,27 +12,98 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  visual-plus-pty:
-    name: Visual Plus PTY (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-24.04, macos-15]
+  test:
+    name: Test (Node 24.15.0)
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
-      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320  # v5
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271  # v6.0.9
 
-      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e  # v6
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020  # v7.0.0
         with:
           node-version: 24.15.0
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
 
-      - name: Build PTY test distribution
+      - name: Verify generated schemas
+        run: pnpm schemas:check
+
+      - name: Test Action adversarial harness
+        run: pnpm exec vitest run test/github-action.test.ts --retry=0
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Lint with zero warnings
+        run: pnpm exec biome check --error-on-warnings .
+
+      - name: Build tested distribution
         run: pnpm build
+
+      - name: Run tests
+        run: pnpm test:run --coverage
+
+      - name: Upload tested distribution
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: depfresh-tested-dist
+          path: dist
+          if-no-files-found: error
+          retention-days: 1
+
+  build:
+    name: Verify tested build
+    runs-on: ubuntu-24.04
+    needs: test
+    steps:
+      - name: Download tested distribution
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
+        with:
+          name: depfresh-tested-dist
+          path: dist
+
+      - name: Verify artifacts exist
+        run: |
+          echo "## Build Artifacts" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| File | Size |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| --- | --- |" >> "$GITHUB_STEP_SUMMARY"
+          for file in dist/cli.mjs dist/index.mjs dist/index.d.ts; do
+            if [ ! -f "$file" ]; then
+              echo "::error::Missing artifact: $file -- something went very wrong"
+              exit 1
+            fi
+            size=$(du -h "$file" | cut -f1)
+            echo "| \`$file\` | $size |" >> "$GITHUB_STEP_SUMMARY"
+          done
+
+  visual-plus-pty:
+    name: Visual Plus PTY (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271  # v6.0.9
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020  # v7.0.0
+        with:
+          node-version: 24.15.0
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Download tested distribution
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
+        with:
+          name: depfresh-tested-dist
+          path: dist
 
       - name: Test Visual Plus PTY and fallbacks
         run: pnpm exec vitest run test/visual-plus-cli.test.ts --retry=0
@@ -78,111 +149,29 @@ jobs:
         run: |
           if [[ -n "${NPM_TOOL_ROOT:-}" ]]; then rm -rf -- "$NPM_TOOL_ROOT"; fi
 
-  test:
-    name: Test (Node 24.15.0)
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7
-
-      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320  # v5
-
-      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e  # v6
-        with:
-          node-version: 24.15.0
-          cache: pnpm
-
-      - run: pnpm install --frozen-lockfile
-
-      - name: Verify generated schemas
-        run: pnpm schemas:check
-
-      - name: Test Action adversarial harness
-        run: pnpm exec vitest run test/github-action.test.ts
-
-      - name: Typecheck
-        run: pnpm typecheck
-
-      - name: Lint with zero warnings
-        run: pnpm exec biome check --error-on-warnings .
-
-      - name: Build test distribution
-        run: pnpm build
-
-      - name: Run tests
-        run: pnpm test:run --coverage
-
-  build:
-    name: Build
-    runs-on: ubuntu-24.04
-    needs: test
-    steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7
-
-      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320  # v5
-
-      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e  # v6
-        with:
-          node-version: 24.15.0
-          cache: pnpm
-
-      - run: pnpm install --frozen-lockfile
-
-      - name: Build
-        run: pnpm build
-
-      - name: Verify artifacts exist
-        run: |
-          echo "## Build Artifacts" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| File | Size |" >> $GITHUB_STEP_SUMMARY
-          echo "| --- | --- |" >> $GITHUB_STEP_SUMMARY
-          for file in dist/cli.mjs dist/index.mjs dist/index.d.ts; do
-            if [ ! -f "$file" ]; then
-              echo "::error::Missing artifact: $file -- something went very wrong"
-              exit 1
-            fi
-            size=$(du -h "$file" | cut -f1)
-            echo "| \`$file\` | $size |" >> $GITHUB_STEP_SUMMARY
-          done
-
-  lint:
-    name: Lint
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7
-
-      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320  # v5
-
-      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e  # v6
-        with:
-          node-version: 24.15.0
-          cache: pnpm
-
-      - run: pnpm install --frozen-lockfile
-
-      - name: Lint
-        run: pnpm lint
-
   distribution-smoke:
     name: Distribution Smoke
     runs-on: ubuntu-24.04
     needs: build
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
-      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320  # v5
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271  # v6.0.9
 
-      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e  # v6
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020  # v7.0.0
         with:
           node-version: 24.15.0
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
 
-      - name: Build
-        run: pnpm build
+      - name: Download tested distribution
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
+        with:
+          name: depfresh-tested-dist
+          path: dist
 
-      - name: Smoke test local build
+      - name: Smoke test tested build
         run: |
           set -euo pipefail
           node dist/cli.mjs --help
@@ -194,8 +183,53 @@ jobs:
       - name: Package dry run
         run: npm pack --dry-run --json --ignore-scripts
 
-      - name: Verify packed package
+      - name: Pack verified distribution
         run: |
           mkdir -p artifacts
           npm pack --json --ignore-scripts --pack-destination artifacts > artifacts/pack.json
           node scripts/verify-packed-package.mjs artifacts/pack.json
+
+      - name: Upload tested package
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: depfresh-tested-package
+          path: artifacts
+          if-no-files-found: error
+          retention-days: 1
+
+  windows-installed:
+    name: Installed distribution (Windows)
+    runs-on: windows-2025
+    needs: distribution-smoke
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020  # v7.0.0
+        with:
+          node-version: 24.15.0
+
+      - name: Download tested package
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
+        with:
+          name: depfresh-tested-package
+          path: artifacts
+
+      - name: Install exact tested tarball
+        shell: pwsh
+        run: |
+          $tarballName = node scripts/read-pack-manifest.mjs artifacts/pack.json filename
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $tarball = (Get-Item -LiteralPath (Join-Path $PWD "artifacts/$tarballName")).FullName
+          $installRoot = Join-Path $env:RUNNER_TEMP 'depfresh-installed'
+          New-Item -ItemType Directory -Path $installRoot -Force | Out-Null
+          npm install --prefix $installRoot --ignore-scripts --no-audit --no-fund $tarball
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $cli = Join-Path $installRoot 'node_modules/depfresh/dist/cli.mjs'
+          if (!(Test-Path -LiteralPath $cli -PathType Leaf)) {
+            throw 'Installed depfresh CLI is unavailable'
+          }
+          "DEPFRESH_CLI=$cli" >> $env:GITHUB_ENV
+
+      - name: Verify installed read-only CLI
+        shell: pwsh
+        run: node scripts/verify-installed-read-only.mjs "$env:DEPFRESH_CLI"

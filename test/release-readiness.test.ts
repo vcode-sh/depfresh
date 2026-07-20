@@ -3,6 +3,7 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { globSync } from 'tinyglobby'
 import { describe, expect, expectTypeOf, it } from 'vitest'
+import { configDefaults } from 'vitest/config'
 import { parse } from 'yaml'
 import type { VisualPlusCapabilities } from '../src/commands/check/visual-plus/capabilities'
 import { buildVisualPlusInsights } from '../src/commands/check/visual-plus/insights'
@@ -15,19 +16,24 @@ import type {
   ArtifactVerificationTarget,
 } from '../src/index'
 import { stripAnsi } from '../src/utils/format'
+import vitestConfig from '../vitest.config'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const read = (path: string) => readFileSync(join(root, path), 'utf8')
 
 interface WorkflowStep {
+  id?: string
+  if?: string
   name?: string
   run?: string
+  shell?: string
   uses?: string
   with?: Record<string, unknown>
 }
 
 interface WorkflowJob {
   environment?: unknown
+  needs?: string | string[]
   'runs-on'?: unknown
   strategy?: {
     matrix?: {
@@ -41,6 +47,22 @@ interface Workflow {
   jobs?: Record<string, WorkflowJob>
 }
 
+interface VitestProjectOptions {
+  exclude?: string[]
+  fileParallelism?: boolean
+  include?: string[]
+  maxWorkers?: number | string
+  name?: string
+  retry?: number
+  sequence?: { groupOrder?: number }
+  testTimeout?: number
+}
+
+interface VitestOptions extends VitestProjectOptions {
+  coverage?: unknown
+  projects?: Array<{ test?: VitestProjectOptions }>
+}
+
 const workflowPaths = [
   '.github/workflows/ci.yml',
   '.github/workflows/pr-validation.yml',
@@ -49,8 +71,44 @@ const workflowPaths = [
   '.github/workflows/release.yml',
 ] as const
 
-const checkoutV7Commit = '9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0'
+const actionPins = {
+  'actions/checkout': {
+    commit: '3d3c42e5aac5ba805825da76410c181273ba90b1',
+    version: 'v7.0.1',
+  },
+  'actions/download-artifact': {
+    commit: '3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c',
+    version: 'v8.0.1',
+  },
+  'actions/setup-node': {
+    commit: '820762786026740c76f36085b0efc47a31fe5020',
+    version: 'v7.0.0',
+  },
+  'actions/upload-artifact': {
+    commit: '043fb46d1a93c77aae656e7c1c64a875d1fc6a0a',
+    version: 'v7.0.1',
+  },
+  'dependabot/fetch-metadata': {
+    commit: '25dd0e34f4fe68f24cc83900b1fe3fe149efef98',
+    version: 'v3.1.0',
+  },
+  'pnpm/action-setup': {
+    commit: '0ebf47130e4866e96fce0953f49152a61190b271',
+    version: 'v6.0.9',
+  },
+  'softprops/action-gh-release': {
+    commit: '3d0d9888cb7fd7b750713d6e236d1fcb99157228',
+    version: 'v3.0.2',
+  },
+} as const
+const checkoutV7Commit = actionPins['actions/checkout'].commit
 const matrixRunnerExpression = '$' + '{{ matrix.os }}'
+const processObservationTestPaths = [
+  'src/commands/apply/index.test.ts',
+  'src/commands/apply/process-runner.test.ts',
+  'src/commands/global-apply/fake-manager.test.ts',
+  'test/visual-plus-cli.test.ts',
+] as const
 const checkoutConsumerPaths = [
   '.github/workflows/ci.yml',
   '.github/workflows/pr-validation.yml',
@@ -484,6 +542,60 @@ describe('2.1.1 release readiness', () => {
     }
   })
 
+  it('pins every maintained workflow and composite action to the reviewed stable action refs', () => {
+    for (const path of [...workflowPaths, 'action.yml']) {
+      const content = read(path)
+      const references = [...content.matchAll(/uses:\s+([^@\s]+)@([^\s]+)/gu)]
+
+      for (const [, action, commit] of references) {
+        const expected = actionPins[action as keyof typeof actionPins]
+        expect(expected, `${path}: ${action}`).toBeDefined()
+        expect(commit, `${path}: ${action}`).toBe(expected?.commit)
+        expect(content, `${path}: ${action}`).toContain(
+          `uses: ${action}@${expected?.commit}  # ${expected?.version}`,
+        )
+      }
+    }
+  })
+
+  it('runs the complete suite once while isolating the exact process-observation files', () => {
+    const test = (vitestConfig as unknown as { test?: VitestOptions }).test
+    const projects = test?.projects ?? []
+    const defaultProject = projects.find((project) => project.test?.name === 'default')?.test
+    const processProject = projects.find((project) => project.test?.name === 'process')?.test
+    const packageJson = JSON.parse(read('package.json')) as { scripts?: Record<string, string> }
+
+    expect(projects).toHaveLength(2)
+    expect(test?.retry).toBe(0)
+    expect(test?.fileParallelism).not.toBe(false)
+    expect(test?.coverage).toBeDefined()
+    expect(defaultProject).toMatchObject({
+      fileParallelism: true,
+      retry: 0,
+      sequence: { groupOrder: 0 },
+      testTimeout: 10_000,
+    })
+    expect(defaultProject?.maxWorkers).not.toBe(1)
+    expect(defaultProject?.include).toEqual(configDefaults.include)
+    expect(defaultProject?.exclude).toEqual([
+      ...configDefaults.exclude,
+      ...processObservationTestPaths,
+    ])
+    expect(processProject).toMatchObject({
+      fileParallelism: false,
+      include: processObservationTestPaths,
+      maxWorkers: 1,
+      retry: 2,
+      sequence: { groupOrder: 1 },
+      testTimeout: 10_000,
+    })
+    for (const path of processObservationTestPaths) {
+      expect(existsSync(join(root, path)), path).toBe(true)
+    }
+    expect(packageJson.scripts?.test).toBe('vitest')
+    expect(packageJson.scripts?.['test:run']).toBe('vitest run')
+  })
+
   it('pins every maintained checkout consumer to the exact checkout v7 commit', () => {
     for (const path of checkoutConsumerPaths) {
       const references = [...read(path).matchAll(/actions\/checkout@([^\s]+)/gu)].map(
@@ -507,6 +619,8 @@ describe('2.1.1 release readiness', () => {
             'ubuntu-24.04',
             'macos-15',
           ])
+        } else if (path === '.github/workflows/ci.yml' && jobName === 'windows-installed') {
+          expect(job['runs-on'], `${path}: ${jobName}`).toBe('windows-2025')
         } else {
           expect(job['runs-on'], `${path}: ${jobName}`).toBe('ubuntu-24.04')
         }
@@ -581,6 +695,94 @@ describe('2.1.1 release readiness', () => {
     expect(release).toContain(`${explicitVerifier} --visual-plus`)
     expect(ci).not.toContain('scripts/verify-local-package.mjs')
     expect(release).not.toContain('scripts/verify-local-package.mjs')
+  })
+
+  it('reuses one tested dist artifact and passes one exact tarball to Windows', () => {
+    const ci = workflow('.github/workflows/ci.yml')
+    const allSteps = Object.values(ci.jobs ?? {}).flatMap((job) => job.steps ?? [])
+    const testSteps = ci.jobs?.test?.steps ?? []
+    const buildSteps = ci.jobs?.build?.steps ?? []
+    const visualSteps = ci.jobs?.['visual-plus-pty']?.steps ?? []
+    const smokeSteps = ci.jobs?.['distribution-smoke']?.steps ?? []
+    const windows = ci.jobs?.['windows-installed']
+    const windowsSteps = windows?.steps ?? []
+
+    expect(allSteps.filter((step) => step.run === 'pnpm build')).toHaveLength(1)
+    expect(
+      allSteps.filter((step) =>
+        /(?:^|\n)\s*(?:pnpm lint|pnpm exec biome check)(?:\s|$)/u.test(step.run ?? ''),
+      ),
+    ).toHaveLength(1)
+    expect(ci.jobs?.lint).toBeUndefined()
+
+    const uploadDist = testSteps.find((step) => step.uses?.startsWith('actions/upload-artifact@'))
+    expect(uploadDist?.with).toMatchObject({
+      name: 'depfresh-tested-dist',
+      path: 'dist',
+      'if-no-files-found': 'error',
+    })
+    for (const [jobName, jobSteps] of [
+      ['build', buildSteps],
+      ['visual-plus-pty', visualSteps],
+      ['distribution-smoke', smokeSteps],
+    ] as const) {
+      const download = jobSteps.find((step) => step.uses?.startsWith('actions/download-artifact@'))
+      expect(download?.with, jobName).toMatchObject({ name: 'depfresh-tested-dist', path: 'dist' })
+      expect(
+        jobSteps.some((step) => step.run === 'pnpm build'),
+        jobName,
+      ).toBe(false)
+    }
+    expect(ci.jobs?.build?.needs).toBe('test')
+    expect(ci.jobs?.['distribution-smoke']?.needs).toBe('build')
+
+    const packageStep = smokeSteps.find((step) => step.name === 'Pack verified distribution')
+    expect(packageStep?.run).toContain(
+      'npm pack --json --ignore-scripts --pack-destination artifacts > artifacts/pack.json',
+    )
+    expect(packageStep?.run).toContain('node scripts/verify-packed-package.mjs artifacts/pack.json')
+    const uploadPackage = smokeSteps.find((step) =>
+      step.uses?.startsWith('actions/upload-artifact@'),
+    )
+    expect(uploadPackage?.with).toMatchObject({
+      name: 'depfresh-tested-package',
+      path: 'artifacts',
+      'if-no-files-found': 'error',
+    })
+
+    expect(windows?.['runs-on']).toBe('windows-2025')
+    expect(windows?.needs).toBe('distribution-smoke')
+    expect(
+      windowsSteps.find((step) => step.uses?.startsWith('actions/download-artifact@'))?.with,
+    ).toMatchObject({ name: 'depfresh-tested-package', path: 'artifacts' })
+    const install = windowsSteps.find((step) => step.name === 'Install exact tested tarball')
+    expect(install?.shell).toBe('pwsh')
+    expect(install?.run).toContain('npm install')
+    expect(install?.run).toContain('--ignore-scripts')
+    const proof = windowsSteps.find((step) => step.name === 'Verify installed read-only CLI')
+    expect(proof?.run).toBe('node scripts/verify-installed-read-only.mjs "$env:DEPFRESH_CLI"')
+    expect(proof?.run).not.toMatch(
+      /--write|--install|--sync-lockfile|--verify(?:-artifacts)?|--global/iu,
+    )
+  })
+
+  it('allows @types/node 24 minor and patch updates while ignoring only majors', () => {
+    const dependabot = parse(read('.github/dependabot.yml')) as {
+      updates?: Array<{
+        'package-ecosystem'?: string
+        groups?: Record<string, { 'update-types'?: string[] }>
+        ignore?: Array<{ 'dependency-name'?: string; 'update-types'?: string[] }>
+      }>
+    }
+    const npm = dependabot.updates?.find((update) => update['package-ecosystem'] === 'npm')
+
+    expect(npm?.ignore).toEqual([
+      {
+        'dependency-name': '@types/node',
+        'update-types': ['version-update:semver-major'],
+      },
+    ])
+    expect(npm?.groups?.['dev-dependencies']?.['update-types']).toEqual(['minor', 'patch'])
   })
 
   it('runs the complete release gate before publishing the exact verified tarball', () => {
