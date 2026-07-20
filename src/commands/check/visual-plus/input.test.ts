@@ -132,7 +132,7 @@ describe('Visual+ authoritative insight reconciliation', () => {
 
   it.each([
     ['source', { ...metadata(), source: 'unsupported-source' }],
-    ['duplicate order', { ...metadata(), displayOrder: 1 }],
+    ['non-contiguous order', { ...metadata(), displayOrder: 1 }],
   ])('rejects invalid change metadata %s', (_name, candidate) => {
     expect(() =>
       createVisualPlusSectionInput(
