@@ -44,6 +44,8 @@ describe('published workflow assets', () => {
     for (const asset of publicAssets.filter((entry) => entry.startsWith('skills/'))) {
       expect(packageJson.exports[`./${asset}`]).toBe(`./${asset}`)
     }
+    expect(existsSync(join(root, 'scripts/live-visual-plus-proof.mjs'))).toBe(true)
+    expect(packageJson.files).not.toContain('scripts')
   })
 
   it('keeps every documented public asset present and sanitized', () => {

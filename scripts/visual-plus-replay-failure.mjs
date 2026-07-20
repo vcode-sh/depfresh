@@ -1,4 +1,20 @@
-import { closeSync, fstatSync, lstatSync, openSync, readSync } from 'node:fs'
+import { createHash, randomBytes } from 'node:crypto'
+import {
+  chmodSync,
+  closeSync,
+  constants,
+  fstatSync,
+  fsyncSync,
+  linkSync,
+  lstatSync,
+  openSync,
+  readFileSync,
+  readSync,
+  realpathSync,
+  unlinkSync,
+  writeSync,
+} from 'node:fs'
+import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path'
 
 export const MAX_VISUAL_PLUS_REPORT_BYTES = 256 * 1024
 
@@ -104,24 +120,24 @@ const TRUSTED_FAILURE_CATEGORIES = new Map([
   ],
   ['Visual+ built CLI executes the selected CLI artifact', 'artifact-identity'],
   [
-    'Visual+ built CLI renders compact success and exact safety journeys in a 40-column PTY by default',
-    'product-journey',
+    'Visual+ built CLI renders hybrid success and exact safety journeys in a 40-column PTY by default',
+    'visual-hierarchy',
   ],
   [
-    'Visual+ built CLI renders compact success and exact safety journeys in a 60-column PTY by default',
-    'product-journey',
+    'Visual+ built CLI renders hybrid success and exact safety journeys in a 60-column PTY by default',
+    'visual-hierarchy',
   ],
   [
-    'Visual+ built CLI renders compact success and exact safety journeys in a 80-column PTY by default',
-    'product-journey',
+    'Visual+ built CLI renders hybrid success and exact safety journeys in a 80-column PTY by default',
+    'visual-hierarchy',
   ],
   [
-    'Visual+ built CLI renders compact success and exact safety journeys in a 118-column PTY by default',
-    'product-journey',
+    'Visual+ built CLI renders hybrid success and exact safety journeys in a 118-column PTY by default',
+    'visual-hierarchy',
   ],
   [
-    'Visual+ built CLI renders compact success and exact safety journeys in a 175-column PTY by default',
-    'product-journey',
+    'Visual+ built CLI renders hybrid success and exact safety journeys in a 175-column PTY by default',
+    'visual-hierarchy',
   ],
   [
     'Visual+ built CLI uses durable direct and slow-pipe fallbacks without losing read-only semantic output',
@@ -255,6 +271,163 @@ export function classifyVisualPlusReplayFailure(report) {
   if (failedTests !== report.numFailedTests || categories.size === 0) return 'unclassified'
   if (categories.size > 1) return 'multiple-known'
   return categories.values().next().value ?? 'unclassified'
+}
+
+export function writeVisualPlusReplayEvidence(options) {
+  if (!isRecord(options)) throw new Error('Installed replay evidence options are invalid')
+  const expected = options.expected
+  if (!isCompleteVisualPlusReplayReport(options.report, expected)) {
+    throw new Error('Installed replay evidence is incomplete')
+  }
+  const containmentRoot = requireCanonicalDirectory(options.containmentRoot, 'evidence root')
+  const outputPath = requireContainedNewOutput(options.outputPath, containmentRoot)
+  const tarballPath = requireCanonicalRegularFile(options.tarballPath, 'tarball')
+  const installedRoot = requireCanonicalDirectory(options.installedRoot, 'extracted package')
+  const cliPath = requireCanonicalRegularFile(options.cliPath, 'installed CLI')
+  requireContainedPath(cliPath, installedRoot, 'Installed CLI is outside the extracted package')
+  const packageVersion = requirePackageVersion(options.packageVersion)
+  const packageJsonPath = requireCanonicalRegularFile(
+    join(installedRoot, 'package.json'),
+    'installed package manifest',
+  )
+  let installedPackage
+  try {
+    installedPackage = JSON.parse(readFileSync(packageJsonPath, 'utf8'))
+  } catch {
+    throw new Error('Installed package manifest is invalid')
+  }
+  if (!isRecord(installedPackage) || installedPackage.version !== packageVersion) {
+    throw new Error('Installed package version does not match replay evidence')
+  }
+  const tarballSha256 = requireSha256(options.tarballSha256, 'tarball')
+  const cliSha256 = requireSha256(options.cliSha256, 'installed CLI')
+  if (sha256File(tarballPath) !== tarballSha256) {
+    throw new Error('Tarball identity changed before replay evidence publication')
+  }
+  if (sha256File(cliPath) !== cliSha256) {
+    throw new Error('Installed CLI identity changed before replay evidence publication')
+  }
+  const evidence = {
+    schemaVersion: 1,
+    kind: 'depfresh-installed-visual-plus-replay',
+    packageVersion,
+    tarball: { realpath: tarballPath, sha256: tarballSha256 },
+    extractedPackage: { realpath: installedRoot },
+    cli: { realpath: cliPath, sha256: cliSha256 },
+    passed: { files: expected.files, suites: expected.suites, tests: expected.tests },
+  }
+  writeJsonAtomicNoReplace(outputPath, evidence)
+  return evidence
+}
+
+function requireCanonicalDirectory(path, label) {
+  if (typeof path !== 'string' || !isAbsolute(path) || resolve(path) !== path) {
+    throw new Error(`Installed replay ${label} path is invalid`)
+  }
+  let stats
+  try {
+    stats = lstatSync(path)
+  } catch {
+    throw new Error(`Installed replay ${label} is unavailable`)
+  }
+  if (!stats.isDirectory() || stats.isSymbolicLink() || realpathSync.native(path) !== path) {
+    throw new Error(`Installed replay ${label} is unsafe`)
+  }
+  return path
+}
+
+function requireCanonicalRegularFile(path, label) {
+  if (typeof path !== 'string' || !isAbsolute(path) || resolve(path) !== path) {
+    throw new Error(`Installed replay ${label} path is invalid`)
+  }
+  let stats
+  try {
+    stats = lstatSync(path)
+  } catch {
+    throw new Error(`Installed replay ${label} is unavailable`)
+  }
+  if (!stats.isFile() || stats.isSymbolicLink() || realpathSync.native(path) !== path) {
+    throw new Error(`Installed replay ${label} is unsafe`)
+  }
+  return path
+}
+
+function requireContainedNewOutput(path, containmentRoot) {
+  if (typeof path !== 'string' || !isAbsolute(path) || resolve(path) !== path) {
+    throw new Error('Installed replay evidence output path is invalid')
+  }
+  const parent = requireCanonicalDirectory(dirname(path), 'evidence output parent')
+  requireContainedPath(parent, containmentRoot, 'Installed replay evidence output is not contained')
+  try {
+    lstatSync(path)
+  } catch (error) {
+    if (isMissing(error)) return path
+    throw new Error('Installed replay evidence output is unavailable')
+  }
+  throw new Error('Installed replay evidence output already exists')
+}
+
+function requireContainedPath(path, root, message) {
+  const containment = relative(root, path)
+  if (containment.startsWith('..') || isAbsolute(containment)) throw new Error(message)
+}
+
+function requirePackageVersion(value) {
+  if (typeof value !== 'string' || value.length < 1 || value.length > 128) {
+    throw new Error('Installed replay package version is invalid')
+  }
+  return value
+}
+
+function requireSha256(value, label) {
+  if (typeof value !== 'string' || !/^[a-f0-9]{64}$/u.test(value)) {
+    throw new Error(`Installed replay ${label} SHA-256 is invalid`)
+  }
+  return value
+}
+
+function sha256File(path) {
+  return createHash('sha256').update(readFileSync(path)).digest('hex')
+}
+
+function writeJsonAtomicNoReplace(path, value) {
+  const bytes = Buffer.from(`${JSON.stringify(value, null, 2)}\n`)
+  const pendingPath = join(
+    dirname(path),
+    `.${basename(path)}.pending-${process.pid}-${randomBytes(12).toString('hex')}`,
+  )
+  let descriptor
+  try {
+    descriptor = openSync(
+      pendingPath,
+      constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY,
+      0o600,
+    )
+    let offset = 0
+    while (offset < bytes.byteLength) {
+      offset += writeSync(descriptor, bytes, offset, bytes.byteLength - offset)
+    }
+    fsyncSync(descriptor)
+    closeSync(descriptor)
+    descriptor = undefined
+    chmodSync(pendingPath, 0o600)
+    linkSync(pendingPath, path)
+  } catch {
+    throw new Error('Installed replay evidence could not be published')
+  } finally {
+    if (descriptor !== undefined) {
+      try {
+        closeSync(descriptor)
+      } catch {}
+    }
+    try {
+      unlinkSync(pendingPath)
+    } catch {}
+  }
+}
+
+function isMissing(error) {
+  return isRecord(error) && error.code === 'ENOENT'
 }
 
 function isRecord(value) {

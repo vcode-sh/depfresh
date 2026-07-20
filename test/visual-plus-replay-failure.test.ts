@@ -59,8 +59,8 @@ describe('installed Visual+ replay failure classification', () => {
       'pty-transport',
     ],
     [
-      'Visual+ built CLI renders compact success and exact safety journeys in a 80-column PTY by default',
-      'product-journey',
+      'Visual+ built CLI renders hybrid success and exact safety journeys in a 80-column PTY by default',
+      'visual-hierarchy',
     ],
     [
       'Visual+ built CLI uses durable direct and slow-pipe fallbacks without losing read-only semantic output',
@@ -114,10 +114,10 @@ describe('installed Visual+ replay failure classification', () => {
     expect(classifyVisualPlusReplayFailure(report([fullName]))).toBe(expected)
   })
 
-  it('keeps all five product-journey classifications coupled to the current compact test titles', () => {
+  it('keeps all five visual-hierarchy classifications coupled to the current hybrid test titles', () => {
     const visualPlusTest = readFileSync('test/visual-plus-cli.test.ts', 'utf8')
     const declaration = visualPlusTest.match(
-      /it\.each\(\[([^\]]+)\]\)\(\s*'([^']*compact success[^']*)'/u,
+      /it\.each\(\[([^\]]+)\]\)\(\s*'([^']*hybrid success[^']*)'/u,
     )
     expect(declaration).not.toBeNull()
     const widths = declaration?.[1]?.split(',').map((value) => Number(value.trim())) ?? []
@@ -130,12 +130,16 @@ describe('installed Visual+ replay failure classification', () => {
 
     expect(
       fullNames.map((fullName) => classifyVisualPlusReplayFailure(report([fullName]))),
-    ).toEqual(fullNames.map(() => 'product-journey'))
-    expect(
-      classifyVisualPlusReplayFailure(
-        report(['Visual+ built CLI renders exact success and safety journeys in a 80-column PTY']),
-      ),
-    ).toBe('unclassified')
+    ).toEqual(fullNames.map(() => 'visual-hierarchy'))
+    for (const width of widths) {
+      expect(
+        classifyVisualPlusReplayFailure(
+          report([
+            `Visual+ built CLI renders compact success and exact safety journeys in a ${width}-column PTY by default`,
+          ]),
+        ),
+      ).toBe('unclassified')
+    }
   })
 
   it('fails closed without reflecting untrusted report content', () => {

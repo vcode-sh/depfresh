@@ -17,6 +17,7 @@ import {
   isCompleteVisualPlusReplayReport,
   readVisualPlusReplayReport,
   visualPlusReplayFailureMessage,
+  writeVisualPlusReplayEvidence,
 } from './visual-plus-replay-failure.mjs'
 
 class PackageVerificationError extends Error {}
@@ -37,13 +38,18 @@ const VISUAL_PLUS_REPLAY_TIMEOUT_MS = 15 * 60_000
 const MAX_TARBALL_EXPANDED_BYTES = 50 * 1024 * 1024
 const VISUAL_PLUS_PASSED_TEST_FILES = 1
 const VISUAL_PLUS_PASSED_TEST_SUITES = 5
-const VISUAL_PLUS_PASSED_TESTS = 58
+const VISUAL_PLUS_PASSED_TESTS = 69
 const command = parseCommand(process.argv.slice(2))
 const manifestArgument = command.manifestPath
 const explicitInstallSpec = command.installSpec
 const visualPlus = command.visualPlus
+const evidencePath = command.evidencePath
 
-if (!manifestArgument) fail('Usage: node scripts/verify-packed-package.mjs <pack.json> [--visual-plus] [--install-spec <exact-spec>]')
+if (!manifestArgument) {
+  fail(
+    'Usage: node scripts/verify-packed-package.mjs <pack.json> [--visual-plus] [--evidence <path>] [--install-spec <exact-spec>]',
+  )
+}
 
 const manifestPath = resolve(manifestArgument)
 const packageJson = JSON.parse(readFileSync(resolve('package.json'), 'utf8'))
@@ -120,6 +126,7 @@ const tarballStat = lstatSync(tarballPath)
 if (!tarballStat.isFile() || tarballStat.isSymbolicLink()) fail('Tarball is not a regular file')
 if (tarballStat.size !== entry.size) fail('Tarball size does not match pack manifest')
 const tarballBytes = readFileSync(tarballPath)
+const tarballSha256 = createHash('sha256').update(tarballBytes).digest('hex')
 const integrity = `sha512-${createHash('sha512').update(tarballBytes).digest('base64')}`
 if (integrity !== entry.integrity) fail('Tarball integrity does not match pack manifest')
 
@@ -202,7 +209,16 @@ try {
   })
   if (capabilitiesRun.stderr !== '') fail('Packed capabilities command wrote stderr')
   const visualPlusEvidence = visualPlus
-    ? verifyVisualPlusReplay({ cliPath, installedRoot, tarballBytes, temporaryRoot })
+    ? verifyVisualPlusReplay({
+        cliPath,
+        evidencePath,
+        installedRoot,
+        packageVersion: packageJson.version,
+        tarballBytes,
+        tarballPath: realpathSync(tarballPath),
+        tarballSha256,
+        temporaryRoot,
+      })
     : undefined
 
   const runPackedCli = (label, cwd, args, expectedStatus) => {
@@ -517,6 +533,24 @@ function verifyVisualPlusReplay(options) {
   ) {
     fail('Installed Visual+ replay evidence is incomplete')
   }
+  if (options.evidencePath !== undefined) {
+    writeVisualPlusReplayEvidence({
+      cliPath: canonicalCliPath,
+      cliSha256,
+      containmentRoot: dirname(realpathSync(options.tarballPath)),
+      expected: {
+        files: VISUAL_PLUS_PASSED_TEST_FILES,
+        suites: VISUAL_PLUS_PASSED_TEST_SUITES,
+        tests: VISUAL_PLUS_PASSED_TESTS,
+      },
+      installedRoot: canonicalInstalledRoot,
+      outputPath: resolve(options.evidencePath),
+      packageVersion: options.packageVersion,
+      report,
+      tarballPath: options.tarballPath,
+      tarballSha256: options.tarballSha256,
+    })
+  }
   return {
     cliPath: canonicalCliPath,
     cliSha256,
@@ -602,6 +636,7 @@ function parseCommand(arguments_) {
   const manifestPath = arguments_[0]
   if (typeof manifestPath !== 'string') return {}
   let installSpec
+  let evidencePath
   let visualPlus = false
   for (let index = 1; index < arguments_.length; index += 1) {
     const argument = arguments_[index]
@@ -616,9 +651,17 @@ function parseCommand(arguments_) {
       index += 1
       continue
     }
+    if (argument === '--evidence' && evidencePath === undefined) {
+      const value = arguments_[index + 1]
+      if (typeof value !== 'string' || value.startsWith('--')) return {}
+      evidencePath = value
+      index += 1
+      continue
+    }
     return {}
   }
-  return { installSpec, manifestPath, visualPlus }
+  if (evidencePath !== undefined && !visualPlus) return {}
+  return { evidencePath, installSpec, manifestPath, visualPlus }
 }
 
 function isRecord(value) {

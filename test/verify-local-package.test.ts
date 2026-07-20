@@ -1,10 +1,13 @@
+import { createHash } from 'node:crypto'
 import {
   chmodSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
   readFileSync,
+  realpathSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -18,6 +21,18 @@ interface ReplayEvidenceApi {
     report: unknown,
     expected: { files: number; suites: number; tests: number },
   ) => boolean
+  writeVisualPlusReplayEvidence?: (options: {
+    cliPath: string
+    cliSha256: string
+    containmentRoot: string
+    expected: { files: number; suites: number; tests: number }
+    installedRoot: string
+    outputPath: string
+    packageVersion: string
+    report: unknown
+    tarballPath: string
+    tarballSha256: string
+  }) => unknown
 }
 
 const replayEvidenceApi = replayEvidence as unknown as ReplayEvidenceApi
@@ -114,6 +129,7 @@ setInterval(() => {}, 1_000)
     const visualPlusTest = readFileSync('test/visual-plus-cli.test.ts', 'utf8')
 
     expect(packedVerifier).toContain("'--visual-plus'")
+    expect(packedVerifier).toContain("'--evidence'")
     expect(packedVerifier).toContain("'package/dist/cli.mjs'")
     expect(packedVerifier).toContain('DEPFRESH_VISUAL_PLUS_CLI_PATH')
     expect(packedVerifier).toContain('DEPFRESH_VISUAL_PLUS_INSTALL_ROOT')
@@ -122,12 +138,13 @@ setInterval(() => {}, 1_000)
     expect(packedVerifier).toContain("'--retry=0'")
     expect(packedVerifier).toContain('readVisualPlusReplayReport')
     expect(packedVerifier).toContain('visualPlusReplayFailureMessage')
+    expect(packedVerifier).toContain('writeVisualPlusReplayEvidence')
     expect(replayFailure).toContain('MAX_VISUAL_PLUS_REPORT_BYTES = 256 * 1024')
     expect(replayFailure).toContain('lstatSync(reportPath)')
     expect(replayFailure).toContain(['classification: $', '{classification}'].join(''))
     expect(packedVerifier).toContain('cliSha256')
     expect(packedVerifier).toContain('passedTests')
-    expect(packedVerifier).toContain('const VISUAL_PLUS_PASSED_TESTS = 58')
+    expect(packedVerifier).toContain('const VISUAL_PLUS_PASSED_TESTS = 69')
     expect(packedVerifier).toContain('VISUAL_PLUS_REPLAY_TIMEOUT_MS = 15 * 60_000')
     expect(packedVerifier).toContain('timeoutMs: PACKED_COMMAND_TIMEOUT_MS')
     expect(packedVerifier).toContain('timeoutMs: VISUAL_PLUS_REPLAY_TIMEOUT_MS')
@@ -168,22 +185,22 @@ setInterval(() => {}, 1_000)
     const complete = {
       numFailedTests: 0,
       numFailedTestSuites: 0,
-      numPassedTests: 58,
+      numPassedTests: 69,
       numPassedTestSuites: 5,
       numPendingTests: 0,
       numPendingTestSuites: 0,
       numTodoTests: 0,
-      numTotalTests: 58,
+      numTotalTests: 69,
       numTotalTestSuites: 5,
       testResults: [
         {
-          assertionResults: Array.from({ length: 58 }, () => ({ status: 'passed' })),
+          assertionResults: Array.from({ length: 69 }, () => ({ status: 'passed' })),
           status: 'passed',
         },
       ],
     }
 
-    expect(validate(complete, { files: 1, suites: 5, tests: 58 })).toBe(true)
+    expect(validate(complete, { files: 1, suites: 5, tests: 69 })).toBe(true)
     for (const incomplete of [
       { ...complete, numFailedTests: 1 },
       { ...complete, numFailedTestSuites: 1 },
@@ -222,21 +239,87 @@ setInterval(() => {}, 1_000)
       },
     ]) {
       expect(
-        validate(incomplete, { files: 1, suites: 5, tests: 58 }),
+        validate(incomplete, { files: 1, suites: 5, tests: 69 }),
         JSON.stringify(incomplete),
       ).toBe(false)
     }
-    expect(validate({}, { files: 1, suites: 5, tests: 58 })).toBe(false)
-    expect(validate(complete, { files: 0, suites: 5, tests: 58 })).toBe(false)
-    expect(validate(complete, { files: 1, suites: 0, tests: 58 })).toBe(false)
+    expect(validate({}, { files: 1, suites: 5, tests: 69 })).toBe(false)
+    expect(validate(complete, { files: 0, suites: 5, tests: 69 })).toBe(false)
+    expect(validate(complete, { files: 1, suites: 0, tests: 69 })).toBe(false)
     expect(validate(complete, { files: 1, suites: 5, tests: 0 })).toBe(false)
+  })
+
+  it('atomically writes a contained schema-versioned installed replay identity', () => {
+    const writeEvidence = replayEvidenceApi.writeVisualPlusReplayEvidence
+    expect(writeEvidence).toBeTypeOf('function')
+    if (!writeEvidence) return
+    const fixture = replayFixture()
+
+    const evidence = writeEvidence(fixture.options)
+
+    expect(JSON.parse(readFileSync(fixture.outputPath, 'utf8'))).toEqual(evidence)
+    expect(evidence).toEqual({
+      schemaVersion: 1,
+      kind: 'depfresh-installed-visual-plus-replay',
+      packageVersion: '2.1.1',
+      tarball: {
+        realpath: fixture.tarballPath,
+        sha256: fixture.tarballSha256,
+      },
+      extractedPackage: { realpath: fixture.installedRoot },
+      cli: {
+        realpath: fixture.cliPath,
+        sha256: fixture.cliSha256,
+      },
+      passed: { files: 1, suites: 5, tests: 69 },
+    })
+    expect(readdirSync(fixture.root).filter((name) => name.includes('.pending-'))).toEqual([])
+  })
+
+  it('rejects unsafe replay outputs, incomplete runs, and changed identities without residue', () => {
+    const writeEvidence = replayEvidenceApi.writeVisualPlusReplayEvidence
+    expect(writeEvidence).toBeTypeOf('function')
+    if (!writeEvidence) return
+
+    for (const fault of [
+      'existing-output',
+      'symlink-output',
+      'outside-output',
+      'incomplete-run',
+      'tarball-mismatch',
+      'cli-mismatch',
+      'version-mismatch',
+    ]) {
+      const fixture = replayFixture()
+      const outsidePath = join(temporaryRoot('depfresh-evidence-outside-'), 'evidence.json')
+      const options = { ...fixture.options }
+      if (fault === 'existing-output') writeFileSync(fixture.outputPath, 'existing')
+      if (fault === 'symlink-output') symlinkSync(fixture.tarballPath, fixture.outputPath)
+      if (fault === 'outside-output') options.outputPath = outsidePath
+      if (fault === 'incomplete-run') {
+        options.report = { ...fixture.completeReport, numPassedTests: 57 }
+      }
+      if (fault === 'tarball-mismatch') options.tarballSha256 = '0'.repeat(64)
+      if (fault === 'cli-mismatch') options.cliSha256 = '0'.repeat(64)
+      if (fault === 'version-mismatch') options.packageVersion = '2.1.0'
+
+      expect(() => writeEvidence(options), fault).toThrow()
+      if (!['existing-output', 'symlink-output'].includes(fault)) {
+        expect(() => readFileSync(options.outputPath), fault).toThrow()
+      }
+      expect(
+        readdirSync(fixture.root).filter((name) => name.includes('.pending-')),
+        fault,
+      ).toEqual([])
+    }
   })
 })
 
 function temporaryRoot(prefix: string): string {
   const root = mkdtempSync(join(tmpdir(), prefix))
-  roots.push(root)
-  return root
+  const canonicalRoot = realpathSync(root)
+  roots.push(canonicalRoot)
+  return canonicalRoot
 }
 
 function writeExecutable(root: string, name: string, content: string): string {
@@ -244,4 +327,59 @@ function writeExecutable(root: string, name: string, content: string): string {
   writeFileSync(path, content)
   chmodSync(path, 0o755)
   return path
+}
+
+function replayFixture() {
+  const root = temporaryRoot('depfresh-installed-replay-')
+  const tarballPath = join(root, 'depfresh-2.1.1.tgz')
+  const installedRoot = join(root, 'node_modules', 'depfresh')
+  const cliPath = join(installedRoot, 'dist', 'cli.mjs')
+  const outputPath = join(root, 'installed-replay.json')
+  const tarballBytes = Buffer.from('exact packed artifact')
+  const cliBytes = Buffer.from('#!/usr/bin/env node\n')
+  mkdirSync(join(installedRoot, 'dist'), { recursive: true })
+  writeFileSync(tarballPath, tarballBytes)
+  writeFileSync(join(installedRoot, 'package.json'), '{"name":"depfresh","version":"2.1.1"}\n')
+  writeFileSync(cliPath, cliBytes)
+  const completeReport = {
+    numFailedTests: 0,
+    numFailedTestSuites: 0,
+    numPassedTests: 69,
+    numPassedTestSuites: 5,
+    numPendingTests: 0,
+    numPendingTestSuites: 0,
+    numTodoTests: 0,
+    numTotalTests: 69,
+    numTotalTestSuites: 5,
+    testResults: [
+      {
+        assertionResults: Array.from({ length: 69 }, () => ({ status: 'passed' })),
+        status: 'passed',
+      },
+    ],
+  }
+  const tarballSha256 = createHash('sha256').update(tarballBytes).digest('hex')
+  const cliSha256 = createHash('sha256').update(cliBytes).digest('hex')
+  return {
+    root,
+    tarballPath,
+    installedRoot,
+    cliPath,
+    outputPath,
+    tarballSha256,
+    cliSha256,
+    completeReport,
+    options: {
+      cliPath,
+      cliSha256,
+      containmentRoot: root,
+      expected: { files: 1, suites: 5, tests: 69 },
+      installedRoot,
+      outputPath,
+      packageVersion: '2.1.1',
+      report: completeReport,
+      tarballPath,
+      tarballSha256,
+    },
+  }
 }
