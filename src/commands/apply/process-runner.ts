@@ -60,9 +60,14 @@ export interface ProcessObservation {
   signal?: NodeJS.Signals
   stdout?: string
   stderr?: string
+  survivors?: {
+    processGroup: boolean
+    supervisionToken: boolean
+    unattributed: boolean
+  }
 }
 
-interface ProcessIdentity {
+export interface ProcessIdentity {
   key: string
   parentPid: number
   processGroup: number
@@ -272,6 +277,9 @@ export async function runResolvedProcess(
 
   let terminationConfirmed = true
   let descendantsSurvived = false
+  let processGroupSurvived = false
+  let supervisionTokenSurvived = false
+  let unattributedSurvived = false
   let closed = first.closed
   if (!closed && (timedOut || outputExceeded)) {
     if ((options.terminationGraceMs ?? 250) > 0) {
@@ -302,25 +310,37 @@ export async function runResolvedProcess(
         terminationConfirmed: false,
       }
     }
-    if (escaped.size > 0) {
+    processGroupSurvived = !processGroupStopped(child.pid)
+    if (processGroupSurvived) {
       descendantsSurvived = true
-      for (const pid of escaped) terminatePid(pid, 'SIGTERM')
-      if ((options.terminationGraceMs ?? 250) > 0) await delay(options.terminationGraceMs ?? 250)
-      for (const pid of escaped) terminatePid(pid, 'SIGKILL')
-      terminationConfirmed = [...escaped].every((pid) => !pidExists(pid))
+      terminationConfirmed = false
     }
-    const unattributed = [...finalProcesses].filter(
-      ([pid, identity]) =>
-        pid !== child.pid &&
-        !escaped.has(pid) &&
-        !sameProcessIdentity(baselineProcesses.get(pid), identity) &&
-        ![...baselineProcesses.values()].some(
-          (baseline) => baseline.processGroup === identity.processGroup,
-        ) &&
-        !hasBaselineAncestor(identity, baselineProcesses, finalProcesses),
+    const escapedSurvivors = new Set(
+      [...escaped].filter((pid) =>
+        isSupervisionTokenSurvivor(pid, finalProcesses.get(pid), child.pid, processGroupSurvived),
+      ),
+    )
+    if (escapedSurvivors.size > 0) {
+      descendantsSurvived = true
+      supervisionTokenSurvived = true
+      for (const pid of escapedSurvivors) terminatePid(pid, 'SIGTERM')
+      if ((options.terminationGraceMs ?? 250) > 0) await delay(options.terminationGraceMs ?? 250)
+      for (const pid of escapedSurvivors) terminatePid(pid, 'SIGKILL')
+      terminationConfirmed =
+        terminationConfirmed && [...escapedSurvivors].every((pid) => !pidExists(pid))
+    }
+    const unattributed = [...finalProcesses].filter(([pid, identity]) =>
+      isUnattributedProcessSurvivor(pid, identity, {
+        baseline: baselineProcesses,
+        childPid: child.pid,
+        current: finalProcesses,
+        escaped: escapedSurvivors,
+        processGroupSurvived,
+      }),
     )
     if (unattributed.length > 0) {
       descendantsSurvived = true
+      unattributedSurvived = true
       terminationConfirmed = false
     }
   }
@@ -341,6 +361,11 @@ export async function runResolvedProcess(
       termination: 'unknown',
       reason: 'PROCESS_DESCENDANTS_SURVIVED',
       terminationConfirmed,
+      survivors: {
+        processGroup: processGroupSurvived,
+        supervisionToken: supervisionTokenSurvived,
+        unattributed: unattributedSurvived,
+      },
     }
   }
   if (outputExceeded) {
@@ -554,10 +579,49 @@ function sameProcessIdentity(
   )
 }
 
+export function isUnattributedProcessSurvivor(
+  pid: number,
+  identity: ProcessIdentity,
+  options: {
+    baseline: ReadonlyMap<number, ProcessIdentity>
+    childPid: number | undefined
+    current: ReadonlyMap<number, ProcessIdentity>
+    escaped: ReadonlySet<number>
+    processGroupSurvived: boolean
+  },
+): boolean {
+  if (pid === options.childPid || options.escaped.has(pid)) return false
+  if (sameProcessIdentity(options.baseline.get(pid), identity)) return false
+  if (
+    [...options.baseline.values()].some(
+      (baseline) => baseline.processGroup === identity.processGroup,
+    )
+  ) {
+    return false
+  }
+  if (hasBaselineAncestor(identity, options.baseline, options.current)) return false
+  return !(
+    options.childPid !== undefined &&
+    identity.processGroup === options.childPid &&
+    !options.processGroupSurvived
+  )
+}
+
+export function isSupervisionTokenSurvivor(
+  pid: number,
+  identity: ProcessIdentity | undefined,
+  childPid: number | undefined,
+  processGroupSurvived: boolean,
+): boolean {
+  if (childPid === undefined || processGroupSurvived) return true
+  if (pid === childPid) return false
+  return identity?.processGroup !== childPid
+}
+
 function hasBaselineAncestor(
   identity: ProcessIdentity,
-  baseline: Map<number, ProcessIdentity>,
-  current: Map<number, ProcessIdentity>,
+  baseline: ReadonlyMap<number, ProcessIdentity>,
+  current: ReadonlyMap<number, ProcessIdentity>,
 ): boolean {
   const visited = new Set<number>()
   let parentPid = identity.parentPid

@@ -11,7 +11,13 @@ import { tmpdir } from 'node:os'
 import { delimiter, join } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { describe, expect, it } from 'vitest'
-import { resolveExecutable, runProcess, runResolvedProcess } from './process-runner'
+import {
+  isSupervisionTokenSurvivor,
+  isUnattributedProcessSurvivor,
+  resolveExecutable,
+  runProcess,
+  runResolvedProcess,
+} from './process-runner'
 
 describe('Plan 020 no-shell process runner', () => {
   it('passes hostile text as one inert argv value and strips unrelated environment secrets', async () => {
@@ -97,6 +103,9 @@ describe('Plan 020 no-shell process runner', () => {
       env: {},
       stdio: 'ignore',
     })
+    const unrelatedClosed = new Promise<void>((resolve) => {
+      unrelated.once('close', () => resolve())
+    })
     unrelated.unref()
 
     const result = await running
@@ -105,14 +114,61 @@ describe('Plan 020 no-shell process runner', () => {
         process.kill(unrelated.pid, 'SIGKILL')
       } catch {}
     }
+    await expect(Promise.race([unrelatedClosed, delay(1_000).then(() => 'timeout')])).resolves.toBe(
+      undefined,
+    )
 
-    expect(result).toMatchObject({
+    expect(result, JSON.stringify(result)).toMatchObject({
       termination: 'exit',
       exitCode: 0,
       reason: 'PROCESS_EXITED',
       terminationConfirmed: true,
     })
   })
+
+  it.each([
+    ['stale member of an extinct original group', 300, false, false],
+    ['member of a still-observable original group', 300, true, true],
+    ['marker-stripped member of a detached group', 301, false, true],
+  ] as const)('classifies a %s exactly', (_name, processGroup, groupSurvived, expected) => {
+    const childPid = 300
+    const pid = 301
+    const identity = { key: '301:start', parentPid: 1, processGroup }
+    const baseline = new Map([[100, { key: '100:start', parentPid: 1, processGroup: 100 }]])
+    const current = new Map([[pid, identity]])
+
+    expect(
+      isUnattributedProcessSurvivor(pid, identity, {
+        baseline,
+        childPid,
+        current,
+        escaped: new Set(),
+        processGroupSurvived: groupSurvived,
+      }),
+    ).toBe(expected)
+  })
+
+  it.each([
+    ['stale original child', 300, 300, false, false],
+    ['stale original-group child', 301, 300, false, false],
+    ['live original-group child', 301, 300, true, true],
+    ['detached token-bearing child', 301, 301, false, true],
+    ['token-bearing child missing from the earlier snapshot', 301, undefined, false, true],
+  ] as const)(
+    'classifies a %s token observation exactly',
+    (_name, pid, processGroup, groupSurvived, expected) => {
+      expect(
+        isSupervisionTokenSurvivor(
+          pid,
+          processGroup === undefined
+            ? undefined
+            : { key: `${pid}:start`, parentPid: 1, processGroup },
+          300,
+          groupSurvived,
+        ),
+      ).toBe(expected)
+    },
+  )
 
   it('kills a timed-out process group before descendants can mutate the repository', async () => {
     const root = mkdtempSync(join(tmpdir(), 'depfresh-process-timeout-'))
@@ -133,12 +189,32 @@ describe('Plan 020 no-shell process runner', () => {
     })
     await delay(650)
 
-    expect(result).toMatchObject({
+    expect(result, JSON.stringify(result)).toMatchObject({
       termination: 'timeout',
       reason: 'PROCESS_TIMEOUT',
       terminationConfirmed: true,
     })
     expect(existsSync(marker)).toBe(false)
+  })
+
+  it('confirms a timed-out shell and sleep process group before returning', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'depfresh-process-shell-timeout-'))
+    const executable = join(root, 'manager')
+    writeFileSync(executable, '#!/bin/sh\nwhile :; do sleep 1; done\n')
+    chmodSync(executable, 0o755)
+
+    const result = await runProcess({
+      executable,
+      args: [],
+      cwd: root,
+      timeoutMs: 200,
+    })
+
+    expect(result, JSON.stringify(result)).toMatchObject({
+      termination: 'timeout',
+      reason: 'PROCESS_TIMEOUT',
+      terminationConfirmed: true,
+    })
   })
 
   it('never reports a successful exit while a detached descendant remains alive', async () => {
@@ -163,6 +239,11 @@ describe('Plan 020 no-shell process runner', () => {
       termination: 'unknown',
       reason: 'PROCESS_DESCENDANTS_SURVIVED',
       terminationConfirmed: true,
+      survivors: {
+        processGroup: false,
+        supervisionToken: true,
+        unattributed: false,
+      },
     })
     expect(existsSync(marker)).toBe(false)
   })
@@ -189,6 +270,11 @@ describe('Plan 020 no-shell process runner', () => {
       termination: 'unknown',
       reason: 'PROCESS_DESCENDANTS_SURVIVED',
       terminationConfirmed: false,
+      survivors: {
+        processGroup: false,
+        supervisionToken: false,
+        unattributed: true,
+      },
     })
     expect(existsSync(marker)).toBe(true)
   })
