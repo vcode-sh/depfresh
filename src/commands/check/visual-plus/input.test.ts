@@ -141,6 +141,35 @@ describe('Visual+ authoritative insight reconciliation', () => {
     ).toThrow(/Visual\+ input/u)
   })
 
+  it('rejects duplicate display orders across two otherwise valid metadata rows', () => {
+    const base = selectedSnapshot()
+    const first = base.changes[0]!
+    const second = {
+      ...first,
+      id: 'operation-two',
+      name: 'vite',
+      insight: {
+        ...first.insight!,
+        dependencyId: createRepositoryId('dependency', 'vite'),
+        rawName: 'vite',
+        occurrencePath: ['dependencies', 'vite'],
+      },
+    }
+    const snapshot: CheckRunSnapshot = {
+      ...base,
+      counts: { ...base.counts, operations: 2, updates: 2 },
+      changes: [first, second],
+      targets: [{ path: 'package.json', operationIds: [first.id, second.id] }],
+    }
+
+    expect(() =>
+      createVisualPlusSectionInput({
+        ...input(snapshot),
+        changes: [metadata(), { ...metadata(), operationId: second.id, displayOrder: 0 }],
+      }),
+    ).toThrow(/display order is duplicated/u)
+  })
+
   it('accepts exact transitional metadata and retains a deep immutable copy', () => {
     const source = input(selectedSnapshot())
     const result = createVisualPlusSectionInput(source)

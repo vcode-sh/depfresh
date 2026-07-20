@@ -173,7 +173,139 @@ function evidence(): MutableEvidence {
   }
 }
 
+function orderingEvidence(): MutableEvidence {
+  const template = evidence().operations[1]!
+  const operation = (
+    operationId: string,
+    name: string,
+    diff: 'major' | 'minor' | 'patch',
+    publishedAt: string,
+    packageIndex: number,
+    changeIndex: number,
+  ): MutableEvidenceOperation => ({
+    ...template,
+    operationId,
+    packageIndex,
+    changeIndex,
+    dependencyId: createRepositoryId('dependency', name),
+    rawName: name,
+    name,
+    diff,
+    publishedAt,
+    occurrencePath: ['dependencies', operationId],
+  })
+  const operations = [
+    operation('operation-major', 'alpha', 'major', '2024-01-01T00:00:00.000Z', 0, 0),
+    operation('operation-tie-package', 'tie', 'minor', '2024-06-01T00:00:00.000Z', 3, 0),
+    operation('operation-tie-change', 'tie', 'minor', '2024-06-01T00:00:00.000Z', 2, 3),
+    operation('operation-tie-z', 'tie', 'minor', '2024-06-01T00:00:00.000Z', 2, 2),
+    operation('operation-tie-a', 'tie', 'minor', '2024-06-01T00:00:00.000Z', 2, 2),
+    operation('operation-patch', 'zulu', 'patch', '2025-01-01T00:00:00.000Z', 4, 0),
+  ]
+  return {
+    operations,
+    targets: [
+      {
+        path: template.physicalTarget,
+        operationIds: operations.map((operation) => operation.operationId),
+      },
+    ],
+  }
+}
+
 describe('Visual+ integration projection', () => {
+  it.each([
+    [
+      'diff-asc',
+      [
+        'operation-major',
+        'operation-tie-a',
+        'operation-tie-z',
+        'operation-tie-change',
+        'operation-tie-package',
+        'operation-patch',
+      ],
+    ],
+    [
+      'diff-desc',
+      [
+        'operation-patch',
+        'operation-tie-a',
+        'operation-tie-z',
+        'operation-tie-change',
+        'operation-tie-package',
+        'operation-major',
+      ],
+    ],
+    [
+      'time-asc',
+      [
+        'operation-major',
+        'operation-tie-a',
+        'operation-tie-z',
+        'operation-tie-change',
+        'operation-tie-package',
+        'operation-patch',
+      ],
+    ],
+    [
+      'time-desc',
+      [
+        'operation-patch',
+        'operation-tie-a',
+        'operation-tie-z',
+        'operation-tie-change',
+        'operation-tie-package',
+        'operation-major',
+      ],
+    ],
+    [
+      'name-asc',
+      [
+        'operation-major',
+        'operation-tie-a',
+        'operation-tie-z',
+        'operation-tie-change',
+        'operation-tie-package',
+        'operation-patch',
+      ],
+    ],
+    [
+      'name-desc',
+      [
+        'operation-patch',
+        'operation-tie-a',
+        'operation-tie-z',
+        'operation-tie-change',
+        'operation-tie-package',
+        'operation-major',
+      ],
+    ],
+  ] as const)(
+    'assigns canonical display order for %s without mutating selection evidence',
+    (sort, expectedIds) => {
+      const source = orderingEvidence()
+      const before = structuredClone(source)
+      const result = createVisualPlusSelectionProjection(
+        source,
+        Date.parse('2026-01-01T00:00:00Z'),
+        { ...display, sort },
+      )
+
+      const metadataByDisplayOrder = [...result.metadata].sort(
+        (left, right) => left.displayOrder - right.displayOrder,
+      )
+      expect(metadataByDisplayOrder.map((metadata) => metadata.operationId)).toEqual(expectedIds)
+      expect(metadataByDisplayOrder.map((metadata) => metadata.displayOrder)).toEqual([
+        0, 1, 2, 3, 4, 5,
+      ])
+      expect(metadataByDisplayOrder.map((metadata) => metadata.source)).toEqual(
+        expectedIds.map(() => 'dependencies'),
+      )
+      expect(source).toEqual(before)
+    },
+  )
+
   it('projects source and deterministic display order without mutating evidence', () => {
     const source = evidence()
     const before = structuredClone(source)
