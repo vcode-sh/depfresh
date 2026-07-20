@@ -400,6 +400,58 @@ describe('Visual+ live renderer', () => {
     )
   })
 
+  it.each([
+    ['group', true],
+    ['sort', 'name-desc'],
+    ['timediff', true],
+    ['nodecompat', true],
+  ] as const)(
+    'rejects discovered metadata whose %s display option differs from startup',
+    (key, value) => {
+      const source = fakeController(snapshot())
+      const view = harness()
+      view.renderer.start(source.controller, startupRun)
+      const metadata: VisualPlusRunMetadata = {
+        ...run,
+        display: { ...run.display, [key]: value },
+      }
+
+      expect(() => view.renderer.setRunMetadata(metadata)).toThrow(/display|startup|metadata/i)
+    },
+  )
+
+  it('accepts discovered metadata whose complete display contract matches startup', () => {
+    const source = fakeController(snapshot())
+    const view = harness()
+    view.renderer.start(source.controller, startupRun)
+
+    expect(() =>
+      view.renderer.setRunMetadata({
+        ...run,
+        display: { ...startupRun.display },
+      }),
+    ).not.toThrow()
+  })
+
+  it('does not mutate matching startup or discovered display inputs', () => {
+    const source = fakeController(snapshot())
+    const view = harness()
+    const startup = structuredClone(startupRun)
+    const discovered = structuredClone(run)
+    const startupBefore = structuredClone(startup)
+    const discoveredBefore = structuredClone(discovered)
+
+    view.renderer.start(source.controller, startup)
+    view.renderer.setRunMetadata(discovered)
+
+    expect(startup).toEqual(startupBefore)
+    expect(discovered).toEqual(discoveredBefore)
+    expect(Object.isFrozen(startup)).toBe(false)
+    expect(Object.isFrozen(startup.display)).toBe(false)
+    expect(Object.isFrozen(discovered)).toBe(false)
+    expect(Object.isFrozen(discovered.display)).toBe(false)
+  })
+
   it.each([40, 60, 80, 118, 175])(
     'renders the complete successful hybrid read-only journey at %i columns',
     (width) => {

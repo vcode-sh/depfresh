@@ -534,6 +534,7 @@ export function createVisualPlusRenderer(
     if (state !== 'live') contractFailure('context requires a live renderer before review')
     if (discoveredRun) contractFailure('context may be set exactly once')
     const snapshot = latestSnapshot ?? contractFailure('context requires a subscribed snapshot')
+    const startup = startupRun ?? contractFailure('context requires startup metadata')
     if (
       snapshot.counts.operations !== 0 ||
       snapshot.counts.targets !== 0 ||
@@ -543,9 +544,6 @@ export function createVisualPlusRenderer(
     ) {
       contractFailure('late context has selection or result evidence')
     }
-    if (metadata.detailLevel !== startupRun?.detailLevel) {
-      contractFailure('context detail level differs from startup')
-    }
     let input: DeepReadonly<VisualPlusSectionInput>
     try {
       input = createVisualPlusSectionInput({
@@ -554,6 +552,17 @@ export function createVisualPlusRenderer(
         run: metadata,
         changes: [],
       })
+      if (input.run.detailLevel !== startup.detailLevel) {
+        contractFailure('context detail level differs from startup')
+      }
+      if (
+        input.run.display.group !== startup.display.group ||
+        input.run.display.sort !== startup.display.sort ||
+        input.run.display.timediff !== startup.display.timediff ||
+        input.run.display.nodecompat !== startup.display.nodecompat
+      ) {
+        contractFailure('context display differs from startup')
+      }
       cancelPending()
       if (compact()) {
         discoveredRun = input.run
