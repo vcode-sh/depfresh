@@ -30,10 +30,8 @@ const CHILD_TIMEOUT_MS = 30_000
 const CHILD_OUTPUT_LIMIT_BYTES = 8 * 1024 * 1024
 const GLOBAL_WRITE_ATTEMPT_LIMIT = 3
 const GLOBAL_WRITE_SUCCESS = /Global writes: 2 applied, 0 skipped, 0 failed, 0 unknown/u
-// A manager blocked before planning has no operation to report, so the fixture can surface
-// zero or one applied writes with zero unknown items despite a fail-closed observation.
 const GLOBAL_WRITE_RETRYABLE_OBSERVATION =
-  /(?:All dependencies are up to date|Found 0 packages|Global writes: [01] applied, 0 skipped, 0 failed, 0 unknown|INVENTORY_UNKNOWN|EXECUTABLE_CHANGED|COMMAND_UNOBSERVABLE)/u
+  /(?:INVENTORY_UNKNOWN|EXECUTABLE_CHANGED|COMMAND_UNOBSERVABLE)/u
 const selectableChecks = new Set([
   PIPE_RECEIPT_CHECK,
   COMMAND_TRANSACTION_CHECK,
