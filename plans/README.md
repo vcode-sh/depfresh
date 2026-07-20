@@ -282,7 +282,7 @@ replay
 results. SLSA provenance binds the exact package digest to the tag, workflow, commit, run, and
 GitHub-hosted builder. Plans 032-036 and the Safe Write/Visual+ v2 program are DONE.
 
-Plan 037 is active after the public 2.1.0 replay showed that the exhaustive Visual+ audit is too
+Plan 037 was opened after the public 2.1.0 replay showed that the exhaustive Visual+ audit is too
 large for the default human journey. Tasks 1 and 2 added deterministic compact/full renderers and
 truthful post-discovery repository context. Task 3 added built-CLI compact-default and explicit
 `--long` PTY/pipe proof plus current documentation. Task 4 prepared and verified one exact local
