@@ -53,22 +53,24 @@ depfresh --no-recursive  # inspect only the root package
 or lifecycle scripts. Use the reviewed plan/apply workflow when lockfile, install, or verification
 phases are required.
 
-For eligible local CLI table runs, Visual+ defaults to a compact audit with repository topology,
-severity, every major-risk card, bounded owner/shared/update/target previews, transaction facts,
-and the final receipt. It does not print internal IDs. Use `--long` for the complete owner, shared,
-operation, occurrence, and physical-target membership. The large acceptance fixture stays within
-80 durable projected lines on successful compact journeys; wrapping can redistribute those lines.
-Ordinary read-only `not-attempted` target previews may be bounded, while every non-success target in
-write safety or recovery bypasses compact limits and every recovery path remains visible.
+For eligible local CLI table runs, Visual+ defaults to the five-region hybrid review: context,
+overview, risk focus, a complete update ledger, and a receipt. The ledger shows every selected
+update exactly once without internal IDs. `--long` remains the exhaustive audit of operations,
+owners, shared dependencies, occurrences, physical targets, lifecycle, and exact receipts. A
+successful compact result has no durable lifecycle rail; a capable terminal clears its one live
+line before writing the final review. Every non-success target and recovery path remains visible.
+
+The former bounded-preview projection is the historical compact semantic contract completed by
+[Plan 037](plans/037-visual-plus-compact-2.1.1.md). [Plan 038](plans/038-visual-plus-hybrid-default.md)
+owns the in-progress visual-composition successor.
 
 Eligibility requires the CLI progress route, non-silent output, non-interactive and non-global
 operation, and no direct or addon `beforePackageWrite` hook. `--write --interactive` keeps the
-interactive selection surface. After discovery, Visual+ prints the observed repository, workspace,
-and package-manager evidence; it no longer emits false `unknown` startup placeholders. A capable
-terminal uses colour and replaceable lifecycle frames. `NO_COLOR` removes only colour, and a narrow
-capable terminal only wraps; both retain motion. Pipes, CI, and `TERM=dumb` select durable
-append-only fallbacks without removing result evidence. For example, a fully observed write ends
-with:
+interactive selection surface. After discovery, Visual+ prints observed repository, workspace, and
+package-manager evidence. Wide, medium, and narrow layouts preserve the same five regions; plain,
+pipes, CI, and `TERM=dumb` use deterministic styling without cursor control. `NO_COLOR` changes
+styling only. `--group`, `--sort`, `--timediff`, and `--nodecompat` remain meaningful in the ledger.
+For example, a fully observed write ends with:
 
 ```text
 Complete · 76 updates applied across 14 files

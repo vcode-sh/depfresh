@@ -1,6 +1,9 @@
 # Visual+ Hybrid Default Design
 
-**Status:** Approved in conversation on 2026-07-20; implementation owned by Plan 038.
+**Status:** Implementation in progress under Plan 038.
+
+Approved in conversation on 2026-07-20. Plan 038 remains in progress through Task 6 and the final
+evidence review; this design makes no artifact, publication, or live-proof claim.
 
 ## Problem
 

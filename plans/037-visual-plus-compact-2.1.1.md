@@ -16,6 +16,10 @@ pinned 2.1.1 package-verification path without publishing or tagging.
 **Tech Stack:** TypeScript, Vitest, Biome, Node `24.15.0`, npm `11.12.1`, pnpm `10.33.0`, existing
 PTY harness, Bun global local-package installation.
 
+**Status:** DONE for the historically complete compact semantic contract. The default visual-
+composition objective moved to Plan 038; this plan's compact rendering, safety, recovery, and
+exhaustive `--long` decisions remain historical contract evidence.
+
 ## Global Constraints
 
 - All code, documentation, tests, plans, and commit messages are English.
@@ -417,5 +421,6 @@ Bun `1.3.14` replaced only global depfresh with that exact tarball, retained eve
 resolved the expected symlink and CLI hash, and printed 2.1.1 through both required probes. The
 current Spreadoo BSD true-PTY smoke exited 0 in 63 projected durable lines with truthful
 `spreadu`/Bun context, no internal IDs, a visible final cursor, and identical successful-run
-pre/post HEAD, index, status, diffs, and `bun.lock`. Plan 037 is DONE. No publish, tag, push, hosted
-workflow, GitHub release, or public-artifact proof is claimed.
+pre/post HEAD, index, status, diffs, and `bun.lock`. Plan 037 is DONE for its historically complete
+compact semantic contract. Its visual-composition objective moved to Plan 038. No publish, tag,
+push, hosted workflow, GitHub release, or public-artifact proof is claimed.

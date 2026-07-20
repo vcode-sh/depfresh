@@ -92,7 +92,7 @@ describe('2.1.1 release readiness', () => {
       changelog.indexOf('## [1.2.0]'),
     )
 
-    const compactVisualPlusEntry = 'Compact Visual+ audits'
+    const compactVisualPlusEntry = 'Historical compact semantic contract'
     const visualPlusEntry = 'Visual+ local result journeys'
     const commandApplyEntry = 'Command-level local write safety'
     const workspaceCatalogEntry = 'First-class exact workspace and catalog exclusions'
@@ -169,20 +169,24 @@ describe('2.1.1 release readiness', () => {
     expect(currentInstructions).not.toContain('bunx depfresh@2.1.0')
   })
 
-  it('ships a dedicated local-only 2.1.1 source candidate record with stale artifacts explicit', () => {
+  it('keeps the 2.1.1 local evidence scoped to the completed compact semantic contract', () => {
     expect(existsSync(join(root, 'docs/releases/v2.1.1.md'))).toBe(true)
     const release = read('docs/releases/v2.1.1.md')
 
-    expect(release).toContain('# depfresh 2.1.1')
+    expect(release).toContain('# depfresh 2.1.1: historical compact Visual+ evidence')
     for (const bullet of [
-      'Eligible local CLI table journeys default to compact Visual+ output.',
-      'Successful compact acceptance journeys stay within 80 durable projected lines.',
-      'Compact output hides internal IDs while retaining every major-risk card and non-success target or recovery fact.',
+      'Plan 037 completed the compact semantic contract for the then-current default projection.',
+      'Plan 038 owns the in-progress hybrid human default and requires independent replacement evidence.',
       '`--long` preserves complete operation, owner, shared-dependency, occurrence, and physical-target membership.',
-      'Repository and package-manager context comes from post-discovery evidence instead of startup placeholders.',
     ]) {
       expect(release, bullet).toContain(`- ${bullet}`)
     }
+    expect(release).toContain(
+      '../superpowers/specs/2026-07-20-visual-plus-hybrid-default-design.md',
+    )
+    expect(release).toContain('../../plans/038-visual-plus-hybrid-default.md')
+    expect(release).toContain('Existing tarball, Bun, and Spreadoo evidence proves Plan 037 only.')
+    expect(release).toContain('It is not Plan 038 proof.')
     expect(release).toContain(
       'Status: corrected local source candidate; artifact regeneration pending.',
     )
@@ -199,6 +203,65 @@ describe('2.1.1 release readiness', () => {
     )
     expect(release).not.toContain('TBD')
     expect(release).not.toContain('TODO')
+  })
+
+  it('documents the in-progress five-region hybrid default without retired compact caps', () => {
+    const table = read('docs/output-formats/table.md')
+    const normalizedTable = table.replace(/\s+/gu, ' ')
+    const currentDocs = [
+      'README.md',
+      'CHANGELOG.md',
+      'docs/output-formats/table.md',
+      'docs/troubleshooting.md',
+      'docs/releases/v2.1.1.md',
+    ].map((path) => ({ path, content: read(path) }))
+
+    expect(read('docs/superpowers/specs/2026-07-18-safe-write-visual-plus-design.md')).toContain(
+      '[approved hybrid amendment](./2026-07-20-visual-plus-hybrid-default-design.md)',
+    )
+    expect(
+      read('docs/superpowers/specs/2026-07-20-visual-plus-hybrid-default-design.md'),
+    ).toContain('**Status:** Implementation in progress under Plan 038.')
+    expect(normalizedTable).toContain(
+      'five ordered regions: context, overview, risk focus, update ledger, and receipt',
+    )
+    expect(normalizedTable).toContain('every selected update exactly once')
+    expect(table).toContain('`diff-asc`  | Major, then Minor, then Patch.')
+    expect(table).toContain('`diff-desc` | Patch, then Minor, then Major.')
+    expect(normalizedTable).toContain('`--long` remains the exhaustive Visual+ audit')
+    expect(normalizedTable).toContain('no durable lifecycle rail')
+    expect(normalizedTable).toContain(
+      'Plain, pipes, CI, and `TERM=dumb` retain the same five regions',
+    )
+    expect(normalizedTable).toContain('`--group`, `--sort`, `--timediff`, and `--nodecompat`')
+
+    for (const { path, content } of currentDocs) {
+      expect(content, path).not.toMatch(/80 durable projected lines|80-line cap/iu)
+      expect(content, path).not.toMatch(/bounded owner\/shared\/update\/target previews/iu)
+      expect(content, path).not.toMatch(/not-attempted.*preview.*bounded/iu)
+    }
+
+    for (const path of [
+      'README.md',
+      'CHANGELOG.md',
+      'docs/troubleshooting.md',
+      'docs/superpowers/specs/2026-07-20-visual-plus-compact-2.1.1-design.md',
+    ]) {
+      const content = read(path)
+      expect(content.toLowerCase(), path).toContain('historical compact semantic contract')
+      expect(content, path).toContain('Plan 038')
+    }
+
+    const plan037 = read('plans/037-visual-plus-compact-2.1.1.md')
+    const plan038 = read('plans/038-visual-plus-hybrid-default.md')
+    const registry = read('plans/README.md')
+    expect(plan037).toContain('historically complete compact semantic contract')
+    expect(plan037).toContain('visual-composition objective moved to Plan 038')
+    expect(plan038).toContain('**Status:** IN PROGRESS')
+    expect(plan038).toContain('Task 6 and the final evidence review')
+    expect(registry).toContain(
+      '| [038](./038-visual-plus-hybrid-default.md) | Hybrid Visual+ human default | P1 | L | 037 | IN PROGRESS |',
+    )
   })
 
   it('preserves the dedicated published 2.1.0 release record', () => {

@@ -31,6 +31,10 @@ signal, supported manager/version/lockfile, apply phase, authority grant, workfl
 package asset. Validate current output with `depfresh/schemas/capabilities-v2.json`; its version
 registry also lists the retained v1 compatibility artifact.
 
+Human terminal output is documented separately in the [hybrid Visual+ table guide](../output-formats/table.md).
+The normal eligible route is a five-region review; `--long` remains the exhaustive audit. This
+presentation boundary does not change any machine-readable command contract.
+
 ## Inspect, plan, review, apply, observe
 
 ```bash

@@ -2,6 +2,11 @@
 
 **Date:** 2026-07-20
 
+> **Historical compact semantic contract:** This historical compact semantic contract records the Plan 037 contract completed
+> for the prior default projection. Its default visual composition is superseded by the in-progress
+> [Plan 038 hybrid default](../../../plans/038-visual-plus-hybrid-default.md); safe-write,
+> recovery, compatibility-route, and exhaustive `--long` decisions remain in force.
+
 ## Problem
 
 Visual+ 2.1.0 correctly selects the capable-terminal path, but its default durable review is an

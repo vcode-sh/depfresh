@@ -416,3 +416,47 @@ is recorded with Plan 038. The implementation plan is READY with six TDD tasks a
 parallel Wave 3 for proof tooling and documentation. No Plan 038 implementation, repack, Bun
 replacement, publish, tag, push, hosted workflow, GitHub release, or public-artifact proof has
 started.
+
+Plan 038 Task 1: complete (commits `0c1a38e..118b191`, independent review clean). The display
+contract now carries exact source evidence, immutable display options, and canonical six-mode row
+order. Fresh controller verification passed 166/166 focused tests, typecheck, and zero-fix Biome.
+
+Plan 038 Task 2: complete (commits `118b191..83ffc3b`, independent review clean). Pure responsive
+hybrid context, severity, divergent-major risk focus, and complete lossless ledger rendering are
+implemented but not yet wired to production. Fresh controller verification passed 197/197 section
+and renderer tests, typecheck, and zero-fix Biome; the complete suite passed 2,317/2,317 during the
+task before the final ledger-only reviewed correction.
+
+Plan 038 Task 3: complete (commits `83ffc3b..a6dd53d`, independent review clean). The production
+compact route now owns one transient lifecycle line, the complete hybrid review, strict concise
+success receipts, and unbounded human-attributed non-success evidence; `--long` and excluded routes
+remain preserved. Fresh controller verification passed build/schema, 273/273 aggregate tests,
+typecheck, and zero-fix Biome. The sole complete-suite RED is the Task 4-owned replay title coupling.
+
+Plan 038 Task 5 Steps 1–3: complete as a documentation/status pass. The release-readiness RED
+assertions failed for the retired compact candidate wording and missing hybrid amendment, as
+expected. Documentation now records the five-region hybrid default, complete ledger, authoritative
+sort directions, exhaustive `--long`, transient-only successful lifecycle, responsive/plain
+behavior, and the historical Plan 037 compact semantic contract. Reviewed Task 1–3 ranges remain
+`0c1a38e..118b191`, `118b191..83ffc3b`, and `83ffc3b..a6dd53d`. Plan 038 is IN PROGRESS through
+Task 6 and final evidence review.
+
+Plan 038 Task 4: complete and independently Approved C0/I0/M0 over `a6dd53d..6e9f59c` (commits
+`57327c9`, `34dfdaa`, `50391f2`, and `6e9f59c`). The exact deterministic Visual+ contract passed
+1 file/5 suites/69 tests with zero failed, pending, todo, or retry; all five hybrid titles classify
+as `visual-hierarchy`, and retired compact titles remain unclassified. Distinct surrounding gates
+passed 4 files/92 tests focused and 5 files/161 tests source-coupled, with the latter including the
+exact 69 Visual+ tests. Build, typecheck, Biome, syntax, format, and diff checks passed. The reviewed
+harness/verifier hardening proves contained no-replace evidence, complete default/`--long`
+membership, identity-bound Bun and `bunx` dispatch, unchanged repository identities, and an
+unshipped support helper. This is reviewed local proof infrastructure and deterministic source
+evidence only; no retained Plan 038 artifact, Bun replacement, or live Spreadoo proof exists until
+Task 6.
+
+Plan 038 Task 5 verification: the exact readiness gate passed 1 file/21 tests without retry, focused
+Biome passed with no fixes, and `git diff --check` passed. The requested full repository run with
+retry disabled passed 166/168 files and 2,390/2,392 tests; its two failures were a PTY cleanup and
+descendant-observation timeout in the 118-column hybrid journey plus a transient `partial` result in
+the global fake-manager integration. Each exact failing test then passed alone without retry:
+1 file/1 test for the fake manager, and 1 file/1 passed with 68 skipped for the named Visual+
+journey. No source or Task 4-owned file was changed in response. Plan 038 remains IN PROGRESS.

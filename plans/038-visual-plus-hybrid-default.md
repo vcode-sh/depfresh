@@ -18,8 +18,8 @@ unchanged surfaces. Artifact-bound PTY goldens and a live Spreadoo replay gate t
 existing PTY/terminal-emulation helpers, existing Bun `1.3.14` local global-package workflow. No
 OpenTUI or new runtime/native dependency.
 
-**Status:** READY. Commit `48eec95` introduced the design; this planning change records its approval.
-Implementation has not started.
+**Status:** IN PROGRESS. Commit `48eec95` introduced the design; this planning change records its
+approval. Plan 038 remains in progress through Task 6 and the final evidence review.
 
 **Design:** `docs/superpowers/specs/2026-07-20-visual-plus-hybrid-default-design.md`
 
@@ -66,6 +66,25 @@ Implementation has not started.
 - **Wave 5:** Task 6 packs and installs only the clean, reviewed source commit.
 - **Wave 6:** Review Task 6 evidence and close Plan 038. Any fix that changes package bytes returns
   to Wave 5 and requires a complete artifact, Bun, and live-proof replay.
+
+## Reviewed implementation ledger
+
+- **Task 1:** complete, reviewed range `0c1a38e..118b191`; immutable display evidence and canonical
+  row order are verified.
+- **Task 2:** complete, reviewed range `118b191..83ffc3b`; responsive hybrid context, risk focus,
+  and complete ledger are verified.
+- **Task 3:** complete, reviewed range `83ffc3b..a6dd53d`; the production hybrid route, transient
+  lifecycle, concise success receipt, and unbounded non-success evidence are verified.
+- **Task 4:** complete, independently approved C0/I0/M0 over `a6dd53d..6e9f59c` (commits
+  `57327c9`, `34dfdaa`, `50391f2`, and `6e9f59c`). The exact deterministic Visual+ contract is
+  1 file, 5 suites, and 69 passed tests with zero failed, pending, todo, or retry results; all five
+  hybrid titles classify as `visual-hierarchy` and retired compact titles remain unclassified. The
+  surrounding focused proof gate passed 4 files/92 tests, and the source-coupled gate passed
+  5 files/161 tests including the exact 69 Visual+ tests. Build, typecheck, Biome, syntax, format,
+  and diff checks passed. Formal review is Approved.
+- **Tasks 5–6:** Task 5 documentation is in progress; Task 6 artifact, Bun, and live proof remains
+  pending. Task 4 provides reviewed local proof infrastructure and deterministic source evidence
+  only, not a retained Plan 038 artifact, Bun replacement, or live Spreadoo proof.
 
 ---
 
@@ -840,7 +859,7 @@ git commit -m "test: prove the hybrid Visual Plus CLI"
 - Produces: one coherent truth surface: Plan 037 completed its superseded compact semantic contract;
   Plan 038 owns and proves the hybrid human default.
 
-- [ ] **Step 1: Write documentation RED assertions**
+- [x] **Step 1: Write documentation RED assertions**
 
 Update release-readiness tests to require:
 
@@ -855,7 +874,7 @@ Update release-readiness tests to require:
 - Plan 037 is complete only for its historical compact semantic contract;
 - Plan 038 stays `IN PROGRESS` through Task 6 and the final evidence review.
 
-- [ ] **Step 2: Run documentation RED tests**
+- [x] **Step 2: Run documentation RED tests**
 
 Run:
 
@@ -867,7 +886,7 @@ mise exec node@24.15.0 npm@11.12.1 -- pnpm exec vitest run \
 Expected: FAIL because current documentation still describes the superseded compact preview and
 the table sort directions incorrectly.
 
-- [ ] **Step 3: Update documentation and status boundaries**
+- [x] **Step 3: Update documentation and status boundaries**
 
 Add an amendment note to the original design without rewriting historical decisions. Mark the
 approved hybrid spec as implementation in progress. Mark the compact 2.1.1 design as a historical
@@ -881,7 +900,7 @@ Update Plan 037 and the registry to say its compact contract remains historicall
 visual-composition objective moved to Plan 038. Record reviewed Task 1–3 commit ranges in Plan 038
 and the durable SDD ledger during the parallel documentation pass.
 
-- [ ] **Step 4: Integrate Task 4 totals, then run GREEN documentation and static checks**
+- [x] **Step 4: Integrate Task 4 totals, then run GREEN documentation and static checks**
 
 Wait for Task 4's reviewed handoff, record its exact replay totals and commit range in the release
 note, Plan 038, registry, and progress ledger, then run:
@@ -898,7 +917,7 @@ git diff --check
 
 Expected: every command exits `0`; Plan 038 is still `IN PROGRESS` and no publication claim exists.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add README.md CHANGELOG.md \

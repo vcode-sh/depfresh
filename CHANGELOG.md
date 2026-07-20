@@ -8,15 +8,14 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Semver
 
 ### Changed
 
-- **Compact Visual+ audits** -- eligible local CLI table journeys now default to a bounded compact
-  audit without internal IDs, while `--long` retains complete operation, owner, shared-dependency,
-  occurrence, and target membership. Successful compact acceptance journeys stay within 80 durable
-  projected lines. Ordinary read-only `not-attempted` target previews may be bounded, while every
-  non-success target in write safety or recovery bypasses compact limits and recovery evidence is
-  always retained.
-  Repository and package-manager context is rendered from post-discovery evidence instead of false
-  startup placeholders. Interactive, JSON, global, silent, veto-capable, and library routes remain
-  unchanged; legacy `--long` homepage details remain available outside Visual+.
+- **Historical compact semantic contract (Visual+)** -- [Plan 037](plans/037-visual-plus-compact-2.1.1.md)
+  completed the former compact projection's semantic and safety contract. Its visual composition is
+  historical; [Plan 038](plans/038-visual-plus-hybrid-default.md) owns the in-progress five-region
+  hybrid default. The hybrid ledger renders every selected update exactly once, successful output
+  has no durable lifecycle rail, and `--long` remains the exhaustive operation, owner,
+  shared-dependency, occurrence, and target audit. Repository and package-manager context remains
+  post-discovery, while interactive, JSON, global, silent, veto-capable, and library routes remain
+  unchanged.
 
 ## [2.1.0] - 2026-07-19
 

@@ -10,6 +10,10 @@ Want a ready-made workflow instead of copy-paste therapy?
 
 Looking for taze comparisons? Those live in [docs/compare/](../compare/).
 
+For local human review, the eligible table route uses the in-progress Plan 038 hybrid composition;
+its [five-region output and `--long` audit boundary](../output-formats/table.md) are separate from
+the JSON contracts used by integrations.
+
 ## GitHub Actions
 
 Minimal workflow that runs depfresh in gate mode and uploads the JSON report as an artifact.

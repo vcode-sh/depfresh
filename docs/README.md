@@ -25,7 +25,7 @@ Everything I know about depfresh is in here, split into files so you can pretend
   - [Errors](./api/errors.md) -- structured error classes
 
 - **[Output Formats](./output-formats/)** -- Table, JSON, exit codes, and AI agent integration. Machines deserve documentation too. They're doing most of the work anyway.
-  - [Table](./output-formats/table.md) -- the default, colourful output
+  - [Table](./output-formats/table.md) -- the hybrid human default, exhaustive audit, and fallback output
   - [JSON](./output-formats/json.md) -- legacy machine-readable check envelope
   - [Capabilities](./output-formats/capabilities.md) -- deterministic installed command, schema,
     authority, runner, and asset descriptor
@@ -47,8 +47,8 @@ Everything I know about depfresh is in here, split into files so you can pretend
 
 - **[Troubleshooting](./troubleshooting.md)** -- Common issues, workspace gotchas, and known limitations. The page you'll find via Google at 2 AM after everything breaks. I've been there. The kettle's already on.
 
-- **[2.1.1 Release Notes](./releases/v2.1.1.md)** -- Compact Visual+ output and truthful
-  post-discovery repository context.
+- **[2.1.1 Release Notes](./releases/v2.1.1.md)** -- Historical Plan 037 compact evidence and the
+  in-progress Plan 038 hybrid-default boundary.
 
 - **[2.1.0 Release Notes](./releases/v2.1.0.md)** -- Command-level local write safety and
   Visual+ terminal journeys.

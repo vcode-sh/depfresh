@@ -80,14 +80,20 @@ of every reported error because a Git blocker can coexist with a strict resoluti
 failure. Partial, failed, unknown, and recovery-first receipts likewise put one bounded inspection
 or evidence-preservation action immediately before `Exit 2`.
 
-### Visual+ output is shorter than before
+### Visual+ output has a different default composition
 
-Eligible Visual+ table output is compact by default. It keeps topology, distribution, every major
-card, and bounded previews without internal IDs. Run `depfresh --long` for the complete audit with
-every selected operation, owner, shared dependency, occurrence, and physical target. The compact
-success acceptance fixture is capped at 80 durable projected lines. Ordinary read-only
-`not-attempted` target previews may be bounded. Every non-success target in write safety or recovery
-bypasses compact limits, and every applied, restored, or unrecovered recovery path remains visible.
+Eligible Visual+ table output now uses the five-region hybrid review: context, overview, risk
+focus, a complete update ledger, and a receipt. The ledger renders every selected update exactly
+once without internal IDs. Run `depfresh --long` for the exhaustive audit with lifecycle, every
+selected operation, owner, shared dependency, occurrence, physical target, and exact receipt.
+Successful output has no durable lifecycle rail; capable terminals clear their one live line before
+the review, while plain, pipes, CI, and `TERM=dumb` emit the same final semantic regions without
+cursor control. Every non-success target and every applied, restored, or unrecovered recovery path
+remains visible.
+
+The former bounded-preview projection is the historical compact semantic contract completed by
+[Plan 037](../plans/037-visual-plus-compact-2.1.1.md). [Plan 038](../plans/038-visual-plus-hybrid-default.md)
+owns its in-progress visual-composition successor.
 
 Repository and package-manager context now appears only after discovery has observed it. Seeing no
 context during startup is expected and avoids false placeholders; an `unknown` value printed after
@@ -100,10 +106,12 @@ This can be the expected capability fallback rather than lost output:
 
 - both stdout and stderr must be TTYs, CI must be inactive, and `TERM` must not be `dumb` for the
   capable local profile;
-- `NO_COLOR` disables colour but retains lifecycle motion when the terminal is otherwise capable;
-- a narrow otherwise-capable terminal wraps fields but retains colour and motion;
-- CI and non-TTY pipes use colourless append-only output;
-- `TERM=dumb` uses append-only ASCII;
+- `NO_COLOR` disables colour but preserves the same final review and one live line while work is
+  active when the terminal is otherwise capable;
+- a narrow otherwise-capable terminal wraps the complete ledger losslessly and keeps its active
+  live line transient;
+- CI and non-TTY pipes use colourless append-only final output without lifecycle history;
+- `TERM=dumb` uses append-only ASCII without cursor control;
 - every profile retains result evidence.
 
 The final semantic content and exit code are unchanged. Direct table pipes print a stderr hint for

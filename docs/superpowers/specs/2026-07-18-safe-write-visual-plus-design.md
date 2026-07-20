@@ -1,5 +1,10 @@
 # Safe Write and Visual+ v2 Design
 
+> **Amendment (2026-07-20):** This historical design remains the authority for safe write,
+> recovery, exhaustive `--long`, and compatibility-route semantics. The successful default visual
+> composition is amended by the [approved hybrid amendment](./2026-07-20-visual-plus-hybrid-default-design.md)
+> and is implemented under Plan 038; this note does not rewrite the decisions recorded below.
+
 ## Status
 
 - **Date**: 2026-07-18

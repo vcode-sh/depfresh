@@ -69,8 +69,8 @@ Controls row ordering. Options:
 
 | Value       | What it does                             |
 |-------------|------------------------------------------|
-| `diff-asc`  | Patch first, then minor, then major. Easing you in gently. |
-| `diff-desc` | Major first, then minor, then patch. The scary stuff on top. |
+| `diff-asc`  | Major, then Minor, then Patch. |
+| `diff-desc` | Patch, then Minor, then Major. |
 | `time-asc`  | Oldest first. Shaming your neglect.      |
 | `time-desc` | Newest first. Fresh drama at the top.    |
 | `name-asc`  | Alphabetical. For the orderly.           |
@@ -165,40 +165,47 @@ CI and pipes.
 
 ## Visual+ Result Journeys
 
-Visual+ is the eligible local CLI table journey. By default it renders a compact audit: repository
-topology, update distribution, every major-risk card, bounded owner/shared/update/target previews,
-lifecycle facts, and one final receipt. Compact output contains no internal operation, owner,
-dependency, or source-file IDs. `--long` selects the complete audit with every selected operation,
-owner, shared dependency, occurrence, and physical target.
+Visual+ is the eligible local CLI table journey. Its default has five ordered regions: context,
+overview, risk focus, update ledger, and receipt. The complete ledger renders every selected update
+exactly once without internal operation, owner, dependency, or source-file IDs.
+`--long` remains the exhaustive Visual+ audit: lifecycle, every selected operation, owner, shared
+dependency, occurrence, physical target, and exact receipt.
+
+The default successful result has no durable lifecycle rail. A capable terminal owns one
+replaceable live line while work is active, clears it before the durable review, and never writes
+completed phases into scrollback. Plain, pipes, CI, and `TERM=dumb` retain the same five regions
+without ANSI or cursor control. Wide layouts align dependency, current, target, severity, and age;
+medium layouts keep the key columns with continuation lines; narrow layouts use lossless labeled
+rows. `NO_COLOR` changes styling only, and `TERM=dumb` uses ASCII tokens.
+
+The update ledger retains physical-owner grouping. Within each owner, `--group`, `--sort`,
+`--timediff`, and `--nodecompat` retain their resolved display meaning. In particular, `diff-asc`
+orders Major, Minor, then Patch; `diff-desc` orders Patch, Minor, then Major. The responsive review
+may be as long as its complete ledger requires; it does not replace successful updates with
+previews. Every non-success target, applied/restored/unrecovered recovery path, and conservative
+receipt remains visible.
 
 The Complete and Safety block examples use the deterministic 76-operation, 14-target renderer
 fixture. Partial and Recovery incomplete use smaller renderer-contract inputs; Partial remains the
 synthetic/future-producer projection qualified below. All are exact final-receipt excerpts.
-
-The successful compact acceptance journey is limited to 80 durable projected lines at narrow,
-standard, and wide supported widths. This is an output-density contract, not a safety truncation
-rule: wrapping redistributes content within the projection, and ordinary read-only `not-attempted`
-target previews may be bounded. Every non-success target in write safety or recovery bypasses
-compact limits. Compact retained recovery reports `Journal: retained` rather than an internal
-journal identifier. A safety block therefore still names every affected physical target, and
-recovery-first receipts still name every applied, restored, and unrecovered path. Rerun with
-`--long` when complete successful/read-only membership is required.
 
 The journey is eligible only through CLI progress routing with table output, a non-silent log
 level, local non-global operation, no interactive selection, and no direct or addon
 `beforePackageWrite` hook. Library `check()` calls and veto-capable hook routes use the
 compatibility table surface above.
 
-Startup prints only the check heading and lifecycle. Once discovery finishes, Visual+ renders the
-observed repository name/path, workspace scope, and package-manager evidence before review. It no
-longer prints false `Repository unknown` or `Package manager unknown` placeholders while discovery
-is still running; `unknown` after discovery means the required evidence was genuinely absent.
+During active work, a capable terminal may draw one replaceable lifecycle line. After discovery,
+the durable hybrid context renders observed repository name/path, workspace scope, and package-
+manager evidence before overview, risk focus, ledger, and receipt. It never writes false
+`Repository unknown` or `Package manager unknown` startup placeholders; `unknown` after discovery
+means the required evidence was genuinely absent.
 
-A capable terminal uses Unicode separators, colour, and replaceable lifecycle frames. A plain
-fallback is append-only and colourless. Its map sections use ASCII, while existing receipt
-punctuation still follows Unicode capability: CI and ordinary pipes can retain `·`, and
-`TERM=dumb` makes the whole journey ASCII. Width changes wrapping only. These snippets pair the
-capable form with the public plain `TERM=dumb` form.
+A capable terminal uses Unicode separators, colour, and its one replaceable live line. The final
+successful review contains no lifecycle history. A plain fallback is append-only and colourless,
+but emits the same final regions after durable facts exist. Its ledger uses ASCII where needed,
+while existing receipt punctuation still follows Unicode capability: CI and ordinary pipes can
+retain `·`, and `TERM=dumb` makes the whole journey ASCII. Width changes geometry, not membership.
+These snippets pair the capable form with the public plain `TERM=dumb` form.
 
 ### Complete
 
