@@ -1,11 +1,13 @@
 import { createHash } from 'node:crypto'
 import {
   chmodSync,
+  closeSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
   readFileSync,
   realpathSync,
+  renameSync,
   rmSync,
   symlinkSync,
   writeFileSync,
@@ -17,6 +19,14 @@ import { runLocalPackageVerification } from '../scripts/verify-local-package.mjs
 import * as replayEvidence from '../scripts/visual-plus-replay-failure.mjs'
 
 interface ReplayEvidenceApi {
+  readStableRegularFile?: (
+    path: string,
+    options: {
+      label: string
+      maxBytes: number
+      hooks?: { afterLstat?: () => void }
+    },
+  ) => { bytes: Buffer; identity: { device: string; inode: string; sha256: string } }
   isCompleteVisualPlusReplayReport?: (
     report: unknown,
     expected: { files: number; suites: number; tests: number },
@@ -32,6 +42,14 @@ interface ReplayEvidenceApi {
     report: unknown
     tarballPath: string
     tarballSha256: string
+    publicationHooks?: {
+      afterPendingCreated?: (input: { parentPath: string; pendingPath: string }) => unknown
+      beforeDescriptorClose?: (input: {
+        parentDescriptor: number
+        pendingDescriptor: number
+      }) => void
+      beforePendingCleanup?: () => void
+    }
   }) => unknown
 }
 
@@ -313,7 +331,123 @@ setInterval(() => {}, 1_000)
       ).toEqual([])
     }
   })
+
+  it('canonicalizes macOS temp aliases for every existing input and the absent output', () => {
+    if (process.platform !== 'darwin') return
+    const writeEvidence = replayEvidenceApi.writeVisualPlusReplayEvidence
+    expect(writeEvidence).toBeTypeOf('function')
+    if (!writeEvidence) return
+    const fixture = replayFixture(temporaryAliasRoot('depfresh-installed-replay-alias-'))
+    const alias = (path: string) => path.replace(/^\/private\/tmp\//u, '/tmp/')
+
+    const evidence = writeEvidence({
+      ...fixture.options,
+      cliPath: alias(fixture.cliPath),
+      containmentRoot: alias(fixture.root),
+      installedRoot: alias(fixture.installedRoot),
+      outputPath: alias(fixture.outputPath),
+      tarballPath: alias(fixture.tarballPath),
+    }) as { cli: { realpath: string }; tarball: { realpath: string } }
+
+    expect(evidence.cli.realpath).toBe(fixture.cliPath)
+    expect(evidence.tarball.realpath).toBe(fixture.tarballPath)
+    expect(JSON.parse(readFileSync(fixture.outputPath, 'utf8'))).toEqual(evidence)
+  })
+
+  it('rejects parent replacement without report or pending residue', () => {
+    const writeEvidence = replayEvidenceApi.writeVisualPlusReplayEvidence
+    expect(writeEvidence).toBeTypeOf('function')
+    if (!writeEvidence) return
+
+    const replaced = replayFixture()
+    const relocated = `${replaced.root}-relocated`
+    roots.push(relocated)
+    expect(() =>
+      writeEvidence({
+        ...replaced.options,
+        publicationHooks: {
+          afterPendingCreated: ({ parentPath }) => {
+            renameSync(parentPath, relocated)
+            mkdirSync(parentPath)
+            return { relocatedParentPath: relocated }
+          },
+        },
+      }),
+    ).toThrow()
+    expect(() => readFileSync(replaced.outputPath)).toThrow()
+    expect(pendingNames(replaced.root)).toEqual([])
+    expect(pendingNames(relocated)).toEqual([])
+  })
+
+  it('reports cleanup faults without report or pending residue', () => {
+    const writeEvidence = replayEvidenceApi.writeVisualPlusReplayEvidence
+    expect(writeEvidence).toBeTypeOf('function')
+    if (!writeEvidence) return
+    const cleanupFault = replayFixture()
+    expect(() =>
+      writeEvidence({
+        ...cleanupFault.options,
+        publicationHooks: {
+          afterPendingCreated: () => {
+            throw new Error('deterministic primary fault')
+          },
+          beforePendingCleanup: () => {
+            throw new Error('deterministic cleanup fault')
+          },
+        },
+      }),
+    ).toThrow(/cleanup/u)
+    expect(() => readFileSync(cleanupFault.outputPath)).toThrow()
+    expect(pendingNames(cleanupFault.root)).toEqual([])
+  })
+
+  it('removes a published report when descriptor cleanup fails', () => {
+    const writeEvidence = replayEvidenceApi.writeVisualPlusReplayEvidence
+    expect(writeEvidence).toBeTypeOf('function')
+    if (!writeEvidence) return
+    const cleanupFault = replayFixture()
+
+    expect(() =>
+      writeEvidence({
+        ...cleanupFault.options,
+        publicationHooks: {
+          beforeDescriptorClose: ({ pendingDescriptor }) => {
+            closeSync(pendingDescriptor)
+          },
+        },
+      }),
+    ).toThrow(/cleanup/u)
+    expect(() => readFileSync(cleanupFault.outputPath)).toThrow()
+    expect(pendingNames(cleanupFault.root)).toEqual([])
+  })
+
+  it('rejects lstat-to-open replacement even when replacement bytes are identical', () => {
+    const readStable = replayEvidenceApi.readStableRegularFile
+    expect(readStable).toBeTypeOf('function')
+    if (!readStable) return
+    const root = temporaryRoot('depfresh-stable-read-')
+    const path = join(root, 'identity.bin')
+    const oldPath = join(root, 'identity.old')
+    writeFileSync(path, 'identical bytes')
+
+    expect(() =>
+      readStable(path, {
+        label: 'identity fixture',
+        maxBytes: 1024,
+        hooks: {
+          afterLstat: () => {
+            renameSync(path, oldPath)
+            writeFileSync(path, readFileSync(oldPath))
+          },
+        },
+      }),
+    ).toThrow()
+  })
 })
+
+function pendingNames(root: string): string[] {
+  return readdirSync(root).filter((name) => name.includes('.pending-'))
+}
 
 function temporaryRoot(prefix: string): string {
   const root = mkdtempSync(join(tmpdir(), prefix))
@@ -329,8 +463,13 @@ function writeExecutable(root: string, name: string, content: string): string {
   return path
 }
 
-function replayFixture() {
-  const root = temporaryRoot('depfresh-installed-replay-')
+function temporaryAliasRoot(prefix: string): string {
+  const root = realpathSync(mkdtempSync(join('/tmp', prefix)))
+  roots.push(root)
+  return root
+}
+
+function replayFixture(root = temporaryRoot('depfresh-installed-replay-')) {
   const tarballPath = join(root, 'depfresh-2.1.1.tgz')
   const installedRoot = join(root, 'node_modules', 'depfresh')
   const cliPath = join(installedRoot, 'dist', 'cli.mjs')

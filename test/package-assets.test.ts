@@ -45,6 +45,7 @@ describe('published workflow assets', () => {
       expect(packageJson.exports[`./${asset}`]).toBe(`./${asset}`)
     }
     expect(existsSync(join(root, 'scripts/live-visual-plus-proof.mjs'))).toBe(true)
+    expect(existsSync(join(root, 'scripts/live-visual-plus-proof-support.mjs'))).toBe(true)
     expect(packageJson.files).not.toContain('scripts')
   })
 

@@ -2,10 +2,14 @@ import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import {
   chmodSync,
+  closeSync,
+  copyFileSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   realpathSync,
+  renameSync,
   rmSync,
   symlinkSync,
   writeFileSync,
@@ -31,6 +35,14 @@ interface ReplayEvidenceApi {
     report: unknown
     tarballPath: string
     tarballSha256: string
+    publicationHooks?: {
+      afterPendingCreated?: (input: { parentPath: string; pendingPath: string }) => unknown
+      beforeDescriptorClose?: (input: {
+        parentDescriptor: number
+        pendingDescriptor: number
+      }) => void
+      beforePendingCleanup?: () => void
+    }
   }): unknown
 }
 
@@ -235,12 +247,148 @@ describe('live Visual+ proof harness', () => {
       )
     }
   }, 30_000)
+
+  it.each([
+    'missing-row-with-severity-note',
+    'duplicate-row',
+    'duplicate-long-ids',
+    'long-owner-mismatch',
+    'long-shared-mismatch',
+    'long-occurrence-duplicate',
+    'long-target-mismatch',
+    'long-target-distribution-mismatch',
+    'long-dependency-cardinality-mismatch',
+    'long-dependency-owner-pair-mismatch',
+    'long-operation-owner-mismatch',
+    'long-empty-owner-id',
+    'long-duplicate-section',
+  ])(
+    'rejects malformed %s membership with unchanged summary counts',
+    async (fault) => {
+      const fixture = liveProofFixture()
+      fixture.options.environment.DEPFRESH_LIVE_TEST_SCREEN_FAULT = fault
+
+      await expect(runLiveVisualPlusProof(fixture.options), fault).rejects.toThrow()
+      expect(() => readFileSync(fixture.outputPath), fault).toThrow()
+    },
+    30_000,
+  )
+
+  it.each([
+    'regular-bunx-replacement',
+    'global-link-replacement',
+    'global-target-replacement',
+    'index-same-bytes',
+    'bun-lock-same-bytes',
+  ])(
+    'rejects %s identity replacement',
+    async (fault) => {
+      const fixture = liveProofFixture({ regularBunx: fault === 'regular-bunx-replacement' })
+      fixture.options.environment.DEPFRESH_LIVE_TEST_IDENTITY_FAULT = fault
+
+      await expect(runLiveVisualPlusProof(fixture.options), fault).rejects.toThrow()
+      expect(() => readFileSync(fixture.outputPath), fault).toThrow()
+    },
+    30_000,
+  )
+
+  it('rejects artifact and report publication inside the repository before any invocation', async () => {
+    const fixture = liveProofFixture({ artifactInRepository: true })
+
+    await expect(runLiveVisualPlusProof(fixture.options)).rejects.toThrow()
+
+    expect(readFileSync(fixture.invocationsPath, 'utf8')).toBe('')
+    expect(() => readFileSync(fixture.outputPath)).toThrow()
+    expect(pendingNames(fixture.artifactRoot)).toEqual([])
+  })
+
+  it('canonicalizes macOS temp aliases for repository, artifact inputs, PATH, and output', async () => {
+    if (process.platform !== 'darwin') return
+    const fixture = liveProofFixture({ aliasRoot: true })
+    const alias = (path: string) => path.replace(/^\/private\/tmp\//u, '/tmp/')
+    fixture.options.cwd = alias(fixture.repository)
+    fixture.options.packJsonPath = alias(fixture.packJsonPath)
+    fixture.options.replayEvidencePath = alias(fixture.replayEvidencePath)
+    fixture.options.outputPath = alias(fixture.outputPath)
+    fixture.options.environment.PATH = fixture.options.environment.PATH.split(':')
+      .map(alias)
+      .join(':')
+
+    const evidence = await runLiveVisualPlusProof(fixture.options)
+
+    expect(evidence.cwd).toBe(fixture.repository)
+    expect(JSON.parse(readFileSync(fixture.outputPath, 'utf8'))).toEqual(evidence)
+  }, 30_000)
+
+  it('rejects output-parent replacement without report or pending residue', async () => {
+    const replaced = liveProofFixture()
+    const relocated = `${replaced.artifactRoot}-relocated`
+    roots.push(relocated)
+    replaced.options.publicationHooks = {
+      afterPendingCreated: ({ parentPath }) => {
+        renameSync(parentPath, relocated)
+        mkdirSync(parentPath)
+        return { relocatedParentPath: relocated }
+      },
+    }
+
+    await expect(runLiveVisualPlusProof(replaced.options)).rejects.toThrow()
+    expect(() => readFileSync(replaced.outputPath)).toThrow()
+    expect(pendingNames(replaced.artifactRoot)).toEqual([])
+    expect(pendingNames(relocated)).toEqual([])
+  }, 30_000)
+
+  it('exposes output cleanup faults without report or pending residue', async () => {
+    const cleanupFault = liveProofFixture()
+    cleanupFault.options.publicationHooks = {
+      afterPendingCreated: () => {
+        throw new Error('deterministic primary fault')
+      },
+      beforePendingCleanup: () => {
+        throw new Error('deterministic cleanup fault')
+      },
+    }
+    await expect(runLiveVisualPlusProof(cleanupFault.options)).rejects.toThrow(/cleanup/u)
+    expect(() => readFileSync(cleanupFault.outputPath)).toThrow()
+    expect(pendingNames(cleanupFault.artifactRoot)).toEqual([])
+  }, 30_000)
+
+  it('removes the live report when descriptor cleanup fails', async () => {
+    const cleanupFault = liveProofFixture()
+    cleanupFault.options.publicationHooks = {
+      beforeDescriptorClose: ({ pendingDescriptor }) => {
+        closeSync(pendingDescriptor)
+      },
+    }
+
+    await expect(runLiveVisualPlusProof(cleanupFault.options)).rejects.toThrow(/cleanup/u)
+    expect(() => readFileSync(cleanupFault.outputPath)).toThrow()
+    expect(pendingNames(cleanupFault.artifactRoot)).toEqual([])
+  }, 30_000)
+
+  it('keeps the repository snapshot authoritative through publication', async () => {
+    const publicationMutation = liveProofFixture()
+    publicationMutation.options.publicationHooks = {
+      afterPendingCreated: () => {
+        replaceSameBytes(join(publicationMutation.repository, 'bun.lock'))
+      },
+    }
+    await expect(runLiveVisualPlusProof(publicationMutation.options)).rejects.toThrow()
+    expect(() => readFileSync(publicationMutation.outputPath)).toThrow()
+    expect(pendingNames(publicationMutation.artifactRoot)).toEqual([])
+  }, 30_000)
 })
 
-function liveProofFixture() {
-  const root = temporaryRoot('depfresh-live-proof-')
+function liveProofFixture(
+  options: { aliasRoot?: boolean; artifactInRepository?: boolean; regularBunx?: boolean } = {},
+) {
+  const root = options.aliasRoot
+    ? temporaryAliasRoot('depfresh-live-proof-alias-')
+    : temporaryRoot('depfresh-live-proof-')
   const repository = join(root, 'spreadoo')
-  const artifactRoot = join(root, 'artifact')
+  const artifactRoot = options.artifactInRepository
+    ? join(repository, 'proof-artifact')
+    : join(root, 'artifact')
   const installedRoot = join(root, 'replay-install', 'node_modules', 'depfresh')
   const replayCli = join(installedRoot, 'dist', 'cli.mjs')
   const globalRoot = join(root, 'bun-global')
@@ -328,23 +476,61 @@ function liveProofFixture() {
   writeFileSync(
     bunPath,
     `#!${process.execPath}
-import { appendFileSync, readFileSync, writeFileSync } from 'node:fs'
+import { appendFileSync, chmodSync, copyFileSync, readFileSync, renameSync, statSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
 const args = process.argv.slice(2)
 appendFileSync(${JSON.stringify(invocationsPath)}, JSON.stringify(args) + '\\n')
 const invocationCount = readFileSync(${JSON.stringify(invocationsPath)}, 'utf8').trim().split('\\n').length
+const replaceSameBytes = (path) => {
+  const oldPath = path + '.old'
+  const mode = statSync(path).mode & 0o777
+  renameSync(path, oldPath)
+  copyFileSync(oldPath, path)
+  chmodSync(path, mode)
+  unlinkSync(oldPath)
+}
 if (JSON.stringify(args) === JSON.stringify(['pm', 'bin', '-g'])) {
   process.stdout.write(${JSON.stringify(`${globalBin}\n`)})
 } else if (args[0] === '--no-install' && args[1] === 'depfresh' && args[2] === 'major' && args[3] === '--cwd' && args[4] === ${JSON.stringify(repository)}) {
   if (process.env.DEPFRESH_LIVE_TEST_MUTATE === '1') writeFileSync(${JSON.stringify(join(repository, 'bun.lock'))}, 'changed\\n')
+  if (invocationCount === 2 && process.env.DEPFRESH_LIVE_TEST_IDENTITY_FAULT === 'regular-bunx-replacement') replaceSameBytes(${JSON.stringify(bunxPath)})
+  if (invocationCount === 2 && process.env.DEPFRESH_LIVE_TEST_IDENTITY_FAULT === 'global-link-replacement') {
+    unlinkSync(${JSON.stringify(globalLink)})
+    symlinkSync('../install/global/node_modules/depfresh/dist/cli.mjs', ${JSON.stringify(globalLink)})
+  }
+  if (invocationCount === 2 && process.env.DEPFRESH_LIVE_TEST_IDENTITY_FAULT === 'global-target-replacement') replaceSameBytes(${JSON.stringify(globalCli)})
+  if (invocationCount === 2 && process.env.DEPFRESH_LIVE_TEST_IDENTITY_FAULT === 'index-same-bytes') replaceSameBytes(${JSON.stringify(join(repository, '.git', 'index'))})
+  if (invocationCount === 2 && process.env.DEPFRESH_LIVE_TEST_IDENTITY_FAULT === 'bun-lock-same-bytes') replaceSameBytes(${JSON.stringify(join(repository, 'bun.lock'))})
   if (process.env.DEPFRESH_LIVE_TEST_FAIL_SECOND === '1' && invocationCount === 3) process.exitCode = 17
-  else process.stdout.write(args[5] === '--long' ? ${JSON.stringify(longScreen())} : ${JSON.stringify(hybridScreen())})
+  else if (args[5] === '--long') {
+    const fault = process.env.DEPFRESH_LIVE_TEST_SCREEN_FAULT
+    if (fault === 'duplicate-long-ids') process.stdout.write(${JSON.stringify(longScreen('duplicate-ids'))})
+    else if (fault === 'long-owner-mismatch') process.stdout.write(${JSON.stringify(longScreen('owner-mismatch'))})
+    else if (fault === 'long-shared-mismatch') process.stdout.write(${JSON.stringify(longScreen('shared-mismatch'))})
+    else if (fault === 'long-occurrence-duplicate') process.stdout.write(${JSON.stringify(longScreen('occurrence-duplicate'))})
+    else if (fault === 'long-target-mismatch') process.stdout.write(${JSON.stringify(longScreen('target-mismatch'))})
+    else if (fault === 'long-target-distribution-mismatch') process.stdout.write(${JSON.stringify(crossRelationshipLongScreen('target-distribution'))})
+    else if (fault === 'long-dependency-cardinality-mismatch') process.stdout.write(${JSON.stringify(crossRelationshipLongScreen('dependency-cardinality'))})
+    else if (fault === 'long-dependency-owner-pair-mismatch') process.stdout.write(${JSON.stringify(crossRelationshipLongScreen('dependency-owner-pair'))})
+    else if (fault === 'long-operation-owner-mismatch') process.stdout.write(${JSON.stringify(crossRelationshipLongScreen('operation-owner'))})
+    else if (fault === 'long-empty-owner-id') process.stdout.write(${JSON.stringify(longScreen('empty-owner-id'))})
+    else if (fault === 'long-duplicate-section') process.stdout.write(${JSON.stringify(longScreen('duplicate-section'))})
+    else process.stdout.write(${JSON.stringify(longScreen())})
+  }
+  else if (process.env.DEPFRESH_LIVE_TEST_SCREEN_FAULT === 'missing-row-with-severity-note') process.stdout.write(${JSON.stringify(hybridScreen('missing-row-with-severity-note'))})
+  else if (process.env.DEPFRESH_LIVE_TEST_SCREEN_FAULT === 'duplicate-row') process.stdout.write(${JSON.stringify(hybridScreen('duplicate-row'))})
+  else process.stdout.write(process.stdout.columns >= 100 ? ${JSON.stringify(hybridScreen('wide'))} : ${JSON.stringify(hybridScreen())})
 } else {
   process.exitCode = 17
 }
 `,
   )
   chmodSync(bunPath, 0o755)
-  symlinkSync('bun', bunxPath)
+  if (options.regularBunx) {
+    copyFileSync(bunPath, bunxPath)
+    chmodSync(bunxPath, 0o755)
+  } else {
+    symlinkSync('bun', bunxPath)
+  }
   const environment = {
     HOME: root,
     LANG: 'C.UTF-8',
@@ -355,6 +541,7 @@ if (JSON.stringify(args) === JSON.stringify(['pm', 'bin', '-g'])) {
   return {
     root,
     repository,
+    artifactRoot,
     packJsonPath,
     replayEvidencePath,
     outputPath,
@@ -374,6 +561,7 @@ if (JSON.stringify(args) === JSON.stringify(['pm', 'bin', '-g'])) {
       includeLong: true,
       outputPath,
       packJsonPath,
+      publicationHooks: undefined,
       replayEvidencePath,
     },
   }
@@ -399,7 +587,27 @@ function completeReplayReport() {
   }
 }
 
-function hybridScreen() {
+function hybridScreen(fault?: 'duplicate-row' | 'missing-row-with-severity-note' | 'wide') {
+  const rows =
+    fault === 'duplicate-row'
+      ? `alpha       ^1.0.0 → ^2.0.0   Major     ~1d
+beta        ^1.0.0 → ^1.1.0   Minor     ~1d
+alpha       ^1.0.0 → ^2.0.0   Major     ~1d`
+      : fault === 'missing-row-with-severity-note'
+        ? `alpha       ^1.0.0 → ^2.0.0   Major     ~1d
+beta        ^1.0.0 → ^1.1.0   Minor     ~1d
+Release note Major migration`
+        : fault === 'wide'
+          ? `alpha       ^1.0.0  ^2.0.0  Major     ~1d
+beta        ^1.0.0  ^1.1.0  Minor     ~1d
+gamma       ^1.0.0  ^1.0.1  Patch     ~1d`
+          : `alpha       ^1.0.0 → ^2.0.0   Major     ~1d
+beta        ^1.0.0 → ^1.1.0   Minor     ~1d
+gamma       ^1.0.0 → ^1.0.1   Patch     ~1d`
+  const heading =
+    fault === 'wide'
+      ? 'dependency  current  target  severity  age'
+      : 'dependency  current → target  severity  age'
   return `spreadu · bun 1.3.14 · workspace · major · read-only
 1 packages · 3 declared · 3 eligible · 3 updates · 1 files
 
@@ -412,34 +620,152 @@ alpha
 
 spreadu · package.json
   dependencies
-dependency  current → target  severity  age
-alpha       ^1.0.0 → ^2.0.0   Major     ~1d
-beta        ^1.0.0 → ^1.1.0   Minor     ~1d
-gamma       ^1.0.0 → ^1.0.1   Patch     ~1d
+${heading}
+${rows}
 Review complete · 3 updates across 1 files · write not attempted
 Exit 0
 `
 }
 
-function longScreen() {
+function longScreen(
+  fault?:
+    | 'duplicate-ids'
+    | 'duplicate-section'
+    | 'empty-owner-id'
+    | 'occurrence-duplicate'
+    | 'owner-mismatch'
+    | 'shared-mismatch'
+    | 'target-mismatch',
+) {
+  const riskHeading = fault === 'duplicate-section' ? 'Risk focus\nRisk focus' : 'Risk focus'
+  const ownerId = fault === 'empty-owner-id' ? '' : 'owner-1'
+  const ownerUpdates = fault === 'owner-mismatch' ? 2 : 3
+  const secondOccurrencePath =
+    fault === 'occurrence-duplicate' ? 'dependencies / alpha-1' : 'dependencies / alpha-2'
+  const thirdOccurrenceOwner = fault === 'shared-mismatch' ? 'unknown-owner' : 'spreadu'
+  const targetUpdates = fault === 'target-mismatch' ? 2 : 3
   return `spreadu · bun 1.3.14 · workspace · major · read-only
+1 packages → 3 declared → 3 eligible → 3 updates → 1 files
+${riskHeading}
+Major card
+Dependency alpha
+Transition ^1.0.0 → ^2.0.0
+Occurrences 3
+Age ~1d
+Compatibility compatible 0 · incompatible 0 · unknown 3
+├ Owner spreadu
+├ Target package.json
 Owner impact
-Owner ID owner-1
+Owner ID ${ownerId}
+Owner spreadu
+Target package.json
+├ Updates ${ownerUpdates} · Major 1 · Minor 1 · Patch 1
 Shared dependencies
 Dependency ID dependency-1
-Major card
+Dependency alpha
+Occurrence
+├ Owner spreadu
+├ Source dependencies
+├ Path dependencies / alpha-1
+Occurrence
+├ Owner spreadu
+├ Source dependencies
+├ Path ${secondOccurrencePath}
+Occurrence
+├ Owner ${thirdOccurrenceOwner}
+├ Source dependencies
+├ Path dependencies / alpha-3
 Complete change list
+Owner spreadu · package.json
 Operation ID operation-1
-Occurrence
+Dependency alpha
+Diff major
 Operation ID operation-2
-Occurrence
-Operation ID operation-3
-Occurrence
+Dependency alpha
+Diff minor
+Operation ID ${fault === 'duplicate-ids' ? 'operation-2' : 'operation-3'}
+Dependency alpha
+Diff patch
 Reviewed physical targets
-Target package.json · 3 updates
+Target package.json · ${targetUpdates} updates
 Review complete
+3 updates reviewed across 1 targets.
 Exit 0
 `
+}
+
+function crossRelationshipLongScreen(
+  fault:
+    | 'dependency-cardinality'
+    | 'dependency-owner-pair'
+    | 'operation-owner'
+    | 'target-distribution',
+) {
+  const operationDependencies =
+    fault === 'dependency-cardinality' ? ['alpha', 'beta', 'beta'] : ['alpha', 'alpha', 'beta']
+  const targetUpdates = fault === 'target-distribution' ? [1, 2] : [2, 1]
+  const firstOperationOwner = fault === 'operation-owner' ? 'owner-b' : 'owner-a'
+  return `spreadu · bun 1.3.14 · workspace · major · read-only
+1 packages → 3 declared → 3 eligible → 3 updates → 2 files
+Risk focus
+Major card
+Dependency alpha
+Transition ^1.0.0 → ^2.0.0
+Occurrences 2
+Age ~1d
+Compatibility compatible 0 · incompatible 0 · unknown 2
+├ Owner owner-a
+├ Target a.json
+Owner impact
+Owner ID owner-1
+Owner owner-a
+Target a.json
+├ Updates 2 · Major 1 · Minor 1 · Patch 0
+Owner ID owner-2
+Owner owner-b
+Target b.json
+├ Updates 1 · Major 0 · Minor 0 · Patch 1
+Shared dependencies
+Dependency ID dependency-1
+Dependency alpha
+Occurrence
+├ Owner owner-a
+├ Source dependencies
+├ Path dependencies / alpha-1
+Occurrence
+├ Owner owner-b
+├ Source dependencies
+├ Path dependencies / alpha-2
+Complete change list
+Owner ${firstOperationOwner} · a.json
+Operation ID operation-1
+Dependency ${operationDependencies[0]}
+Diff major
+Operation ID operation-2
+Dependency ${operationDependencies[1]}
+Diff minor
+Owner owner-b · b.json
+Operation ID operation-3
+Dependency ${operationDependencies[2]}
+Diff patch
+Reviewed physical targets
+Target a.json · ${targetUpdates[0]} updates
+Target b.json · ${targetUpdates[1]} update
+Review complete
+3 updates reviewed across 2 targets.
+Exit 0
+`
+}
+
+function pendingNames(root: string): string[] {
+  return readdirSync(root).filter((name) => name.includes('.pending-'))
+}
+
+function replaceSameBytes(path: string): void {
+  const oldPath = `${path}.old`
+  renameSync(path, oldPath)
+  copyFileSync(oldPath, path)
+  rmSync(oldPath)
 }
 
 function temporaryRoot(prefix: string): string {
@@ -447,4 +773,10 @@ function temporaryRoot(prefix: string): string {
   const canonicalRoot = realpathSync(root)
   roots.push(canonicalRoot)
   return canonicalRoot
+}
+
+function temporaryAliasRoot(prefix: string): string {
+  const root = realpathSync(mkdtempSync(join('/tmp', prefix)))
+  roots.push(root)
+  return root
 }

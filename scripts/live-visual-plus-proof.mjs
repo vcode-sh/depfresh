@@ -1,30 +1,37 @@
 import { spawnSync } from 'node:child_process'
-import { createHash, randomBytes } from 'node:crypto'
+import { createHash } from 'node:crypto'
 import {
-  accessSync,
-  chmodSync,
-  closeSync,
-  constants,
-  fsyncSync,
   linkSync,
   lstatSync,
   mkdtempSync,
-  openSync,
-  readFileSync,
   realpathSync,
   rmSync,
-  statSync,
-  unlinkSync,
-  writeSync,
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { basename, delimiter, dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { extractSinglePackEntry } from './pack-manifest.mjs'
-import { classifyRawTerminalTransport, runInPty } from '../test/helpers/pty-runner.mjs'
+import {
+  canonicalContainedNewOutput,
+  canonicalExistingDirectory,
+  canonicalExistingRegularFile,
+  publishJsonAtomicNoReplace,
+  readStableRegularFile,
+} from './visual-plus-replay-failure.mjs'
+import {
+  analyzeHybridRun,
+  analyzeLongRun,
+  observeBunx,
+  pathIdentity,
+  requireBoundBunxIdentity,
+  requireBunxIdentity,
+  requireExecutionIdentity,
+} from './live-visual-plus-proof-support.mjs'
+import { runInPty } from '../test/helpers/pty-runner.mjs'
 
 const MAX_JSON_BYTES = 256 * 1024
 const MAX_COMMAND_OUTPUT_BYTES = 1024 * 1024
+const MAX_IDENTITY_FILE_BYTES = 64 * 1024 * 1024
 const COMMAND_TIMEOUT_MS = 30_000
 const LIVE_PTY_TIMEOUT_MS = 15 * 60_000
 const LIVE_PTY_OUTPUT_BYTES = 4 * 1024 * 1024
@@ -112,16 +119,42 @@ export async function runLiveVisualPlusProof(options) {
   }
   rejectLocalShadow(cwd)
   const artifact = verifyArtifactBinding(command.packJsonPath, command.replayEvidencePath)
-  const outputPath = requireContainedNewOutput(command.outputPath, artifact.root)
+  const outputPath = canonicalContainedNewOutput(
+    resolve(command.outputPath),
+    artifact.root,
+    'Live proof evidence',
+  )
+  rejectRepositoryPublication(outputPath, cwd)
   const environment = requireEnvironment(command.environment ?? process.env)
-  const bunx = resolveUniqueBunx(environment.PATH)
-  const bunGlobal = resolveBunGlobalIdentity(bunx, cwd, environment, artifact.replay.cli.sha256)
+  let bunx = resolveUniqueBunx(environment.PATH)
   const before = repositorySnapshot(cwd)
   const launcher = createBunxPtyLauncher(bunx)
+  bunx = requireBoundBunxIdentity(bunx, MAX_IDENTITY_FILE_BYTES)
   const runs = []
   const longRuns = []
+  let bunGlobal
   try {
+    requireBunxIdentity(bunx, MAX_IDENTITY_FILE_BYTES)
+    bunGlobal = resolveBunGlobalIdentity(
+      launcher.path,
+      cwd,
+      environment,
+      artifact.replay.cli.sha256,
+    )
+    requireExecutionIdentity(
+      bunx,
+      bunGlobal,
+      artifact.replay.cli.sha256,
+      MAX_IDENTITY_FILE_BYTES,
+    )
+    requireUnchanged(before, repositorySnapshot(cwd))
     for (const columns of command.columns) {
+      requireExecutionIdentity(
+        bunx,
+        bunGlobal,
+        artifact.replay.cli.sha256,
+        MAX_IDENTITY_FILE_BYTES,
+      )
       const argv = fixedArgv(cwd, false)
       const result = await runInPty({
         args: argv,
@@ -133,11 +166,23 @@ export async function runLiveVisualPlusProof(options) {
         timeoutMs: LIVE_PTY_TIMEOUT_MS,
       })
       runs.push(analyzeHybridRun(result, columns, argv, repositoryPackage.name))
+      requireExecutionIdentity(
+        bunx,
+        bunGlobal,
+        artifact.replay.cli.sha256,
+        MAX_IDENTITY_FILE_BYTES,
+      )
       requireUnchanged(before, repositorySnapshot(cwd))
     }
     if (command.includeLong) {
       for (let index = 0; index < command.columns.length; index += 1) {
         const columns = command.columns[index]
+        requireExecutionIdentity(
+          bunx,
+          bunGlobal,
+          artifact.replay.cli.sha256,
+          MAX_IDENTITY_FILE_BYTES,
+        )
         const argv = fixedArgv(cwd, true)
         const result = await runInPty({
           args: argv,
@@ -149,6 +194,12 @@ export async function runLiveVisualPlusProof(options) {
           timeoutMs: LIVE_PTY_TIMEOUT_MS,
         })
         longRuns.push(analyzeLongRun(result, columns, argv, runs[index].operationRows.declared))
+        requireExecutionIdentity(
+          bunx,
+          bunGlobal,
+          artifact.replay.cli.sha256,
+          MAX_IDENTITY_FILE_BYTES,
+        )
         requireUnchanged(before, repositorySnapshot(cwd))
       }
     }
@@ -157,6 +208,7 @@ export async function runLiveVisualPlusProof(options) {
   }
   const after = repositorySnapshot(cwd)
   requireUnchanged(before, after)
+  if (bunGlobal === undefined) throw new Error('Bun global identity is unavailable')
   const evidence = {
     schemaVersion: 1,
     kind: 'depfresh-live-visual-plus-proof',
@@ -165,6 +217,8 @@ export async function runLiveVisualPlusProof(options) {
       path: bunx.path,
       realpath: bunx.realpath,
       sha256: bunx.sha256,
+      pathIdentity: bunx.pathIdentity,
+      targetIdentity: bunx.targetIdentity,
       launchIdentity: launcher.identity,
     },
     bunGlobal,
@@ -179,7 +233,18 @@ export async function runLiveVisualPlusProof(options) {
     ...(command.includeLong ? { longRuns } : {}),
     repository: { before, after, unchanged: true },
   }
-  writeJsonAtomicNoReplace(outputPath, evidence)
+  let publicationSnapshot
+  publishJsonAtomicNoReplace(outputPath, evidence, {
+    errorPrefix: 'Live proof evidence',
+    hooks: command.publicationHooks,
+    afterPublication: () => {
+      publicationSnapshot = repositorySnapshot(cwd)
+      requireUnchanged(before, publicationSnapshot)
+    },
+  })
+  if (publicationSnapshot === undefined) {
+    throw new Error('Live repository publication snapshot is unavailable')
+  }
   return evidence
 }
 
@@ -229,10 +294,13 @@ function verifyArtifactBinding(packJsonArgument, replayEvidenceArgument) {
   }
   const tarballPath = requireSafeRegularFile(join(root, entry.filename), 'tarball')
   requireContained(tarballPath, root, 'Tarball is not contained')
-  const tarballBytes = readFileSync(tarballPath)
-  const tarballSha256 = sha256(tarballBytes)
+  const tarball = readStableRegularFile(tarballPath, {
+    label: 'tarball',
+    maxBytes: MAX_IDENTITY_FILE_BYTES,
+  })
+  const tarballSha256 = tarball.identity.sha256
   if (
-    tarballBytes.byteLength !== entry.size ||
+    tarball.bytes.byteLength !== entry.size ||
     replay.tarball.realpath !== tarballPath ||
     replay.tarball.sha256 !== tarballSha256
   ) {
@@ -270,31 +338,31 @@ function resolveUniqueBunx(pathValue) {
     throw new Error('PATH is unavailable')
   }
   const candidates = []
-  const directories = new Set(pathValue.split(delimiter))
-  for (const directory of directories) {
+  const directories = new Set()
+  for (const directory of pathValue.split(delimiter)) {
     if (!isAbsolute(directory) || resolve(directory) !== directory) {
       throw new Error('PATH contains an unsafe entry')
     }
+    directories.add(canonicalExistingDirectory(directory, 'PATH directory'))
+  }
+  for (const directory of directories) {
     const candidate = join(directory, process.platform === 'win32' ? 'bunx.exe' : 'bunx')
     try {
-      const stats = statSync(candidate)
-      accessSync(candidate, constants.X_OK)
-      if (!stats.isFile()) continue
-      candidates.push({ path: candidate, realpath: realpathSync.native(candidate) })
+      candidates.push(observeBunx(candidate, MAX_IDENTITY_FILE_BYTES))
     } catch {}
   }
   if (candidates.length !== 1) throw new Error('PATH must resolve exactly one bunx executable')
-  const candidate = candidates[0]
-  return { ...candidate, sha256: sha256(readFileSync(candidate.realpath)) }
+  return candidates[0]
 }
 
-function resolveBunGlobalIdentity(bunx, cwd, environment, expectedCliSha256) {
-  const result = runBounded(bunx.realpath, ['pm', 'bin', '-g'], { cwd, environment })
+function resolveBunGlobalIdentity(executable, cwd, environment, expectedCliSha256) {
+  const result = runBounded(executable, ['pm', 'bin', '-g'], { cwd, environment })
   const lines = result.stdout.trimEnd().split('\n')
   if (result.stderr !== '' || lines.length !== 1 || lines[0].length < 1) {
     throw new Error('Bun global bin could not be resolved')
   }
   const binRealpath = requireSafeDirectory(lines[0], 'Bun global bin')
+  const binIdentity = pathIdentity(lstatSync(binRealpath))
   const depfreshLink = join(binRealpath, 'depfresh')
   let linkStats
   try {
@@ -303,6 +371,7 @@ function resolveBunGlobalIdentity(bunx, cwd, environment, expectedCliSha256) {
     throw new Error('Bun global depfresh link is unavailable')
   }
   if (!linkStats.isSymbolicLink()) throw new Error('Bun global depfresh entry is not a symlink')
+  const linkIdentity = pathIdentity(linkStats)
   const depfreshLinkTarget = requireSafeRegularFile(
     realpathSync.native(depfreshLink),
     'Bun global depfresh CLI',
@@ -312,27 +381,26 @@ function resolveBunGlobalIdentity(bunx, cwd, environment, expectedCliSha256) {
     dirname(binRealpath),
     'Bun global depfresh CLI is outside the Bun installation',
   )
-  const cliSha256 = sha256(readFileSync(depfreshLinkTarget))
+  const cli = readStableRegularFile(depfreshLinkTarget, {
+    label: 'Bun global depfresh CLI',
+    maxBytes: MAX_IDENTITY_FILE_BYTES,
+  })
+  const cliSha256 = cli.identity.sha256
   if (cliSha256 !== expectedCliSha256) {
     throw new Error('Bun global depfresh CLI does not match installed replay evidence')
   }
-  return { binRealpath, depfreshLink, depfreshLinkTarget, cliSha256 }
+  return {
+    binRealpath,
+    binIdentity,
+    depfreshLink,
+    linkIdentity,
+    depfreshLinkTarget,
+    targetIdentity: cli.identity,
+    cliSha256,
+  }
 }
 
 function createBunxPtyLauncher(bunx) {
-  const stats = lstatSync(bunx.path)
-  const targetStats = statSync(bunx.realpath)
-  if (stats.isFile() && !stats.isSymbolicLink() && bunx.path === bunx.realpath) {
-    return {
-      path: bunx.realpath,
-      identity: {
-        method: 'direct',
-        device: String(targetStats.dev),
-        inode: String(targetStats.ino),
-      },
-      cleanup() {},
-    }
-  }
   const lexicalRoot = mkdtempSync(join(tmpdir(), 'depfresh-live-bunx-'))
   const root = realpathSync.native(lexicalRoot)
   const launcherPath = join(root, 'bunx')
@@ -342,8 +410,8 @@ function createBunxPtyLauncher(bunx) {
     if (
       !launcherStats.isFile() ||
       launcherStats.isSymbolicLink() ||
-      launcherStats.dev !== targetStats.dev ||
-      launcherStats.ino !== targetStats.ino
+      String(launcherStats.dev) !== bunx.targetIdentity.device ||
+      String(launcherStats.ino) !== bunx.targetIdentity.inode
     ) {
       throw new Error()
     }
@@ -351,8 +419,8 @@ function createBunxPtyLauncher(bunx) {
       path: launcherPath,
       identity: {
         method: 'inode-bound-bunx',
-        device: String(targetStats.dev),
-        inode: String(targetStats.ino),
+        device: bunx.targetIdentity.device,
+        inode: bunx.targetIdentity.inode,
       },
       cleanup() {
         rmSync(root, { force: true, recursive: true })
@@ -361,111 +429,6 @@ function createBunxPtyLauncher(bunx) {
   } catch {
     rmSync(root, { force: true, recursive: true })
     throw new Error('Resolved bunx executable could not be bound for PTY execution')
-  }
-}
-
-function analyzeHybridRun(result, columns, argv, repositoryName) {
-  requireSuccessfulPty(result, columns)
-  const screen = result.transcript
-  const lines = screen.trimEnd().split('\n')
-  const context = lines.findIndex(
-    (line) =>
-      line.includes(repositoryName) &&
-      /\bbun(?:\s|\b)/u.test(line) &&
-      line.includes('major') &&
-      line.includes('read-only'),
-  )
-  const topology = lines.findIndex((line) => /\b[0-9]+ updates\b/u.test(line))
-  const severity = lines.findIndex((line) => /^Major [0-9]+ .*Minor [0-9]+ .*Patch [0-9]+$/u.test(line))
-  const breaking = lines.findIndex((line) => line === 'Breaking changes')
-  const ledger = lines.findIndex((line) => /^dependency\b.*\bseverity\b/u.test(line))
-  const indexes = [context, topology, severity, breaking, ledger]
-  if (indexes.some((index) => index < 0) || indexes.some((value, index) => index > 0 && value <= indexes[index - 1])) {
-    throw new Error('Live Visual+ hierarchy is incomplete')
-  }
-  const topologyMatch = lines[topology].match(/\b([0-9]+) updates\b/u)
-  const declared = Number(topologyMatch?.[1])
-  const ledgerTail = lines.slice(ledger + 1)
-  const receiptIndex = ledgerTail.findIndex((line) => /^Review complete\b/u.test(line))
-  if (!Number.isSafeInteger(declared) || declared < 1 || receiptIndex < 0) {
-    throw new Error('Live Visual+ update membership is incomplete')
-  }
-  const rendered = ledgerTail
-    .slice(0, receiptIndex)
-    .filter((line) => /\b(?:Major|Minor|Patch)\b/u.test(line)).length
-  if (rendered !== declared || !ledgerTail[receiptIndex].includes(`${declared} updates`)) {
-    throw new Error('Live Visual+ update membership differs from the summary')
-  }
-  if (
-    /Lifecycle|Update preview|audit preview|Operation ID|Owner ID|Dependency ID|Package ID|Source ID/iu.test(
-      screen,
-    )
-  ) {
-    throw new Error('Live Visual+ default output contains forbidden audit details')
-  }
-  return {
-    columns,
-    argv,
-    exitCode: result.exitCode,
-    signal: result.signal,
-    finalCursorVisible: result.finalCursorVisible,
-    controls: result.controls,
-    rawControl: classifyRawTerminalTransport(result.rawTerminal),
-    operationRows: { declared, rendered, complete: true },
-    hierarchyTokens: [
-      'context',
-      'topology',
-      'severity',
-      'breaking-changes',
-      'update-ledger',
-    ],
-    finalScreen: screen,
-  }
-}
-
-function analyzeLongRun(result, columns, argv, expectedOperations) {
-  requireSuccessfulPty(result, columns)
-  const screen = result.transcript
-  const membership = {
-    dependencies: countExactLines(screen, 'Dependency ID '),
-    majorCards: countExactLines(screen, 'Major card'),
-    occurrences: countExactLines(screen, 'Occurrence'),
-    operations: countExactLines(screen, 'Operation ID '),
-    owners: countExactLines(screen, 'Owner ID '),
-    targets: countExactLines(screen, 'Target '),
-  }
-  if (
-    membership.operations !== expectedOperations ||
-    membership.occurrences < 1 ||
-    membership.owners < 1 ||
-    membership.targets < 1
-  ) {
-    throw new Error('Live Visual+ long membership is incomplete')
-  }
-  return {
-    columns,
-    argv,
-    exitCode: result.exitCode,
-    signal: result.signal,
-    finalCursorVisible: result.finalCursorVisible,
-    controls: result.controls,
-    rawControl: classifyRawTerminalTransport(result.rawTerminal),
-    membership,
-    finalScreen: screen,
-  }
-}
-
-function requireSuccessfulPty(result, columns) {
-  if (
-    !isRecord(result) ||
-    result.exitCode !== 0 ||
-    result.signal !== null ||
-    result.finalCursorVisible !== true ||
-    result.evidence?.columns !== columns ||
-    typeof result.transcript !== 'string' ||
-    !result.transcript.endsWith('Exit 0\n')
-  ) {
-    throw new Error('Live Visual+ PTY run is incomplete')
   }
 }
 
@@ -481,19 +444,25 @@ function repositorySnapshot(cwd) {
     isAbsolute(rawIndexPath) ? rawIndexPath : resolve(cwd, rawIndexPath),
     'Git index',
   )
-  const indexBytes = readFileSync(indexPath)
+  const index = readStableRegularFile(indexPath, {
+    label: 'Git index',
+    maxBytes: MAX_IDENTITY_FILE_BYTES,
+  })
   const diff = runGit(cwd, ['diff', '--no-ext-diff', '--binary']).stdoutBytes
   const cachedDiff = runGit(cwd, ['diff', '--cached', '--no-ext-diff', '--binary']).stdoutBytes
   const status = runGit(cwd, ['status', '--porcelain=v1', '--untracked-files=all']).stdoutBytes
   const bunLockPath = requireSafeRegularFile(join(cwd, 'bun.lock'), 'bun.lock')
-  const bunLockBytes = readFileSync(bunLockPath)
+  const bunLock = readStableRegularFile(bunLockPath, {
+    label: 'bun.lock',
+    maxBytes: MAX_IDENTITY_FILE_BYTES,
+  })
   return {
     head,
-    index: byteIdentity(indexBytes, indexPath),
+    index: index.identity,
     diff: byteIdentity(diff),
     cachedDiff: byteIdentity(cachedDiff),
     status: byteIdentity(status),
-    bunLock: byteIdentity(bunLockBytes, bunLockPath),
+    bunLock: bunLock.identity,
   }
 }
 
@@ -534,61 +503,24 @@ function runBounded(executable, args, options) {
 }
 
 function readBoundedJson(path) {
-  const stats = lstatSync(path)
-  if (!stats.isFile() || stats.isSymbolicLink() || stats.size < 1 || stats.size > MAX_JSON_BYTES) {
-    throw new Error('Live proof JSON input is unsafe')
-  }
+  const input = readStableRegularFile(path, {
+    label: 'Live proof JSON input',
+    maxBytes: MAX_JSON_BYTES,
+  })
+  if (input.bytes.byteLength < 1) throw new Error('Live proof JSON input is unsafe')
   try {
-    return JSON.parse(readFileSync(path, 'utf8'))
+    return JSON.parse(input.bytes.toString('utf8'))
   } catch {
     throw new Error('Live proof JSON input is invalid')
   }
 }
 
 function requireSafeDirectory(path, label) {
-  if (typeof path !== 'string' || !isAbsolute(path) || resolve(path) !== path) {
-    throw new Error(`${label} path is invalid`)
-  }
-  let stats
-  try {
-    stats = lstatSync(path)
-  } catch {
-    throw new Error(`${label} is unavailable`)
-  }
-  if (!stats.isDirectory() || stats.isSymbolicLink() || realpathSync.native(path) !== path) {
-    throw new Error(`${label} is unsafe`)
-  }
-  return path
+  return canonicalExistingDirectory(path, label)
 }
 
 function requireSafeRegularFile(path, label) {
-  if (typeof path !== 'string' || !isAbsolute(path) || resolve(path) !== path) {
-    throw new Error(`${label} path is invalid`)
-  }
-  let stats
-  try {
-    stats = lstatSync(path)
-  } catch {
-    throw new Error(`${label} is unavailable`)
-  }
-  if (!stats.isFile() || stats.isSymbolicLink() || realpathSync.native(path) !== path) {
-    throw new Error(`${label} is unsafe`)
-  }
-  return path
-}
-
-function requireContainedNewOutput(path, root) {
-  if (typeof path !== 'string') throw new Error('Live proof output path is invalid')
-  const outputPath = resolve(path)
-  const parent = requireSafeDirectory(dirname(outputPath), 'live proof output parent')
-  requireContained(parent, root, 'Live proof output is not contained')
-  try {
-    lstatSync(outputPath)
-  } catch (error) {
-    if (isRecord(error) && error.code === 'ENOENT') return outputPath
-    throw new Error('Live proof output is unavailable')
-  }
-  throw new Error('Live proof output already exists')
+  return canonicalExistingRegularFile(path, label)
 }
 
 function rejectLocalShadow(cwd) {
@@ -634,10 +566,6 @@ function fixedArgv(cwd, long) {
   return ['--no-install', 'depfresh', 'major', '--cwd', cwd, ...(long ? ['--long'] : [])]
 }
 
-function countExactLines(screen, prefix) {
-  return screen.split('\n').filter((line) => (prefix.endsWith(' ') ? line.startsWith(prefix) : line === prefix)).length
-}
-
 function requireUnchanged(before, after) {
   if (JSON.stringify(before) !== JSON.stringify(after)) {
     throw new Error('Live repository identity changed during proof')
@@ -665,39 +593,10 @@ function requireContained(path, root, message) {
   if (containment.startsWith('..') || isAbsolute(containment)) throw new Error(message)
 }
 
-function writeJsonAtomicNoReplace(path, value) {
-  const bytes = Buffer.from(`${JSON.stringify(value, null, 2)}\n`)
-  const pendingPath = join(
-    dirname(path),
-    `.${basename(path)}.pending-${process.pid}-${randomBytes(12).toString('hex')}`,
-  )
-  let descriptor
-  try {
-    descriptor = openSync(
-      pendingPath,
-      constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY,
-      0o600,
-    )
-    let offset = 0
-    while (offset < bytes.byteLength) {
-      offset += writeSync(descriptor, bytes, offset, bytes.byteLength - offset)
-    }
-    fsyncSync(descriptor)
-    closeSync(descriptor)
-    descriptor = undefined
-    chmodSync(pendingPath, 0o600)
-    linkSync(pendingPath, path)
-  } catch {
-    throw new Error('Live proof evidence could not be published')
-  } finally {
-    if (descriptor !== undefined) {
-      try {
-        closeSync(descriptor)
-      } catch {}
-    }
-    try {
-      unlinkSync(pendingPath)
-    } catch {}
+function rejectRepositoryPublication(path, cwd) {
+  const containment = relative(cwd, path)
+  if (containment === '' || (!containment.startsWith('..') && !isAbsolute(containment))) {
+    throw new Error('Live proof evidence must be published outside the repository')
   }
 }
 

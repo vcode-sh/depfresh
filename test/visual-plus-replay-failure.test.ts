@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -6,6 +7,7 @@ import * as replayFailure from '../scripts/visual-plus-replay-failure.mjs'
 
 interface ReplayFailureApi {
   MAX_VISUAL_PLUS_REPORT_BYTES: number
+  trustedVisualPlusReplayTitles(): readonly string[]
   visualPlusReplayFailureMessage(reportPath: string): string
 }
 
@@ -140,6 +142,27 @@ describe('installed Visual+ replay failure classification', () => {
         ),
       ).toBe('unclassified')
     }
+  })
+
+  it('couples every trusted failure title to an exact collected Visual+ source test title', () => {
+    const titles = replayFailureApi.trustedVisualPlusReplayTitles()
+    const collected = JSON.parse(
+      execFileSync(
+        process.execPath,
+        [
+          join(process.cwd(), 'node_modules', 'vitest', 'vitest.mjs'),
+          'list',
+          'test/visual-plus-cli.test.ts',
+          '--json',
+        ],
+        { encoding: 'utf8', maxBuffer: 1024 * 1024 },
+      ),
+    ) as { name: string }[]
+    const exactSourceTitles = new Set(collected.map(({ name }) => name.replaceAll(' > ', ' ')))
+
+    expect(titles).toHaveLength(32)
+    expect(new Set(titles).size).toBe(32)
+    expect(titles.filter((title) => !exactSourceTitles.has(title))).toEqual([])
   })
 
   it('fails closed without reflecting untrusted report content', () => {

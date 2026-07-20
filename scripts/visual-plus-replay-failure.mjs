@@ -1,13 +1,14 @@
 import { createHash, randomBytes } from 'node:crypto'
 import {
-  chmodSync,
   closeSync,
   constants,
+  fchmodSync,
   fstatSync,
   fsyncSync,
   linkSync,
   lstatSync,
   openSync,
+  readdirSync,
   readFileSync,
   readSync,
   realpathSync,
@@ -17,6 +18,8 @@ import {
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path'
 
 export const MAX_VISUAL_PLUS_REPORT_BYTES = 256 * 1024
+
+const MAX_STABLE_FILE_BYTES = 4 * 1024 * 1024
 
 export function isCompleteVisualPlusReplayReport(report, expected) {
   if (
@@ -193,6 +196,10 @@ const TRUSTED_FAILURE_CATEGORIES = new Map([
   ],
 ])
 
+export function trustedVisualPlusReplayTitles() {
+  return Object.freeze([...TRUSTED_FAILURE_CATEGORIES.keys()])
+}
+
 export function visualPlusReplayFailureMessage(reportPath) {
   const report = readVisualPlusReplayReport(reportPath)
   const classification = classifyVisualPlusReplayFailure(report)
@@ -279,20 +286,29 @@ export function writeVisualPlusReplayEvidence(options) {
   if (!isCompleteVisualPlusReplayReport(options.report, expected)) {
     throw new Error('Installed replay evidence is incomplete')
   }
-  const containmentRoot = requireCanonicalDirectory(options.containmentRoot, 'evidence root')
-  const outputPath = requireContainedNewOutput(options.outputPath, containmentRoot)
-  const tarballPath = requireCanonicalRegularFile(options.tarballPath, 'tarball')
-  const installedRoot = requireCanonicalDirectory(options.installedRoot, 'extracted package')
-  const cliPath = requireCanonicalRegularFile(options.cliPath, 'installed CLI')
+  const containmentRoot = canonicalExistingDirectory(options.containmentRoot, 'evidence root')
+  const outputPath = canonicalContainedNewOutput(
+    options.outputPath,
+    containmentRoot,
+    'Installed replay evidence',
+  )
+  const tarballPath = canonicalExistingRegularFile(options.tarballPath, 'tarball')
+  const installedRoot = canonicalExistingDirectory(options.installedRoot, 'extracted package')
+  const cliPath = canonicalExistingRegularFile(options.cliPath, 'installed CLI')
   requireContainedPath(cliPath, installedRoot, 'Installed CLI is outside the extracted package')
   const packageVersion = requirePackageVersion(options.packageVersion)
-  const packageJsonPath = requireCanonicalRegularFile(
+  const packageJsonPath = canonicalExistingRegularFile(
     join(installedRoot, 'package.json'),
     'installed package manifest',
   )
   let installedPackage
   try {
-    installedPackage = JSON.parse(readFileSync(packageJsonPath, 'utf8'))
+    installedPackage = JSON.parse(
+      readStableRegularFile(packageJsonPath, {
+        label: 'installed package manifest',
+        maxBytes: MAX_STABLE_FILE_BYTES,
+      }).bytes.toString('utf8'),
+    )
   } catch {
     throw new Error('Installed package manifest is invalid')
   }
@@ -301,10 +317,20 @@ export function writeVisualPlusReplayEvidence(options) {
   }
   const tarballSha256 = requireSha256(options.tarballSha256, 'tarball')
   const cliSha256 = requireSha256(options.cliSha256, 'installed CLI')
-  if (sha256File(tarballPath) !== tarballSha256) {
+  if (
+    readStableRegularFile(tarballPath, {
+      label: 'tarball',
+      maxBytes: MAX_STABLE_FILE_BYTES,
+    }).identity.sha256 !== tarballSha256
+  ) {
     throw new Error('Tarball identity changed before replay evidence publication')
   }
-  if (sha256File(cliPath) !== cliSha256) {
+  if (
+    readStableRegularFile(cliPath, {
+      label: 'installed CLI',
+      maxBytes: MAX_STABLE_FILE_BYTES,
+    }).identity.sha256 !== cliSha256
+  ) {
     throw new Error('Installed CLI identity changed before replay evidence publication')
   }
   const evidence = {
@@ -316,55 +342,55 @@ export function writeVisualPlusReplayEvidence(options) {
     cli: { realpath: cliPath, sha256: cliSha256 },
     passed: { files: expected.files, suites: expected.suites, tests: expected.tests },
   }
-  writeJsonAtomicNoReplace(outputPath, evidence)
+  publishJsonAtomicNoReplace(outputPath, evidence, {
+    errorPrefix: 'Installed replay evidence',
+    hooks: options.publicationHooks,
+  })
   return evidence
 }
 
-function requireCanonicalDirectory(path, label) {
-  if (typeof path !== 'string' || !isAbsolute(path) || resolve(path) !== path) {
-    throw new Error(`Installed replay ${label} path is invalid`)
-  }
-  let stats
-  try {
-    stats = lstatSync(path)
-  } catch {
-    throw new Error(`Installed replay ${label} is unavailable`)
-  }
-  if (!stats.isDirectory() || stats.isSymbolicLink() || realpathSync.native(path) !== path) {
-    throw new Error(`Installed replay ${label} is unsafe`)
-  }
-  return path
+export function canonicalExistingDirectory(path, label) {
+  return canonicalExistingPath(path, label, 'directory')
 }
 
-function requireCanonicalRegularFile(path, label) {
-  if (typeof path !== 'string' || !isAbsolute(path) || resolve(path) !== path) {
-    throw new Error(`Installed replay ${label} path is invalid`)
-  }
-  let stats
-  try {
-    stats = lstatSync(path)
-  } catch {
-    throw new Error(`Installed replay ${label} is unavailable`)
-  }
-  if (!stats.isFile() || stats.isSymbolicLink() || realpathSync.native(path) !== path) {
-    throw new Error(`Installed replay ${label} is unsafe`)
-  }
-  return path
+export function canonicalExistingRegularFile(path, label) {
+  return canonicalExistingPath(path, label, 'file')
 }
 
-function requireContainedNewOutput(path, containmentRoot) {
+function canonicalExistingPath(path, label, kind) {
   if (typeof path !== 'string' || !isAbsolute(path) || resolve(path) !== path) {
-    throw new Error('Installed replay evidence output path is invalid')
+    throw new Error(`${label} path is invalid`)
   }
-  const parent = requireCanonicalDirectory(dirname(path), 'evidence output parent')
-  requireContainedPath(parent, containmentRoot, 'Installed replay evidence output is not contained')
+  let stats
+  let canonical
   try {
-    lstatSync(path)
+    stats = lstatSync(path)
+    canonical = realpathSync.native(path)
+  } catch {
+    throw new Error(`${label} is unavailable`)
+  }
+  const expectedKind = kind === 'directory' ? stats.isDirectory() : stats.isFile()
+  if (!expectedKind || stats.isSymbolicLink() || !isAbsolute(canonical)) {
+    throw new Error(`${label} is unsafe`)
+  }
+  return canonical
+}
+
+export function canonicalContainedNewOutput(path, containmentRoot, label) {
+  if (typeof path !== 'string' || !isAbsolute(path) || resolve(path) !== path) {
+    throw new Error(`${label} output path is invalid`)
+  }
+  const canonicalRoot = canonicalExistingDirectory(containmentRoot, `${label} root`)
+  const parent = canonicalExistingDirectory(dirname(path), `${label} output parent`)
+  requireContainedPath(parent, canonicalRoot, `${label} output is not contained`)
+  const outputPath = join(parent, basename(path))
+  try {
+    lstatSync(outputPath)
   } catch (error) {
-    if (isMissing(error)) return path
-    throw new Error('Installed replay evidence output is unavailable')
+    if (isMissing(error)) return outputPath
+    throw new Error(`${label} output is unavailable`)
   }
-  throw new Error('Installed replay evidence output already exists')
+  throw new Error(`${label} output already exists`)
 }
 
 function requireContainedPath(path, root, message) {
@@ -386,44 +412,392 @@ function requireSha256(value, label) {
   return value
 }
 
-function sha256File(path) {
-  return createHash('sha256').update(readFileSync(path)).digest('hex')
-}
-
-function writeJsonAtomicNoReplace(path, value) {
-  const bytes = Buffer.from(`${JSON.stringify(value, null, 2)}\n`)
-  const pendingPath = join(
-    dirname(path),
-    `.${basename(path)}.pending-${process.pid}-${randomBytes(12).toString('hex')}`,
-  )
+export function readStableRegularFile(path, options) {
+  if (!isRecord(options) || typeof options.label !== 'string') {
+    throw new Error('Stable file read options are invalid')
+  }
+  const maxBytes = options.maxBytes
+  if (!Number.isSafeInteger(maxBytes) || maxBytes < 1) {
+    throw new Error(`${options.label} byte bound is invalid`)
+  }
+  const canonical = canonicalExistingRegularFile(path, options.label)
+  const expected = lstatSync(path)
+  options.hooks?.afterLstat?.()
   let descriptor
+  let closeError
   try {
     descriptor = openSync(
-      pendingPath,
-      constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY,
-      0o600,
+      path,
+      constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0),
     )
+    const opened = fstatSync(descriptor)
+    requireSameRegularIdentity(expected, opened, options.label)
+    if (opened.size < 0 || opened.size > maxBytes) {
+      throw new Error(`${options.label} exceeds its byte bound`)
+    }
+    const bytes = Buffer.alloc(opened.size)
     let offset = 0
     while (offset < bytes.byteLength) {
-      offset += writeSync(descriptor, bytes, offset, bytes.byteLength - offset)
+      const count = readSync(descriptor, bytes, offset, bytes.byteLength - offset, offset)
+      if (count === 0) throw new Error(`${options.label} changed while being read`)
+      offset += count
     }
-    fsyncSync(descriptor)
-    closeSync(descriptor)
-    descriptor = undefined
-    chmodSync(pendingPath, 0o600)
-    linkSync(pendingPath, path)
-  } catch {
-    throw new Error('Installed replay evidence could not be published')
+    if (readSync(descriptor, Buffer.alloc(1), 0, 1, bytes.byteLength) !== 0) {
+      throw new Error(`${options.label} changed while being read`)
+    }
+    const afterDescriptor = fstatSync(descriptor)
+    const afterPath = lstatSync(path)
+    requireSameRegularIdentity(opened, afterDescriptor, options.label)
+    requireSameRegularIdentity(opened, afterPath, options.label)
+    if (realpathSync.native(path) !== canonical) {
+      throw new Error(`${options.label} identity changed while being read`)
+    }
+    return {
+      bytes,
+      identity: stableIdentity(opened, canonical, bytes),
+    }
   } finally {
     if (descriptor !== undefined) {
       try {
         closeSync(descriptor)
-      } catch {}
+      } catch (error) {
+        closeError = error
+      }
     }
-    try {
-      unlinkSync(pendingPath)
-    } catch {}
+    if (closeError !== undefined) throw new Error(`${options.label} descriptor could not be closed`)
   }
+}
+
+function requireSameRegularIdentity(expected, actual, label) {
+  if (
+    !actual.isFile() ||
+    actual.isSymbolicLink() ||
+    actual.dev !== expected.dev ||
+    actual.ino !== expected.ino ||
+    actual.mode !== expected.mode ||
+    actual.nlink !== expected.nlink ||
+    actual.size !== expected.size
+  ) {
+    throw new Error(`${label} identity changed while being read`)
+  }
+}
+
+function stableIdentity(stats, canonical, bytes) {
+  return {
+    realpath: canonical,
+    device: String(stats.dev),
+    inode: String(stats.ino),
+    mode: stats.mode,
+    links: stats.nlink,
+    bytes: bytes.byteLength,
+    sha256: createHash('sha256').update(bytes).digest('hex'),
+  }
+}
+
+export function publishJsonAtomicNoReplace(path, value, options = {}) {
+  const errorPrefix = typeof options.errorPrefix === 'string' ? options.errorPrefix : 'Evidence'
+  const bytes = Buffer.from(`${JSON.stringify(value, null, 2)}\n`)
+  const parentPath = canonicalExistingDirectory(dirname(path), `${errorPrefix} output parent`)
+  const parentContainer = canonicalExistingDirectory(
+    dirname(parentPath),
+    `${errorPrefix} output parent container`,
+  )
+  if (join(parentPath, basename(path)) !== path) {
+    throw new Error(`${errorPrefix} output path is not canonical`)
+  }
+  const pendingPath = join(
+    parentPath,
+    `.${basename(path)}.pending-${process.pid}-${randomBytes(12).toString('hex')}`,
+  )
+  let expectedParent
+  let parentDescriptor
+  let pendingDescriptor
+  let pendingIdentity
+  let relocatedParentPath
+  let primaryError
+  const cleanupErrors = []
+  try {
+    expectedParent = lstatSync(parentPath)
+    parentDescriptor = openSync(
+      parentPath,
+      constants.O_RDONLY | (constants.O_DIRECTORY ?? 0) | (constants.O_NOFOLLOW ?? 0),
+    )
+    requireSameDirectoryIdentity(expectedParent, fstatSync(parentDescriptor), errorPrefix)
+    requireDirectoryPathIdentity(parentPath, expectedParent, parentDescriptor, errorPrefix)
+    requireAbsent(path, errorPrefix)
+    pendingDescriptor = openSync(
+      pendingPath,
+      constants.O_CREAT |
+        constants.O_EXCL |
+        constants.O_WRONLY |
+        (constants.O_NOFOLLOW ?? 0),
+      0o600,
+    )
+    fchmodSync(pendingDescriptor, 0o600)
+    pendingIdentity = fstatSync(pendingDescriptor)
+    if (
+      !pendingIdentity.isFile() ||
+      pendingIdentity.isSymbolicLink() ||
+      pendingIdentity.dev !== expectedParent.dev ||
+      pendingIdentity.nlink !== 1 ||
+      (pendingIdentity.mode & 0o777) !== 0o600
+    ) {
+      throw new Error(`${errorPrefix} pending file is unsafe`)
+    }
+    requireDirectoryPathIdentity(parentPath, expectedParent, parentDescriptor, errorPrefix)
+    let offset = 0
+    while (offset < bytes.byteLength) {
+      offset += writeSync(pendingDescriptor, bytes, offset, bytes.byteLength - offset)
+    }
+    fsyncSync(pendingDescriptor)
+    const writtenIdentity = fstatSync(pendingDescriptor)
+    if (
+      writtenIdentity.dev !== pendingIdentity.dev ||
+      writtenIdentity.ino !== pendingIdentity.ino ||
+      writtenIdentity.mode !== pendingIdentity.mode ||
+      writtenIdentity.nlink !== 1 ||
+      writtenIdentity.size !== bytes.byteLength
+    ) {
+      throw new Error(`${errorPrefix} pending file changed while being written`)
+    }
+    pendingIdentity = writtenIdentity
+    requirePendingPathIdentity(pendingPath, pendingIdentity, errorPrefix)
+    const hookResult = options.hooks?.afterPendingCreated?.({ parentPath, pendingPath })
+    if (isRecord(hookResult) && typeof hookResult.relocatedParentPath === 'string') {
+      relocatedParentPath = hookResult.relocatedParentPath
+    }
+    requireDirectoryPathIdentity(parentPath, expectedParent, parentDescriptor, errorPrefix)
+    requirePendingPathIdentity(pendingPath, pendingIdentity, errorPrefix)
+    requireAbsent(path, errorPrefix)
+    linkSync(pendingPath, path)
+    const published = lstatSync(path)
+    if (
+      !published.isFile() ||
+      published.isSymbolicLink() ||
+      published.dev !== pendingIdentity.dev ||
+      published.ino !== pendingIdentity.ino ||
+      published.nlink !== 2
+    ) {
+      throw new Error(`${errorPrefix} publication identity is invalid`)
+    }
+    requireDirectoryPathIdentity(parentPath, expectedParent, parentDescriptor, errorPrefix)
+    fsyncSync(parentDescriptor)
+  } catch (error) {
+    primaryError = error
+  } finally {
+    try {
+      options.hooks?.beforePendingCleanup?.()
+    } catch (error) {
+      cleanupErrors.push(error)
+    }
+    if (pendingIdentity !== undefined && (primaryError !== undefined || cleanupErrors.length > 0)) {
+      cleanupOwnedPath(path, pendingIdentity, cleanupErrors)
+    }
+    const discoveredParent =
+      relocatedParentPath === undefined && !isOwnedPath(pendingPath, pendingIdentity)
+        ? locateDirectoryIdentity(parentContainer, expectedParent)
+        : undefined
+    const pendingCandidates = [
+      pendingPath,
+      ...(typeof relocatedParentPath === 'string'
+        ? [join(relocatedParentPath, basename(pendingPath))]
+        : []),
+      ...(discoveredParent === undefined
+        ? []
+        : [join(discoveredParent, basename(pendingPath))]),
+    ]
+    for (const candidate of pendingCandidates) {
+      cleanupOwnedPath(candidate, pendingIdentity, cleanupErrors)
+    }
+    if (pendingDescriptor !== undefined && (primaryError !== undefined || cleanupErrors.length > 0)) {
+      cleanupOwnedPath(path, pendingIdentity, cleanupErrors)
+    }
+    if (pendingDescriptor !== undefined && pendingIdentity !== undefined) {
+      try {
+        const remainingLinks = fstatSync(pendingDescriptor).nlink
+        const expectedLinks = primaryError === undefined && cleanupErrors.length === 0 ? 1 : 0
+        if (remainingLinks !== expectedLinks) {
+          cleanupErrors.push(new Error(`${errorPrefix} pending residue remains observable`))
+        }
+      } catch (error) {
+        cleanupErrors.push(error)
+      }
+    }
+    if (
+      primaryError === undefined &&
+      cleanupErrors.length === 0 &&
+      pendingIdentity !== undefined &&
+      parentDescriptor !== undefined &&
+      expectedParent !== undefined
+    ) {
+      try {
+        const published = lstatSync(path)
+        if (
+          !published.isFile() ||
+          published.isSymbolicLink() ||
+          published.dev !== pendingIdentity.dev ||
+          published.ino !== pendingIdentity.ino ||
+          published.nlink !== 1 ||
+          published.size !== bytes.byteLength
+        ) {
+          throw new Error(`${errorPrefix} final publication identity is invalid`)
+        }
+        requireDirectoryPathIdentity(parentPath, expectedParent, parentDescriptor, errorPrefix)
+        options.afterPublication?.()
+        const afterCallback = lstatSync(path)
+        if (
+          !afterCallback.isFile() ||
+          afterCallback.isSymbolicLink() ||
+          afterCallback.dev !== pendingIdentity.dev ||
+          afterCallback.ino !== pendingIdentity.ino ||
+          afterCallback.nlink !== 1 ||
+          afterCallback.size !== bytes.byteLength
+        ) {
+          throw new Error(`${errorPrefix} final publication identity changed`)
+        }
+        requireDirectoryPathIdentity(parentPath, expectedParent, parentDescriptor, errorPrefix)
+        fsyncSync(parentDescriptor)
+      } catch (error) {
+        primaryError = error
+        cleanupOwnedPath(path, pendingIdentity, cleanupErrors)
+      }
+    }
+    if (pendingDescriptor !== undefined && parentDescriptor !== undefined) {
+      try {
+        options.hooks?.beforeDescriptorClose?.({ parentDescriptor, pendingDescriptor })
+      } catch (error) {
+        cleanupErrors.push(error)
+      }
+    }
+    if (pendingDescriptor !== undefined) {
+      try {
+        closeSync(pendingDescriptor)
+      } catch (error) {
+        cleanupErrors.push(error)
+      }
+    }
+    if (parentDescriptor !== undefined) {
+      try {
+        closeSync(parentDescriptor)
+      } catch (error) {
+        cleanupErrors.push(error)
+      }
+    }
+    if (cleanupErrors.length > 0 && pendingIdentity !== undefined) {
+      cleanupOwnedPath(path, pendingIdentity, cleanupErrors)
+    }
+  }
+  if (cleanupErrors.length > 0) {
+    throw new AggregateError(
+      [...(primaryError === undefined ? [] : [primaryError]), ...cleanupErrors],
+      `${errorPrefix} cleanup failed`,
+    )
+  }
+  if (primaryError !== undefined) {
+    throw new Error(`${errorPrefix} could not be published`, { cause: primaryError })
+  }
+}
+
+function requireSameDirectoryIdentity(expected, actual, label) {
+  if (
+    !actual.isDirectory() ||
+    actual.isSymbolicLink() ||
+    actual.dev !== expected.dev ||
+    actual.ino !== expected.ino ||
+    actual.mode !== expected.mode
+  ) {
+    throw new Error(`${label} output parent identity changed`)
+  }
+}
+
+function requireDirectoryPathIdentity(path, expected, descriptor, label) {
+  requireSameDirectoryIdentity(expected, fstatSync(descriptor), label)
+  requireSameDirectoryIdentity(expected, lstatSync(path), label)
+  if (realpathSync.native(path) !== path) throw new Error(`${label} output parent identity changed`)
+}
+
+function requirePendingPathIdentity(path, expected, label) {
+  const actual = lstatSync(path)
+  if (
+    !actual.isFile() ||
+    actual.isSymbolicLink() ||
+    actual.dev !== expected.dev ||
+    actual.ino !== expected.ino ||
+    actual.mode !== expected.mode ||
+    actual.nlink !== expected.nlink
+  ) {
+    throw new Error(`${label} pending identity changed`)
+  }
+}
+
+function requireAbsent(path, label) {
+  try {
+    lstatSync(path)
+  } catch (error) {
+    if (isMissing(error)) return
+    throw new Error(`${label} output is unavailable`)
+  }
+  throw new Error(`${label} output already exists`)
+}
+
+function cleanupOwnedPath(path, expected, errors) {
+  if (expected === undefined) return
+  let actual
+  try {
+    actual = lstatSync(path)
+  } catch (error) {
+    if (isMissing(error)) return
+    errors.push(error)
+    return
+  }
+  if (actual.dev !== expected.dev || actual.ino !== expected.ino || !actual.isFile()) {
+    errors.push(new Error('Owned publication path identity changed during cleanup'))
+    return
+  }
+  try {
+    unlinkSync(path)
+  } catch (error) {
+    errors.push(error)
+  }
+}
+
+function isOwnedPath(path, expected) {
+  if (expected === undefined) return false
+  try {
+    const actual = lstatSync(path)
+    return actual.isFile() && actual.dev === expected.dev && actual.ino === expected.ino
+  } catch {
+    return false
+  }
+}
+
+function locateDirectoryIdentity(container, expected) {
+  if (expected === undefined) return undefined
+  let names
+  try {
+    names = readdirSync(container)
+  } catch {
+    return undefined
+  }
+  if (names.length > 4096) return undefined
+  for (const name of names) {
+    const candidate = join(container, name)
+    let stats
+    try {
+      stats = lstatSync(candidate)
+    } catch {
+      continue
+    }
+    if (
+      stats.isDirectory() &&
+      !stats.isSymbolicLink() &&
+      stats.dev === expected.dev &&
+      stats.ino === expected.ino
+    ) {
+      return candidate
+    }
+  }
+  return undefined
 }
 
 function isMissing(error) {
