@@ -76,17 +76,67 @@ describe('PTY identity registration diagnostics', () => {
     expect(observed.ambiguous).toBe(false)
   })
 
-  it('promotes exactly one provisional wrapper change to its self-led group', () => {
-    const observed = createPromotionObserved()
+  it.each(['cli', 'wrapper'] as const)(
+    'consumes one exact provisional self-led group change from authoritative %s evidence',
+    (role) => {
+      const observed = createPromotionObserved()
+      observeIdentity(observed, 300, promoted)
 
-    observeIdentity(observed, 300, promoted)
+      expect(() => registerEvidenceIdentity(observed, role, 300, promoted)).not.toThrow()
+      expect(observed.ambiguous).toBe(false)
+      expect(observed.get(300)).toEqual(promoted)
+      expect(observed.authoritative).toEqual(new Set([300]))
+      expect(observed.provisionalGroupChanges.size).toBe(0)
+    },
+  )
 
-    expect(observed.ambiguous).toBe(false)
-    expect(promoteWrapperIdentity(observed, 300, promoted, promoted)).toBe(true)
-    expect(observed.get(300)).toEqual(promoted)
-    expect(observed.authoritative).toEqual(new Set([300]))
-    expect(observed.provisionalGroupChanges.size).toBe(0)
-  })
+  it.each(['missing', 'reappeared'] as const)(
+    'rejects authoritative CLI evidence after a provisional identity was %s',
+    (state) => {
+      const observed = createPromotionObserved()
+      observeIdentity(observed, 300, promoted)
+      observed[state].add(300)
+
+      expect(() => registerEvidenceIdentity(observed, 'cli', 300, promoted)).toThrow(
+        'PTY process identity evidence changed [cli-group-only]',
+      )
+      expect(observed.ambiguous).toBe(true)
+      expect(observed.authoritative.size).toBe(0)
+      expect(observed.provisionalGroupChanges.size).toBe(1)
+    },
+  )
+
+  it.each([
+    ['group', { ...promoted, group: 301 }],
+    ['start', { ...promoted, start: 'Sun Jul 19 13:20:32 2026' }],
+  ] as const)(
+    'rejects changed authoritative CLI %s evidence after a provisional change',
+    (_axis, changed) => {
+      const observed = createPromotionObserved()
+      observeIdentity(observed, 300, promoted)
+
+      expect(() => registerEvidenceIdentity(observed, 'cli', 300, changed)).toThrow(
+        /PTY process identity evidence changed/u,
+      )
+      expect(observed.ambiguous).toBe(true)
+      expect(observed.authoritative.size).toBe(0)
+    },
+  )
+
+  it.each(['wrapper', 'known detached outer root'])(
+    'promotes exactly one provisional %s change to its self-led group',
+    () => {
+      const observed = createPromotionObserved()
+
+      observeIdentity(observed, 300, promoted)
+
+      expect(observed.ambiguous).toBe(false)
+      expect(promoteWrapperIdentity(observed, 300, promoted, promoted)).toBe(true)
+      expect(observed.get(300)).toEqual(promoted)
+      expect(observed.authoritative).toEqual(new Set([300]))
+      expect(observed.provisionalGroupChanges.size).toBe(0)
+    },
+  )
 
   it.each([
     ['self-led', promoted],

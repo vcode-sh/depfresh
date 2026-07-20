@@ -25,7 +25,7 @@ import { visualLength } from '../../src/utils/format/width.ts'
 const DEFAULT_TIMEOUT_MS = 30_000
 const DEFAULT_OUTPUT_LIMIT = 4 * 1024 * 1024
 const PROCESS_SCAN_OUTPUT_LIMIT = 1024 * 1024
-const PROCESS_SCAN_TIMEOUT_MS = 1_000
+const PROCESS_SCAN_TIMEOUT_MS = 5_000
 const CONFIG_LIMIT = 256 * 1024
 const SIDECAR_LIMIT = 4 * 1024
 const TIMEOUT_READINESS_ENV = 'DEPFRESH_PTY_TIMEOUT_READINESS_PATH'
@@ -1534,6 +1534,7 @@ function signalMatchingIdentities(current, observed, signal, errors) {
 function observeProcessTree(outerPid, directory, observed) {
   const roots = new Set([outerPid])
   const publishedWrapper = readPublishedWrapperIdentity(directory)
+  const publishedCli = readPublishedCliIdentity(directory)
   for (const name of ['script-pid', 'wrapper-ready.json', 'start.json']) {
     try {
       if (name === 'script-pid') roots.add(readPidSidecar(directory, name))
@@ -1551,17 +1552,23 @@ function observeProcessTree(outerPid, directory, observed) {
   }
   observed.probeSucceeded = true
   observeIdentitySnapshot(observed, current)
-  if (
-    publishedWrapper &&
-    observed.provisionalGroupChanges?.has(publishedWrapper.pid) &&
-    !observed.authoritative?.has(publishedWrapper.pid)
-  ) {
-    promoteWrapperIdentity(
-      observed,
-      publishedWrapper.pid,
-      publishedWrapper.identity,
-      current.get(publishedWrapper.pid),
-    )
+  for (const published of [
+    { pid: outerPid, identity: current.get(outerPid) },
+    publishedWrapper,
+    publishedCli,
+  ]) {
+    if (
+      published?.identity &&
+      observed.provisionalGroupChanges?.has(published.pid) &&
+      !observed.authoritative?.has(published.pid)
+    ) {
+      promoteWrapperIdentity(
+        observed,
+        published.pid,
+        published.identity,
+        current.get(published.pid),
+      )
+    }
   }
   const descendants = new Set(roots)
   let changed = true
@@ -1607,6 +1614,24 @@ function readPublishedWrapperIdentity(directory) {
         parent: wrapperReady.wrapperParent,
         group: wrapperReady.wrapperGroup,
         start: wrapperReady.wrapperStart,
+      },
+    }
+  } catch {
+    return undefined
+  }
+}
+
+function readPublishedCliIdentity(directory) {
+  try {
+    requireStartReadinessEvidence(directory)
+    const start = readSidecar(directory, 'start.json')
+    validateStart(start)
+    return {
+      pid: start.cliPid,
+      identity: {
+        parent: start.cliParent,
+        group: start.cliGroup,
+        start: start.cliStart,
       },
     }
   } catch {
@@ -1983,6 +2008,16 @@ export function registerEvidenceIdentity(observed, roleOrPid, pidOrIdentity, may
   if (diagnostic) {
     observed.ambiguous = true
     throw new Error(`PTY process identity evidence changed [${role}-${diagnostic}]`)
+  }
+  if (observed.provisionalGroupChanges?.has(pid)) {
+    const promoted =
+      (role === 'cli' || role === 'wrapper') &&
+      promoteWrapperIdentity(observed, pid, identity, identity)
+    if (!promoted) {
+      observed.ambiguous = true
+      throw new Error(`PTY process identity evidence changed [${role}-group-only]`)
+    }
+    return
   }
   observed.set(pid, identity)
 }

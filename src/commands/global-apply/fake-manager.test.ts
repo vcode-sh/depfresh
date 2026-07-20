@@ -2,6 +2,7 @@ import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync 
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
+import { defaultGlobalProcessRuntime, type GlobalProcessRuntime } from '../../io/global-manager'
 import type { GlobalManagerName } from '../../types'
 import { applyGlobalPlan, createGlobalApplyPlan, createGlobalInvocationAuthority } from '.'
 
@@ -38,11 +39,32 @@ describe('global apply fake manager integration', () => {
       expectedVersion: '1.0.0',
       targetVersion: '2.0.0',
     }))
-    const plan = await createGlobalApplyPlan(requests, {
-      cwd: root,
-      timeoutMs: 5_000,
-      inheritedEnv,
-    })
+    const observations: Array<{
+      reason: string
+      termination: string
+      terminationConfirmed: boolean
+    }> = []
+    const runtime: GlobalProcessRuntime = {
+      resolve: (...args) => defaultGlobalProcessRuntime.resolve(...args),
+      run: async (...args) => {
+        const observation = await defaultGlobalProcessRuntime.run(...args)
+        observations.push({
+          reason: observation.reason,
+          termination: observation.termination,
+          terminationConfirmed: observation.terminationConfirmed,
+        })
+        return observation
+      },
+    }
+    const plan = await createGlobalApplyPlan(
+      requests,
+      {
+        cwd: root,
+        timeoutMs: 5_000,
+        inheritedEnv,
+      },
+      runtime,
+    )
     const result = await applyGlobalPlan(
       plan,
       { cwd: root, inheritedEnv },
@@ -50,9 +72,23 @@ describe('global apply fake manager integration', () => {
         globalWrite: true,
         processExecute: true,
       }),
+      runtime,
     )
 
-    expect(result.status).toBe('applied')
+    const diagnostics = {
+      items: result.items.map(({ manager, status, reason }) => ({ manager, status, reason })),
+      commands: result.commands.map(
+        ({ manager, termination, terminationConfirmed, exitCode, signal }) => ({
+          manager,
+          termination,
+          terminationConfirmed,
+          exitCode,
+          signal,
+        }),
+      ),
+      observations,
+    }
+    expect(result.status, JSON.stringify(diagnostics)).toBe('applied')
     expect(result.items.map((item) => [item.manager, item.status])).toEqual([
       ['npm', 'applied'],
       ['pnpm', 'applied'],
