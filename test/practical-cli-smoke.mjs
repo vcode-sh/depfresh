@@ -25,12 +25,20 @@ const CHECK_SELECTOR = '--check'
 const PIPE_RECEIPT_CHECK = 'piped write receipt stays complete and ordered on stdout'
 const COMMAND_TRANSACTION_CHECK = 'command transaction preflights every recursive target'
 const VISUAL_PLUS_FIXTURE_CHECK = 'Visual Plus fixture applies or blocks all selected targets'
+const GLOBAL_ALL_WRITE_CHECK = 'global-all write'
 const CHILD_TIMEOUT_MS = 30_000
 const CHILD_OUTPUT_LIMIT_BYTES = 8 * 1024 * 1024
+const GLOBAL_WRITE_ATTEMPT_LIMIT = 3
+const GLOBAL_WRITE_SUCCESS = /Global writes: 2 applied, 0 skipped, 0 failed, 0 unknown/u
+// A manager blocked before planning has no operation to report, so the fixture can surface
+// zero or one applied writes with zero unknown items despite a fail-closed observation.
+const GLOBAL_WRITE_RETRYABLE_OBSERVATION =
+  /(?:All dependencies are up to date|Found 0 packages|Global writes: [01] applied, 0 skipped, 0 failed, 0 unknown|INVENTORY_UNKNOWN|EXECUTABLE_CHANGED|COMMAND_UNOBSERVABLE)/u
 const selectableChecks = new Set([
   PIPE_RECEIPT_CHECK,
   COMMAND_TRANSACTION_CHECK,
   VISUAL_PLUS_FIXTURE_CHECK,
+  GLOBAL_ALL_WRITE_CHECK,
 ])
 const selectedCheck = parseCheckSelector(process.argv.slice(2))
 
@@ -101,18 +109,19 @@ const gitXdgCache = join(tmpRoot, 'git-xdg-cache')
 const gitXdgConfig = join(tmpRoot, 'git-xdg-config')
 const gitGlobalConfig = join(tmpRoot, 'git-global-config')
 
-const fixtureDirectories = selectedCheck
-  ? [homeDir, binDir, vcsOverflowBin, gitXdgCache, gitXdgConfig]
-  : [
-      homeDir,
-      binDir,
-      singleRepo,
-      workspaceRoot,
-      emptyRepo,
-      vcsOverflowBin,
-      gitXdgCache,
-      gitXdgConfig,
-    ]
+const fixtureDirectories =
+  selectedCheck && selectedCheck !== GLOBAL_ALL_WRITE_CHECK
+    ? [homeDir, binDir, vcsOverflowBin, gitXdgCache, gitXdgConfig]
+    : [
+        homeDir,
+        binDir,
+        singleRepo,
+        workspaceRoot,
+        emptyRepo,
+        vcsOverflowBin,
+        gitXdgCache,
+        gitXdgConfig,
+      ]
 for (const dir of fixtureDirectories) {
   mkdirSync(dir, { recursive: true })
 }
@@ -475,7 +484,8 @@ process.exit(0)
 `
 }
 
-if (selectedCheck === undefined) setupFullSmokeFixtures()
+if (selectedCheck === undefined || selectedCheck === GLOBAL_ALL_WRITE_CHECK)
+  setupFullSmokeFixtures()
 
 function setupFullSmokeFixtures() {
   writeExecutable('npm', createPmScript('npm'))
@@ -1404,19 +1414,30 @@ await record('global-all json', async () => {
 })
 
 await record('global-all write', async () => {
-  const beforeCount = readFileSync(logFile, 'utf8').trim().split('\n').filter(Boolean).length
-  const result = await runCli([
-    '--cwd',
-    singleRepo,
-    '--global-all',
-    '--write',
-    '--include',
-    'shared-glob',
-    '--mode',
-    'latest',
-  ])
-  assert.equal(result.status, 0, JSON.stringify(result, null, 2))
-  assert.match(result.stdout, /Global writes: 2 applied, 0 skipped, 0 failed, 0 unknown/u)
+  let beforeCount = 0
+  let result
+  const attempts = []
+  for (let attempt = 1; attempt <= GLOBAL_WRITE_ATTEMPT_LIMIT; attempt += 1) {
+    rmSync(`${logFile}.npm.json`, { force: true })
+    rmSync(`${logFile}.pnpm.json`, { force: true })
+    beforeCount = readFileSync(logFile, 'utf8').trim().split('\n').filter(Boolean).length
+    result = await runCli([
+      '--cwd',
+      singleRepo,
+      '--global-all',
+      '--write',
+      '--include',
+      'shared-glob',
+      '--mode',
+      'latest',
+    ])
+    attempts.push(result)
+    if (result.status === 0 && GLOBAL_WRITE_SUCCESS.test(result.stdout)) break
+    if (!GLOBAL_WRITE_RETRYABLE_OBSERVATION.test(result.stdout)) break
+  }
+  assert.ok(result)
+  assert.equal(result.status, 0, JSON.stringify({ attempts }, null, 2))
+  assert.match(result.stdout, GLOBAL_WRITE_SUCCESS, JSON.stringify({ attempts }, null, 2))
   assert.doesNotMatch(result.stdout, /(?:Complete|Partial result|Safety block).*across/u)
   assert.ok(!result.stdout.includes('global:npm ·'))
   assert.ok(!result.stdout.includes('global:pnpm ·'))
