@@ -905,38 +905,164 @@ describe('Visual+ built CLI', () => {
     expect(version.trim()).toBe('2.1.1')
   })
 
+  it('removes a partial fixture directory and retains its builder failure', () => {
+    const name = 'builder-primary-failure'
+    const directory = join(fixtureParent, `${name}-${fixtureSequence}`)
+    const primary = new Error('fixture builder failed')
+    let caught: unknown
+    let partialDirectoryRemained = false
+
+    try {
+      createFixture(name, {
+        build: () => {
+          throw primary
+        },
+      })
+    } catch (error) {
+      caught = error
+    } finally {
+      partialDirectoryRemained = existsSync(directory)
+      if (partialDirectoryRemained) rmSync(directory, { recursive: true, force: true })
+    }
+
+    expect(caught).toBe(primary)
+    expect(partialDirectoryRemained).toBe(false)
+  })
+
+  it('retains the builder failure first when partial cleanup also fails', () => {
+    const name = 'builder-and-cleanup-failure'
+    const directory = join(fixtureParent, `${name}-${fixtureSequence}`)
+    const primary = new Error('fixture builder failed')
+    const cleanup = new Error('partial fixture cleanup failed')
+    let caught: unknown
+
+    try {
+      createFixture(name, {
+        build: () => {
+          throw primary
+        },
+        remove: () => {
+          throw cleanup
+        },
+      })
+    } catch (error) {
+      caught = error
+    } finally {
+      if (existsSync(directory)) rmSync(directory, { recursive: true, force: true })
+    }
+
+    expect(caught).toBeInstanceOf(AggregateError)
+    expect((caught as AggregateError).errors).toEqual([primary, cleanup])
+    expect((caught as AggregateError).message).toBe(primary.message)
+  })
+
+  it('retains a primary journey failure and every cleanup failure without skipping cleanup', async () => {
+    const primary = new Error('journey assertion failed')
+    const safetyCleanup = new Error('safety cleanup failed')
+    const successCleanup = new Error('success cleanup failed')
+    const attempted: string[] = []
+    let caught: unknown
+
+    try {
+      await runWithFixtureCleanup(
+        async () => {
+          throw primary
+        },
+        () => ['safety-repository', 'success-repository'],
+        (repository) => {
+          attempted.push(repository)
+          throw repository.startsWith('safety') ? safetyCleanup : successCleanup
+        },
+      )
+    } catch (error) {
+      caught = error
+    }
+
+    expect(attempted).toEqual(['safety-repository', 'success-repository'])
+    expect(caught).toBeInstanceOf(AggregateError)
+    expect((caught as AggregateError).errors).toEqual([primary, safetyCleanup, successCleanup])
+    expect((caught as AggregateError).message).toBe(primary.message)
+  })
+
+  it('surfaces every cleanup failure after a successful journey', async () => {
+    const safetyCleanup = new Error('safety cleanup failed')
+    const successCleanup = new Error('success cleanup failed')
+    const attempted: string[] = []
+    let caught: unknown
+
+    try {
+      await runWithFixtureCleanup(
+        async () => 'complete',
+        () => ['safety-repository', 'success-repository'],
+        (repository) => {
+          attempted.push(repository)
+          throw repository.startsWith('safety') ? safetyCleanup : successCleanup
+        },
+      )
+    } catch (error) {
+      caught = error
+    }
+
+    expect(attempted).toEqual(['safety-repository', 'success-repository'])
+    expect(caught).toBeInstanceOf(AggregateError)
+    expect((caught as AggregateError).errors).toEqual([safetyCleanup, successCleanup])
+  })
+
+  it('binds expected ages to the pre-launch clock across a rounding boundary', async () => {
+    const dayMs = 86_400_000
+    const afterJourneyClockMs = Date.now()
+    const roundingBoundaryMs = afterJourneyClockMs - 1
+    const launchClockMs = roundingBoundaryMs - 1
+    const publishedMs = roundingBoundaryMs - 1.5 * dayMs
+    let clockMs = launchClockMs
+    const fixture = {
+      asOfMs: publishedMs + dayMs,
+    } as ReturnType<typeof createVisualPlusFixture>
+    const result = await runWithLaunchClock(
+      async () => {
+        clockMs = afterJourneyClockMs
+        return { complete: true }
+      },
+      () => clockMs,
+    )
+
+    expect(result).toEqual({ complete: true, launchClockMs })
+    expect(expectedFixtureAge(fixture, dayMs, result.launchClockMs)).toBe('~1d')
+    expect(expectedFixtureAge(fixture, dayMs, clockMs)).toBe('~2d')
+  })
+
   it.each([40, 60, 80, 118, 175])(
     'renders hybrid success and exact safety journeys in a %i-column PTY by default',
     async (columns) => {
       let successFixture: ReturnType<typeof createVisualPlusFixture> | undefined
       let safetyFixture: ReturnType<typeof createVisualPlusFixture> | undefined
-      try {
-        successFixture = createFixture(`success-${columns}`)
-        const success = await runFixture(successFixture, columns, 'success', true)
-        assertJourney(success, columns, 'success', successFixture)
-        assertFixtureBytes(successFixture, 'after')
-        assertNoApplyResidue(successFixture.repository)
-        assertExpectedTargetDirtAndStage(successFixture)
-        execFileSync(successFixture.git, ['commit', '--quiet', '-m', 'expected update'], {
-          cwd: successFixture.repository,
-          env: successFixture.gitEnvironment,
-        })
-        assertGitClean(successFixture)
+      await runWithFixtureCleanup(
+        async () => {
+          successFixture = createFixture(`success-${columns}`)
+          const success = await runFixture(successFixture, columns, 'success', true)
+          assertJourney(success, columns, 'success', successFixture)
+          assertFixtureBytes(successFixture, 'after')
+          assertNoApplyResidue(successFixture.repository)
+          assertExpectedTargetDirtAndStage(successFixture)
+          execFileSync(successFixture.git, ['commit', '--quiet', '-m', 'expected update'], {
+            cwd: successFixture.repository,
+            env: successFixture.gitEnvironment,
+          })
+          assertGitClean(successFixture)
 
-        safetyFixture = createFixture(`safety-${columns}`)
-        const safety = await runFixture(safetyFixture, columns, 'safety', true)
-        assertJourney(safety, columns, 'safety', safetyFixture)
-        assertFixtureBytes(safetyFixture, 'before')
-        expect(readFileSync(safetyFixture.variants.safety.counter, 'utf8')).toBe('2')
-        assertNoApplyResidue(safetyFixture.repository)
-        assertGitClean(safetyFixture)
-      } finally {
-        try {
-          if (safetyFixture) cleanupFixtureRepository(safetyFixture.repository)
-        } finally {
-          if (successFixture) cleanupFixtureRepository(successFixture.repository)
-        }
-      }
+          safetyFixture = createFixture(`safety-${columns}`)
+          const safety = await runFixture(safetyFixture, columns, 'safety', true)
+          assertJourney(safety, columns, 'safety', safetyFixture)
+          assertFixtureBytes(safetyFixture, 'before')
+          expect(readFileSync(safetyFixture.variants.safety.counter, 'utf8')).toBe('2')
+          assertNoApplyResidue(safetyFixture.repository)
+          assertGitClean(safetyFixture)
+        },
+        () =>
+          [safetyFixture?.repository, successFixture?.repository].filter(
+            (repository): repository is string => repository !== undefined,
+          ),
+      )
     },
     120_000,
   )
@@ -969,8 +1095,8 @@ describe('Visual+ built CLI', () => {
     expect(direct.stderr.toString('utf8')).toContain('Tip: Use --output json')
     expect(slow.stderr).toEqual(direct.stderr)
     expect(direct.stdout.toString('utf8').endsWith('Exit 0\n')).toBe(true)
-    assertHybridReadOnlySemantics(direct.stdout.toString('utf8'), fixture, 80)
-    assertHybridReadOnlySemantics(slow.stdout.toString('utf8'), fixture, 80)
+    assertHybridReadOnlySemantics(direct.stdout.toString('utf8'), fixture, 80, direct.launchClockMs)
+    assertHybridReadOnlySemantics(slow.stdout.toString('utf8'), fixture, 80, slow.launchClockMs)
 
     assertFixtureBytes(fixture, 'before')
     assertGitClean(fixture)
@@ -1072,7 +1198,7 @@ describe('Visual+ built CLI', () => {
       expect(result.evidence.columns).toBe(80)
       expect(result.finalCursorVisible).toBe(true)
       expect(result.transcript.endsWith('Exit 0\n')).toBe(true)
-      assertHybridReadOnlySemantics(result.transcript, fixture, 80)
+      assertHybridReadOnlySemantics(result.transcript, fixture, 80, result.launchClockMs)
     }
     expect(baseline.controls.sgr).toBeGreaterThan(0)
     expect(baseline.controls.cursorUp).toBeGreaterThan(0)
@@ -1097,7 +1223,13 @@ describe('Visual+ built CLI', () => {
         expect(result.controls.sgr).toBe(0)
         expect(result.controls.cursorUp).toBe(0)
         expect(result.controls.eraseLine).toBe(0)
-        assertHybridReadOnlySemantics(result.transcript, fixture, columns, true)
+        assertHybridReadOnlySemantics(
+          result.transcript,
+          fixture,
+          columns,
+          result.launchClockMs,
+          true,
+        )
         for (const line of result.transcript.split('\n')) {
           expect(visualLength(line), line).toBeLessThanOrEqual(columns)
         }
@@ -1112,7 +1244,7 @@ describe('Visual+ built CLI', () => {
 
   describe.sequential('CI constrained PTY fallback', () => {
     let fixture: ReturnType<typeof createVisualPlusFixture> | undefined
-    let result: Awaited<ReturnType<typeof runInPty>> | undefined
+    let result: Awaited<ReturnType<typeof runReadOnlyPty>> | undefined
     let journeyReady = false
     let executionReady = false
     let semanticsReady = false
@@ -1140,7 +1272,7 @@ describe('Visual+ built CLI', () => {
     it('preserves read-only semantic output', () => {
       if (!(executionReady && fixture && result)) return
       expect(result.transcript.endsWith('Exit 0\n')).toBe(true)
-      assertHybridReadOnlySemantics(result.transcript, fixture, 80)
+      assertHybridReadOnlySemantics(result.transcript, fixture, 80, result.launchClockMs)
       semanticsReady = true
     })
 
@@ -1182,7 +1314,7 @@ describe('Visual+ built CLI', () => {
 
   describe.sequential('TERM=dumb constrained PTY fallback', () => {
     let fixture: ReturnType<typeof createVisualPlusFixture> | undefined
-    let result: Awaited<ReturnType<typeof runInPty>> | undefined
+    let result: Awaited<ReturnType<typeof runReadOnlyPty>> | undefined
     let captureReady = false
     let journeyReady = false
     let transportReady = false
@@ -1203,7 +1335,7 @@ describe('Visual+ built CLI', () => {
       expect(result.evidence.columns).toBe(80)
       expect(result.finalCursorVisible).toBe(true)
       expect(result.transcript.endsWith('Exit 0\n')).toBe(true)
-      assertHybridReadOnlySemantics(result.transcript, fixture, 80, true)
+      assertHybridReadOnlySemantics(result.transcript, fixture, 80, result.launchClockMs, true)
       journeyReady = true
     })
 
@@ -1310,7 +1442,7 @@ function createHostileRepository() {
 }
 
 function assertJourney(
-  result: Awaited<ReturnType<typeof runInPty>>,
+  result: Awaited<ReturnType<typeof runFixture>>,
   columns: number,
   outcome: 'success' | 'safety',
   fixture: ReturnType<typeof createVisualPlusFixture>,
@@ -1324,7 +1456,7 @@ function assertJourney(
   assertHybridContext(result.transcript, 'write')
   assertNoInternalIds(result.transcript)
   assertHybridReviewMembership(result.transcript, fixture)
-  assertHybridLayoutSignature(result.transcript, columns, 'write', fixture)
+  assertHybridLayoutSignature(result.transcript, columns, 'write', fixture, result.launchClockMs)
   const transaction = result.transcript.slice(result.transcript.indexOf('Apply transaction'))
   const compact = result.transcript.replace(/\s+/gu, '')
   const compactTransaction = transaction.replace(/\s+/gu, '')
@@ -1336,7 +1468,7 @@ function assertJourney(
     expect(durableLineCount(result.transcript)).toBeGreaterThan(80)
     expect(compact).toContain('Complete·76updatesappliedacross14files')
     expect(compact).toContain('All14filesobservedattherequestedvalues·recoverynotneeded·')
-    assertExactStrictWriteFinalScreen(result.transcript, columns, fixture)
+    assertExactStrictWriteFinalScreen(result.transcript, columns, fixture, result.launchClockMs)
   } else {
     expect(
       result.transcript.match(/^preflight · .* (?:blocked|failed|unknown)$/gmu) ?? [],
@@ -1391,9 +1523,10 @@ function assertHybridLayoutSignature(
   width: number,
   intent: 'write' | 'read-only',
   fixture: ReturnType<typeof createVisualPlusFixture>,
+  launchClockMs: number,
 ) {
   const lines = transcript.split('\n')
-  const majorAge = expectedFixtureAge(fixture, 432_000_000)
+  const majorAge = expectedFixtureAge(fixture, 432_000_000, launchClockMs)
   const context =
     width === 40
       ? ['lab-editor · manager unknown · workspace', `major · ${intent}`]
@@ -1459,7 +1592,7 @@ function assertHybridLayoutSignature(
     ...risk,
     'lab-editor · package.json',
     ...table,
-    ...expectedFinalLedgerSignature(width, false, fixture).header,
+    ...expectedFinalLedgerSignature(width, false, fixture, launchClockMs).header,
   ])
 }
 
@@ -1467,9 +1600,10 @@ function assertPlainHybridLayoutSignature(
   transcript: string,
   width: number,
   fixture: ReturnType<typeof createVisualPlusFixture>,
+  launchClockMs: number,
 ) {
   const lines = transcript.split('\n')
-  const majorAge = expectedFixtureAge(fixture, 432_000_000)
+  const majorAge = expectedFixtureAge(fixture, 432_000_000, launchClockMs)
   const context =
     width === 40
       ? ['lab-editor - manager unknown - workspace', 'major - read-only']
@@ -1535,7 +1669,7 @@ function assertPlainHybridLayoutSignature(
     ...risk,
     'lab-editor - package.json',
     ...table,
-    ...expectedFinalLedgerSignature(width, true, fixture).header,
+    ...expectedFinalLedgerSignature(width, true, fixture, launchClockMs).header,
   ])
 }
 
@@ -1543,10 +1677,11 @@ function expectedFinalLedgerSignature(
   width: number,
   plain: boolean,
   fixture: ReturnType<typeof createVisualPlusFixture>,
+  launchClockMs: number,
 ) {
   const separator = plain ? ' - ' : ' · '
   const rule = (plain ? '-' : '─').repeat(width < 100 ? width : 76)
-  const patchAge = expectedFixtureAge(fixture, 86_400_000)
+  const patchAge = expectedFixtureAge(fixture, 86_400_000, launchClockMs)
   const catalogEvidence =
     width === 40
       ? ['  catalog root-catalog:', '  pnpm-workspace.yaml']
@@ -1624,8 +1759,9 @@ function expectedFinalLedgerSignature(
 function expectedFixtureAge(
   fixture: ReturnType<typeof createVisualPlusFixture>,
   ageAtFixtureClockMs: number,
+  launchClockMs: number,
 ) {
-  const ageMs = Date.now() - (fixture.asOfMs - ageAtFixtureClockMs)
+  const ageMs = launchClockMs - (fixture.asOfMs - ageAtFixtureClockMs)
   const days = ageMs / 86_400_000
   if (days < 1) return '~0d'
   if (days < 90) return `~${Math.round(days)}d`
@@ -1644,6 +1780,7 @@ function assertExactReadOnlyFinalScreen(
   width: number,
   plain: boolean,
   fixture: ReturnType<typeof createVisualPlusFixture>,
+  launchClockMs: number,
 ) {
   const receipt =
     width === 40
@@ -1668,7 +1805,10 @@ function assertExactReadOnlyFinalScreen(
               : 'Review complete · 76 updates across 14 files · write not attempted',
             'Exit 0',
           ]
-  const expected = [...expectedFinalLedgerSignature(width, plain, fixture).row, ...receipt]
+  const expected = [
+    ...expectedFinalLedgerSignature(width, plain, fixture, launchClockMs).row,
+    ...receipt,
+  ]
   expect(exactTranscriptLines(transcript).slice(-expected.length)).toEqual(expected)
 }
 
@@ -1676,6 +1816,7 @@ function assertExactStrictWriteFinalScreen(
   transcript: string,
   width: number,
   fixture: ReturnType<typeof createVisualPlusFixture>,
+  launchClockMs: number,
 ) {
   const receipt =
     width === 40
@@ -1698,7 +1839,10 @@ function assertExactStrictWriteFinalScreen(
             'All 14 files observed at the requested values · recovery not needed · <elapsed>',
             'Exit 0',
           ]
-  const expected = [...expectedFinalLedgerSignature(width, false, fixture).row, ...receipt]
+  const expected = [
+    ...expectedFinalLedgerSignature(width, false, fixture, launchClockMs).row,
+    ...receipt,
+  ]
   const actual = exactTranscriptLines(transcript).map((line) =>
     line.replace(/\b(?:\d+ms|\d+(?:\.\d+)?s)\b/gu, '<elapsed>'),
   )
@@ -1843,14 +1987,15 @@ function assertHybridReadOnlySemantics(
   transcript: string,
   fixture: ReturnType<typeof createVisualPlusFixture>,
   width: number,
+  launchClockMs: number,
   plain = false,
 ) {
   assertHybridContext(transcript, 'read-only')
   assertNoInternalIds(transcript)
   assertHybridReviewMembership(transcript, fixture)
-  if (plain) assertPlainHybridLayoutSignature(transcript, width, fixture)
-  else assertHybridLayoutSignature(transcript, width, 'read-only', fixture)
-  assertExactReadOnlyFinalScreen(transcript, width, plain, fixture)
+  if (plain) assertPlainHybridLayoutSignature(transcript, width, fixture, launchClockMs)
+  else assertHybridLayoutSignature(transcript, width, 'read-only', fixture, launchClockMs)
+  assertExactReadOnlyFinalScreen(transcript, width, plain, fixture, launchClockMs)
   expect(durableLineCount(transcript)).toBeGreaterThan(80)
   expect(transcript).not.toMatch(
     /Lifecycle|Update preview|audit preview|omitted|more updates|Reviewed physical targets/iu,
@@ -2016,27 +2161,95 @@ function groupDeclarationNames(fixture: ReturnType<typeof createVisualPlusFixtur
   return counts
 }
 
-function createFixture(name: string) {
+interface FixtureCreationOverrides {
+  readonly build?: typeof createVisualPlusFixture
+  readonly remove?: (directory: string) => void
+}
+
+function createFixture(name: string, overrides: FixtureCreationOverrides = {}) {
   const directory = join(fixtureParent, `${name}-${fixtureSequence}`)
   fixtureSequence += 1
   mkdirSync(directory)
-  const fixture = createVisualPlusFixture(realpathSync(directory), { asOfMs, registryUrl })
-  registryResponses.push(fixture.registry.responses)
-  return fixture
+  const canonicalDirectory = realpathSync(directory)
+  try {
+    const fixture = (overrides.build ?? createVisualPlusFixture)(canonicalDirectory, {
+      asOfMs,
+      registryUrl,
+    })
+    registryResponses.push(fixture.registry.responses)
+    return fixture
+  } catch (error) {
+    try {
+      cleanupFixtureDirectory(canonicalDirectory, overrides.remove)
+    } catch (cleanupError) {
+      throw new AggregateError([error, cleanupError], errorMessage(error))
+    }
+    throw error
+  }
 }
 
 function cleanupFixtureRepository(repository: string) {
+  cleanupContainedFixturePath(repository)
+}
+
+function cleanupFixtureDirectory(directory: string, remove?: (directory: string) => void) {
+  cleanupContainedFixturePath(directory, remove)
+}
+
+function cleanupContainedFixturePath(path: string, remove?: (path: string) => void) {
+  if (!fixtureParent) throw new Error('Visual+ fixture cleanup escaped its temporary parent')
   const canonicalParent = realpathSync(fixtureParent)
-  const relativeRepository = relative(canonicalParent, repository)
+  const relativePath = relative(canonicalParent, path)
   if (
-    !fixtureParent ||
-    relativeRepository.length === 0 ||
-    isAbsolute(relativeRepository) ||
-    relativeRepository.split(/[\\/]/u)[0] === '..'
+    relativePath.length === 0 ||
+    isAbsolute(relativePath) ||
+    relativePath.split(/[\\/]/u)[0] === '..'
   ) {
     throw new Error('Visual+ fixture cleanup escaped its temporary parent')
   }
-  rmSync(repository, { recursive: true, force: true })
+  if (remove) remove(path)
+  else rmSync(path, { recursive: true, force: true })
+}
+
+function errorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error)
+}
+
+async function runWithFixtureCleanup<T>(
+  run: () => Promise<T>,
+  repositories: () => readonly string[],
+  cleanup: (repository: string) => void = cleanupFixtureRepository,
+): Promise<T> {
+  let completed = false
+  let primary: unknown
+  let value: T | undefined
+  try {
+    value = await run()
+    completed = true
+  } catch (error) {
+    primary = error
+  }
+
+  const cleanupErrors: unknown[] = []
+  for (const repository of repositories()) {
+    try {
+      cleanup(repository)
+    } catch (error) {
+      cleanupErrors.push(error)
+    }
+  }
+
+  if (!completed) {
+    if (cleanupErrors.length > 0) {
+      throw new AggregateError([primary, ...cleanupErrors], errorMessage(primary))
+    }
+    throw primary
+  }
+  if (cleanupErrors.length === 1) throw cleanupErrors[0]
+  if (cleanupErrors.length > 1) {
+    throw new AggregateError(cleanupErrors, 'Visual+ fixture cleanup failed')
+  }
+  return value as T
 }
 
 function capableEnvironment(environment: Record<string, string>, overrides = {}) {
@@ -2051,27 +2264,37 @@ function capableEnvironment(environment: Record<string, string>, overrides = {})
   return { ...clean, TERM: 'xterm-256color', ...overrides }
 }
 
+async function runWithLaunchClock<T extends object>(
+  run: () => Promise<T>,
+  now: () => number = Date.now,
+): Promise<T & { readonly launchClockMs: number }> {
+  const launchClockMs = now()
+  return { ...(await run()), launchClockMs }
+}
+
 function runFixture(
   fixture: ReturnType<typeof createVisualPlusFixture>,
   columns: number,
   variant: 'success' | 'safety',
   write: boolean,
 ) {
-  return runInPty({
-    cliPath: process.execPath,
-    args: [
-      cliPath,
-      '--cwd',
-      fixture.repository,
-      '--recursive',
-      ...(write ? ['--write'] : []),
-      '--mode',
-      'major',
-    ],
-    columns,
-    env: capableEnvironment(fixture.variants[variant].environment),
-    input: Buffer.alloc(0),
-  })
+  return runWithLaunchClock(() =>
+    runInPty({
+      cliPath: process.execPath,
+      args: [
+        cliPath,
+        '--cwd',
+        fixture.repository,
+        '--recursive',
+        ...(write ? ['--write'] : []),
+        '--mode',
+        'major',
+      ],
+      columns,
+      env: capableEnvironment(fixture.variants[variant].environment),
+      input: Buffer.alloc(0),
+    }),
+  )
 }
 
 function runReadOnlyPty(
@@ -2081,22 +2304,24 @@ function runReadOnlyPty(
   long = false,
   columns = 80,
 ) {
-  return runInPty({
-    cliPath: process.execPath,
-    args: [
-      cliPath,
-      '--cwd',
-      fixture.repository,
-      '--recursive',
-      '--mode',
-      'major',
-      ...(long ? ['--long'] : []),
-    ],
-    columns,
-    diagnoseChildWrites,
-    env: capableEnvironment(fixture.variants.success.environment, overrides),
-    input: Buffer.alloc(0),
-  })
+  return runWithLaunchClock(() =>
+    runInPty({
+      cliPath: process.execPath,
+      args: [
+        cliPath,
+        '--cwd',
+        fixture.repository,
+        '--recursive',
+        '--mode',
+        'major',
+        ...(long ? ['--long'] : []),
+      ],
+      columns,
+      diagnoseChildWrites,
+      env: capableEnvironment(fixture.variants.success.environment, overrides),
+      input: Buffer.alloc(0),
+    }),
+  )
 }
 
 function expectedWriteBoundary(options: {
@@ -2152,18 +2377,20 @@ function runDirectFixture(
   slow: boolean,
   long = false,
 ) {
-  return runDirectCommand(
-    [
-      cliPath,
-      '--cwd',
-      fixture.repository,
-      '--recursive',
-      '--mode',
-      'major',
-      ...(long ? ['--long'] : []),
-    ],
-    capableEnvironment(fixture.variants.success.environment),
-    { slow },
+  return runWithLaunchClock(() =>
+    runDirectCommand(
+      [
+        cliPath,
+        '--cwd',
+        fixture.repository,
+        '--recursive',
+        '--mode',
+        'major',
+        ...(long ? ['--long'] : []),
+      ],
+      capableEnvironment(fixture.variants.success.environment),
+      { slow },
+    ),
   )
 }
 
