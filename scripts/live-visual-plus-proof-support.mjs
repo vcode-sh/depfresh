@@ -137,7 +137,12 @@ export function analyzeHybridRun(result, columns, argv, repositoryName) {
     throw new Error('Live Visual+ update membership is incomplete')
   }
   const rows = parseLedgerRows(lines.slice(breaking + 1, receiptIndex))
-  const distinctRows = new Set(rows.map(semanticLedgerRowKey))
+  const parsedRows = rows.map((row) => ({ evidence: parseTypedLedgerEvidence(row), row }))
+  const distinctRows = new Set(
+    parsedRows.flatMap(({ evidence, row }) =>
+      evidence === undefined ? [] : [semanticLedgerRowKey(row, evidence)],
+    ),
+  )
   const receiptMatch = /^Review complete (?:·|-) ([0-9]+) updates across ([0-9]+) files? (?:·|-) write not attempted$/u.exec(
     lines[receiptIndex],
   )
@@ -158,7 +163,9 @@ export function analyzeHybridRun(result, columns, argv, repositoryName) {
     declared < 1 ||
     rows.length !== declared ||
     distinctRows.size !== declared ||
-    rows.some((row) => !hasCompleteCatalogContext(row)) ||
+    parsedRows.some(
+      ({ evidence, row }) => evidence === undefined || !hasValidLedgerEvidence(row, evidence),
+    ) ||
     receiptUpdates !== declared ||
     topologyFiles !== physicalFiles.size ||
     receiptFiles !== physicalFiles.size ||
@@ -421,39 +428,58 @@ function parseLedgerRows(lines) {
   return rows
 }
 
-function semanticLedgerRowKey(row) {
+function semanticLedgerRowKey(row, parsed) {
+  const catalog = parsed.evidence.find(({ type }) => type === 'catalog')?.value ?? null
   return JSON.stringify([
     row.owner,
     row.file,
     row.source,
-    row.dependency,
+    parsed.baseDependency,
     row.current,
     row.target,
     row.severity,
-    row.context,
+    catalog,
   ])
 }
 
-function hasCompleteCatalogContext(row) {
-  if (row.source !== 'catalog') return true
-  const expected = `catalog ${row.owner}: ${row.file}`
-  const evidence = parseTypedLedgerEvidence(row)
-  const catalogs = evidence?.filter((value) => value.startsWith('catalog ')) ?? []
-  return catalogs.length === 1 && catalogs[0] === expected
+function hasValidLedgerEvidence(row, parsed) {
+  const catalogs = parsed.evidence.filter(({ type }) => type === 'catalog')
+  const compatibility = parsed.evidence.filter(({ type }) => type === 'compatibility')
+  if (compatibility.length > 1) return false
+  if (row.source !== 'catalog') return catalogs.length === 0
+  return catalogs.length === 1 && catalogs[0].value === `catalog ${row.owner}: ${row.file}`
 }
 
 function parseTypedLedgerEvidence(row) {
-  const evidence = [...row.dependency.matchAll(/\[([^\]\n]+)\]/gu)].map((match) => match[1])
+  let baseDependency = row.dependency
+  const values = []
+  for (;;) {
+    const match = /^(.*) \[((?:catalog|compat) .+)\]$/u.exec(baseDependency)
+    if (!match) break
+    baseDependency = match[1]
+    values.unshift(match[2])
+  }
+  if (baseDependency === '') return undefined
+  let continued = false
   for (const fragment of row.context) {
     if (/^(?:catalog|compat) /u.test(fragment)) {
-      evidence.push(fragment)
-    } else if (evidence.length > 0) {
-      evidence[evidence.length - 1] += ` ${fragment}`
+      values.push(fragment)
+      continued = true
+    } else if (continued) {
+      values[values.length - 1] += ` ${fragment}`
     } else {
       return undefined
     }
   }
-  return evidence
+  const evidence = values.flatMap((value) => {
+    if (/^catalog .+/u.test(value)) return [{ type: 'catalog', value }]
+    if (/^compat (?:incompatible|unknown)(?:: .+)?$/u.test(value)) {
+      return [{ type: 'compatibility', value }]
+    }
+    return []
+  })
+  if (evidence.length !== values.length) return undefined
+  return { baseDependency, evidence }
 }
 
 function parseLedgerOwner(value) {

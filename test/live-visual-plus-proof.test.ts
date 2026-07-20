@@ -298,6 +298,8 @@ describe('live Visual+ proof harness', () => {
     'missing-row-with-severity-note',
     'duplicate-row',
     'duplicate-row-different-age',
+    'duplicate-row-inline-compatibility',
+    'duplicate-row-continuation-compatibility',
     'default-topology-file-mismatch',
     'default-receipt-file-mismatch',
     'default-severity-mismatch',
@@ -580,6 +582,8 @@ if (launcherName === 'bunx' && args[0] === 'pm') {
   else if (process.env.DEPFRESH_LIVE_TEST_SCREEN_FAULT === 'missing-row-with-severity-note') process.stdout.write(${JSON.stringify(hybridScreen('missing-row-with-severity-note'))})
   else if (process.env.DEPFRESH_LIVE_TEST_SCREEN_FAULT === 'duplicate-row') process.stdout.write(${JSON.stringify(hybridScreen('duplicate-row'))})
   else if (process.env.DEPFRESH_LIVE_TEST_SCREEN_FAULT === 'duplicate-row-different-age') process.stdout.write(${JSON.stringify(hybridScreen('duplicate-row-different-age'))})
+  else if (process.env.DEPFRESH_LIVE_TEST_SCREEN_FAULT === 'duplicate-row-inline-compatibility') process.stdout.write(${JSON.stringify(hybridScreen('duplicate-row-inline-compatibility'))})
+  else if (process.env.DEPFRESH_LIVE_TEST_SCREEN_FAULT === 'duplicate-row-continuation-compatibility') process.stdout.write(${JSON.stringify(hybridScreen('duplicate-row-continuation-compatibility'))})
   else if (process.env.DEPFRESH_LIVE_TEST_SCREEN_FAULT === 'default-topology-file-mismatch') process.stdout.write(${JSON.stringify(hybridScreen('topology-file-mismatch'))})
   else if (process.env.DEPFRESH_LIVE_TEST_SCREEN_FAULT === 'default-receipt-file-mismatch') process.stdout.write(${JSON.stringify(hybridScreen('receipt-file-mismatch'))})
   else if (process.env.DEPFRESH_LIVE_TEST_SCREEN_FAULT === 'default-severity-mismatch') process.stdout.write(${JSON.stringify(hybridScreen('severity-mismatch'))})
@@ -657,7 +661,9 @@ function completeReplayReport() {
 function hybridScreen(
   fault?:
     | 'duplicate-row'
+    | 'duplicate-row-continuation-compatibility'
     | 'duplicate-row-different-age'
+    | 'duplicate-row-inline-compatibility'
     | 'missing-row-with-severity-note'
     | 'physical-file-mismatch'
     | 'receipt-file-mismatch'
@@ -674,15 +680,25 @@ alpha       ^1.0.0 → ^2.0.0   Major     ~1d`
         ? `alpha       ^1.0.0 → ^2.0.0   Major     ~1d
 beta        ^1.0.0 → ^1.1.0   Minor     ~1d
 alpha       ^1.0.0 → ^2.0.0   Major     ~2d`
-        : fault === 'missing-row-with-severity-note'
-          ? `alpha       ^1.0.0 → ^2.0.0   Major     ~1d
+        : fault === 'duplicate-row-inline-compatibility'
+          ? `alpha [compat unknown: first]   ^1.0.0 → ^2.0.0   Major     ~1d
+beta                             ^1.0.0 → ^1.1.0   Minor     ~1d
+alpha [compat unknown: second]  ^1.0.0 → ^2.0.0   Major     ~2d`
+          : fault === 'duplicate-row-continuation-compatibility'
+            ? `alpha       ^1.0.0 → ^2.0.0   Major     ~1d
+  compat unknown: first
+beta        ^1.0.0 → ^1.1.0   Minor     ~1d
+alpha       ^1.0.0 → ^2.0.0   Major     ~2d
+  compat unknown: second`
+            : fault === 'missing-row-with-severity-note'
+              ? `alpha       ^1.0.0 → ^2.0.0   Major     ~1d
 beta        ^1.0.0 → ^1.1.0   Minor     ~1d
 Release note Major migration`
-          : fault === 'wide'
-            ? `alpha       ^1.0.0  ^2.0.0  Major     ~1d
+              : fault === 'wide'
+                ? `alpha       ^1.0.0  ^2.0.0  Major     ~1d
 beta        ^1.0.0  ^1.1.0  Minor     ~1d
 gamma       ^1.0.0  ^1.0.1  Patch     ~1d`
-            : `alpha       ^1.0.0 → ^2.0.0   Major     ~1d
+                : `alpha       ^1.0.0 → ^2.0.0   Major     ~1d
 beta        ^1.0.0 → ^1.1.0   Minor     ~1d
 gamma       ^1.0.0 → ^1.0.1   Patch     ~1d`
   const heading =
@@ -694,7 +710,11 @@ gamma       ^1.0.0 → ^1.0.1   Patch     ~1d`
   const severity =
     fault === 'severity-mismatch'
       ? 'Major 2 · Minor 0 · Patch 1'
-      : fault === 'duplicate-row-different-age'
+      : [
+            'duplicate-row-continuation-compatibility',
+            'duplicate-row-different-age',
+            'duplicate-row-inline-compatibility',
+          ].includes(fault ?? '')
         ? 'Major 2 · Minor 1 · Patch 0'
         : 'Major 1 · Minor 1 · Patch 1'
   const ledger =
@@ -975,13 +995,14 @@ alpha
 catalog-a · pnpm-workspace.yaml
   catalog
 dependency  current → target  severity  age
-alpha       ^1.0.0 → ^2.0.0   Major     ~1d
+alpha [compat unknown]  ^1.0.0 → ^2.0.0   Major     ~1d
   catalog catalog-a: pnpm-workspace.yaml
 
 catalog-b · pnpm-workspace.yaml
   catalog
 dependency  current → target  severity  age
 beta        ^1.0.0 → ^1.1.0   Minor     ~1d
+  compat incompatible: requires Node 24
   catalog catalog-b: pnpm-workspace.yaml
 Review complete · 2 updates across 1 file · write not attempted
 Exit 0
