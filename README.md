@@ -43,7 +43,8 @@ depfresh                 # show available updates
 depfresh minor           # allow minor and patch updates
 depfresh major           # include major updates
 depfresh -w              # write selected targets safely
-depfresh -wI             # choose updates interactively
+depfresh --write --interactive # choose updates interactively
+depfresh --long          # show the complete Visual+ audit
 depfresh --output json   # structured compatibility output
 depfresh --no-recursive  # inspect only the root package
 ```
@@ -52,13 +53,21 @@ depfresh --no-recursive  # inspect only the root package
 or lifecycle scripts. Use the reviewed plan/apply workflow when lockfile, install, or verification
 phases are required.
 
-For eligible local CLI table runs, the Visual+ review keeps repository topology, severity,
-major-risk, owner, shared-dependency, complete change-list, transaction, and final receipt evidence
-in one terminal journey. Eligibility requires the CLI progress route, non-silent output,
-non-interactive and non-global operation, and no direct or addon `beforePackageWrite` hook. A
-capable terminal uses colour and replaceable lifecycle frames. `NO_COLOR` removes only colour, and
-a narrow capable terminal only wraps; both retain motion. Pipes, CI, and `TERM=dumb` select durable
-append-only fallbacks without removing semantic content. For example, a fully observed write ends
+For eligible local CLI table runs, Visual+ defaults to a compact audit with repository topology,
+severity, every major-risk card, bounded owner/shared/update/target previews, transaction facts,
+and the final receipt. It does not print internal IDs. Use `--long` for the complete owner, shared,
+operation, occurrence, and physical-target membership. The large acceptance fixture stays within
+80 durable projected lines on successful compact journeys; wrapping can redistribute those lines,
+while a failure or recovery always overrides preview limits to retain every safety-relevant target
+and recovery path.
+
+Eligibility requires the CLI progress route, non-silent output, non-interactive and non-global
+operation, and no direct or addon `beforePackageWrite` hook. `--write --interactive` keeps the
+interactive selection surface. After discovery, Visual+ prints the observed repository, workspace,
+and package-manager evidence; it no longer emits false `unknown` startup placeholders. A capable
+terminal uses colour and replaceable lifecycle frames. `NO_COLOR` removes only colour, and a narrow
+capable terminal only wraps; both retain motion. Pipes, CI, and `TERM=dumb` select durable
+append-only fallbacks without removing result evidence. For example, a fully observed write ends
 with:
 
 ```text

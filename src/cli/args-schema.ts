@@ -166,7 +166,7 @@ export const args: ArgsDef = {
   long: {
     type: 'boolean',
     alias: 'L',
-    description: 'Show extra details (homepage URL) per package',
+    description: 'Show the complete Visual+ audit or legacy package homepage details',
     default: false,
   },
   explain: {

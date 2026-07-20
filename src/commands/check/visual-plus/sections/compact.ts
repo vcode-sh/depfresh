@@ -95,6 +95,13 @@ export function renderVisualPlusCompactTransaction(
   const unrecovered = new Set(recovery.unrecoveredPaths)
   const requiresDetail = (path: string): boolean => {
     const result = results.get(path)
+    const ordinaryReadOnlyResult =
+      !input.snapshot.write &&
+      result?.outcome === 'not-attempted' &&
+      result.blocked === false &&
+      result.notAttempted === true &&
+      result.unknown === false
+    if (ordinaryReadOnlyResult) return restored.has(path) || unrecovered.has(path)
     return (
       restored.has(path) ||
       unrecovered.has(path) ||

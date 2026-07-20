@@ -64,6 +64,7 @@ may grant side effects. Unknown state is never reported as success.
 | [034](./034-visual-plus-v2-core.md) | Visual+ v2 core terminal renderer | P1 | L | 033 | DONE |
 | [035](./035-visual-plus-insights-pty-proof.md) | Visual+ insights and PTY proof | P1 | L | 034 | DONE |
 | [036](./036-v2.1.0-release.md) | Publish and prove depfresh 2.1.0 | P1 | M | 035 | DONE |
+| [037](./037-visual-plus-compact-2.1.1.md) | Compact Visual+ output and prepare 2.1.1 | P1 | M | 036 | IN PROGRESS |
 
 The implementation order through 016 is present locally. Plans 011 through 013 passed their final
 blocker replays, regression fixes, full gates, and independent re-reviews on 2026-07-16. Plans 014
@@ -280,6 +281,12 @@ replay
 50/50, capabilities/exports/assets verification, and signature audit with no invalid or missing
 results. SLSA provenance binds the exact package digest to the tag, workflow, commit, run, and
 GitHub-hosted builder. Plans 032-036 and the Safe Write/Visual+ v2 program are DONE.
+
+Plan 037 is active after the public 2.1.0 replay showed that the exhaustive Visual+ audit is too
+large for the default human journey. Tasks 1 and 2 added deterministic compact/full renderers and
+truthful post-discovery repository context. Task 3 owns built-CLI compact-default and explicit
+`--long` PTY/pipe proof plus current documentation. Version `2.1.0` remains unchanged until the
+separate local 2.1.1 candidate task completes; no publication, tag, push, or hosted proof is claimed.
 
 Post-release retained-harness commit `de3c417` deterministically owns the nested PTY line-ending
 mapping after diagnostics isolated recurrent BSD `CRCRLF` below bare-LF-only child writes. Exact

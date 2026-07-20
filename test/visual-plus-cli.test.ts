@@ -905,8 +905,8 @@ describe('Visual+ built CLI', () => {
     expect(version.trim()).toBe('2.1.0')
   })
 
-  it.each([40, 60, 80, 118])(
-    'renders exact success and safety journeys in a %i-column PTY',
+  it.each([40, 60, 80, 118, 175])(
+    'renders compact success and exact safety journeys in a %i-column PTY by default',
     async (columns) => {
       const successFixture = createFixture(`success-${columns}`)
       const success = await runFixture(successFixture, columns, 'success', true)
@@ -931,6 +931,22 @@ describe('Visual+ built CLI', () => {
     120_000,
   )
 
+  it('renders the complete audit in an 80-column PTY with --long', async () => {
+    const fixture = createFixture('long-pty')
+    const result = await runReadOnlyPty(fixture, {}, false, true)
+
+    expect(result.exitCode).toBe(0)
+    expect(result.evidence.columns).toBe(80)
+    expect(result.finalCursorVisible).toBe(true)
+    expect(result.controls.cursorUp).toBeGreaterThan(0)
+    expect(result.controls.eraseLine).toBeGreaterThan(0)
+    expect(result.transcript.endsWith('Exit 0\n')).toBe(true)
+    assertRunContext(result.transcript)
+    assertFullReadOnlySemantics(result.transcript, fixture)
+    assertFixtureBytes(fixture, 'before')
+    assertGitClean(fixture)
+  }, 120_000)
+
   it('uses durable direct and slow-pipe fallbacks without losing read-only semantic output', async () => {
     const fixture = createFixture('direct-fallbacks')
     const direct = await runDirectFixture(fixture, false)
@@ -943,9 +959,25 @@ describe('Visual+ built CLI', () => {
     expect(direct.stderr.toString('utf8')).toContain('Tip: Use --output json')
     expect(slow.stderr).toEqual(direct.stderr)
     expect(direct.stdout.toString('utf8').endsWith('Exit 0\n')).toBe(true)
-    assertReadOnlySemantics(direct.stdout.toString('utf8'), fixture)
-    assertReadOnlySemantics(slow.stdout.toString('utf8'), fixture)
+    assertCompactReadOnlySemantics(direct.stdout.toString('utf8'), fixture)
+    assertCompactReadOnlySemantics(slow.stdout.toString('utf8'), fixture)
 
+    assertFixtureBytes(fixture, 'before')
+    assertGitClean(fixture)
+  }, 120_000)
+
+  it('uses the durable direct-pipe fallback for the complete --long audit', async () => {
+    const fixture = createFixture('long-direct')
+    const result = await runDirectFixture(fixture, false, true)
+
+    expect(result.exitCode).toBe(0)
+    expect(result.stdout.includes(0x1b)).toBe(false)
+    expect(result.stdout.includes(0x0d)).toBe(false)
+    expect(result.stderr.toString('utf8')).toContain('Tip: Use --output json')
+    const transcript = result.stdout.toString('utf8')
+    expect(transcript.endsWith('Exit 0\n')).toBe(true)
+    assertRunContext(transcript)
+    assertFullReadOnlySemantics(transcript, fixture)
     assertFixtureBytes(fixture, 'before')
     assertGitClean(fixture)
   }, 120_000)
@@ -959,7 +991,7 @@ describe('Visual+ built CLI', () => {
       expect(result.evidence.columns).toBe(80)
       expect(result.finalCursorVisible).toBe(true)
       expect(result.transcript.endsWith('Exit 0\n')).toBe(true)
-      assertReadOnlySemantics(result.transcript, fixture)
+      assertCompactReadOnlySemantics(result.transcript, fixture)
     }
     expect(baseline.controls.sgr).toBeGreaterThan(0)
     expect(baseline.controls.cursorUp).toBeGreaterThan(0)
@@ -1001,7 +1033,7 @@ describe('Visual+ built CLI', () => {
     it('preserves read-only semantic output', () => {
       if (!(executionReady && fixture && result)) return
       expect(result.transcript.endsWith('Exit 0\n')).toBe(true)
-      assertReadOnlySemantics(result.transcript, fixture)
+      assertCompactReadOnlySemantics(result.transcript, fixture)
       semanticsReady = true
     })
 
@@ -1067,7 +1099,7 @@ describe('Visual+ built CLI', () => {
       expect(result.evidence.columns).toBe(80)
       expect(result.finalCursorVisible).toBe(true)
       expect(result.transcript.endsWith('Exit 0\n')).toBe(true)
-      assertReadOnlySemantics(result.transcript, fixture)
+      assertCompactReadOnlySemantics(result.transcript, fixture)
       journeyReady = true
     })
 
@@ -1188,23 +1220,16 @@ function assertJourney(
   expect(result.finalCursorVisible).toBe(true)
   expect(result.controls.cursorUp).toBeGreaterThan(0)
   expect(result.controls.eraseLine).toBeGreaterThan(0)
-  assertExactReviewMembership(result.transcript, fixture)
-  expect(logicalFieldStarts(result.transcript, 'Operation ID ')).toBe(76)
-  expect(result.transcript.match(/^Owner ID /gmu) ?? []).toHaveLength(15)
-  expect(result.transcript.match(/^Dependency ID /gmu) ?? []).toHaveLength(18)
-  expect(result.transcript.match(/^Occurrence$/gmu) ?? []).toHaveLength(39)
-  expect(result.transcript.match(/^Major card$/gmu) ?? []).toHaveLength(2)
+  assertRunContext(result.transcript)
+  assertNoInternalIds(result.transcript)
+  expect(result.transcript.match(/^Major card /gmu) ?? []).toHaveLength(2)
   const compact = result.transcript.replace(/\s+/gu, '')
   expect(compact).toContain('66packages→616declared→612eligible→76updates→14files')
   expect(result.transcript).toContain('Major 3')
   expect(result.transcript).toContain('Minor 37')
   expect(result.transcript).toContain('Patch 36')
   const transaction = result.transcript.slice(result.transcript.indexOf('Apply transaction'))
-  expect(transaction.match(/^Target /gmu) ?? []).toHaveLength(14)
   const compactTransaction = transaction.replace(/\s+/gu, '')
-  for (const target of fixture.targets) {
-    expect(compactTransaction.split(`Target${target.path}`).length - 1, target.path).toBe(1)
-  }
   for (const phase of [
     'discover',
     'inspect',
@@ -1221,12 +1246,24 @@ function assertJourney(
   }
   expect(result.transcript).not.toMatch(/\bactive\b/u)
   if (outcome === 'success') {
+    expect(transaction.match(/^Target /gmu) ?? []).toHaveLength(0)
+    for (const target of fixture.targets.slice(0, 8)) {
+      expect(
+        transaction.match(new RegExp(`^${escapeRegExp(target.path)}$`, 'gmu')) ?? [],
+      ).toHaveLength(1)
+    }
+    expect(transaction).toMatch(/(?:…|\.\.\.) 6 more targets/u)
+    expect(durableLineCount(result.transcript)).toBeLessThanOrEqual(80)
     expect(compact).toContain('Complete·76updatesappliedacross14files')
     expect(compact).toContain('Applied76Blocked0Notattempted0Failed0Unknown0')
     expect(compact).toContain(
       'All14targetfileswereobservedattherequestedvalues.Recoverywasnotneeded.',
     )
   } else {
+    expect(transaction.match(/^Target /gmu) ?? []).toHaveLength(14)
+    for (const target of fixture.targets) {
+      expect(compactTransaction.split(`Target${target.path}`).length - 1, target.path).toBe(1)
+    }
     expect(compact).toContain('Safetyblock·nofileswerechanged')
     expect(compact).toContain('Applied0Blocked0Notattempted76Failed0Unknown76')
     expect(result.transcript.match(/^Next:/gmu) ?? []).toHaveLength(1)
@@ -1247,6 +1284,26 @@ function assertJourney(
   }
 }
 
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')
+}
+
+function assertRunContext(transcript: string) {
+  const compact = transcript.replace(/\s+/gu, '')
+  expect(compact).toMatch(/Repositorylab-editor(?:·|\||-)\.(?:·|\||-)workspace/u)
+  expect(compact).toContain('Packagemanagerunknown')
+  expect(transcript).not.toContain('Repository unknown')
+}
+
+function assertNoInternalIds(transcript: string) {
+  expect(transcript).not.toMatch(/Operation ID|Owner ID|Dependency ID/u)
+  expect(transcript).not.toMatch(/operation-|dependency:|package:|source:/iu)
+}
+
+function durableLineCount(transcript: string) {
+  return transcript.split('\n').filter((line) => line.length > 0).length
+}
+
 function logicalFieldStarts(transcript: string, label: string) {
   const lines = transcript.split('\n')
   return lines.filter(
@@ -1254,7 +1311,25 @@ function logicalFieldStarts(transcript: string, label: string) {
   ).length
 }
 
-function assertReadOnlySemantics(
+function assertCompactReadOnlySemantics(
+  transcript: string,
+  fixture: ReturnType<typeof createVisualPlusFixture>,
+) {
+  assertRunContext(transcript)
+  assertNoInternalIds(transcript)
+  expect(durableLineCount(transcript)).toBeLessThanOrEqual(80)
+  expect(transcript.match(/^Major card /gmu) ?? []).toHaveLength(2)
+  expect(transcript).toContain('Details: rerun with --long for the complete audit.')
+  for (const target of fixture.targets.slice(0, 8)) expect(transcript).toContain(target.path)
+  expect(transcript).toMatch(/(?:…|\.\.\.) 6 more targets/u)
+  const compact = transcript.replace(/\s+/gu, '')
+  expect(compact).toMatch(
+    /66packages(?:→|->)616declared(?:→|->)612eligible(?:→|->)76updates(?:→|->)14files/u,
+  )
+  expect(compact).toContain('76updatesreviewedacross14targets.')
+}
+
+function assertFullReadOnlySemantics(
   transcript: string,
   fixture: ReturnType<typeof createVisualPlusFixture>,
 ) {
@@ -1448,10 +1523,19 @@ function runReadOnlyPty(
   fixture: ReturnType<typeof createVisualPlusFixture>,
   overrides: Record<string, string>,
   diagnoseChildWrites = false,
+  long = false,
 ) {
   return runInPty({
     cliPath: process.execPath,
-    args: [cliPath, '--cwd', fixture.repository, '--recursive', '--mode', 'major'],
+    args: [
+      cliPath,
+      '--cwd',
+      fixture.repository,
+      '--recursive',
+      '--mode',
+      'major',
+      ...(long ? ['--long'] : []),
+    ],
     columns: 80,
     diagnoseChildWrites,
     env: capableEnvironment(fixture.variants.success.environment, overrides),
@@ -1507,9 +1591,21 @@ function availableOutputModes(newlineMapping: boolean, outputProcessing: boolean
   }
 }
 
-function runDirectFixture(fixture: ReturnType<typeof createVisualPlusFixture>, slow: boolean) {
+function runDirectFixture(
+  fixture: ReturnType<typeof createVisualPlusFixture>,
+  slow: boolean,
+  long = false,
+) {
   return runDirectCommand(
-    [cliPath, '--cwd', fixture.repository, '--recursive', '--mode', 'major'],
+    [
+      cliPath,
+      '--cwd',
+      fixture.repository,
+      '--recursive',
+      '--mode',
+      'major',
+      ...(long ? ['--long'] : []),
+    ],
     capableEnvironment(fixture.variants.success.environment),
     { slow },
   )

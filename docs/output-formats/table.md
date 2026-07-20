@@ -80,7 +80,9 @@ Controls row ordering. Options:
 Shows how long ago each target version was published. Disable with `--no-timediff` if ignorance is your coping strategy.
 
 **`--long` / `-L`** (default: `false`)
-Shows the package homepage URL beneath each row. For when you need to click through to the changelog and quietly panic.
+Shows the complete Visual+ audit, including every selected operation, owner, shared dependency,
+occurrence, and physical target. Outside eligible Visual+ routes, it retains the legacy package
+homepage detail beneath each row.
 
 **`--all` / `-a`** (default: `false`)
 Shows all packages, including the ones that are actually up to date. A confidence boost, if you need one.
@@ -163,18 +165,33 @@ CI and pipes.
 
 ## Visual+ Result Journeys
 
-Visual+ is the eligible local CLI table journey. It renders repository topology, update
-distribution, major-risk cards, owner impact, shared dependencies, the complete change list,
-physical targets, lifecycle facts, and one final receipt. The Complete and Safety block examples
-use the deterministic 76-operation, 14-target renderer fixture. Partial and Recovery incomplete
-use smaller renderer-contract inputs; Partial remains the synthetic/future-producer projection
-qualified below. All are exact final-receipt excerpts. Long maps and change rows are omitted from
-this page, not hidden by the command.
+Visual+ is the eligible local CLI table journey. By default it renders a compact audit: repository
+topology, update distribution, every major-risk card, bounded owner/shared/update/target previews,
+lifecycle facts, and one final receipt. Compact output contains no internal operation, owner,
+dependency, or source-file IDs. `--long` selects the complete audit with every selected operation,
+owner, shared dependency, occurrence, and physical target.
+
+The Complete and Safety block examples use the deterministic 76-operation, 14-target renderer
+fixture. Partial and Recovery incomplete use smaller renderer-contract inputs; Partial remains the
+synthetic/future-producer projection qualified below. All are exact final-receipt excerpts.
+
+The successful compact acceptance journey is limited to 80 durable projected lines at narrow,
+standard, and wide supported widths. This is an output-density contract, not a safety truncation
+rule: wrapping redistributes content within the projection, and any non-success target or recovery
+path bypasses preview limits. Compact retained recovery reports `Journal: retained` rather than an
+internal journal identifier. A safety block therefore still names every affected physical target,
+and recovery-first receipts still name every applied, restored, and unrecovered path. Rerun with
+`--long` when complete successful/read-only membership is required.
 
 The journey is eligible only through CLI progress routing with table output, a non-silent log
 level, local non-global operation, no interactive selection, and no direct or addon
 `beforePackageWrite` hook. Library `check()` calls and veto-capable hook routes use the
 compatibility table surface above.
+
+Startup prints only the check heading and lifecycle. Once discovery finishes, Visual+ renders the
+observed repository name/path, workspace scope, and package-manager evidence before review. It no
+longer prints false `Repository unknown` or `Package manager unknown` placeholders while discovery
+is still running; `unknown` after discovery means the required evidence was genuinely absent.
 
 A capable terminal uses Unicode separators, colour, and replaceable lifecycle frames. A plain
 fallback is append-only and colourless. Its map sections use ASCII, while existing receipt

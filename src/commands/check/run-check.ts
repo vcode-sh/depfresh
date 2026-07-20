@@ -148,6 +148,7 @@ export async function runCheck(
   let unregisterSignalCleanup: (() => void) | undefined
   let visualResolutionSuspended = false
   let visualRun: VisualPlusRunMetadata = {
+    detailLevel: options.long ? 'full' : 'compact',
     workspaceScope: 'unknown',
     packageManager: { status: 'unknown', sources: [] },
   }

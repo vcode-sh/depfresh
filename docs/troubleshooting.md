@@ -80,6 +80,19 @@ of every reported error because a Git blocker can coexist with a strict resoluti
 failure. Partial, failed, unknown, and recovery-first receipts likewise put one bounded inspection
 or evidence-preservation action immediately before `Exit 2`.
 
+### Visual+ output is shorter than before
+
+Eligible Visual+ table output is compact by default. It keeps topology, distribution, every major
+card, and bounded previews without internal IDs. Run `depfresh --long` for the complete audit with
+every selected operation, owner, shared dependency, occurrence, and physical target. The compact
+success acceptance fixture is capped at 80 durable projected lines; this limit never removes a
+non-success target or an applied, restored, or unrecovered recovery path.
+
+Repository and package-manager context now appears only after discovery has observed it. Seeing no
+context during startup is expected and avoids false placeholders; an `unknown` value printed after
+discovery means the evidence was actually absent. `depfresh --write --interactive` intentionally
+uses the separate selection UI, so neither compact Visual+ nor Visual+ `--long` applies there.
+
 ### Visual+ is plain, colourless, or append-only
 
 This can be the expected capability fallback rather than lost output:
