@@ -199,7 +199,7 @@ apply flags grant only that reviewed intent.
 |------|-------|------|---------|-------------|
 | `--sync-lockfile` | -- | boolean | `false` | On `plan`, fingerprint a supported lifecycle-disabled lockfile-only adapter; on `apply`, grant its process and lockfile writes. |
 | `--install` | `-i` | boolean | `false` | On `plan`, fingerprint the stronger full-install adapter; on `apply`, grant process, lockfile, install-tree, and cache effects. |
-| `--verify-artifacts` | -- | boolean | `false` | With `--install`, fingerprint or grant exact npm 11.12.x or verified npm 12.0.x public-registry artifact verification. Configuration cannot supply this authority. |
+| `--verify-artifacts` | -- | boolean | `false` | With `--install`, fingerprint or grant exact npm `>=11.12.0 <12.0.0 || >=12.0.0 <12.1.0` public-registry artifact verification. Configuration cannot supply this authority. |
 | `--verify-argv <json>` | -- | string | -- | On `plan`, fingerprint one non-empty public JSON string array such as `'["pnpm","test"]'`; absolute paths and credential/auth-shaped flags, headers, or values are rejected with `INVALID_OPTION_VALUE`. Never inferred from scripts. |
 | `--verify` | -- | boolean | `false` | On `apply`, grant only the exact verification argv already in the plan. |
 | `--phase-timeout <ms>` | -- | integer | `120000` | Fingerprinted timeout for manager version, manager execution, generic verification, and artifact verification; maximum `600000`. |
@@ -284,12 +284,13 @@ When writing global updates (`-gw`), depfresh runs the corresponding install com
 - pnpm: `pnpm add -g --ignore-scripts --ignore-pnpmfile -- <pkg>@<version>`
 - bun: `bun add -g --ignore-scripts <pkg>@<version>`
 
-Supported versions are npm 10/11, pnpm 10/11, and Bun `>=1.2.0 <2.0.0`. Before any command,
-depfresh inventories every requested manager and checks explicit global-write, process, and exact
-manager authority. It re-inventories immediately before and after each command. Only the observed
-post-command version determines `applied`; a zero exit alone does not. Missing/stale/downgrade
-preconditions are skipped or conflicted, malformed or lost evidence is unknown, and a later failure
-does not roll back an earlier applied global item. See [Global Apply](../output-formats/global-apply.md).
+Supported versions are npm `>=10.0.0 <13.0.0`, pnpm `>=10.0.0 <12.0.0`, and Bun
+`>=1.2.0 <2.0.0`. Before any command, depfresh inventories every requested manager and checks
+explicit global-write, process, and exact manager authority. It re-inventories immediately before
+and after each command. Only the observed post-command version determines `applied`; a zero exit
+alone does not. Missing/stale/downgrade preconditions are skipped or conflicted, malformed or lost
+evidence is unknown, and a later failure does not roll back an earlier applied global item. See
+[Global Apply](../output-formats/global-apply.md).
 
 ---
 

@@ -311,6 +311,49 @@ describe('2.1.1 release readiness', () => {
     )
   })
 
+  it('keeps maintained support and local Plan 038 status current without changing history', () => {
+    const normalized = (path: string) => read(path).replace(/\s+/gu, ' ')
+
+    expect(read('README.md')).toContain('completed and locally proven visual-composition successor')
+    expect(normalized('README.md')).toContain('npm `>=10.0.0 <13.0.0`')
+    expect(normalized('README.md')).toContain('pnpm `>=10.0.0 <12.0.0`')
+    expect(normalized('README.md')).toContain('Bun `>=1.2.0 <2.0.0`')
+    expect(normalized('README.md')).toContain('npm `>=11.12.0 <12.0.0 || >=12.0.0 <12.1.0`')
+    expect(read('docs/README.md')).toContain(
+      'completed Plan 038 hybrid-default boundary; the 2.1.1 local candidate remains unpublished',
+    )
+    expect(read('docs/integrations/README.md')).toContain('completed and locally proven Plan 038')
+    expect(read('docs/troubleshooting.md')).toContain(
+      'completed and locally proven visual-composition successor',
+    )
+    expect(normalized('docs/troubleshooting.md')).toContain('npm `>=10.0.0 <13.0.0`')
+    expect(normalized('docs/troubleshooting.md')).toContain('pnpm `>=10.0.0 <12.0.0`')
+    expect(normalized('docs/troubleshooting.md')).toContain('Bun `>=1.2.0 <2.0.0`')
+    expect(normalized('docs/troubleshooting.md')).toContain(
+      'npm `>=11.12.0 <12.0.0 || >=12.0.0 <12.1.0`',
+    )
+    expect(normalized('docs/cli/flags.md')).toContain('npm `>=10.0.0 <13.0.0`')
+    expect(normalized('docs/cli/flags.md')).toContain('pnpm `>=10.0.0 <12.0.0`')
+    expect(normalized('docs/cli/flags.md')).toContain('Bun `>=1.2.0 <2.0.0`')
+    expect(normalized('docs/cli/flags.md')).toContain('npm `>=11.12.0 <12.0.0 || >=12.0.0 <12.1.0`')
+    expect(normalized('docs/output-formats/global-apply.md')).toContain('npm `>=10.0.0 <13.0.0`')
+    expect(normalized('docs/output-formats/global-apply.md')).toContain('pnpm `>=10.0.0 <12.0.0`')
+    expect(normalized('docs/output-formats/global-apply.md')).toContain('Bun `>=1.2.0 <2.0.0`')
+    expect(normalized('SECURITY.md')).toContain('npm `>=10.0.0 <13.0.0`')
+    expect(normalized('SECURITY.md')).toContain('pnpm `>=10.0.0 <12.0.0`')
+    expect(normalized('SECURITY.md')).toContain('Bun `>=1.2.0 <2.0.0`')
+    expect(normalized('SECURITY.md')).toContain('npm `>=11.12.0 <12.0.0 || >=12.0.0 <12.1.0`')
+    expect(read('docs/integrations/README.md')).toContain('node-version: 24.15.0')
+
+    const release = read('docs/releases/v2.1.1.md')
+    expect(release).toContain(
+      'No npm publication, Git tag, GitHub release, hosted workflow, or public artifact is claimed.',
+    )
+    expect(release).toContain(
+      'Status: corrected local source candidate; artifact regeneration pending.',
+    )
+  })
+
   it('keeps the primary table example as one count-consistent five-region hybrid journey', () => {
     const table = read('docs/output-formats/table.md')
     const startMarker = '<!-- visual-plus-default-example:start -->'

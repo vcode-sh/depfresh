@@ -48,7 +48,7 @@ Everything I know about depfresh is in here, split into files so you can pretend
 - **[Troubleshooting](./troubleshooting.md)** -- Common issues, workspace gotchas, and known limitations. The page you'll find via Google at 2 AM after everything breaks. I've been there. The kettle's already on.
 
 - **[2.1.1 Release Notes](./releases/v2.1.1.md)** -- Historical Plan 037 compact evidence and the
-  in-progress Plan 038 hybrid-default boundary.
+  completed Plan 038 hybrid-default boundary; the 2.1.1 local candidate remains unpublished.
 
 - **[2.1.0 Release Notes](./releases/v2.1.0.md)** -- Command-level local write safety and
   Visual+ terminal journeys.

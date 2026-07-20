@@ -62,7 +62,8 @@ line before writing the final review. Every non-success target and recovery path
 
 The former bounded-preview projection is the historical compact semantic contract completed by
 [Plan 037](plans/037-visual-plus-compact-2.1.1.md). [Plan 038](plans/038-visual-plus-hybrid-default.md)
-owns the in-progress visual-composition successor.
+owns the completed and locally proven visual-composition successor. The 2.1.1 local candidate
+remains unpublished until its release work is complete.
 
 Eligibility requires the CLI progress route, non-silent output, non-interactive and non-global
 operation, and no direct or addon `beforePackageWrite` hook. `--write --interactive` keeps the
@@ -192,12 +193,13 @@ and `.git`.
 - deterministic inspect, plan, apply, and global-operation JSON contracts
 - SQLite registry cache with an automatic in-memory fallback
 - runtime, peer, cohort, release, deprecation, and evidence-completeness signals
-- optional exact public-npm artifact verification with npm 11.12.x or verified npm 12.0.x
+- optional exact public-npm artifact verification with npm `>=11.12.0 <12.0.0 || >=12.0.0 <12.1.0`
 
-Deliberate limits are documented rather than hidden: manager execution is supported on Linux and
-macOS; Yarn manager execution, Windows manager execution, and legacy `bun.lockb` are unsupported.
-File replacement is atomic per file, not across an entire repository. Exact artifact verification
-is limited to the public npm registry and does not inherit project npm configuration.
+Deliberate limits are documented rather than hidden: manager execution on Linux and macOS supports
+npm `>=10.0.0 <13.0.0`, pnpm `>=10.0.0 <12.0.0`, and Bun `>=1.2.0 <2.0.0`. Yarn manager execution,
+Windows manager execution, and legacy `bun.lockb` are unsupported. File replacement is atomic per
+file, not across an entire repository. Exact artifact verification is limited to the public npm
+registry and does not inherit project npm configuration.
 
 ## Documentation
 

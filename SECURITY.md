@@ -77,11 +77,12 @@ so hostile replacement of an ancestor after the final pathname check remains an 
 boundary.
 
 When explicitly planned and granted, apply runs supported npm, pnpm, or Bun adapters without shell
-interpolation while the apply lock and journal remain live. Lifecycle scripts are disabled; pnpm
-also bypasses project hook files and fixes its lockfile, modules, virtual-store, linker, and
-workspace-lock settings to contained values. Exact manager/version and lockfile bytes are checked
-before source replacement and again before execution. The final lockfile must change, parse, and
-match affected manifest specifiers plus exact resolved target versions. Repository and
+interpolation while the apply lock and journal remain live. Supported ranges are npm
+`>=10.0.0 <13.0.0`, pnpm `>=10.0.0 <12.0.0`, and Bun `>=1.2.0 <2.0.0`. Lifecycle scripts are
+disabled; pnpm also bypasses project hook files and fixes its lockfile, modules, virtual-store,
+linker, and workspace-lock settings to contained values. Exact manager/version and lockfile bytes
+are checked before source replacement and again before execution. The final lockfile must change,
+parse, and match affected manifest specifiers plus exact resolved target versions. Repository and
 linked-worktree Git metadata mutations outside the adapter allowlist fail; install roots and
 contained symlinks are rechecked after execution. Lockfile/source bytes are restored only while
 exact observed physical identity remains current. Manager caches and a full install tree are
@@ -102,29 +103,30 @@ configuration; unsupported proxy arrangements block. Manager install and
 generic verification phases alone do not establish package trust or update global packages.
 
 Exact artifact trust is an optional install-only boundary for public npm registry artifacts with
-npm `>=11.12.0 <12.0.0`. It requires explicit process, install, artifact-verification, and network
-authority that configuration cannot grant. Apply binds the planned package/version/SHA-512 identity
-to the final npm lockfile, contained installed location, and exact package manifest before reusing
-the preflight-pinned npm executable for fixed lifecycle-disabled `audit signatures` argv. The
-verifier receives an owned temporary home/cache, empty user/global config, and fixed public
-registry; a project `.npmrc` makes verification unavailable. Private stdout/stderr are separately
-bounded and never enter public evidence. Signature and provenance results remain independent;
-presence never passes, unknown never passes, and policy can block only through a fingerprinted
-matching rule. Install trees and package-manager caches remain non-transactional, and every safety
-ambiguity retains recovery evidence.
+npm `>=11.12.0 <12.0.0 || >=12.0.0 <12.1.0`. It requires explicit process, install,
+artifact-verification, and network authority that configuration cannot grant. Apply binds the
+planned package/version/SHA-512 identity to the final npm lockfile, contained installed location,
+and exact package manifest before reusing the preflight-pinned npm executable for fixed
+lifecycle-disabled `audit signatures` argv. The verifier receives an owned temporary home/cache,
+empty user/global config, and fixed public registry; a project `.npmrc` makes verification
+unavailable. Private stdout/stderr are separately bounded and never enter public evidence.
+Signature and provenance results remain independent; presence never passes, unknown never passes,
+and policy can block only through a fingerprinted matching rule. Install trees and package-manager
+caches remain non-transactional, and every safety ambiguity retains recovery evidence.
 The npm result does not expose safe per-artifact positive signature coverage, so signature
 verification never passes. Provenance passes only for one verified SLSA v1 DSSE statement whose
 package PURL and SHA-512 subject digest exactly match. Fail/unknown trust warns by default unless an
 embedded fingerprinted rule blocks. Pnpm, Bun, JSR, and private-registry exact verification remain
 unsupported.
 
-Global updates use a separate non-transactional state machine for npm 10/11, pnpm 10/11, and Bun
-`>=1.2.0 <2.0.0`. It preflights every selected occurrence, immediately rechecks its manager before
-execution, forbids downgrades, and re-inventories after every fixed-argv command. Applied items are
-not rolled back if a later item fails. Missing, malformed, timed-out, changed-realm, or otherwise
-unobservable evidence remains conflicted, failed, or unknown. No configuration value grants the
-global-write or process authority, and the sanitized environment excludes ambient credential and
-proxy variables; manager-readable configuration is required for private registries.
+Global updates use a separate non-transactional state machine for npm `>=10.0.0 <13.0.0`, pnpm
+`>=10.0.0 <12.0.0`, and Bun `>=1.2.0 <2.0.0`. It preflights every selected occurrence, immediately
+rechecks its manager before execution, forbids downgrades, and re-inventories after every fixed-argv
+command. Applied items are not rolled back if a later item fails. Missing, malformed, timed-out,
+changed-realm, or otherwise unobservable evidence remains conflicted, failed, or unknown. No
+configuration value grants the global-write or process authority, and the sanitized environment
+excludes ambient credential and proxy variables; manager-readable configuration is required for
+private registries.
 
 ## Disclosure
 

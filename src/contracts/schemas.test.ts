@@ -55,9 +55,16 @@ describe('shipped contract schemas', () => {
     expect(JSON.parse(readFileSync(resolve(root, path), 'utf8'))).toEqual(schema)
   })
 
-  it('keeps published v1 plan and capabilities schema bytes stable', () => {
+  it('keeps every published v1 schema byte stable', () => {
     const hashes = {
+      'schemas/inspect-v1.json': '69cda9ab4f4a1b67d7a39d9f7250943ef96458586bed7943d9d8663b68ded929',
       'schemas/plan-v1.json': '1f9d8c19d4eb56cfd0fa98a16244c877fc75a538106297f8135bdc7d2d64a5bd',
+      'schemas/apply-v1.json': '0b0c22f5fb5e0c39f6f4f4bdf69504da6da2a714854ad24dc898e1bdd904b7ec',
+      'schemas/error-v1.json': '429f72e72fe311813764321f0f493fa4460dca342dd4cbea7243dc084e46cfa2',
+      'schemas/global-plan-v1.json':
+        '503caf82020617693a516c4f90aea4b739424e9333519e0e142a71ddf5c99285',
+      'schemas/global-apply-v1.json':
+        '1362c930d76c0f1c2283aa758b103c4451b98f21cfa0456f56811b10ae9bcd2d',
       'schemas/capabilities-v1.json':
         '5c6ef7fdc9cb75325a6a711ae6f0311a948a25000bae5cc75a68e9bf2925e2ec',
     }

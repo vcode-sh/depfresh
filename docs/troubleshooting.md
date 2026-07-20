@@ -93,7 +93,8 @@ remains visible.
 
 The former bounded-preview projection is the historical compact semantic contract completed by
 [Plan 037](../plans/037-visual-plus-compact-2.1.1.md). [Plan 038](../plans/038-visual-plus-hybrid-default.md)
-owns its in-progress visual-composition successor.
+owns its completed and locally proven visual-composition successor. The 2.1.1 local candidate
+remains unpublished.
 
 Repository and package-manager context now appears only after discovery has observed it. Seeing no
 context during startup is expected and avoids false placeholders; an `unknown` value printed after
@@ -310,10 +311,11 @@ Verification uses only the fingerprinted JSON argv and may not mutate repository
 execution currently fails closed on Windows because equivalent process-tree observation is not
 available.
 
-For `artifact-verify`, first confirm the immutable plan selected npm 11.12.x or verified npm 12.0.x,
-public npm registry artifacts, canonical SHA-512 integrity, and full install. Pnpm, Bun, JSR, private registries,
-unsupported npm versions, or missing integrity block planning. A project `.npmrc` produces
-verifier-unavailable apply evidence rather than being inherited.
+For `artifact-verify`, first confirm the immutable plan selected npm
+`>=11.12.0 <12.0.0 || >=12.0.0 <12.1.0`, public npm registry artifacts, canonical SHA-512
+integrity, and full install. Pnpm, Bun, JSR, private registries, unsupported npm versions, or
+missing integrity block planning. A project `.npmrc` produces verifier-unavailable apply evidence
+rather than being inherited.
 Offline network codes and expired signature-key evidence are reported as distinct unknown states;
 retry only after the environment or upstream evidence changes. Timeout/output-limit termination is
 visible on the command; malformed or oversized JSON becomes a sanitized verifier-error trust state.
@@ -394,11 +396,12 @@ not be printed directly into shared logs.
 
 ## Known limitations
 
-**Global packages.** `--global` and `--global-all` support npm 10/11, pnpm 10/11, and Bun
-`>=1.2.0 <2.0.0`. Yarn global is unsupported. Missing executables, unsupported versions, malformed
-or timed-out inventory, a changed executable/global root, or lost post-command inventory fail
-closed as unavailable, conflicted, or unknown. Re-run read-only inventory and create a fresh plan;
-do not treat a successful process exit as proof that the package changed.
+**Global packages.** `--global` and `--global-all` support npm `>=10.0.0 <13.0.0`, pnpm
+`>=10.0.0 <12.0.0`, and Bun `>=1.2.0 <2.0.0`. Yarn global is unsupported. Missing executables,
+unsupported versions, malformed or timed-out inventory, a changed executable/global root, or lost
+post-command inventory fail closed as unavailable, conflicted, or unknown. Re-run read-only
+inventory and create a fresh plan; do not treat a successful process exit as proof that the package
+changed.
 
 **JSR registry.** Works, but metadata is sparser than npm. Signature-presence and some passive
 metadata may be unavailable. When `--cooldown` needs a missing publish time, the candidate is
