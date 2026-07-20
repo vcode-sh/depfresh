@@ -400,9 +400,22 @@ release suite, typecheck, a schema-checked build, focused Biome, and full zero-w
 post-lstat disappearance failure, and 2/29 replay-title failures before each focused suite passed
 GREEN.
 
-These corrections change package bytes. The Task 4 artifact hashes, sizes, installed CLI hash,
-Bun installation, and live Spreadoo smoke above are retained only as historical `41f0002` evidence
-and do not match the corrected HEAD. Regenerating the full source/package gate, one exact tarball,
-artifact metrics, Bun global replacement, and the final Spreadoo smoke remains pending in the root
-release-evidence pass. Plan 037 is therefore reopened for artifact refresh. No publish, tag, push,
-hosted workflow, GitHub release, or public-artifact proof is claimed.
+These corrections changed package bytes. The original Task 4 artifact identity, Bun installation,
+and live Spreadoo smoke above remain historical `41f0002` evidence only.
+
+### Corrected artifact refresh after `a0efe4d`
+
+The exact pinned gate passed schema, type, full zero-warning Biome, build, `164` coverage files and
+`2262` tests without retry, the 5-file/106-test release suite, and `verify:package`. One isolated
+56-file corrected tarball has `336301` packed bytes, `2129683` unpacked bytes, SHA-1
+`07e0f30c206356033597b29b18d8874aa69beff3`, and SHA-256
+`fcd864a34cd45c7fa0c0f379efea7048c17ca0c51aa0843ae91786bda5ba71f1`. The installed-product
+verifier passed exact 58/58 tests and assertions across 5/5 suites; the installed CLI SHA-256 is
+`1020cf266ed6011a432961047e3e64c938ac90e3d6079d63443f6d83136e2958`.
+
+Bun `1.3.14` replaced only global depfresh with that exact tarball, retained every other global,
+resolved the expected symlink and CLI hash, and printed 2.1.1 through both required probes. The
+current Spreadoo BSD true-PTY smoke exited 0 in 63 projected durable lines with truthful
+`spreadu`/Bun context, no internal IDs, a visible final cursor, and identical successful-run
+pre/post HEAD, index, status, diffs, and `bun.lock`. Plan 037 is DONE. No publish, tag, push, hosted
+workflow, GitHub release, or public-artifact proof is claimed.

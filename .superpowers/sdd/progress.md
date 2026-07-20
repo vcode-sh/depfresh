@@ -401,7 +401,12 @@ Fresh corrected-source verification passed 7 focused files/159 tests, the 5-file
 suite, typecheck, a schema-checked build, focused Biome, and full zero-warning Biome across 358
 files. RED evidence was 2/16 unnamed-manifest failures, 2/18 symlink/replacement failures, 1/19
 post-lstat disappearance failure, and 2/29 replay-title failures before focused GREEN.
-All recorded 2.1.1 artifact hashes, sizes, Bun installation, and live Spreadoo evidence are
-historical `41f0002` evidence only; rebuild, repack, exact verification, Bun replacement, and a
-fresh Spreadoo smoke remain pending in the root pass. No publish, tag, push, hosted workflow,
-GitHub release, or public-artifact proof is claimed.
+The original 2.1.1 artifact identity, Bun installation, and live Spreadoo evidence remain
+historical `41f0002` evidence only. The corrected root pass completed at `a0efe4d`: schema,
+typecheck, full zero-warning Biome, build, 164-file/2,262-test coverage, the 5-file/106-test release
+suite, and package verification all passed. The isolated corrected 56-file tarball has SHA-256
+`fcd864a34cd45c7fa0c0f379efea7048c17ca0c51aa0843ae91786bda5ba71f1` and passed exact 58/58
+installed tests across 5/5 suites. Bun replaced only global depfresh with those bytes; both probes
+printed 2.1.1. The current 63-line Spreadoo true-PTY smoke exited 0 with truthful context, no
+internal IDs, a visible cursor, and unchanged successful-run Git and `bun.lock` evidence. Plan 037
+is DONE. No publish, tag, push, hosted workflow, GitHub release, or public-artifact proof is claimed.

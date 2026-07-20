@@ -64,7 +64,7 @@ may grant side effects. Unknown state is never reported as success.
 | [034](./034-visual-plus-v2-core.md) | Visual+ v2 core terminal renderer | P1 | L | 033 | DONE |
 | [035](./035-visual-plus-insights-pty-proof.md) | Visual+ insights and PTY proof | P1 | L | 034 | DONE |
 | [036](./036-v2.1.0-release.md) | Publish and prove depfresh 2.1.0 | P1 | M | 035 | DONE |
-| [037](./037-visual-plus-compact-2.1.1.md) | Compact Visual+ output and prepare 2.1.1 | P1 | M | 036 | IN PROGRESS |
+| [037](./037-visual-plus-compact-2.1.1.md) | Compact Visual+ output and prepare 2.1.1 | P1 | M | 036 | DONE |
 
 The implementation order through 016 is present locally. Plans 011 through 013 passed their final
 blocker replays, regression fixes, full gates, and independent re-reviews on 2026-07-16. Plans 014
@@ -289,12 +289,12 @@ truthful post-discovery repository context. Task 3 added built-CLI compact-defau
 2.1.1 candidate. The full 164-file/2,256-test gate, retained 56-file artifact replay, exact Bun
 install, 74-line live Spreadoo true-PTY smoke, and initial C0/I0/M0 review passed at `41f0002`.
 Final review then required repository-name provenance, lockfile-marker identity, and replay-title
-coupling corrections. Those corrections change package bytes, so the recorded artifact identity,
-Bun install, and Spreadoo smoke are historical `41f0002` evidence only. The corrected source passed
-7 focused files/159 tests, 5 release files/106 tests, typecheck, build, and zero-warning Biome over
-358 files. Plan 037 is IN PROGRESS until the corrected source is rebuilt, repacked, verified,
-installed, and replayed. No publication, tag, push, hosted workflow, or public-artifact proof is
-claimed.
+coupling corrections. The corrected gate passed 164 files/2,262 tests, the 5-file/106-test release
+suite, and all static/build/package checks. A new isolated 56-file artifact passed the exact
+58-test/5-suite installed replay, Bun installed those exact bytes globally, and the current
+63-line Spreadoo true-PTY smoke exited 0 without Git changes. The original artifact remains
+historical `41f0002` evidence; Plan 037 is DONE on corrected local evidence. No publication, tag,
+push, hosted workflow, or public-artifact proof is claimed.
 
 Post-release retained-harness commit `de3c417` deterministically owns the nested PTY line-ending
 mapping after diagnostics isolated recurrent BSD `CRCRLF` below bare-LF-only child writes. Exact
