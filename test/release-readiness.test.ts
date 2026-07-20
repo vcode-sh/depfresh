@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { globSync } from 'tinyglobby'
@@ -64,11 +64,15 @@ function steps(path: string): WorkflowStep[] {
   return Object.values(workflow(path).jobs ?? {}).flatMap((job) => job.steps ?? [])
 }
 
-describe('2.1.0 release readiness', () => {
-  it('moves completed command-apply and Visual+ work into the dated 2.1.0 changelog section', () => {
+describe('2.1.1 release readiness', () => {
+  it('moves compact Visual+ work into the dated 2.1.1 changelog section', () => {
     const changelog = read('CHANGELOG.md')
     const unreleased = changelog.slice(
       changelog.indexOf('## Unreleased') + '## Unreleased'.length,
+      changelog.indexOf('## [2.1.1]'),
+    )
+    const candidateRelease = changelog.slice(
+      changelog.indexOf('## [2.1.1]'),
       changelog.indexOf('## [2.1.0]'),
     )
     const minorRelease = changelog.slice(
@@ -88,21 +92,28 @@ describe('2.1.0 release readiness', () => {
       changelog.indexOf('## [1.2.0]'),
     )
 
+    const compactVisualPlusEntry = 'Compact Visual+ audits'
     const visualPlusEntry = 'Visual+ local result journeys'
     const commandApplyEntry = 'Command-level local write safety'
     const workspaceCatalogEntry = 'First-class exact workspace and catalog exclusions'
     const groupedReceiptEntry = 'Truthful grouped legacy write receipts'
 
     expect(unreleased.trim()).toBe('')
+    expect(candidateRelease).toContain(compactVisualPlusEntry)
     expect(minorRelease).toContain(visualPlusEntry)
     expect(minorRelease).toContain(commandApplyEntry)
+    expect(candidateRelease).not.toContain(visualPlusEntry)
     expect(unreleased).not.toContain(groupedReceiptEntry)
+    expect(changelog).toContain('## [2.1.1] - 2026-07-20')
     expect(changelog).toContain('## [2.1.0] - 2026-07-19')
     expect(hotfixRelease).toContain(groupedReceiptEntry)
     expect(patchRelease).toContain(workspaceCatalogEntry)
     expect(historicalRelease).toContain('Portable isolated npm bootstrap in the release workflow')
     expect(changelog).toContain(
-      '[Unreleased]: https://github.com/vcode-sh/depfresh/compare/v2.1.0...HEAD',
+      '[Unreleased]: https://github.com/vcode-sh/depfresh/compare/v2.1.1...HEAD',
+    )
+    expect(changelog).toContain(
+      '[2.1.1]: https://github.com/vcode-sh/depfresh/compare/v2.1.0...v2.1.1',
     )
     expect(changelog).toContain(
       '[2.1.0]: https://github.com/vcode-sh/depfresh/compare/v2.0.2...v2.1.0',
@@ -116,28 +127,74 @@ describe('2.1.0 release readiness', () => {
     expect(read('README.md')).toContain('<a id="skip-native-or-expo-updates-in-a-monorepo"></a>')
   })
 
-  it('couples all current package and runner surfaces to 2.1.0', () => {
+  it('couples all current package and runner surfaces to 2.1.1', () => {
     const packageJson = JSON.parse(read('package.json')) as { version: string }
-    expect(packageJson.version).toBe('2.1.0')
+    expect(packageJson.version).toBe('2.1.1')
     expect(read('.nvmrc')).toBe('24.15.0\n')
 
-    expect(read('README.md')).toContain('depfresh@2.1.0')
+    expect(read('README.md')).toContain('[2.1.1 release notes](docs/releases/v2.1.1.md)')
     expect(read('README.md')).toContain('[2.1.0 release notes](docs/releases/v2.1.0.md)')
-    expect(read('docs/README.md')).toContain('[2.1.0 Release Notes](./releases/v2.1.0.md)')
+    expect(read('docs/README.md')).toContain('[2.1.1 Release Notes](./releases/v2.1.1.md)')
     for (const path of ['docs/agents/README.md', 'skills/depfresh/recipes/runners.md']) {
-      expect(read(path), path).toContain('DEPFRESH_VERSION=2.1.0')
+      expect(read(path), path).toContain('DEPFRESH_VERSION=2.1.1')
+      expect(read(path), path).not.toContain('DEPFRESH_VERSION=2.1.0')
       expect(read(path), path).not.toContain('DEPFRESH_VERSION=2.0.2')
       expect(read(path), path).toContain('depfresh@$DEPFRESH_VERSION')
       expect(read(path), path).not.toContain('depfresh@1.2.0')
     }
-    expect(read('docs/integrations/README.md')).toContain('capabilities-v2.json` in 2.1.0')
-    expect(read('.github/ISSUE_TEMPLATE/bug_report.yml')).toContain('placeholder: "2.1.0"')
-    expect(read('test/wun-demo-proof.mjs')).toContain('depfresh 2.1.0 is available')
-    expect(read('test/wun-demo-proof.mjs')).toContain('bunx depfresh@2.1.0')
-    expect(read('test/wun-demo-proof.mjs')).toContain("capabilities.version, '2.1.0'")
+    expect(read('docs/integrations/README.md')).toContain('capabilities-v2.json` in 2.1.1')
+    expect(read('.github/ISSUE_TEMPLATE/bug_report.yml')).toContain('placeholder: "2.1.1"')
+    expect(read('test/wun-demo-proof.mjs')).toContain("capabilities.version, '2.1.1'")
   })
 
-  it('ships a dedicated 2.1.0 release candidate record', () => {
+  it('pins every maintained README runner command to 2.1.1', () => {
+    const readme = read('README.md')
+    const currentInstructions = readme.slice(
+      readme.indexOf('## Try it'),
+      readme.indexOf('## Everyday commands'),
+    )
+
+    expect(currentInstructions.match(/depfresh@2\.1\.1/gu)).toHaveLength(5)
+    expect(currentInstructions).not.toContain('depfresh@2.1.0')
+  })
+
+  it('pins both maintained WUN published-runner commands to 2.1.1', () => {
+    const demo = read('test/wun-demo-proof.mjs')
+    const currentInstructions = demo.slice(
+      demo.indexOf('Run from this directory after depfresh 2.1.1 is available:'),
+      demo.indexOf('The `native` catalog'),
+    )
+
+    expect(currentInstructions.match(/bunx depfresh@2\.1\.1/gu)).toHaveLength(2)
+    expect(currentInstructions).not.toContain('bunx depfresh@2.1.0')
+  })
+
+  it('ships a dedicated local-only 2.1.1 candidate record', () => {
+    expect(existsSync(join(root, 'docs/releases/v2.1.1.md'))).toBe(true)
+    const release = read('docs/releases/v2.1.1.md')
+
+    expect(release).toContain('# depfresh 2.1.1')
+    for (const bullet of [
+      'Eligible local CLI table journeys default to compact Visual+ output.',
+      'Successful compact acceptance journeys stay within 80 durable projected lines.',
+      'Compact output hides internal IDs while retaining every major-risk card and non-success target or recovery fact.',
+      '`--long` preserves complete operation, owner, shared-dependency, occurrence, and physical-target membership.',
+      'Repository and package-manager context comes from post-discovery evidence instead of startup placeholders.',
+    ]) {
+      expect(release, bullet).toContain(`- ${bullet}`)
+    }
+    expect(release).toContain('Status: local candidate only.')
+    expect(release).toContain(
+      'No npm publication, Git tag, GitHub release, hosted workflow, or public artifact is claimed.',
+    )
+    expect(release).not.toMatch(
+      /npm exposes|published to npm|hosted run .*passed|public .*byte-identical/iu,
+    )
+    expect(release).not.toContain('TBD')
+    expect(release).not.toContain('TODO')
+  })
+
+  it('preserves the dedicated published 2.1.0 release record', () => {
     const release = read('docs/releases/v2.1.0.md')
 
     expect(release).toContain('# depfresh 2.1.0')
@@ -290,7 +347,7 @@ describe('2.1.0 release readiness', () => {
       'npm publish "file:$GITHUB_WORKSPACE/$PACKAGE_TARBALL" --access public --ignore-scripts',
     )
     expect(release).not.toContain('npm publish "$PACKAGE_TARBALL" --access public --ignore-scripts')
-    expect(release).toContain('body_path: docs/releases/v2.1.0.md')
+    expect(release).toContain('body_path: docs/releases/v2.1.1.md')
     expect(release).toContain('npm view "depfresh@$' + '{PACKAGE_VERSION}" dist.integrity')
     expect(release).toContain('--install-spec "depfresh@$PACKAGE_VERSION"')
     expect(release).toContain(

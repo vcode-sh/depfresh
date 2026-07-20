@@ -161,11 +161,11 @@ bunx --package file:${repositoryRoot} depfresh
 node ${cliPath} --cwd . plan --json --mode minor --include-locked > depfresh-plan.json
 \`\`\`
 
-Run from this directory after depfresh 2.1.0 is available:
+Run from this directory after depfresh 2.1.1 is available:
 
 \`\`\`bash
-bunx depfresh@2.1.0
-bunx depfresh@2.1.0 plan --json --mode minor --include-locked > depfresh-plan.json
+bunx depfresh@2.1.1
+bunx depfresh@2.1.1 plan --json --mode minor --include-locked > depfresh-plan.json
 \`\`\`
 
 The \`native\` catalog and direct dependencies in \`apps/native\` are excluded by
@@ -250,7 +250,7 @@ const cleanStatus = await runGit(demoRoot, ['status', '--short'])
 assert.equal(cleanStatus, '')
 
 const capabilities = parseJson(await runCli(demoRoot, ['capabilities', '--json']), 0)
-assert.equal(capabilities.version, '2.1.0')
+assert.equal(capabilities.version, '2.1.1')
 
 const inspected = parseJson(await runCli(demoRoot, ['inspect', '--json']), 0)
 assert.equal(inspected.repository.packageManager, undefined)

@@ -11,6 +11,16 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { runLocalPackageVerification } from '../scripts/verify-local-package.mjs'
+import * as replayEvidence from '../scripts/visual-plus-replay-failure.mjs'
+
+interface ReplayEvidenceApi {
+  isCompleteVisualPlusReplayReport?: (
+    report: unknown,
+    expected: { files: number; suites: number; tests: number },
+  ) => boolean
+}
+
+const replayEvidenceApi = replayEvidence as unknown as ReplayEvidenceApi
 
 const roots: string[] = []
 
@@ -117,7 +127,7 @@ setInterval(() => {}, 1_000)
     expect(replayFailure).toContain(['classification: $', '{classification}'].join(''))
     expect(packedVerifier).toContain('cliSha256')
     expect(packedVerifier).toContain('passedTests')
-    expect(packedVerifier).toContain('const VISUAL_PLUS_PASSED_TESTS = 54')
+    expect(packedVerifier).toContain('const VISUAL_PLUS_PASSED_TESTS = 58')
     expect(packedVerifier).toContain('VISUAL_PLUS_REPLAY_TIMEOUT_MS = 15 * 60_000')
     expect(packedVerifier).toContain('timeoutMs: PACKED_COMMAND_TIMEOUT_MS')
     expect(packedVerifier).toContain('timeoutMs: VISUAL_PLUS_REPLAY_TIMEOUT_MS')
@@ -148,6 +158,78 @@ setInterval(() => {}, 1_000)
     expect(visualPlusTest).toContain('expect(journeyReady).toBe(true)')
     expect(visualPlusTest).toContain('catch {}')
     expect(visualPlusTest).not.toContain('let runError: unknown')
+  })
+
+  it('requires exact complete installed Visual+ test and suite totals', () => {
+    const validate = replayEvidenceApi.isCompleteVisualPlusReplayReport
+    expect(validate).toBeTypeOf('function')
+    if (!validate) return
+
+    const complete = {
+      numFailedTests: 0,
+      numFailedTestSuites: 0,
+      numPassedTests: 58,
+      numPassedTestSuites: 5,
+      numPendingTests: 0,
+      numPendingTestSuites: 0,
+      numTodoTests: 0,
+      numTotalTests: 58,
+      numTotalTestSuites: 5,
+      testResults: [
+        {
+          assertionResults: Array.from({ length: 58 }, () => ({ status: 'passed' })),
+          status: 'passed',
+        },
+      ],
+    }
+
+    expect(validate(complete, { files: 1, suites: 5, tests: 58 })).toBe(true)
+    for (const incomplete of [
+      { ...complete, numFailedTests: 1 },
+      { ...complete, numFailedTestSuites: 1 },
+      { ...complete, numPassedTests: 57 },
+      { ...complete, numPassedTestSuites: 4 },
+      { ...complete, numPendingTests: 1 },
+      { ...complete, numPendingTestSuites: 1 },
+      { ...complete, numTodoTests: 1 },
+      { ...complete, numTotalTests: 59 },
+      { ...complete, numTotalTestSuites: 6 },
+      { ...complete, testResults: [] },
+      {
+        ...complete,
+        testResults: [{ ...complete.testResults[0], status: 'failed' }],
+      },
+      {
+        ...complete,
+        testResults: [
+          {
+            ...complete.testResults[0],
+            assertionResults: complete.testResults[0].assertionResults.slice(1),
+          },
+        ],
+      },
+      {
+        ...complete,
+        testResults: [
+          {
+            ...complete.testResults[0],
+            assertionResults: [
+              ...complete.testResults[0].assertionResults.slice(1),
+              { status: 'failed' },
+            ],
+          },
+        ],
+      },
+    ]) {
+      expect(
+        validate(incomplete, { files: 1, suites: 5, tests: 58 }),
+        JSON.stringify(incomplete),
+      ).toBe(false)
+    }
+    expect(validate({}, { files: 1, suites: 5, tests: 58 })).toBe(false)
+    expect(validate(complete, { files: 0, suites: 5, tests: 58 })).toBe(false)
+    expect(validate(complete, { files: 1, suites: 0, tests: 58 })).toBe(false)
+    expect(validate(complete, { files: 1, suites: 5, tests: 0 })).toBe(false)
   })
 })
 

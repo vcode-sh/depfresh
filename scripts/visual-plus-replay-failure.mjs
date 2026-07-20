@@ -2,6 +2,53 @@ import { closeSync, fstatSync, lstatSync, openSync, readSync } from 'node:fs'
 
 export const MAX_VISUAL_PLUS_REPORT_BYTES = 256 * 1024
 
+export function isCompleteVisualPlusReplayReport(report, expected) {
+  if (
+    !isRecord(report) ||
+    !isRecord(expected) ||
+    !Number.isSafeInteger(expected.files) ||
+    expected.files < 1 ||
+    !Number.isSafeInteger(expected.suites) ||
+    expected.suites < 1 ||
+    !Number.isSafeInteger(expected.tests) ||
+    expected.tests < 1
+  ) {
+    return false
+  }
+
+  if (
+    report.numTotalTestSuites !== expected.suites ||
+    report.numPassedTestSuites !== expected.suites ||
+    report.numFailedTestSuites !== 0 ||
+    report.numPendingTestSuites !== 0 ||
+    report.numTotalTests !== expected.tests ||
+    report.numPassedTests !== expected.tests ||
+    report.numFailedTests !== 0 ||
+    report.numPendingTests !== 0 ||
+    report.numTodoTests !== 0 ||
+    !Array.isArray(report.testResults) ||
+    report.testResults.length !== expected.files
+  ) {
+    return false
+  }
+
+  let assertionCount = 0
+  for (const testResult of report.testResults) {
+    if (
+      !isRecord(testResult) ||
+      testResult.status !== 'passed' ||
+      !Array.isArray(testResult.assertionResults)
+    ) {
+      return false
+    }
+    for (const assertion of testResult.assertionResults) {
+      if (!isRecord(assertion) || assertion.status !== 'passed') return false
+      assertionCount += 1
+    }
+  }
+  return assertionCount === expected.tests
+}
+
 const TRUSTED_FAILURE_CATEGORIES = new Map([
   [
     'Visual+ PTY adapter allocates one PTY for all three child streams at the requested width',

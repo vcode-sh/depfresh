@@ -71,7 +71,7 @@ describe('run-check orchestration paths', () => {
   })
 
   it('passes one shared resolve context through the exclusive Visual+ table path', async () => {
-    const result = await runScenario('sequential', { profile: true })
+    const result = await runScenario('sequential', { long: true, profile: true })
 
     expect(mocks.resolvePackageMock).toHaveBeenCalledTimes(2)
     const calls = mocks.resolvePackageMock.mock.calls
@@ -289,6 +289,7 @@ describe('run-check orchestration paths', () => {
           output: 'table',
           loglevel: 'info',
           explainDiscovery: true,
+          long: true,
         }),
       ).resolves.toBe(0)
 
@@ -567,6 +568,7 @@ describe('run-check orchestration paths', () => {
           ...baseOptions,
           output: 'table',
           loglevel: 'info',
+          long: true,
           write: true,
         }),
       ).resolves.toBe(0)
@@ -608,6 +610,7 @@ describe('run-check orchestration paths', () => {
           ...baseOptions,
           output: 'table',
           loglevel: 'info',
+          long: true,
           write: true,
           afterPackageWrite,
           afterPackageEnd,
@@ -749,6 +752,7 @@ describe('run-check orchestration paths', () => {
           ...baseOptions,
           output: 'table',
           loglevel: 'info',
+          long: true,
           write: true,
         }),
       ).resolves.toBe(2)

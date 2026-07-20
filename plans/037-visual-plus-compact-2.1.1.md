@@ -290,14 +290,14 @@ adding a production fault seam. Re-review reported C0/I0/M0.
 - Consumes: reviewed Tasks 1-3 and the pinned release toolchain.
 - Produces: one committed, locally packed, locally installed, fully verified 2.1.1 candidate.
 
-- [ ] **Step 1: Write release-coupling RED tests**
+- [x] **Step 1: Write release-coupling RED tests**
 
 Update release readiness and package asset tests to require `2.1.1`, a dated changelog section,
 dedicated release notes, workflow body path, current docs/runner pins, and preserved historical
 2.1.0 evidence. Explicitly assert the release note makes no npm publication, tag, hosted, or public
 artifact claim.
 
-- [ ] **Step 2: Run release RED tests**
+- [x] **Step 2: Run release RED tests**
 
 Run:
 
@@ -307,14 +307,14 @@ mise exec -- pnpm exec vitest run test/release-readiness.test.ts test/package-as
 
 Expected: FAIL because package and maintained release surfaces still identify 2.1.0.
 
-- [ ] **Step 3: Bump maintained candidate surfaces**
+- [x] **Step 3: Bump maintained candidate surfaces**
 
 Set the package version to `2.1.1` while leaving the versionless root `pnpm-lock.yaml` unchanged,
 move the Visual+ compact changelog entry to
 `## [2.1.1] - 2026-07-20`, add comparison links, create the candidate release note, update current
 README/docs/workflow/test pins, and leave historical 2.1.0 evidence unchanged.
 
-- [ ] **Step 4: Run the complete pinned source gate**
+- [x] **Step 4: Run the complete pinned source gate**
 
 Run with `--retry=0` where supported:
 
@@ -324,8 +324,8 @@ mise exec node@24.15.0 npm@11.12.1 -- pnpm schemas:check
 mise exec node@24.15.0 npm@11.12.1 -- pnpm typecheck
 mise exec node@24.15.0 npm@11.12.1 -- pnpm lint
 mise exec node@24.15.0 npm@11.12.1 -- pnpm exec biome check --error-on-warnings .
-mise exec node@24.15.0 npm@11.12.1 -- pnpm exec vitest run --coverage --retry=0
 mise exec node@24.15.0 npm@11.12.1 -- pnpm build
+mise exec node@24.15.0 npm@11.12.1 -- pnpm exec vitest run --coverage --retry=0
 mise exec node@24.15.0 npm@11.12.1 -- pnpm test:smoke
 mise exec node@24.15.0 npm@11.12.1 -- pnpm test:demo
 mise exec node@24.15.0 npm@11.12.1 -- pnpm test:release -- --retry=0
@@ -334,14 +334,14 @@ mise exec node@24.15.0 npm@11.12.1 -- pnpm verify:package
 
 Expected: every command exits 0 with zero failed tests and zero retries.
 
-- [ ] **Step 5: Pack and verify one isolated artifact**
+- [x] **Step 5: Pack and verify one isolated artifact**
 
 Run the repository package verifier, record exact filename, file count, packed/unpacked bytes,
 SHA-1, SHA-256, SHA-512 integrity, and installed CLI SHA-256 in `docs/releases/v2.1.1.md`, then rerun
 release readiness. The verifier must use disposable HOME/cache/store/temp/install paths and the
 exact candidate bytes.
 
-- [ ] **Step 6: Install the exact candidate for Bun and smoke Spreadoo**
+- [x] **Step 6: Install the exact candidate for Bun and smoke Spreadoo**
 
 Install the verified local tarball with Bun global package management. Verify:
 
@@ -351,16 +351,35 @@ bunx depfresh --version
 ```
 
 Both must print `2.1.1`. Run `bunx depfresh major` in `/Users/tomrobak/_projects_/spreadoo` under a
-true PTY and require compact output, correct `spreadu`/`pnpm` context, exit 0, at most 80 durable
-lines, no internal IDs, and unchanged `git status --short` before/after.
+true PTY and require compact output, current `spreadu` repository and observed manager/source
+context, exit 0, at most 80 durable lines, no internal IDs, and unchanged Git bytes and status
+before/after.
 
-- [ ] **Step 7: Final independent review and commit**
+- [x] **Step 7: Final independent review and commit**
 
 Obtain a whole-range code/spec/safety review. Fix every Critical or Important finding and rerun its
 covering tests. Mark Plan 037 complete only after the review is clean and every fresh verification
 result is recorded.
 
 ```bash
-git add package.json CHANGELOG.md README.md docs .github test plans
+git add .github/ISSUE_TEMPLATE/bug_report.yml .github/workflows/release.yml CHANGELOG.md README.md \
+  docs/README.md docs/agents/README.md docs/integrations/README.md docs/releases/v2.1.1.md \
+  package.json plans/037-visual-plus-compact-2.1.1.md plans/README.md \
+  scripts/verify-packed-package.mjs scripts/visual-plus-replay-failure.mjs \
+  skills/depfresh/recipes/runners.md \
+  src/commands/check/run-check.orchestration.test.ts test/package-assets.test.ts \
+  test/release-readiness.test.ts test/verify-local-package.test.ts test/visual-plus-cli.test.ts \
+  test/wun-demo-proof.mjs
 git commit -m "chore: prepare depfresh 2.1.1"
 ```
+
+**Task 4 evidence (2026-07-20):** Exact Node `24.15.0`, npm `11.12.1`, and pnpm `10.33.0`
+passed the complete frozen-install, schema, type, zero-warning lint, build, `164`-file/`2256`-test
+coverage, smoke, demo, `106`-test release, and package gates without retry. One retained 56-file
+tarball passed the installed Visual+ replay with exact 58/58 tests, 5/5 suites, and unchanged
+SHA-256 `5c38c97902abd625533ce36fdff9e889c7d719a4baffd1647ae00ebad1b98636`.
+Bun resolved the exact global candidate as 2.1.1 through both required paths. The 74-line live
+Spreadoo true-PTY compact smoke exited 0 with truthful current repository/manager context, no
+internal IDs, and unchanged Git state. Initial independent findings C1/I2/M0 were fixed with
+fault-injected release-pin and executable replay-completeness tests; re-review reported C0/I0/M0.
+No publish, tag, push, hosted workflow, GitHub release, or public-artifact claim was made.

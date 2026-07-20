@@ -14,6 +14,7 @@ import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:pat
 import { gunzipSync } from 'node:zlib'
 import { extractSinglePackEntry } from './pack-manifest.mjs'
 import {
+  isCompleteVisualPlusReplayReport,
   readVisualPlusReplayReport,
   visualPlusReplayFailureMessage,
 } from './visual-plus-replay-failure.mjs'
@@ -34,7 +35,9 @@ const MAX_COMMAND_OUTPUT_BYTES = 1024 * 1024
 const PACKED_COMMAND_TIMEOUT_MS = 120_000
 const VISUAL_PLUS_REPLAY_TIMEOUT_MS = 15 * 60_000
 const MAX_TARBALL_EXPANDED_BYTES = 50 * 1024 * 1024
-const VISUAL_PLUS_PASSED_TESTS = 54
+const VISUAL_PLUS_PASSED_TEST_FILES = 1
+const VISUAL_PLUS_PASSED_TEST_SUITES = 5
+const VISUAL_PLUS_PASSED_TESTS = 58
 const command = parseCommand(process.argv.slice(2))
 const manifestArgument = command.manifestPath
 const explicitInstallSpec = command.installSpec
@@ -506,10 +509,11 @@ function verifyVisualPlusReplay(options) {
   const report = readVisualPlusReplayReport(reportPath)
   if (report === undefined) fail('Installed Visual+ replay did not produce machine evidence')
   if (
-    !isRecord(report) ||
-    report.numFailedTests !== 0 ||
-    report.numFailedTestSuites !== 0 ||
-    report.numPassedTests !== VISUAL_PLUS_PASSED_TESTS
+    !isCompleteVisualPlusReplayReport(report, {
+      files: VISUAL_PLUS_PASSED_TEST_FILES,
+      suites: VISUAL_PLUS_PASSED_TEST_SUITES,
+      tests: VISUAL_PLUS_PASSED_TESTS,
+    })
   ) {
     fail('Installed Visual+ replay evidence is incomplete')
   }

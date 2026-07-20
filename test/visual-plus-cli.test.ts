@@ -902,7 +902,7 @@ describe('Visual+ built CLI', () => {
       encoding: 'utf8',
     })
 
-    expect(version.trim()).toBe('2.1.0')
+    expect(version.trim()).toBe('2.1.1')
   })
 
   it.each([40, 60, 80, 118, 175])(

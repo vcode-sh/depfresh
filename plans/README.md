@@ -64,7 +64,7 @@ may grant side effects. Unknown state is never reported as success.
 | [034](./034-visual-plus-v2-core.md) | Visual+ v2 core terminal renderer | P1 | L | 033 | DONE |
 | [035](./035-visual-plus-insights-pty-proof.md) | Visual+ insights and PTY proof | P1 | L | 034 | DONE |
 | [036](./036-v2.1.0-release.md) | Publish and prove depfresh 2.1.0 | P1 | M | 035 | DONE |
-| [037](./037-visual-plus-compact-2.1.1.md) | Compact Visual+ output and prepare 2.1.1 | P1 | M | 036 | IN PROGRESS |
+| [037](./037-visual-plus-compact-2.1.1.md) | Compact Visual+ output and prepare 2.1.1 | P1 | M | 036 | DONE |
 
 The implementation order through 016 is present locally. Plans 011 through 013 passed their final
 blocker replays, regression fixes, full gates, and independent re-reviews on 2026-07-16. Plans 014
@@ -284,9 +284,11 @@ GitHub-hosted builder. Plans 032-036 and the Safe Write/Visual+ v2 program are D
 
 Plan 037 is active after the public 2.1.0 replay showed that the exhaustive Visual+ audit is too
 large for the default human journey. Tasks 1 and 2 added deterministic compact/full renderers and
-truthful post-discovery repository context. Task 3 owns built-CLI compact-default and explicit
-`--long` PTY/pipe proof plus current documentation. Version `2.1.0` remains unchanged until the
-separate local 2.1.1 candidate task completes; no publication, tag, push, or hosted proof is claimed.
+truthful post-discovery repository context. Task 3 added built-CLI compact-default and explicit
+`--long` PTY/pipe proof plus current documentation. Task 4 prepared and verified one exact local
+2.1.1 candidate. The full 164-file/2,256-test gate, retained 56-file artifact replay, exact Bun
+install, 74-line live Spreadoo true-PTY smoke, and final C0/I0/M0 review passed. Plan 037 is DONE.
+No publication, tag, push, hosted workflow, or public-artifact proof is claimed.
 
 Post-release retained-harness commit `de3c417` deterministically owns the nested PTY line-ending
 mapping after diagnostics isolated recurrent BSD `CRCRLF` below bare-LF-only child writes. Exact
