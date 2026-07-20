@@ -5,6 +5,13 @@ import { NPM_ARTIFACT_VERIFIER_SUPPORT } from './artifact-verifier'
 export const CAPABILITIES_SCHEMA_ID = 'https://depfresh.dev/schemas/capabilities-v1.json'
 export const CAPABILITIES_V2_SCHEMA_ID = 'https://depfresh.dev/schemas/capabilities-v2.json'
 
+const NPM_ARTIFACT_VERIFIER_SUPPORT_V1 = {
+  manager: 'npm',
+  versionRange: '>=11.12.0 <12.0.0',
+  registry: 'https://registry.npmjs.org/',
+  integrity: 'sha512',
+} as const
+
 const stringArray = { type: 'array', items: { type: 'string' } } as const
 const stringMap = {
   type: 'object',
@@ -171,10 +178,10 @@ export const capabilitiesSchema = {
           additionalProperties: false,
           required: ['manager', 'versionRange', 'registry', 'integrity'],
           properties: {
-            manager: { const: NPM_ARTIFACT_VERIFIER_SUPPORT.manager },
-            versionRange: { const: NPM_ARTIFACT_VERIFIER_SUPPORT.versionRange },
-            registry: { const: NPM_ARTIFACT_VERIFIER_SUPPORT.registry },
-            integrity: { const: NPM_ARTIFACT_VERIFIER_SUPPORT.integrity },
+            manager: { const: NPM_ARTIFACT_VERIFIER_SUPPORT_V1.manager },
+            versionRange: { const: NPM_ARTIFACT_VERIFIER_SUPPORT_V1.versionRange },
+            registry: { const: NPM_ARTIFACT_VERIFIER_SUPPORT_V1.registry },
+            integrity: { const: NPM_ARTIFACT_VERIFIER_SUPPORT_V1.integrity },
           },
         },
       },
@@ -218,6 +225,23 @@ export const capabilitiesV2Schema = {
     schema: { const: 'depfresh/schemas/capabilities-v2.json' },
     positional: { type: 'object', additionalProperties: capabilityFlagV2 },
     flags: { type: 'object', additionalProperties: capabilityFlagV2 },
+    registries: {
+      ...capabilitiesSchema.properties.registries,
+      properties: {
+        ...capabilitiesSchema.properties.registries.properties,
+        artifactVerification: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['manager', 'versionRange', 'registry', 'integrity'],
+          properties: {
+            manager: { const: NPM_ARTIFACT_VERIFIER_SUPPORT.manager },
+            versionRange: { const: NPM_ARTIFACT_VERIFIER_SUPPORT.versionRange },
+            registry: { const: NPM_ARTIFACT_VERIFIER_SUPPORT.registry },
+            integrity: { const: NPM_ARTIFACT_VERIFIER_SUPPORT.integrity },
+          },
+        },
+      },
+    },
     contractVersions: {
       type: 'object',
       additionalProperties: false,

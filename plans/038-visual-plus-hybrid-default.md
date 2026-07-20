@@ -92,7 +92,7 @@ verification compatibility remains supported alongside the verified npm 12.0.x p
   pnpm `11.15.1`, TypeScript `7.0.2`, ini `7.0.0`, and undici `8.8.0` are the active release
   candidates. The tsdown build, generated schemas, frozen install, peer check, typecheck,
   zero-warning Biome gate, focused/release tests, and isolated-npm packed verifier passed. The
-  verified candidate contains 87 manifest files in a 282,757-byte tarball; Task 6 must create fresh
+  verified candidate contains 87 manifest files in a 282,885-byte tarball; Task 6 must create fresh
   retained evidence from these exact source and package bytes.
 - **Task 6:** pending. Task 4 provides reviewed local proof infrastructure and deterministic source
   evidence only, not a retained Plan 038 artifact, Bun replacement, or live Spreadoo proof.

@@ -68,6 +68,18 @@ describe('shipped contract schemas', () => {
     }
   })
 
+  it('keeps npm 12 verifier support out of immutable capabilities v1 bytes', () => {
+    const v1 = JSON.parse(readFileSync(resolve(root, 'schemas/capabilities-v1.json'), 'utf8'))
+    const v2 = JSON.parse(readFileSync(resolve(root, 'schemas/capabilities-v2.json'), 'utf8'))
+
+    expect(
+      v1.properties.registries.properties.artifactVerification.properties.versionRange,
+    ).toEqual({ const: '>=11.12.0 <12.0.0' })
+    expect(
+      v2.properties.registries.properties.artifactVerification.properties.versionRange,
+    ).toEqual({ const: '>=11.12.0 <12.0.0 || >=12.0.0 <12.1.0' })
+  })
+
   it('rejects additional inspect fields and absolute source paths', () => {
     const base = {
       contract: 'depfresh.inspect',
