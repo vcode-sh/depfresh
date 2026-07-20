@@ -81,11 +81,21 @@ export function createVisualPlusFixture(root, options) {
     exactPathspecs,
     runtimePaths,
   })
+  createRecoveryPreload(runtimePaths, repository, targets)
   const registry = createRegistryResponses(selectedDeclarations, asOfMs)
   const successEnvironment = childEnvironment(runtimePaths, git, gitEnvironment)
-  const safetyEnvironment = {
+  const wrappedEnvironment = {
     ...successEnvironment,
     PATH: `${runtimePaths.wrapperBin}${delimiter}${dirname(git)}${delimiter}${process.env.PATH ?? ''}`,
+  }
+  const safetyEnvironment = {
+    ...wrappedEnvironment,
+    DEPFRESH_VISUAL_PLUS_FIXTURE_VARIANT: 'safety',
+  }
+  const recoveryEnvironment = {
+    ...successEnvironment,
+    DEPFRESH_VISUAL_PLUS_RECOVERY_ROOT: repository,
+    NODE_OPTIONS: `--import=${runtimePaths.recoveryPreload}`,
   }
 
   return Object.freeze({
@@ -106,6 +116,10 @@ export function createVisualPlusFixture(root, options) {
         environment: Object.freeze(safetyEnvironment),
         wrapper,
         counter: runtimePaths.counter,
+      }),
+      recovery: Object.freeze({
+        environment: Object.freeze(recoveryEnvironment),
+        marker: runtimePaths.recoveryMarker,
       }),
     }),
     runtimePaths: Object.freeze(runtimePaths),
@@ -189,6 +203,8 @@ function createRuntimePaths(runtime) {
     pnpmStore: join(runtime, 'pnpm-store'),
     wrapperBin: join(runtime, 'git-wrapper-bin'),
     counter: join(runtime, 'git-ls-files-count'),
+    recoveryMarker: join(runtime, 'recovery-fault.json'),
+    recoveryPreload: join(runtime, 'recovery-preload.mjs'),
     gitConfig: join(runtime, 'gitconfig'),
     npmConfig: join(runtime, 'npmrc'),
   }
@@ -472,11 +488,12 @@ const commandIndex = args.indexOf('ls-files')
 const command = commandIndex === -1 ? [] : args.slice(commandIndex)
 const expected = ${JSON.stringify(expected)}
 const matches = command.length === expected.length && command.every((value, index) => value === expected[index])
+let count = 0
 if (matches) {
   const counter = ${JSON.stringify(runtimePaths.counter)}
-  const count = existsSync(counter) ? Number(readFileSync(counter, 'utf8')) + 1 : 1
+  count = existsSync(counter) ? Number(readFileSync(counter, 'utf8')) + 1 : 1
   writeFileSync(counter, String(count))
-  if (count === 2) {
+  if (process.env.DEPFRESH_VISUAL_PLUS_FIXTURE_VARIANT === 'safety' && count === 2) {
     writeSync(1, Buffer.alloc(1100000, 97))
     process.exit(0)
   }
@@ -487,6 +504,79 @@ process.exit(result.status ?? 1)
   )
   chmodSync(wrapper, 0o755)
   return wrapper
+}
+
+function createRecoveryPreload(runtimePaths, repository, targets) {
+  const targetPaths = targets.map((target) => join(repository, target.path))
+  writeFileSync(
+    runtimePaths.recoveryPreload,
+    `import fs from 'node:fs'
+import { syncBuiltinESMExports } from 'node:module'
+import { basename, dirname, relative, resolve, sep } from 'node:path'
+
+const expectedCli = process.env.DEPFRESH_VISUAL_PLUS_RECOVERY_CLI
+const expectedRoot = ${JSON.stringify(repository)}
+const configuredRoot = process.env.DEPFRESH_VISUAL_PLUS_RECOVERY_ROOT
+let invokedCli
+try {
+  invokedCli = process.argv[1] ? fs.realpathSync.native(process.argv[1]) : undefined
+} catch {}
+
+if (expectedCli && invokedCli === expectedCli && configuredRoot === expectedRoot) {
+  const targetPaths = new Set(${JSON.stringify(targetPaths)})
+  const firstTarget = ${JSON.stringify(targetPaths[0])}
+  const marker = ${JSON.stringify(runtimePaths.recoveryMarker)}
+  const originalRenameSync = fs.renameSync
+  const evidence = {}
+  let stageRenames = 0
+  let recoveryRenames = 0
+
+  const exactArtifact = (source, destination, suffix) => {
+    if (typeof source !== 'string' || typeof destination !== 'string') return false
+    const target = resolve(destination)
+    const artifact = resolve(source)
+    if (!targetPaths.has(target) || dirname(artifact) !== dirname(target)) return false
+    const prefix = \`.\${basename(target)}.depfresh-\`
+    return basename(artifact).startsWith(prefix) && basename(artifact).endsWith(suffix)
+  }
+  const containedTarget = (destination) => {
+    if (typeof destination !== 'string') return false
+    const target = resolve(destination)
+    const path = relative(expectedRoot, target)
+    return path !== '..' && !path.startsWith(\`..\${sep}\`) && targetPaths.has(target)
+  }
+  const injectedError = (message) => Object.assign(new Error(message), { code: 'EIO' })
+  const record = () => fs.writeFileSync(marker, JSON.stringify(evidence))
+
+  fs.renameSync = (source, destination) => {
+    if (containedTarget(destination) && exactArtifact(source, destination, '.stage')) {
+      stageRenames += 1
+      if (stageRenames === 3) {
+        evidence.commitBlocked = relative(expectedRoot, resolve(destination))
+        evidence.commitRenameCount = stageRenames
+        record()
+        throw injectedError('fixture commit fault')
+      }
+    }
+    if (
+      containedTarget(destination) &&
+      resolve(destination) === firstTarget &&
+      exactArtifact(source, destination, '.backup')
+    ) {
+      recoveryRenames += 1
+      if (recoveryRenames === 1) {
+        evidence.recoveryBlocked = relative(expectedRoot, resolve(destination))
+        evidence.recoveryRenameCount = recoveryRenames
+        record()
+        throw injectedError('fixture recovery fault')
+      }
+    }
+    return originalRenameSync(source, destination)
+  }
+  syncBuiltinESMExports()
+}
+`,
+  )
 }
 
 function childEnvironment(paths, git, gitEnvironment) {

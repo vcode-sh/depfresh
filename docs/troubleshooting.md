@@ -85,8 +85,9 @@ or evidence-preservation action immediately before `Exit 2`.
 Eligible Visual+ table output is compact by default. It keeps topology, distribution, every major
 card, and bounded previews without internal IDs. Run `depfresh --long` for the complete audit with
 every selected operation, owner, shared dependency, occurrence, and physical target. The compact
-success acceptance fixture is capped at 80 durable projected lines; this limit never removes a
-non-success target or an applied, restored, or unrecovered recovery path.
+success acceptance fixture is capped at 80 durable projected lines. Ordinary read-only
+`not-attempted` target previews may be bounded. Every non-success target in write safety or recovery
+bypasses compact limits, and every applied, restored, or unrecovered recovery path remains visible.
 
 Repository and package-manager context now appears only after discovery has observed it. Seeing no
 context during startup is expected and avoids false placeholders; an `unknown` value printed after

@@ -982,6 +982,59 @@ describe('Visual+ built CLI', () => {
     assertGitClean(fixture)
   }, 120_000)
 
+  it('retains exact compact recovery truth in the durable direct-pipe fallback', async () => {
+    const fixture = createFixture('compact-recovery')
+    const recovery = (
+      fixture.variants as typeof fixture.variants & {
+        recovery?: { environment: Record<string, string>; marker: string }
+      }
+    ).recovery
+
+    expect(recovery).toBeDefined()
+    if (!recovery) return
+    const result = await runDirectCommand(
+      [cliPath, '--cwd', fixture.repository, '--recursive', '--write', '--mode', 'major'],
+      capableEnvironment(recovery.environment, {
+        DEPFRESH_VISUAL_PLUS_RECOVERY_CLI: realpathSync(cliPath),
+      }),
+      {},
+    )
+
+    expect(result.exitCode).toBe(2)
+    expect(result.stdout.includes(0x1b)).toBe(false)
+    expect(result.stdout.includes(0x0d)).toBe(false)
+    expect(result.stderr.toString('utf8')).toContain('Tip: Use --output json')
+    const transcript = result.stdout.toString('utf8')
+    expect(transcript.endsWith('Exit 2\n')).toBe(true)
+    assertRunContext(transcript)
+    assertNoInternalIds(transcript)
+    expect(transcript).toContain('Recovery incomplete')
+    expect(transcript).toContain('Applied: none')
+    expect(transcript).toContain(`Restored: ${fixture.targets[1]!.path}`)
+    expect(transcript).toContain(`Unrecovered: ${fixture.targets[0]!.path}`)
+    expect(transcript).toContain('Journal: retained')
+    expect(transcript).not.toMatch(/^Journal: (?!retained$).+/gmu)
+    for (const target of fixture.targets) expect(transcript, target.path).toContain(target.path)
+
+    expect(JSON.parse(readFileSync(recovery.marker, 'utf8'))).toEqual({
+      commitBlocked: fixture.targets[2]!.path,
+      commitRenameCount: 3,
+      recoveryBlocked: fixture.targets[0]!.path,
+      recoveryRenameCount: 1,
+    })
+    for (const [index, target] of fixture.targets.entries()) {
+      const actual = readFileSync(join(fixture.repository, target.path))
+      const expected = index === 0 ? target.expectedAfterBytes : target.beforeBytes
+      expect(actual, target.path).toEqual(expected)
+    }
+    expect(existsSync(join(fixture.repository, '.depfresh', 'apply.lock'))).toBe(true)
+    const runs = readdirSync(join(fixture.repository, '.depfresh', 'runs'))
+    expect(runs).toHaveLength(1)
+    expect(
+      existsSync(join(fixture.repository, '.depfresh', 'runs', runs[0]!, 'journal.json')),
+    ).toBe(true)
+  }, 120_000)
+
   it('uses durable capable and no-color PTY fallbacks without losing read-only semantic output', async () => {
     const fixture = createFixture('capable-fallbacks')
     const baseline = await runReadOnlyPty(fixture, {})
@@ -1344,6 +1397,13 @@ function assertFullReadOnlySemantics(
     /66packages(?:→|->)616declared(?:→|->)612eligible(?:→|->)76updates(?:→|->)14files/u,
   )
   expect(compact).toContain('76updatesreviewedacross14targets.')
+  const transaction = section(transcript, 'Reviewed physical targets\n', 'Review complete\n')
+  expect(transaction.match(/^Target /gmu) ?? []).toHaveLength(fixture.targets.length)
+  for (const target of fixture.targets) {
+    expect(transaction, target.path).toMatch(
+      new RegExp(`^Target ${escapeRegExp(target.path)}(?: ·| \\|)`, 'mu'),
+    )
+  }
 }
 
 function assertExactReviewMembership(

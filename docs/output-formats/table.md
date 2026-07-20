@@ -177,10 +177,11 @@ synthetic/future-producer projection qualified below. All are exact final-receip
 
 The successful compact acceptance journey is limited to 80 durable projected lines at narrow,
 standard, and wide supported widths. This is an output-density contract, not a safety truncation
-rule: wrapping redistributes content within the projection, and any non-success target or recovery
-path bypasses preview limits. Compact retained recovery reports `Journal: retained` rather than an
-internal journal identifier. A safety block therefore still names every affected physical target,
-and recovery-first receipts still name every applied, restored, and unrecovered path. Rerun with
+rule: wrapping redistributes content within the projection, and ordinary read-only `not-attempted`
+target previews may be bounded. Every non-success target in write safety or recovery bypasses
+compact limits. Compact retained recovery reports `Journal: retained` rather than an internal
+journal identifier. A safety block therefore still names every affected physical target, and
+recovery-first receipts still name every applied, restored, and unrecovered path. Rerun with
 `--long` when complete successful/read-only membership is required.
 
 The journey is eligible only through CLI progress routing with table output, a non-silent log

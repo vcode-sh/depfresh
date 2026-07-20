@@ -57,9 +57,9 @@ For eligible local CLI table runs, Visual+ defaults to a compact audit with repo
 severity, every major-risk card, bounded owner/shared/update/target previews, transaction facts,
 and the final receipt. It does not print internal IDs. Use `--long` for the complete owner, shared,
 operation, occurrence, and physical-target membership. The large acceptance fixture stays within
-80 durable projected lines on successful compact journeys; wrapping can redistribute those lines,
-while a failure or recovery always overrides preview limits to retain every safety-relevant target
-and recovery path.
+80 durable projected lines on successful compact journeys; wrapping can redistribute those lines.
+Ordinary read-only `not-attempted` target previews may be bounded, while every non-success target in
+write safety or recovery bypasses compact limits and every recovery path remains visible.
 
 Eligibility requires the CLI progress route, non-silent output, non-interactive and non-global
 operation, and no direct or addon `beforePackageWrite` hook. `--write --interactive` keeps the
