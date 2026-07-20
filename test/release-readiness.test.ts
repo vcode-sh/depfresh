@@ -759,11 +759,22 @@ describe('2.1.1 release readiness', () => {
     expect(install?.shell).toBe('pwsh')
     expect(install?.run).toContain('npm install')
     expect(install?.run).toContain('--ignore-scripts')
-    const proof = windowsSteps.find((step) => step.name === 'Verify installed read-only CLI')
-    expect(proof?.run).toBe('node scripts/verify-installed-read-only.mjs "$env:DEPFRESH_CLI"')
+    expect(install?.run).toContain(
+      "$commandShim = Join-Path $installRoot 'node_modules/.bin/depfresh.cmd'",
+    )
+    expect(install?.run).toContain('DEPFRESH_COMMAND_SHIM=$commandShim')
+    expect(install?.run).not.toContain('node_modules/depfresh/dist/cli.mjs')
+    const proof = windowsSteps.find((step) => step.name === 'Verify installed command shim')
+    expect(proof?.run).toBe(
+      'node scripts/verify-installed-read-only.mjs "$env:DEPFRESH_COMMAND_SHIM"',
+    )
     expect(proof?.run).not.toMatch(
       /--write|--install|--sync-lockfile|--verify(?:-artifacts)?|--global/iu,
     )
+    const verifier = read('scripts/verify-installed-read-only.mjs')
+    expect(verifier).toContain('DEPFRESH_COMMAND_SHIM')
+    expect(verifier).toContain('shell: false')
+    expect(verifier).not.toContain('shell: true')
   })
 
   it('allows @types/node 24 minor and patch updates while ignoring only majors', () => {

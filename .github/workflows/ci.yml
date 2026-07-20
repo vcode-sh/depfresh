@@ -224,12 +224,13 @@ jobs:
           New-Item -ItemType Directory -Path $installRoot -Force | Out-Null
           npm install --prefix $installRoot --ignore-scripts --no-audit --no-fund $tarball
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          $cli = Join-Path $installRoot 'node_modules/depfresh/dist/cli.mjs'
-          if (!(Test-Path -LiteralPath $cli -PathType Leaf)) {
-            throw 'Installed depfresh CLI is unavailable'
+          $commandShim = Join-Path $installRoot 'node_modules/.bin/depfresh.cmd'
+          if (!(Test-Path -LiteralPath $commandShim -PathType Leaf)) {
+            throw 'Installed depfresh command shim is unavailable'
           }
-          "DEPFRESH_CLI=$cli" >> $env:GITHUB_ENV
+          $commandShim = (Get-Item -LiteralPath $commandShim).FullName
+          "DEPFRESH_COMMAND_SHIM=$commandShim" >> $env:GITHUB_ENV
 
-      - name: Verify installed read-only CLI
+      - name: Verify installed command shim
         shell: pwsh
-        run: node scripts/verify-installed-read-only.mjs "$env:DEPFRESH_CLI"
+        run: node scripts/verify-installed-read-only.mjs "$env:DEPFRESH_COMMAND_SHIM"
