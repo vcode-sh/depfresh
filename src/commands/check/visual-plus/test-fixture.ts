@@ -71,6 +71,7 @@ export function createVisualPlusFixtureInput(
     capabilities,
     run: {
       detailLevel: 'compact',
+      display: { group: false, sort: 'diff-asc', timediff: false, nodecompat: false },
       repository: { name: 'visual-plus-fixture', relativePath: '.' },
       workspaceScope: 'workspace',
       packageManager: {
@@ -80,10 +81,12 @@ export function createVisualPlusFixtureInput(
         sources: ['package.json'],
       },
     },
-    changes: snapshot.changes.map((change) => {
+    changes: snapshot.changes.map((change, displayOrder) => {
       const insight = change.insight!
       return {
         operationId: change.id,
+        source: insight.catalog.role === 'owner' ? 'catalog' : 'dependencies',
+        displayOrder,
         ownerGroup: {
           id: insight.owner.id,
           label: insight.owner.label,

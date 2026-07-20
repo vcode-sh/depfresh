@@ -5,6 +5,13 @@ import type { LegacySelectionEvidenceOperation } from '../../apply/legacy-plan'
 import { createCheckRunState, reduceCheckRun } from '../run-model'
 import { createVisualPlusSelectionProjection, isVisualPlusEligible } from './integration'
 
+const display = {
+  group: false,
+  sort: 'diff-asc' as const,
+  timediff: false,
+  nodecompat: false,
+}
+
 type MutableEvidenceOperation = {
   -readonly [Key in keyof LegacySelectionEvidenceOperation]: LegacySelectionEvidenceOperation[Key]
 }
@@ -51,6 +58,7 @@ function evidence(): MutableEvidence {
         changeIndex: 0,
         dependencyId: createRepositoryId('dependency', '\u001B[31mshared'),
         rawName: '\u001B[31mshared',
+        source: 'catalog',
         sourceFileId: catalogSourceId,
         sourcePath: 'package.json',
         owner: {
@@ -84,6 +92,7 @@ function evidence(): MutableEvidence {
         changeIndex: 3,
         dependencyId: createRepositoryId('dependency', 'future'),
         rawName: 'future',
+        source: 'dependencies',
         sourceFileId: manifestSourceId,
         sourcePath: 'packages/b/package.json',
         owner: {
@@ -109,6 +118,7 @@ function evidence(): MutableEvidence {
         changeIndex: 4,
         dependencyId: createRepositoryId('dependency', 'unknown'),
         rawName: 'unknown',
+        source: 'devDependencies',
         sourceFileId: manifestSourceId,
         sourcePath: 'packages/b/package.json',
         owner: {
@@ -133,6 +143,7 @@ function evidence(): MutableEvidence {
         changeIndex: 5,
         dependencyId: createRepositoryId('dependency', 'loose-date'),
         rawName: 'loose-date',
+        source: 'devDependencies',
         sourceFileId: manifestSourceId,
         sourcePath: 'packages/b/package.json',
         owner: {
@@ -163,10 +174,27 @@ function evidence(): MutableEvidence {
 }
 
 describe('Visual+ integration projection', () => {
+  it('projects source and deterministic display order without mutating evidence', () => {
+    const source = evidence()
+    const before = structuredClone(source)
+    const result = createVisualPlusSelectionProjection(source, Date.parse('2026-01-01T00:00:00Z'), {
+      ...display,
+      sort: 'name-asc',
+    })
+
+    expect(result.metadata.map((metadata) => [metadata.source, metadata.displayOrder])).toEqual([
+      ['catalog', 0],
+      ['dependencies', 1],
+      ['devDependencies', 3],
+      ['devDependencies', 2],
+    ])
+    expect(source).toEqual(before)
+  })
+
   it('projects one immutable selection model with fixed-clock metadata and exact targets', () => {
     const source = evidence()
     const now = Date.parse('2026-01-01T00:00:00.000Z')
-    const result = createVisualPlusSelectionProjection(source, now)
+    const result = createVisualPlusSelectionProjection(source, now, display)
     const catalogSourceId = createRepositoryId('source', 'package.json')
     const catalogId = createRepositoryId('catalog', 'package.json\0bun\0default')
     const manifestSourceId = createRepositoryId('source', 'packages/b/package.json')
@@ -290,6 +318,8 @@ describe('Visual+ integration projection', () => {
     expect(result.metadata).toEqual([
       {
         operationId: 'operation-shared',
+        source: 'catalog',
+        displayOrder: 0,
         ownerGroup: {
           id: catalogId,
           order: 0,
@@ -302,6 +332,8 @@ describe('Visual+ integration projection', () => {
       },
       {
         operationId: 'operation-future',
+        source: 'dependencies',
+        displayOrder: 1,
         ownerGroup: {
           id: manifestOwnerId,
           order: 1,
@@ -313,6 +345,8 @@ describe('Visual+ integration projection', () => {
       },
       {
         operationId: 'operation-unknown',
+        source: 'devDependencies',
+        displayOrder: 2,
         ownerGroup: {
           id: manifestOwnerId,
           order: 1,
@@ -324,6 +358,8 @@ describe('Visual+ integration projection', () => {
       },
       {
         operationId: 'operation-loose-date',
+        source: 'devDependencies',
+        displayOrder: 3,
         ownerGroup: {
           id: manifestOwnerId,
           order: 1,
@@ -345,10 +381,10 @@ describe('Visual+ integration projection', () => {
   })
 
   it('rejects an invalid fixed wall clock', () => {
-    expect(() => createVisualPlusSelectionProjection(evidence(), Number.NaN)).toThrow(
+    expect(() => createVisualPlusSelectionProjection(evidence(), Number.NaN, display)).toThrow(
       /finite nonnegative integer/u,
     )
-    expect(() => createVisualPlusSelectionProjection(evidence(), -1)).toThrow(
+    expect(() => createVisualPlusSelectionProjection(evidence(), -1, display)).toThrow(
       /finite nonnegative integer/u,
     )
   })
@@ -360,10 +396,10 @@ describe('Visual+ integration projection', () => {
     const withOffset = evidence()
     withOffset.operations[0]!.publishedAt = '2025-01-01T01:00:00+01:00'
 
-    expect(createVisualPlusSelectionProjection(withoutMilliseconds, now).metadata[0]?.ageMs).toBe(
-      365 * 24 * 60 * 60 * 1000,
-    )
-    expect(createVisualPlusSelectionProjection(withOffset, now).metadata[0]?.ageMs).toBe(
+    expect(
+      createVisualPlusSelectionProjection(withoutMilliseconds, now, display).metadata[0]?.ageMs,
+    ).toBe(365 * 24 * 60 * 60 * 1000)
+    expect(createVisualPlusSelectionProjection(withOffset, now, display).metadata[0]?.ageMs).toBe(
       365 * 24 * 60 * 60 * 1000,
     )
   })
@@ -374,6 +410,7 @@ describe('Visual+ integration projection', () => {
     const projection = createVisualPlusSelectionProjection(
       source,
       Date.parse('2026-01-01T00:00:00.000Z'),
+      display,
     )
     expect(projection.changes[0]?.insight?.compatibility).toEqual({
       status: 'incompatible',
@@ -415,6 +452,7 @@ describe('Visual+ integration projection', () => {
     const result = createVisualPlusSelectionProjection(
       source,
       Date.parse('2026-01-01T00:00:00.000Z'),
+      display,
     )
     expect(result.metadata[0]?.ageMs).toBeNull()
     expect(result.changes[0]).not.toHaveProperty('ageMs')
@@ -426,7 +464,7 @@ describe('Visual+ integration projection', () => {
     source.targets[0]!.operationIds[0] = operationId
 
     expect(() =>
-      createVisualPlusSelectionProjection(source, Date.parse('2026-01-01T00:00:00.000Z')),
+      createVisualPlusSelectionProjection(source, Date.parse('2026-01-01T00:00:00.000Z'), display),
     ).toThrow(/operation ID is unsafe/u)
   })
 
@@ -434,7 +472,7 @@ describe('Visual+ integration projection', () => {
     const now = Date.parse('2026-01-01T00:00:00.000Z')
     const duplicateOperation = evidence()
     duplicateOperation.operations[1]!.operationId = duplicateOperation.operations[0]!.operationId
-    expect(() => createVisualPlusSelectionProjection(duplicateOperation, now)).toThrow(
+    expect(() => createVisualPlusSelectionProjection(duplicateOperation, now, display)).toThrow(
       /operation IDs must be unique/u,
     )
 
@@ -443,25 +481,25 @@ describe('Visual+ integration projection', () => {
       path: duplicateTarget.targets[0]!.path,
       operationIds: ['operation-extra'],
     })
-    expect(() => createVisualPlusSelectionProjection(duplicateTarget, now)).toThrow(
+    expect(() => createVisualPlusSelectionProjection(duplicateTarget, now, display)).toThrow(
       /target inventory is inconsistent/u,
     )
 
     const emptyTarget = evidence()
     emptyTarget.targets[0]!.operationIds = []
-    expect(() => createVisualPlusSelectionProjection(emptyTarget, now)).toThrow(
+    expect(() => createVisualPlusSelectionProjection(emptyTarget, now, display)).toThrow(
       /target inventory is inconsistent/u,
     )
 
     const incomplete = evidence()
     incomplete.targets[1]!.operationIds.pop()
-    expect(() => createVisualPlusSelectionProjection(incomplete, now)).toThrow(
+    expect(() => createVisualPlusSelectionProjection(incomplete, now, display)).toThrow(
       /target membership is incomplete/u,
     )
 
     const physicalMismatch = evidence()
     physicalMismatch.operations[0]!.physicalTarget = 'other/package.json'
-    expect(() => createVisualPlusSelectionProjection(physicalMismatch, now)).toThrow(
+    expect(() => createVisualPlusSelectionProjection(physicalMismatch, now, display)).toThrow(
       /operation physical target is inconsistent/u,
     )
 
@@ -472,19 +510,19 @@ describe('Visual+ integration projection', () => {
       ...catalog,
       sourcePath: 'other/package.json',
     }
-    expect(() => createVisualPlusSelectionProjection(catalogMismatch, now)).toThrow(
+    expect(() => createVisualPlusSelectionProjection(catalogMismatch, now, display)).toThrow(
       /catalog owner evidence is inconsistent/u,
     )
   })
 
   it('assigns physical owner order independently from selection and consumer order', () => {
     const now = Date.parse('2026-01-01T00:00:00.000Z')
-    const first = createVisualPlusSelectionProjection(evidence(), now)
+    const first = createVisualPlusSelectionProjection(evidence(), now, display)
     const permuted = evidence()
     permuted.operations.reverse()
     permuted.targets.reverse()
     for (const target of permuted.targets) target.operationIds.reverse()
-    const second = createVisualPlusSelectionProjection(permuted, now)
+    const second = createVisualPlusSelectionProjection(permuted, now, display)
 
     const ownerOrders = (projection: typeof first) =>
       Object.fromEntries(
@@ -638,7 +676,9 @@ describe('Visual+ integration projection', () => {
     const now = Date.parse('2026-01-01T00:00:00.000Z')
     const source = evidence()
     mutate(source)
-    expect(() => createVisualPlusSelectionProjection(source, now)).toThrow(/Visual\+ integration/u)
+    expect(() => createVisualPlusSelectionProjection(source, now, display)).toThrow(
+      /Visual\+ integration/u,
+    )
   })
 })
 

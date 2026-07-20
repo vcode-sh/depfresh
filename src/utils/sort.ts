@@ -22,45 +22,31 @@ export function parseSortOption(value: string): SortOption {
   return 'diff-asc'
 }
 
-function byDiff(a: ResolvedDepChange, b: ResolvedDepChange): number {
-  return (DIFF_ORDER[a.diff] ?? 4) - (DIFF_ORDER[b.diff] ?? 4)
+export interface DependencySortFacts {
+  readonly name: string
+  readonly diff: DiffType
+  readonly publishedAt?: string
 }
 
-function byTime(a: ResolvedDepChange, b: ResolvedDepChange): number {
-  const aTime = a.publishedAt ? new Date(a.publishedAt).getTime() : 0
-  const bTime = b.publishedAt ? new Date(b.publishedAt).getTime() : 0
-  return aTime - bTime
-}
-
-function byName(a: ResolvedDepChange, b: ResolvedDepChange): number {
-  return a.name.localeCompare(b.name)
+export function compareDependencySortFacts(
+  left: DependencySortFacts,
+  right: DependencySortFacts,
+  sort: SortOption,
+): number {
+  const diff = () => (DIFF_ORDER[left.diff] ?? 4) - (DIFF_ORDER[right.diff] ?? 4)
+  const time = () =>
+    (left.publishedAt ? new Date(left.publishedAt).getTime() : 0) -
+    (right.publishedAt ? new Date(right.publishedAt).getTime() : 0)
+  if (sort === 'diff-asc') return diff()
+  if (sort === 'diff-desc') return -diff()
+  if (sort === 'time-asc') return time()
+  if (sort === 'time-desc') return -time()
+  const name = left.name.localeCompare(right.name)
+  return sort === 'name-desc' ? -name : name
 }
 
 export function sortDeps(deps: ResolvedDepChange[], sort: SortOption): ResolvedDepChange[] {
   if (deps.length === 0) return deps
 
-  const sorted = [...deps]
-
-  switch (sort) {
-    case 'diff-asc':
-      sorted.sort(byDiff)
-      break
-    case 'diff-desc':
-      sorted.sort((a, b) => byDiff(b, a))
-      break
-    case 'time-asc':
-      sorted.sort(byTime)
-      break
-    case 'time-desc':
-      sorted.sort((a, b) => byTime(b, a))
-      break
-    case 'name-asc':
-      sorted.sort(byName)
-      break
-    case 'name-desc':
-      sorted.sort((a, b) => byName(b, a))
-      break
-  }
-
-  return sorted
+  return [...deps].sort((left, right) => compareDependencySortFacts(left, right, sort))
 }

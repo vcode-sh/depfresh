@@ -149,6 +149,12 @@ export async function runCheck(
   let visualResolutionSuspended = false
   let visualRun: VisualPlusRunMetadata = {
     detailLevel: options.long ? 'full' : 'compact',
+    display: {
+      group: options.group,
+      sort: options.sort,
+      timediff: options.timediff,
+      nodecompat: options.nodecompat,
+    },
     workspaceScope: 'unknown',
     packageManager: { status: 'unknown', sources: [] },
   }
@@ -296,7 +302,7 @@ export async function runCheck(
     if (visualRenderer) {
       const visualRoot =
         runtimeOptions.effectiveRoot ?? resolveDiscoveryContext(runtimeOptions.cwd).effectiveRoot
-      visualRun = deriveVisualPlusRunMetadata(visualRoot, packages, visualRun.detailLevel)
+      visualRun = deriveVisualPlusRunMetadata(visualRoot, packages, visualRun)
       visualRenderer.setRunMetadata(visualRun)
       throwRetainedRendererError(rendererError)
     }
@@ -573,7 +579,11 @@ export async function runCheck(
           throw new CheckRunInstrumentationError('Visual+ runtime is incomplete')
         }
         visualEvidence = result.evidence
-        visualProjection = createVisualPlusSelectionProjection(result.evidence, wallClockMs)
+        visualProjection = createVisualPlusSelectionProjection(
+          result.evidence,
+          wallClockMs,
+          visualRun.display,
+        )
         emitVisualSelection(controller, visualProjection)
         visualRenderer.writeReview(
           visualSectionInput(controller, capabilities, visualRun, visualProjection),

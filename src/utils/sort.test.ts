@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ResolvedDepChange } from '../types'
-import { parseSortOption, sortDeps } from './sort'
+import { compareDependencySortFacts, parseSortOption, sortDeps } from './sort'
 
 function makeDep(overrides: Partial<ResolvedDepChange> = {}): ResolvedDepChange {
   return {
@@ -34,6 +34,23 @@ describe('parseSortOption', () => {
 })
 
 describe('sortDeps', () => {
+  it.each(['diff-asc', 'diff-desc', 'time-asc', 'time-desc', 'name-asc', 'name-desc'] as const)(
+    'delegates %s ordering to the shared sort facts comparator',
+    (sort) => {
+      const deps = [
+        makeDep({ name: 'zeta', diff: 'patch', publishedAt: '2025-01-01T00:00:00Z' }),
+        makeDep({ name: 'alpha', diff: 'major', publishedAt: '2024-01-01T00:00:00Z' }),
+        makeDep({ name: 'middle', diff: 'minor' }),
+      ]
+
+      const expected = [...deps].sort((left, right) =>
+        compareDependencySortFacts(left, right, sort),
+      )
+
+      expect(sortDeps(deps, sort)).toEqual(expected)
+    },
+  )
+
   it('returns empty array unchanged', () => {
     expect(sortDeps([], 'diff-asc')).toEqual([])
   })

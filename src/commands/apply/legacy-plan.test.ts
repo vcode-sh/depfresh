@@ -531,6 +531,7 @@ describe('command-level legacy plan', () => {
             changeIndex: 0,
             dependencyId: createRepositoryId('dependency', 'shared'),
             rawName: 'shared',
+            source: 'dependencies',
             sourceFileId: catalogSourceId,
             sourcePath: 'package.json',
             owner: {
@@ -655,6 +656,35 @@ describe('command-level legacy plan', () => {
       createLegacyPlan(root, [
         { packageIndex: 0, pkg, changes: [first] },
         { packageIndex: 1, pkg, changes: [second] },
+      ]).selectionEvidence,
+    ).toEqual({ status: 'unavailable', reason: 'INCONSISTENT_SELECTION_EVIDENCE' })
+
+    const sourceDisagreementCatalog: CatalogSource = {
+      type: 'bun',
+      name: 'default',
+      filepath,
+      deps: [
+        {
+          name: 'shared',
+          currentVersion: '1.0.0',
+          rawVersion: '1.0.0',
+          source: 'catalog',
+          update: true,
+          parents: [],
+        },
+      ],
+      raw: {},
+      indent: '  ',
+    }
+    const catalogPkg = catalogPackage(filepath, sourceDisagreementCatalog, 'catalog')
+    first.publishedAt = undefined
+    second.publishedAt = undefined
+    first.source = 'catalog'
+    second.source = 'dependencies'
+    expect(
+      createLegacyPlan(root, [
+        { packageIndex: 0, pkg: catalogPkg, changes: [first] },
+        { packageIndex: 1, pkg: catalogPkg, changes: [second] },
       ]).selectionEvidence,
     ).toEqual({ status: 'unavailable', reason: 'INCONSISTENT_SELECTION_EVIDENCE' })
   })

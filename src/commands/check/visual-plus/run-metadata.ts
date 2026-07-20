@@ -13,6 +13,8 @@ import { type ContainedPathResult, resolveContainedPath } from '../../../io/pack
 import type { PackageManagerName, PackageMeta } from '../../../types'
 import type { VisualPlusPackageManagerMetadata, VisualPlusRunMetadata } from './input'
 
+type VisualPlusPresentation = Pick<VisualPlusRunMetadata, 'detailLevel' | 'display'>
+
 const MANAGER_MARKERS = [
   { source: 'bun.lock', name: 'bun' },
   { source: 'bun.lockb', name: 'bun' },
@@ -37,13 +39,16 @@ interface ContainedPackage {
 export function deriveVisualPlusRunMetadata(
   root: string,
   packages: readonly PackageMeta[],
-  detailLevel: VisualPlusRunMetadata['detailLevel'],
+  presentation: VisualPlusPresentation,
 ): VisualPlusRunMetadata {
-  const detail = detailLevel === undefined ? {} : { detailLevel }
+  const detail =
+    presentation.detailLevel === undefined ? {} : { detailLevel: presentation.detailLevel }
+  const display = Object.freeze({ ...presentation.display })
   const rootResolution = resolveContainedPath(root, root)
   if (!rootResolution.allowed) {
     return {
       ...detail,
+      display,
       repository: { relativePath: '.' },
       workspaceScope: 'unknown',
       packageManager: { status: 'unavailable', sources: [] },
@@ -92,6 +97,7 @@ export function deriveVisualPlusRunMetadata(
 
   return {
     ...detail,
+    display,
     repository: {
       ...(repositoryName ? { name: repositoryName } : {}),
       relativePath: repositoryPath(rootResolution.path, repositoryDirectory),

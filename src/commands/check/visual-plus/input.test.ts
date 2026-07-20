@@ -80,6 +80,8 @@ function selectedSnapshot(withInsight = true): CheckRunSnapshot {
 function metadata(): VisualPlusChangeMetadata {
   return {
     operationId: 'operation-one',
+    source: 'dependencies',
+    displayOrder: 0,
     ownerGroup: {
       id: createRepositoryId('package', 'package.json'),
       label: 'root',
@@ -99,6 +101,12 @@ function input(
     snapshot,
     capabilities,
     run: {
+      display: {
+        group: true,
+        sort: 'diff-asc',
+        timediff: true,
+        nodecompat: true,
+      },
       workspaceScope: 'single-package',
       packageManager: { status: 'unknown', sources: [] },
     },
@@ -107,6 +115,32 @@ function input(
 }
 
 describe('Visual+ authoritative insight reconciliation', () => {
+  it.each([
+    ['unknown sort', { sort: 'unknown-sort' }],
+    ['non-boolean group', { group: 'yes' }],
+    ['non-boolean timediff', { timediff: 1 }],
+    ['non-boolean nodecompat', { nodecompat: null }],
+  ])('rejects an invalid display %s', (_name, display) => {
+    const source = input(selectedSnapshot())
+    expect(() =>
+      createVisualPlusSectionInput({
+        ...source,
+        run: { ...source.run, display: { ...source.run.display, ...display } } as typeof source.run,
+      }),
+    ).toThrow(/Visual\+ input/u)
+  })
+
+  it.each([
+    ['source', { ...metadata(), source: 'unsupported-source' }],
+    ['duplicate order', { ...metadata(), displayOrder: 1 }],
+  ])('rejects invalid change metadata %s', (_name, candidate) => {
+    expect(() =>
+      createVisualPlusSectionInput(
+        input(selectedSnapshot(), candidate as unknown as VisualPlusChangeMetadata),
+      ),
+    ).toThrow(/Visual\+ input/u)
+  })
+
   it('accepts exact transitional metadata and retains a deep immutable copy', () => {
     const source = input(selectedSnapshot())
     const result = createVisualPlusSectionInput(source)
@@ -242,6 +276,8 @@ describe('Visual+ authoritative insight reconciliation', () => {
     }
     const metadataFor = (change: typeof first): VisualPlusChangeMetadata => ({
       operationId: change.id,
+      source: 'dependencies',
+      displayOrder: change.id === first.id ? 0 : 1,
       ownerGroup: {
         id: change.insight.owner.id,
         label: change.insight.owner.label,

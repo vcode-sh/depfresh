@@ -284,6 +284,8 @@ function fixture(
       })
       metadata.push({
         operationId: id,
+        source: catalog.role === 'owner' ? 'catalog' : 'dependencies',
+        displayOrder: metadata.length,
         ownerGroup: {
           id: owner.id,
           label: owner.label,
@@ -380,6 +382,7 @@ function fixture(
     capabilities: capable,
     run: {
       detailLevel: 'full',
+      display: { group: false, sort: 'diff-asc', timediff: false, nodecompat: false },
       repository: { name: 'spreadu', relativePath: '.' },
       workspaceScope: 'workspace',
       packageManager: {
@@ -1399,10 +1402,16 @@ describe('Visual+ receipt decision table', () => {
     return {
       snapshot,
       capabilities: { ...capable, color: false, unicode: false },
-      run: { workspaceScope: 'single-package', packageManager: { status: 'unknown', sources: [] } },
+      run: {
+        display: { group: false, sort: 'diff-asc', timediff: false, nodecompat: false },
+        workspaceScope: 'single-package',
+        packageManager: { status: 'unknown', sources: [] },
+      },
       changes: [
         {
           operationId: 'op',
+          source: 'dependencies',
+          displayOrder: 0,
           ownerGroup: {
             id: createRepositoryId('package', 'package.json'),
             label: 'root',
@@ -1932,6 +1941,8 @@ describe('Visual+ receipt decision table', () => {
       changes: [
         {
           operationId: 'applied',
+          source: 'dependencies',
+          displayOrder: 0,
           ownerGroup: {
             id: createRepositoryId('package', 'mixed/package.json'),
             label: 'mixed',
@@ -1943,6 +1954,8 @@ describe('Visual+ receipt decision table', () => {
         },
         {
           operationId: 'blocked',
+          source: 'dependencies',
+          displayOrder: 1,
           ownerGroup: {
             id: createRepositoryId('package', 'mixed/package.json'),
             label: 'mixed',
@@ -1954,6 +1967,8 @@ describe('Visual+ receipt decision table', () => {
         },
         {
           operationId: 'reverted',
+          source: 'dependencies',
+          displayOrder: 2,
           ownerGroup: {
             id: createRepositoryId('package', 'reverted/package.json'),
             label: 'reverted',

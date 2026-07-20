@@ -63,6 +63,13 @@ function manager(name: PackageManagerField['name'], version: string): PackageMan
   return { name, version, raw: `${name}@${version}` }
 }
 
+function presentation(detailLevel: 'compact' | 'full') {
+  return {
+    detailLevel,
+    display: { group: false, sort: 'diff-asc' as const, timediff: false, nodecompat: false },
+  }
+}
+
 describe('deriveVisualPlusRunMetadata', () => {
   let root: string
 
@@ -80,15 +87,38 @@ describe('deriveVisualPlusRunMetadata', () => {
     const metadata = deriveVisualPlusRunMetadata(
       root,
       [packageMeta(root, 'package.json', 'solo')],
-      'compact',
+      presentation('compact'),
     )
 
     expect(metadata).toEqual({
       detailLevel: 'compact',
+      display: { group: false, sort: 'diff-asc', timediff: false, nodecompat: false },
       repository: { name: 'solo', relativePath: '.' },
       workspaceScope: 'single-package',
       packageManager: { status: 'unknown', sources: [] },
     })
+  })
+
+  it('preserves immutable startup display intent after discovery', () => {
+    const presentation = {
+      detailLevel: 'compact' as const,
+      display: {
+        group: true,
+        sort: 'time-desc' as const,
+        timediff: false,
+        nodecompat: true,
+      },
+    }
+
+    const metadata = deriveVisualPlusRunMetadata(
+      root,
+      [packageMeta(root, 'package.json', 'solo')],
+      presentation,
+    )
+
+    expect(metadata).toMatchObject(presentation)
+    expect(metadata.display).not.toBe(presentation.display)
+    expect(Object.isFrozen(metadata.display)).toBe(true)
   })
 
   it.each([
@@ -102,7 +132,7 @@ describe('deriveVisualPlusRunMetadata', () => {
       const pkg = loadPackage(filepath, { ...DEFAULT_OPTIONS, cwd: root } as depfreshOptions)
 
       expect(pkg.name).toBe(root)
-      const metadata = deriveVisualPlusRunMetadata(root, [pkg], 'compact')
+      const metadata = deriveVisualPlusRunMetadata(root, [pkg], presentation('compact'))
 
       expect(metadata.repository).toEqual({ name: basename(root), relativePath: '.' })
       expect(JSON.stringify(metadata)).not.toContain(root)
@@ -116,7 +146,7 @@ describe('deriveVisualPlusRunMetadata', () => {
       deriveVisualPlusRunMetadata(
         root,
         [nestedPackage(root, 'packages/web', 'web'), rootPackage],
-        'full',
+        presentation('full'),
       ),
     ).toMatchObject({
       detailLevel: 'full',
@@ -153,7 +183,7 @@ describe('deriveVisualPlusRunMetadata', () => {
                 indent: '  ',
               },
             ],
-            'compact',
+            presentation('compact'),
           ).workspaceScope,
         ).toBe('single-package')
       } finally {
@@ -170,7 +200,7 @@ describe('deriveVisualPlusRunMetadata', () => {
       deriveVisualPlusRunMetadata(
         root,
         [{ ...manifest, filepath: `${root}/nested/../package.json` }],
-        'compact',
+        presentation('compact'),
       ),
     ).toMatchObject({
       repository: { relativePath: '.' },
@@ -182,7 +212,7 @@ describe('deriveVisualPlusRunMetadata', () => {
     const metadata = deriveVisualPlusRunMetadata(
       root,
       [packageMeta(root, 'package.json', 'declared', manager('pnpm', '10.33.0'))],
-      'compact',
+      presentation('compact'),
     )
 
     expect(metadata.packageManager).toEqual({
@@ -197,7 +227,9 @@ describe('deriveVisualPlusRunMetadata', () => {
     const json = packageMeta(root, 'package.json', 'root', manager('pnpm', '10.33.0'))
     const yaml = packageMeta(root, 'package.yaml', 'root', manager('pnpm', '10.33.0'))
 
-    expect(deriveVisualPlusRunMetadata(root, [yaml, json], 'compact').packageManager).toEqual({
+    expect(
+      deriveVisualPlusRunMetadata(root, [yaml, json], presentation('compact')).packageManager,
+    ).toEqual({
       status: 'observed',
       name: 'pnpm',
       version: '10.33.0',
@@ -209,7 +241,9 @@ describe('deriveVisualPlusRunMetadata', () => {
     const json = packageMeta(root, 'package.json', 'root', manager('pnpm', '10.33.0'))
     const yaml = packageMeta(root, 'package.yaml', 'root', manager('npm', '11.12.1'))
 
-    expect(deriveVisualPlusRunMetadata(root, [json, yaml], 'compact').packageManager).toEqual({
+    expect(
+      deriveVisualPlusRunMetadata(root, [json, yaml], presentation('compact')).packageManager,
+    ).toEqual({
       status: 'ambiguous',
       candidates: [
         { name: 'pnpm', version: '10.33.0', source: 'package.json' },
@@ -225,7 +259,7 @@ describe('deriveVisualPlusRunMetadata', () => {
       deriveVisualPlusRunMetadata(
         root,
         [packageMeta(root, 'package.json', 'marker-only')],
-        'compact',
+        presentation('compact'),
       ).packageManager,
     ).toEqual({ status: 'observed', name: 'pnpm', sources: ['pnpm-lock.yaml'] })
   })
@@ -239,7 +273,7 @@ describe('deriveVisualPlusRunMetadata', () => {
       deriveVisualPlusRunMetadata(
         root,
         [packageMeta(root, 'package.json', 'contained-symlink')],
-        'compact',
+        presentation('compact'),
       ).packageManager,
     ).toEqual({ status: 'unavailable', sources: ['pnpm-lock.yaml'] })
   })
@@ -260,7 +294,7 @@ describe('deriveVisualPlusRunMetadata', () => {
     const packageManager = deriveVisualPlusRunMetadata(
       root,
       [packageMeta(root, 'package.json', 'replacement-race')],
-      'compact',
+      presentation('compact'),
     ).packageManager
 
     expect(replaced).toBe(true)
@@ -280,7 +314,7 @@ describe('deriveVisualPlusRunMetadata', () => {
       deriveVisualPlusRunMetadata(
         root,
         [packageMeta(root, 'package.json', 'removal-race')],
-        'compact',
+        presentation('compact'),
       ).packageManager,
     ).toEqual({ status: 'unavailable', sources: ['pnpm-lock.yaml'] })
   })
@@ -293,7 +327,7 @@ describe('deriveVisualPlusRunMetadata', () => {
       deriveVisualPlusRunMetadata(
         root,
         [packageMeta(root, 'package.json', 'conflicting-markers')],
-        'compact',
+        presentation('compact'),
       ).packageManager,
     ).toEqual({
       status: 'ambiguous',
@@ -305,8 +339,9 @@ describe('deriveVisualPlusRunMetadata', () => {
   })
 
   it('reports absent manager evidence as unknown only after discovery', () => {
-    expect(deriveVisualPlusRunMetadata(root, [], 'compact')).toEqual({
+    expect(deriveVisualPlusRunMetadata(root, [], presentation('compact'))).toEqual({
       detailLevel: 'compact',
+      display: { group: false, sort: 'diff-asc', timediff: false, nodecompat: false },
       repository: { relativePath: '.' },
       workspaceScope: 'unknown',
       packageManager: { status: 'unknown', sources: [] },
@@ -324,7 +359,7 @@ describe('deriveVisualPlusRunMetadata', () => {
         deriveVisualPlusRunMetadata(
           root,
           [packageMeta(root, 'package.json', 'unsafe-markers')],
-          'compact',
+          presentation('compact'),
         ).packageManager,
       ).toEqual({ status: 'unavailable', sources: ['pnpm-lock.yaml', 'yarn.lock'] })
     } finally {
@@ -339,7 +374,7 @@ describe('deriveVisualPlusRunMetadata', () => {
       deriveVisualPlusRunMetadata(
         root,
         [packageMeta(root, 'package.json', hostile, manager('pnpm', '10.33.0'))],
-        'compact',
+        presentation('compact'),
       ).repository?.name,
     ).toBe(hostile)
   })
@@ -349,8 +384,8 @@ describe('deriveVisualPlusRunMetadata', () => {
     const yaml = packageMeta(root, 'package.yaml', 'root', manager('pnpm', '10.33.0'))
     writeFileSync(join(root, 'pnpm-lock.yaml'), "lockfileVersion: '9.0'\n")
 
-    const forward = deriveVisualPlusRunMetadata(root, [json, yaml], 'compact')
-    const reverse = deriveVisualPlusRunMetadata(root, [yaml, json], 'compact')
+    const forward = deriveVisualPlusRunMetadata(root, [json, yaml], presentation('compact'))
+    const reverse = deriveVisualPlusRunMetadata(root, [yaml, json], presentation('compact'))
 
     expect(reverse).toEqual(forward)
     expect(reverse.packageManager).toEqual({

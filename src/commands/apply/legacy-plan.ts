@@ -22,6 +22,7 @@ import { createRepositoryId } from '../../repository/identity'
 import { collectVcsEvidence } from '../../repository/vcs'
 import type {
   CatalogSource,
+  DepFieldType,
   InvocationAuthority,
   PackageMeta,
   RepositoryDiagnosticCode,
@@ -108,6 +109,7 @@ export interface LegacySelectionEvidenceOperation {
   readonly changeIndex: number
   readonly dependencyId: string
   readonly rawName: string
+  readonly source: DepFieldType
   readonly sourceFileId: string
   readonly sourcePath: string
   readonly owner: {
@@ -371,6 +373,7 @@ function createSelectionEvidence(
       changeIndex: canonical.changeIndex,
       dependencyId: fact.dependencyId,
       rawName: fact.rawName,
+      source: fact.source,
       sourceFileId: fact.sourceFileId,
       sourcePath: fact.sourcePath,
       owner: { ...fact.owner },
@@ -435,6 +438,7 @@ function evidenceFacts(
   return {
     dependencyId,
     rawName,
+    source: projection.change.source,
     sourceFileId,
     sourcePath: physicalTarget,
     owner,

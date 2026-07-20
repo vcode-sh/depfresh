@@ -23,6 +23,7 @@ const phaseNames = [
 
 const run: VisualPlusRunMetadata = {
   detailLevel: 'full',
+  display: { group: false, sort: 'diff-asc', timediff: false, nodecompat: false },
   repository: { name: 'fixture', relativePath: 'packages/fixture' },
   workspaceScope: 'workspace',
   packageManager: {
@@ -35,6 +36,7 @@ const run: VisualPlusRunMetadata = {
 
 const startupRun: VisualPlusRunMetadata = {
   detailLevel: 'full',
+  display: { group: false, sort: 'diff-asc', timediff: false, nodecompat: false },
   workspaceScope: 'unknown',
   packageManager: { status: 'unknown', sources: [] },
 }
@@ -197,8 +199,10 @@ function input(value: CheckRunSnapshot, caps = capable): VisualPlusSectionInput 
     snapshot: value,
     capabilities: caps,
     run,
-    changes: value.changes.map((change) => ({
+    changes: value.changes.map((change, displayOrder) => ({
       operationId: change.id,
+      source: change.insight!.occurrencePath[0] as 'dependencies',
+      displayOrder,
       ownerGroup: {
         id: change.insight!.owner.id,
         label: change.insight!.owner.label,

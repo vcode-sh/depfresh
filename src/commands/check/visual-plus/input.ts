@@ -1,4 +1,5 @@
 import { isAbsolute, win32 } from 'node:path'
+import type { DepFieldType, SortOption } from '../../../types'
 import { sanitizeTerminalText } from '../../../utils/format'
 import {
   copyAndValidateRelationshipSelection,
@@ -8,8 +9,16 @@ import type { CheckRunRecovery, CheckRunSnapshot } from '../run-model'
 import type { WriteReceipt } from '../write-receipt'
 import type { VisualPlusCapabilities } from './capabilities'
 
+export interface VisualPlusDisplayOptions {
+  readonly group: boolean
+  readonly sort: SortOption
+  readonly timediff: boolean
+  readonly nodecompat: boolean
+}
+
 export interface VisualPlusRunMetadata {
   readonly detailLevel?: 'compact' | 'full'
+  readonly display: VisualPlusDisplayOptions
   readonly repository?: {
     readonly name?: string
     readonly relativePath?: string
@@ -44,6 +53,8 @@ export type VisualPlusPackageManagerMetadata =
 
 export interface VisualPlusChangeMetadata {
   readonly operationId: string
+  readonly source: DepFieldType
+  readonly displayOrder: number
   readonly ownerGroup: {
     readonly id: string
     readonly label: string
@@ -147,6 +158,7 @@ function validateRunMetadata(run: VisualPlusRunMetadata): void {
   if (run.detailLevel !== undefined && !['compact', 'full'].includes(run.detailLevel)) {
     invalid('detail level is invalid')
   }
+  validateDisplayOptions(run.display)
   if (!['single-package', 'workspace', 'unknown'].includes(run.workspaceScope)) {
     invalid('workspace scope is invalid')
   }
@@ -181,6 +193,23 @@ function validateRunMetadata(run: VisualPlusRunMetadata): void {
   }
   if (manager.status !== 'unknown' || manager.sources.length !== 0) {
     invalid('unknown manager evidence is contradictory')
+  }
+}
+
+function validateDisplayOptions(display: VisualPlusDisplayOptions): void {
+  if (
+    !['diff-asc', 'diff-desc', 'time-asc', 'time-desc', 'name-asc', 'name-desc'].includes(
+      display.sort,
+    )
+  ) {
+    invalid('display sort is invalid')
+  }
+  for (const [name, value] of Object.entries({
+    group: display.group,
+    timediff: display.timediff,
+    nodecompat: display.nodecompat,
+  })) {
+    if (typeof value !== 'boolean') invalid(`display ${name} is invalid`)
   }
 }
 
@@ -355,8 +384,29 @@ function validateChangeMetadata(
   const insightsByOperation = new Map(
     input.snapshot.changes.map((change) => [change.id, change.insight!] as const),
   )
+  const displayOrders = new Set<number>()
   for (const metadata of input.changes) {
     safeText(metadata.operationId, 'metadata operation ID')
+    if (
+      ![
+        'dependencies',
+        'devDependencies',
+        'peerDependencies',
+        'optionalDependencies',
+        'overrides',
+        'resolutions',
+        'packageManager',
+        'pnpm.overrides',
+        'catalog',
+      ].includes(metadata.source)
+    ) {
+      invalid('change source is invalid')
+    }
+    if (!(Number.isInteger(metadata.displayOrder) && metadata.displayOrder >= 0)) {
+      invalid('display order is invalid')
+    }
+    if (displayOrders.has(metadata.displayOrder)) invalid('display order is duplicated')
+    displayOrders.add(metadata.displayOrder)
     const group = metadata.ownerGroup
     safeText(group.id, 'owner group ID')
     safeText(group.label, 'owner group label')
@@ -407,6 +457,9 @@ function validateChangeMetadata(
     }
     const insight = insightsByOperation.get(metadata.operationId)
     if (insight) validateMetadataInsightEquality(metadata, insight)
+  }
+  for (let displayOrder = 0; displayOrder < input.changes.length; displayOrder += 1) {
+    if (!displayOrders.has(displayOrder)) invalid('display order is not contiguous')
   }
   if (orderOwners.size !== groups.size) invalid('owner group order is incomplete')
   for (let order = 0; order < groups.size; order += 1) {

@@ -487,6 +487,7 @@ function createTestSelectionEvidence(
     changeIndex: entry.changeIndex,
     dependencyId: createRepositoryId('dependency', entry.change.name),
     rawName: entry.change.name,
+    source: entry.change.source,
     sourceFileId: createRepositoryId('source', entry.physicalTarget),
     sourcePath: entry.physicalTarget,
     owner: entry.catalog

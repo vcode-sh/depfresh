@@ -1,6 +1,7 @@
 import { isAbsolute, win32 } from 'node:path'
 import type { depfreshOptions } from '../../../types'
 import { sanitizeTerminalText } from '../../../utils/format'
+import { compareDependencySortFacts } from '../../../utils/sort'
 import type { LegacySelectionEvidence } from '../../apply/legacy-plan'
 import {
   normalizeRelationshipCompatibilityDetail,
@@ -8,7 +9,7 @@ import {
   reconcileRelationshipEvidence,
 } from '../relationship-evidence'
 import type { CheckRunChange, CheckRunInsightEvidence, CheckRunTarget } from '../run-model'
-import type { VisualPlusChangeMetadata } from './input'
+import type { VisualPlusChangeMetadata, VisualPlusDisplayOptions } from './input'
 
 export interface VisualPlusSelectionProjection {
   readonly changes: readonly CheckRunChange[]
@@ -38,10 +39,21 @@ export function isVisualPlusEligible(options: depfreshOptions, renderProgress: b
 export function createVisualPlusSelectionProjection(
   evidence: LegacySelectionEvidence,
   wallClockMs: number,
+  display: VisualPlusDisplayOptions,
 ): VisualPlusSelectionProjection {
   if (!(Number.isFinite(wallClockMs) && Number.isInteger(wallClockMs) && wallClockMs >= 0)) {
     throw new VisualPlusIntegrationError('wall clock must be a finite nonnegative integer')
   }
+  const ordered = [...evidence.operations].sort(
+    (left, right) =>
+      compareDependencySortFacts(left, right, display.sort) ||
+      left.packageIndex - right.packageIndex ||
+      left.changeIndex - right.changeIndex ||
+      compareText(left.operationId, right.operationId),
+  )
+  const displayOrderById = new Map(
+    ordered.map((operation, displayOrder) => [operation.operationId, displayOrder]),
+  )
   const candidates = evidence.operations.map((operation) => {
     const ageMs = releaseAge(operation.publishedAt, wallClockMs)
     const detail = normalizeRelationshipCompatibilityDetail(operation.nodeCompat)
@@ -99,6 +111,8 @@ export function createVisualPlusSelectionProjection(
     })
     metadata.push({
       operationId: sanitizeTerminalText(operation.operationId),
+      source: operation.source,
+      displayOrder: displayOrderById.get(operation.operationId)!,
       ownerGroup: {
         id: owner.id,
         order: owner.order,
@@ -126,6 +140,10 @@ export function createVisualPlusSelectionProjection(
     })),
     metadata,
   })
+}
+
+function compareText(left: string, right: string): number {
+  return left.localeCompare(right)
 }
 
 function validateEvidenceMembership(evidence: LegacySelectionEvidence): void {
