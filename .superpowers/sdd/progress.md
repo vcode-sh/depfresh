@@ -384,3 +384,9 @@ startup placeholders and accepts one contained, post-discovery repository/packag
 before review. Canonical root aliases remain supported without accepting parent traversal;
 out-of-root and symlink-escaped catalog projections cannot alter workspace scope. Focused proof
 passed 89 tests, typecheck, Biome, and diff checks; re-review reported C0/I0/M0.
+Plan 037 Task 3: complete (commits `927b921..23aa96b`, review clean). The eligible CLI defaults to
+compact while `--long` retains exhaustive owner/change/occurrence/target membership. Exact pinned
+proof passed 58 built-CLI Visual+ tests without retry, 100 compact section tests, 68 excluded-route
+tests, build, typecheck, lint, and diff checks. A fixture-local, exact-path-gated Node preload proves
+real partial recovery through the built CLI with restored/unrecovered truth, retained journal/lock,
+exit 2, and exact final bytes; production code has no fault seam. Re-review reported C0/I0/M0.

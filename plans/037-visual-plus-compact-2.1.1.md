@@ -212,14 +212,14 @@ being accepted through canonical fallback. Re-review reported C0/I0/M0.
 - Consumes: `options.long`, compact/full renderers, and the retained PTY adapter.
 - Produces: product-level proof of default compact output and explicit complete `--long` output.
 
-- [ ] **Step 1: Write built-CLI RED journeys**
+- [x] **Step 1: Write built-CLI RED journeys**
 
 Add true-PTY and direct-pipe journeys proving default compact line budgets, absence of internal
 IDs, correct repository/manager lines, `--long` complete operation/owner/shared/target membership,
 terminal-control containment, exit codes, and byte-identical fixture repositories. Preserve exact
 non-success target/recovery evidence in compact mode.
 
-- [ ] **Step 2: Run PTY RED tests**
+- [x] **Step 2: Run PTY RED tests**
 
 Run under the pinned Mise toolchain:
 
@@ -229,19 +229,19 @@ mise exec -- pnpm exec vitest run test/visual-plus-cli.test.ts --retry=0
 
 Expected: new compact and metadata assertions fail against the current built CLI behavior.
 
-- [ ] **Step 3: Wire `--long` and update help text**
+- [x] **Step 3: Wire `--long` and update help text**
 
 Map eligible Visual+ `options.long` to `detailLevel: 'full'`; default to `compact`. Change the
 `--long` description to state that it includes the complete Visual+ audit while retaining legacy
 homepage behavior outside Visual+.
 
-- [ ] **Step 4: Document both journeys**
+- [x] **Step 4: Document both journeys**
 
 Document default compact output, `--long` completeness, `--write --interactive`, line-budget
 semantics, failure-detail override, and the removal of false startup placeholders. Add an
 Unreleased changelog entry and mark Plan 037 active in `plans/README.md`.
 
-- [ ] **Step 5: Run GREEN and route regressions**
+- [x] **Step 5: Run GREEN and route regressions**
 
 Run:
 
@@ -255,12 +255,20 @@ mise exec -- pnpm lint
 
 Expected: all commands exit 0, the PTY suite reports zero retries, and lint has zero warnings.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/cli/args-schema.ts test/visual-plus-cli.test.ts README.md docs/output-formats/table.md docs/troubleshooting.md CHANGELOG.md plans/README.md
 git commit -m "test: prove compact Visual Plus terminal journeys"
 ```
+
+**Task 3 evidence (2026-07-20):** Commits `1c739d4` and `23aa96b` wire compact as the default
+eligible CLI view, retain the exhaustive `--long` audit, and prove the built product. Exact pinned
+proof passed the 58-test Visual+ CLI suite without retry, 100 compact section tests, 68 excluded
+route tests, build, typecheck, lint across 358 files, and diff checks. Review gaps were closed with
+truthful read-only wording, exact membership assertions for all 14 `--long` targets, and a
+contained test-only preload that deterministically proves real built-CLI partial recovery without
+adding a production fault seam. Re-review reported C0/I0/M0.
 
 ### Task 4: Prepare and verify the local 2.1.1 candidate
 
