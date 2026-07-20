@@ -545,7 +545,7 @@ describe('2.1.1 release readiness', () => {
       'npm publish "file:$GITHUB_WORKSPACE/$PACKAGE_TARBALL" --access public --ignore-scripts',
     )
     expect(release).not.toContain('npm publish "$PACKAGE_TARBALL" --access public --ignore-scripts')
-    expect(release).toContain('body_path: docs/releases/v2.1.2.md')
+    expect(release).toContain('body_path: docs/releases/v2.1.1.md')
     expect(
       release.match(/node scripts\/read-pack-manifest\.mjs artifacts\/pack\.json filename/gu),
     ).toHaveLength(1)

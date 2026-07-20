@@ -109,15 +109,19 @@ describe('read pack manifest script', () => {
     name: 'depfresh',
   }
 
-  function readPackManifest(manifest: unknown, field: 'filename' | 'integrity') {
+  function readPackManifest(manifest: unknown, ...arguments_: string[]) {
     const directory = mkdtempSync(join(tmpdir(), 'depfresh-pack-manifest-'))
     const manifestPath = join(directory, 'pack.json')
     try {
       writeFileSync(manifestPath, JSON.stringify(manifest))
-      return spawnSync(process.execPath, ['scripts/read-pack-manifest.mjs', manifestPath, field], {
-        cwd: root,
-        encoding: 'utf8',
-      })
+      return spawnSync(
+        process.execPath,
+        ['scripts/read-pack-manifest.mjs', manifestPath, ...arguments_],
+        {
+          cwd: root,
+          encoding: 'utf8',
+        },
+      )
     } finally {
       rmSync(directory, { force: true, recursive: true })
     }
@@ -141,6 +145,17 @@ describe('read pack manifest script', () => {
     ['missing field', [{ ...entry, integrity: '' }], 'integrity'],
   ] as const)('fails without output for a %s manifest', (_name, manifest, field) => {
     const result = readPackManifest(manifest, field)
+
+    expect(result.status).not.toBe(0)
+    expect(result.stderr).toBe('')
+    expect(result.stdout).toBe('')
+  })
+
+  it.each([
+    ['unsupported selector', [entry], ['version']],
+    ['extra argument', [entry], ['filename', 'unexpected']],
+  ] as const)('rejects %s without output', (_name, manifest, arguments_) => {
+    const result = readPackManifest(manifest, ...arguments_)
 
     expect(result.status).not.toBe(0)
     expect(result.stderr).toBe('')
