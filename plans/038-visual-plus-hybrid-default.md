@@ -82,9 +82,12 @@ approval. Plan 038 remains in progress through Task 6 and the final evidence rev
   surrounding focused proof gate passed 4 files/92 tests, and the source-coupled gate passed
   5 files/161 tests including the exact 69 Visual+ tests. Build, typecheck, Biome, syntax, format,
   and diff checks passed. Formal review is Approved.
-- **Tasks 5–6:** Task 5 documentation is in progress; Task 6 artifact, Bun, and live proof remains
-  pending. Task 4 provides reviewed local proof infrastructure and deterministic source evidence
-  only, not a retained Plan 038 artifact, Bun replacement, or live Spreadoo proof.
+- **Task 5:** complete through documentation commits `90746af` and `07dacc1`, followed by the broad
+  pre-artifact review correction recorded in this commit. The current default example is coupled to
+  the reviewed 118-column renderer fixture; strict-success receipts and styling match production.
+  The correction received an independent read-only Approved C0/I0/M0 review.
+- **Task 6:** pending. Task 4 provides reviewed local proof infrastructure and deterministic source
+  evidence only, not a retained Plan 038 artifact, Bun replacement, or live Spreadoo proof.
 
 ---
 

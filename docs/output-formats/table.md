@@ -21,52 +21,79 @@ workspace exclusion leaves shared catalog owners eligible, a second concise note
 | **name**  | Package name. The thing you `npm install`-ed and forgot about. |
 | **source**| Where it lives: `dependencies`, `devDependencies`, `overrides`, etc. Shown when `--group` is off. |
 | **current** | What you've got.                                           |
-| **target** | What you should have. The changed segments are colour-coded. |
-| **diff**  | `major`, `minor`, or `patch`. Colour-coded so you know exactly how scared to be. |
-| **age**   | How long ago the target version was published. Enabled by default (`--timediff`). |
+| **target** | What you should have. The entire target range is colour-coded by severity. |
+| **diff**  | `major`, `minor`, or `patch`. The severity label uses the same colour as the target. |
+| **age**   | How long ago the target version was published. Unstyled and enabled by default (`--timediff`). |
 
-## Colour Coding
+## Hybrid Styling
 
-I use colours like a responsible adult:
+The ledger applies severity colour to the entire target range and severity label. Age remains
+unstyled. Current ranges are muted, and the severity bar uses the same redundant mapping:
 
 - **Red** -- `major` update. Breaking changes ahead. Godspeed.
 - **Yellow** -- `minor` update. New features, theoretically backwards-compatible. Theoretically.
 - **Green** -- `patch` update. Bug fixes. The safest bet you'll make all day.
-- **Gray** -- `none`. Up to date. A rare and beautiful sight.
+- **Gray** -- the current range. It remains visually secondary to the proposed target.
 
-The target version itself gets partial colouring -- only the segments that actually changed light up. So `^2.1.0 -> ^2.3.0` highlights the `3.0` part. It's the small things.
-
-Age colouring follows a similar scheme: green for recent (< 90 days), yellow for a few months, red for anything old enough to vote.
+Colour is supplementary. `Major`, `Minor`, and `Patch` remain visible text, and neither target
+styling nor the severity bar changes semantic membership.
 
 ## Example
 
-This representative wide read-only journey shows the five durable regions in order. Risk focus
-repeats the one major update for attention; the complete ledger still counts each selected update
-exactly once, so its three rows match both the overview and receipt.
+This is the exact ANSI-stripped 118-column projection produced by the deterministic reviewed hybrid
+fixture. Risk focus repeats major operations for attention; the complete ledger still contains
+every selected update exactly once, so its seven rows match both the overview and receipt.
 
 <!-- visual-plus-default-example:start -->
+<!-- source-coupled: createVisualPlusHybridFixtureInput(118) + renderVisualPlusHybridReview + renderVisualPlusReceipt; ANSI stripped -->
 ```text
-spreadu · bun workspace · major · read-only
-3 packages · 8 declared · 6 eligible · 3 updates · 2 files
+hybrid-fixture · pnpm 10.33.0 · workspace · major · read-only
+3 packages · 7 declared · 7 eligible · 7 updates · 3 files
 
-Major 1   Minor 1   Patch 1
-████████████████   ████████████████   ████████████████
+Major 3 · Minor 2 · Patch 2
+████████████████████████████████████████
 
 Breaking changes
-react-dropzone  ^15.0.0 → ^19.1.1  ~0d  web  compat unknown
+react-dropzone
+  ^15.0.0 → ^17.0.0 · ~5d · web (apps/web/package.json)
+  0 compatible · 0 incompatible · 1 unknown
+  ^15.0.0 → ^18.0.0 · ~10d · web (packages/web/package.json)
+  1 compatible · 0 incompatible · 0 unknown
+vitest
+  ^3.2.0 → ^4.0.0 · unknown · web (apps/web/package.json)
+  0 compatible · 1 incompatible · 0 unknown
 
 web · apps/web/package.json
-dependency       current       target        severity  age
-──────────────────────────────────────────────────────────
-react-dropzone   ^15.0.0   →   ^19.1.1      Major     ~0d
-posthog-js       ^1.300.0  →   ^1.302.0     Minor     ~1d
+  dependencies
+dependency                                current  target   severity  age
+─────────────────────────────────────────────────────────────────────────────
+react-dropzone                            ^15.0.0  ^17.0.0  Major     ~5d
+  compat unknown: Node support unknown
 
-cli · packages/cli/package.json
-dependency       current       target        severity  age
-──────────────────────────────────────────────────────────
-nanoid           ^5.1.16   →   ^5.1.17      Patch     ~2d
+  devDependencies
+dependency                                current  target  severity  age
+────────────────────────────────────────────────────────────────────────────
+vitest                                    ^3.2.0   ^4.0.0  Major     unknown
+  compat incompatible: requires Node >=22
+typescript                                ^5.8.0   ^5.9.0  Minor     ~45d
 
-Review complete · 3 updates across 2 files · write not attempted
+web · packages/web/package.json
+  dependencies
+dependency                                current  target   severity  age
+─────────────────────────────────────────────────────────────────────────────
+react-dropzone                            ^15.0.0  ^18.0.0  Major     ~10d
+nanoid                                    ^5.1.0   ^5.2.0   Minor     ~2d
+  compat incompatible: requires Node >=20
+picocolors [compat unknown]               ^1.1.0   ^1.1.1   Patch     unknown
+
+default · pnpm-workspace.yaml
+  catalog
+dependency                                current  target  severity  age
+────────────────────────────────────────────────────────────────────────────
+eslint [compat unknown]                   ^9.0.0   ^9.1.0  Patch     ~4mo
+  catalog default: pnpm-workspace.yaml
+
+Review complete · 7 updates across 3 files · write not attempted
 Exit 0
 ```
 <!-- visual-plus-default-example:end -->
@@ -227,8 +254,7 @@ Capable terminal:
 
 ```text
 Complete · 76 updates applied across 14 files
-Applied 76  Blocked 0  Not attempted 0  Failed 0  Unknown 0
-All 14 target files were observed at the requested values. Recovery was not needed. 2.4s.
+All 14 files observed at the requested values · recovery not needed · 2.4s
 Exit 0
 ```
 
@@ -236,8 +262,7 @@ Plain `TERM=dumb` fallback:
 
 ```text
 Complete - 76 updates applied across 14 files
-Applied 76  Blocked 0  Not attempted 0  Failed 0  Unknown 0
-All 14 target files were observed at the requested values. Recovery was not needed. 2.4s.
+All 14 files observed at the requested values - recovery not needed - 2.4s
 Exit 0
 ```
 

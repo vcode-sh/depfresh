@@ -460,3 +460,17 @@ descendant-observation timeout in the 118-column hybrid journey plus a transient
 the global fake-manager integration. Each exact failing test then passed alone without retry:
 1 file/1 test for the fake manager, and 1 file/1 passed with 68 skipped for the named Visual+
 journey. No source or Task 4-owned file was changed in response. Plan 038 remains IN PROGRESS.
+
+Plan 038 stability amendment `b44447d`: the exclusive retry-disabled aggregate passed 168/168
+files and 2,400/2,400 tests in 305.14s after process-observation stabilization. This supersedes the
+earlier contention-affected aggregate above without changing Task 4's exact 69-test contract.
+
+Plan 038 Task 5 documentation commits `90746af` and `07dacc1` established the hybrid-default truth
+surface and corrected the principal example hierarchy. Broad pre-artifact review returned C0/I4/M0:
+I1-I3 were documentation/status findings owned by Task 5, while renderer/source I4 remains owned by
+its separate correction. Task 5's final documentation correction couples the primary example to the
+reviewed 118-column deterministic renderer fixture, aligns current strict-success receipts and
+styling with production, and records Task 5 complete. Plan 038 remains IN PROGRESS; Task 6 artifact,
+Bun replacement, live Spreadoo proof, final evidence review, and any publication action remain
+pending. An independent read-only re-review approved the correction C0/I0/M0 and independently
+passed release readiness at 1 file/23 tests without retry, focused Biome, and `git diff --check`.

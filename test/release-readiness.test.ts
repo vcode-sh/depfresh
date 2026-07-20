@@ -4,11 +4,17 @@ import { fileURLToPath } from 'node:url'
 import { globSync } from 'tinyglobby'
 import { describe, expect, expectTypeOf, it } from 'vitest'
 import { parse } from 'yaml'
+import type { VisualPlusCapabilities } from '../src/commands/check/visual-plus/capabilities'
+import { buildVisualPlusInsights } from '../src/commands/check/visual-plus/insights'
+import { renderVisualPlusHybridReview } from '../src/commands/check/visual-plus/sections/hybrid'
+import { renderVisualPlusReceipt } from '../src/commands/check/visual-plus/sections/receipt'
+import { createVisualPlusHybridFixtureInput } from '../src/commands/check/visual-plus/test-fixture'
 import type {
   ArtifactTrustDimensionResult,
   ArtifactTrustResult,
   ArtifactVerificationTarget,
 } from '../src/index'
+import { stripAnsi } from '../src/utils/format'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const read = (path: string) => readFileSync(join(root, path), 'utf8')
@@ -55,6 +61,16 @@ const checkoutConsumerPaths = [
   'skills/depfresh/examples/protected-apply.yml',
   'skills/depfresh/examples/read-only-gate.yml',
 ] as const
+
+const reviewedHybridCapabilities: VisualPlusCapabilities = {
+  interactive: true,
+  color: true,
+  unicode: true,
+  motion: false,
+  cursorControl: false,
+  width: 118,
+  layout: 'wide',
+}
 
 function workflow(path: string): Workflow {
   return parse(read(path)) as Workflow
@@ -274,24 +290,75 @@ describe('2.1.1 release readiness', () => {
     expect(start).toBeGreaterThanOrEqual(0)
     expect(end).toBeGreaterThan(start)
 
-    const example = table.slice(start + startMarker.length, end)
-    const regionPositions = [
-      'spreadu · bun workspace · major · read-only',
-      '3 packages · 8 declared · 6 eligible · 3 updates · 2 files',
-      'Breaking changes',
-      'dependency',
-      'Review complete · 3 updates across 2 files · write not attempted',
-    ].map((region) => example.indexOf(region))
+    const markedExample = table.slice(start + startMarker.length, end)
+    const codeBlock = markedExample.match(/```text\n([\s\S]*?)\n```/u)
+    const fixture = createVisualPlusHybridFixtureInput(reviewedHybridCapabilities)
+    const completedFixture = {
+      ...fixture,
+      snapshot: { ...fixture.snapshot, exitCode: 0 as const },
+    }
+    const expected = [
+      ...renderVisualPlusHybridReview(
+        completedFixture,
+        buildVisualPlusInsights(completedFixture.snapshot),
+      ),
+      '',
+      ...renderVisualPlusReceipt(completedFixture),
+    ]
+      .map(stripAnsi)
+      .join('\n')
 
-    expect(regionPositions.every((position) => position >= 0)).toBe(true)
-    expect(regionPositions).toEqual([...regionPositions].sort((left, right) => left - right))
-    expect(example).toContain('Major 1   Minor 1   Patch 1')
+    expect(table).toContain(
+      '<!-- source-coupled: createVisualPlusHybridFixtureInput(118) + renderVisualPlusHybridReview + renderVisualPlusReceipt; ANSI stripped -->',
+    )
+    expect(codeBlock?.[1]).toBe(expected)
+  })
 
-    const ledger = example.slice(example.indexOf('dependency'), example.indexOf('Review complete'))
-    expect(ledger.match(/ → /gu)).toHaveLength(3)
-    expect(ledger.match(/\bMajor\b/gu)).toHaveLength(1)
-    expect(ledger.match(/\bMinor\b/gu)).toHaveLength(1)
-    expect(ledger.match(/\bPatch\b/gu)).toHaveLength(1)
+  it('couples current strict-success and styling docs to the production renderers', () => {
+    const readme = read('README.md')
+    const table = read('docs/output-formats/table.md')
+    const normalizedTable = table.replace(/\s+/gu, ' ')
+    const strictSuccess = [
+      'Complete · 76 updates applied across 14 files',
+      'All 14 files observed at the requested values · recovery not needed · 2.4s',
+      'Exit 0',
+    ].join('\n')
+    const plainStrictSuccess = [
+      'Complete - 76 updates applied across 14 files',
+      'All 14 files observed at the requested values - recovery not needed - 2.4s',
+      'Exit 0',
+    ].join('\n')
+
+    expect(readme).toContain(strictSuccess)
+    expect(table).toContain(strictSuccess)
+    expect(table).toContain(plainStrictSuccess)
+    for (const [path, content] of [
+      ['README.md', readme],
+      ['docs/output-formats/table.md', table],
+    ]) {
+      expect(content, path).not.toContain(
+        'Applied 76  Blocked 0  Not attempted 0  Failed 0  Unknown 0',
+      )
+      expect(content, path).not.toContain(
+        'All 14 target files were observed at the requested values.',
+      )
+    }
+
+    expect(normalizedTable).toContain(
+      'The ledger applies severity colour to the entire target range and severity label. Age remains unstyled.',
+    )
+    const fixture = createVisualPlusHybridFixtureInput(reviewedHybridCapabilities)
+    const row = renderVisualPlusHybridReview(
+      fixture,
+      buildVisualPlusInsights(fixture.snapshot),
+    ).find((line) => {
+      const plain = stripAnsi(line)
+      return plain.startsWith('react-dropzone') && plain.includes('^17.0.0')
+    })
+
+    expect(row).toContain('\u001b[31m^17.0.0\u001b[39m')
+    expect(row).toContain('\u001b[31mMajor\u001b[39m')
+    expect(row).toMatch(/~5d$/u)
   })
 
   it('preserves the dedicated published 2.1.0 release record', () => {

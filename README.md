@@ -74,8 +74,7 @@ For example, a fully observed write ends with:
 
 ```text
 Complete · 76 updates applied across 14 files
-Applied 76  Blocked 0  Not attempted 0  Failed 0  Unknown 0
-All 14 target files were observed at the requested values. Recovery was not needed. 2.4s.
+All 14 files observed at the requested values · recovery not needed · 2.4s
 Exit 0
 ```
 
