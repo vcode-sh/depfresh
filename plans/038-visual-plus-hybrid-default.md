@@ -18,9 +18,8 @@ unchanged surfaces. Artifact-bound PTY goldens and a live Spreadoo replay gate t
 existing PTY/terminal-emulation helpers, existing Bun `1.3.14` local global-package workflow. No
 OpenTUI or new runtime/native dependency.
 
-**Status:** IN PROGRESS. Commit `48eec95` introduced the design. Tasks 1–6 and the complete local
-release-candidate proof are complete; Plan 038 remains in progress only through final evidence
-review. The active
+**Status:** DONE. Commit `48eec95` introduced the design. Tasks 1–6, the complete local
+release-candidate proof, and the final C0/I0/M0 evidence review are complete. The active
 release gate uses Node `24.15.0`, isolated npm `12.0.1`, and pnpm `11.15.1`; npm 11.12.x artifact
 verification compatibility remains supported alongside the verified npm 12.0.x protocol.
 
@@ -126,7 +125,10 @@ also needs the single explicit Bun binary directory: invoke it with
   retained evidence from these exact source and package bytes.
 - **Task 6:** complete from exact source commit `70c4fcff728e4197362d86f286f451700fc4e11b`.
   The retained 87-file artifact, 69-test installed replay, scoped Bun replacement, and four live
-  Spreadoo journeys are recorded below. Final evidence review remains pending.
+  Spreadoo journeys are recorded below.
+- **Final evidence review:** Approved C0/I0/M0 over `48eec95..fe92ee2` plus the retained artifact,
+  installed replay, Bun inventory and rollback artifact, and live Spreadoo evidence. Plan 038 is
+  complete with no publication claim.
 
 ---
 

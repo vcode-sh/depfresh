@@ -252,7 +252,7 @@ describe('2.1.1 release readiness', () => {
     expect(release).not.toContain('TODO')
   })
 
-  it('documents the in-progress five-region hybrid default without retired compact caps', () => {
+  it('documents the completed five-region hybrid default without retired compact caps', () => {
     const table = read('docs/output-formats/table.md')
     const normalizedTable = table.replace(/\s+/gu, ' ')
     const currentDocs = [
@@ -268,7 +268,7 @@ describe('2.1.1 release readiness', () => {
     )
     expect(
       read('docs/superpowers/specs/2026-07-20-visual-plus-hybrid-default-design.md'),
-    ).toContain('**Status:** Implementation in progress under Plan 038.')
+    ).toContain('**Status:** Implemented and locally proven under completed Plan 038.')
     expect(normalizedTable).toContain(
       'five ordered regions: context, overview, risk focus, update ledger, and receipt',
     )
@@ -304,10 +304,10 @@ describe('2.1.1 release readiness', () => {
     const registry = read('plans/README.md')
     expect(plan037).toContain('historically complete compact semantic contract')
     expect(plan037).toContain('visual-composition objective moved to Plan 038')
-    expect(plan038).toContain('**Status:** IN PROGRESS')
-    expect(plan038).toContain('Task 6 and the final evidence review')
+    expect(plan038).toContain('**Status:** DONE')
+    expect(plan038).toContain('final C0/I0/M0 evidence review')
     expect(registry).toContain(
-      '| [038](./038-visual-plus-hybrid-default.md) | Hybrid Visual+ human default | P1 | L | 037 | IN PROGRESS |',
+      '| [038](./038-visual-plus-hybrid-default.md) | Hybrid Visual+ human default | P1 | L | 037 | DONE |',
     )
   })
 

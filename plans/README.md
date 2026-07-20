@@ -65,7 +65,7 @@ may grant side effects. Unknown state is never reported as success.
 | [035](./035-visual-plus-insights-pty-proof.md) | Visual+ insights and PTY proof | P1 | L | 034 | DONE |
 | [036](./036-v2.1.0-release.md) | Publish and prove depfresh 2.1.0 | P1 | M | 035 | DONE |
 | [037](./037-visual-plus-compact-2.1.1.md) | Compact Visual+ output and prepare 2.1.1 | P1 | M | 036 | DONE |
-| [038](./038-visual-plus-hybrid-default.md) | Hybrid Visual+ human default | P1 | L | 037 | IN PROGRESS |
+| [038](./038-visual-plus-hybrid-default.md) | Hybrid Visual+ human default | P1 | L | 037 | DONE |
 
 The implementation order through 016 is present locally. Plans 011 through 013 passed their final
 blocker replays, regression fixes, full gates, and independent re-reviews on 2026-07-16. Plans 014
@@ -298,8 +298,8 @@ historical `41f0002` evidence; Plan 037 is DONE for its historically complete co
 contract on corrected local evidence. Its visual-composition objective moved to Plan 038. No
 publication, tag, push, hosted workflow, or public-artifact proof is claimed.
 
-Plan 038 is IN PROGRESS only through final evidence review. The hybrid Visual+ design introduced as
-`48eec95` was subsequently approved in conversation. Tasks 1–3 are independently reviewed through
+Plan 038 is DONE. The hybrid Visual+ design introduced as `48eec95` was subsequently approved in
+conversation. Tasks 1–3 are independently reviewed through
 `a6dd53d`: it replaces the
 flat compact success transcript with responsive context, proportional severity, complete major-risk
 focus, and a canonical update ledger while preserving the exhaustive `--long` audit and all
@@ -313,7 +313,9 @@ Task 6 packed exact source commit `70c4fcff728e4197362d86f286f451700fc4e11b` int
 exact 1-file/5-suite/69-test contract. Bun `1.3.14` installed those exact bytes without changing
 unrelated global packages. Four fixed-argv live Spreadoo journeys at 80/118 columns, default and
 `--long`, exited 0 and retained complete membership. The default rendered 99/99 updates across 21
-files; HEAD, index, status, diffs, and `bun.lock` were unchanged. Final evidence review remains.
+files; HEAD, index, status, diffs, and `bun.lock` were unchanged. Final evidence review over
+`48eec95..fe92ee2` plus the retained evidence returned C0/I0/M0. No publication, tag, push, hosted
+workflow, GitHub release, public artifact, or production deployment is claimed.
 
 Post-release retained-harness commit `de3c417` deterministically owns the nested PTY line-ending
 mapping after diagnostics isolated recurrent BSD `CRCRLF` below bare-LF-only child writes. Exact

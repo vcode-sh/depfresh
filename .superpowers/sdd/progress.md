@@ -490,3 +490,11 @@ of 99 operations, 22 owners, 22 shared dependencies, 55 occurrences, and 21 targ
 `93bbe6a4...d1db6`, index, empty status/diffs, and `bun.lock` remained unchanged. Plan 038 stays
 IN PROGRESS only for the final evidence review and closeout commit; no publish, tag, push, hosted
 workflow, GitHub release, or public-artifact proof is claimed.
+
+Plan 038 final evidence review: Approved C0/I0/M0 over `48eec95..fe92ee2` plus the retained pack,
+installed replay, Bun inventory and exact rollback artifact, and live Spreadoo report. The review
+rechecked source-to-artifact binding, hashes, exact 69-test replay, four 80/118-column journeys,
+99/99 default membership, exhaustive `--long`, global CLI identity, rollback readiness, and exact
+repository immutability. Plan 038 is DONE. The closeout changes only documentation/status and its
+release-readiness assertion; no package bytes or Task 6 evidence were invalidated. No publish, tag,
+push, hosted workflow, GitHub release, public artifact, or production deployment is claimed.

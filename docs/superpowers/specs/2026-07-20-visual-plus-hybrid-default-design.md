@@ -1,9 +1,9 @@
 # Visual+ Hybrid Default Design
 
-**Status:** Implementation in progress under Plan 038.
+**Status:** Implemented and locally proven under completed Plan 038.
 
-Approved in conversation on 2026-07-20. Plan 038 remains in progress through Task 6 and the final
-evidence review; this design makes no artifact, publication, or live-proof claim.
+Approved in conversation on 2026-07-20. Plan 038 completed Tasks 1–6 and the final evidence review.
+The retained evidence is local only; this design makes no publication or public-artifact claim.
 
 ## Problem
 
