@@ -474,3 +474,19 @@ styling with production, and records Task 5 complete. Plan 038 remains IN PROGRE
 Bun replacement, live Spreadoo proof, final evidence review, and any publication action remain
 pending. An independent read-only re-review approved the correction C0/I0/M0 and independently
 passed release readiness at 1 file/23 tests without retry, focused Biome, and `git diff --check`.
+
+Plan 038 current-stable and Task 6 proof: Node remains `24.15.0`; exact npm `12.0.1`, pnpm
+`11.15.1`, TypeScript `7.0.2`, ini `7.0.0`, undici `8.8.0`, and tsdown `0.22.12` are current.
+The final retry-disabled aggregate passed 168/168 files and 2422/2422 tests with coverage 88.68%
+statements, 82.18% branches, 95.03% functions, and 90.91% lines. Commit `70c4fcf` fixed the direct
+Node live-harness loader after a retained RED and passed the focused 2-file/67-test PTY gate.
+Exact source `70c4fcff728e4197362d86f286f451700fc4e11b` produced one retained 87-file artifact at
+282910 packed/1531841 unpacked bytes with SHA-256 `145fa43d...9371df`; the installed CLI SHA-256
+is `4e41339c...ff87a7`, and the artifact-bound replay passed 1 file/5 suites/69 tests. Bun `1.3.14`
+installed those exact bytes; both version probes returned 2.1.1 and unrelated global packages
+remained present. The fixed-argv live Spreadoo proof passed at 80/118 columns in default and
+`--long`: 99/99 default rows across 21 files, 6 major/47 minor/46 patch, and exhaustive membership
+of 99 operations, 22 owners, 22 shared dependencies, 55 occurrences, and 21 targets. Spreadoo HEAD
+`93bbe6a4...d1db6`, index, empty status/diffs, and `bun.lock` remained unchanged. Plan 038 stays
+IN PROGRESS only for the final evidence review and closeout commit; no publish, tag, push, hosted
+workflow, GitHub release, or public-artifact proof is claimed.

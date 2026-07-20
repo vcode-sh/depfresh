@@ -210,14 +210,13 @@ describe('2.1.1 release readiness', () => {
     expect(currentInstructions).not.toContain('bunx depfresh@2.1.0')
   })
 
-  it('keeps the 2.1.1 local evidence scoped to the completed compact semantic contract', () => {
+  it('binds the 2.1.1 local evidence to the hybrid release candidate', () => {
     expect(existsSync(join(root, 'docs/releases/v2.1.1.md'))).toBe(true)
     const release = read('docs/releases/v2.1.1.md')
 
-    expect(release).toContain('# depfresh 2.1.1: historical compact Visual+ evidence')
+    expect(release).toContain('# depfresh 2.1.1: local hybrid Visual+ release candidate')
     for (const bullet of [
       'Plan 037 completed the compact semantic contract for the then-current default projection.',
-      'Plan 038 owns the in-progress hybrid human default and requires independent replacement evidence.',
       '`--long` preserves complete operation, owner, shared-dependency, occurrence, and physical-target membership.',
     ]) {
       expect(release, bullet).toContain(`- ${bullet}`)
@@ -226,8 +225,15 @@ describe('2.1.1 release readiness', () => {
       '../superpowers/specs/2026-07-20-visual-plus-hybrid-default-design.md',
     )
     expect(release).toContain('../../plans/038-visual-plus-hybrid-default.md')
-    expect(release).toContain('Existing tarball, Bun, and Spreadoo evidence proves Plan 037 only.')
-    expect(release).toContain('It is not Plan 038 proof.')
+    expect(release).toContain('## Retained Plan 038 local release candidate')
+    expect(release).toContain('70c4fcff728e4197362d86f286f451700fc4e11b')
+    expect(release).toContain('145fa43da00b9f95c892863be937f88dc637e6549760469710a7f943be9371df')
+    expect(release).toContain('4e41339ce1e7d6818602eeced1d0a7d4a5ef63374f593e5a351b491e3aff87a7')
+    expect(release).toContain('`69/69` passed tests')
+    expect(release).toContain('exactly `99/99` update rows across `21`')
+    expect(release).toContain('`6` major, `47` minor, and `46` patch')
+    expect(release).toContain('status, working diff, and cached diff remained empty')
+    expect(release).toContain('supersede the Plan 037 local candidate for current use')
     expect(release).toContain(
       'Status: corrected local source candidate; artifact regeneration pending.',
     )

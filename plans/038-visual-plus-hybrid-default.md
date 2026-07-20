@@ -18,8 +18,9 @@ unchanged surfaces. Artifact-bound PTY goldens and a live Spreadoo replay gate t
 existing PTY/terminal-emulation helpers, existing Bun `1.3.14` local global-package workflow. No
 OpenTUI or new runtime/native dependency.
 
-**Status:** IN PROGRESS. Commit `48eec95` introduced the design; this planning change records its
-approval. Plan 038 remains in progress through Task 6 and the final evidence review. The active
+**Status:** IN PROGRESS. Commit `48eec95` introduced the design. Tasks 1–6 and the complete local
+release-candidate proof are complete; Plan 038 remains in progress only through final evidence
+review. The active
 release gate uses Node `24.15.0`, isolated npm `12.0.1`, and pnpm `11.15.1`; npm 11.12.x artifact
 verification compatibility remains supported alongside the verified npm 12.0.x protocol.
 
@@ -73,6 +74,7 @@ HOME="$TOOL_ROOT/home" "$BOOTSTRAP_NPM" install --global --ignore-scripts --no-a
   --userconfig "$TOOL_ROOT/user.npmrc" --globalconfig "$TOOL_ROOT/global.npmrc" \
   --cache "$TOOL_ROOT/cache" --prefix "$TOOL_ROOT/prefix" npm@12.0.1 pnpm@11.15.1
 EXACT_TOOL_PATH="$TOOL_ROOT/prefix/bin:$(dirname "$NODE_BIN"):/usr/bin:/bin"
+BUN_BIN="$HOME/.bun/bin"
 exact() { env PATH="$EXACT_TOOL_PATH" "$@"; }
 exact node --version
 exact npm --version
@@ -80,7 +82,9 @@ exact pnpm --version
 ```
 
 Expected: `v24.15.0`, `12.0.1`, and `11.15.1`. Keep npm user/global configs distinct and retain
-`TOOL_ROOT` through the package, installed-replay, Bun, and live-proof gates.
+`TOOL_ROOT` through the package, installed-replay, Bun, and live-proof gates. The live harness
+also needs the single explicit Bun binary directory: invoke it with
+`env PATH="$BUN_BIN:$EXACT_TOOL_PATH" node ...` so `bunx` remains uniquely resolvable.
 
 ## Execution Waves
 
@@ -120,8 +124,9 @@ Expected: `v24.15.0`, `12.0.1`, and `11.15.1`. Keep npm user/global configs dist
   zero-warning Biome gate, focused/release tests, and isolated-npm packed verifier passed. The
   verified candidate contains 87 manifest files in a 282,910-byte tarball; Task 6 must create fresh
   retained evidence from these exact source and package bytes.
-- **Task 6:** pending. Task 4 provides reviewed local proof infrastructure and deterministic source
-  evidence only, not a retained Plan 038 artifact, Bun replacement, or live Spreadoo proof.
+- **Task 6:** complete from exact source commit `70c4fcff728e4197362d86f286f451700fc4e11b`.
+  The retained 87-file artifact, 69-test installed replay, scoped Bun replacement, and four live
+  Spreadoo journeys are recorded below. Final evidence review remains pending.
 
 ---
 
@@ -1001,7 +1006,7 @@ commit the fixes, and obtain a clean re-review before Task 6 may start.
 - Produces: one retained corrected 2.1.1 tarball, an artifact-bound installed replay, a scoped local
   Bun replacement, and unchanged live Spreadoo repository evidence.
 
-- [ ] **Step 1: Prove a clean exact-toolchain source candidate**
+- [x] **Step 1: Prove a clean exact-toolchain source candidate**
 
 Run with no concurrent Vitest process:
 
@@ -1031,7 +1036,7 @@ have zero retry; Biome reports zero warnings; package identity remains `2.1.1`; 
 empty. Record the exact HEAD as `PACKAGE_SOURCE_COMMIT` and require the same value immediately
 before packing, installed replay, and Bun replacement.
 
-- [ ] **Step 2: Pack one isolated retained artifact**
+- [x] **Step 2: Pack one isolated retained artifact**
 
 Create one retained root and two distinct empty npm configs:
 
@@ -1052,7 +1057,7 @@ exact env \
 Validate exactly one `depfresh-2.1.1.tgz`, retain `pack.json`, and record filename, file count,
 packed/unpacked bytes, SHA-1, SHA-256, and SHA-512 integrity in the final report.
 
-- [ ] **Step 3: Run the artifact-bound installed replay**
+- [x] **Step 3: Run the artifact-bound installed replay**
 
 Run:
 
@@ -1071,7 +1076,7 @@ exact env \
 Expected: exit `0`, exact installed CLI/tarball identity, exact `1` file/`5` suites/`69` tests,
 zero failed/pending/todo/retry, and all hybrid goldens run against the installed CLI.
 
-- [ ] **Step 4: Replace only the local global Bun depfresh candidate**
+- [x] **Step 4: Replace only the local global Bun depfresh candidate**
 
 Before mutation, record `bun pm -g ls`, the current depfresh package source/tarball identity, current
 CLI symlink target, and CLI SHA-256. Require a readable retained old tarball whose package version
@@ -1092,12 +1097,12 @@ SHA-256 matches the installed replay; every unrelated global package remains pre
 identity verification fails, restore the retained previous exact tarball and stop without a success
 claim.
 
-- [ ] **Step 5: Prove the live Spreadoo hybrid journey without writes**
+- [x] **Step 5: Prove the live Spreadoo hybrid journey without writes**
 
 Use the reviewed fixed-argv harness; do not run an ad hoc terminal command:
 
 ```bash
-exact node scripts/live-visual-plus-proof.mjs \
+env PATH="$BUN_BIN:$EXACT_TOOL_PATH" node scripts/live-visual-plus-proof.mjs \
   --cwd /Users/tomrobak/_projects_/spreadoo \
   --pack-json "$PACK_ROOT/pack.json" \
   --replay-evidence "$PACK_ROOT/installed-replay.json" \
@@ -1115,7 +1120,7 @@ the artifact-bound deterministic-fixture assertion because human live output int
 IDs. For `--long`, assert current exhaustive owner/shared/occurrence/target membership and exit `0`.
 Require exact pre/post equality for HEAD, index, working/cached diff, status, and `bun.lock`.
 
-- [ ] **Step 6: Record current evidence without closing Plan 038**
+- [x] **Step 6: Record current evidence without closing Plan 038**
 
 Write exact tool versions, commit, test totals, coverage, artifact metrics/hashes, installed CLI
 hash, Bun inventory/probes, PTY widths/counts, and Spreadoo pre/post identities to the release note,
@@ -1123,7 +1128,7 @@ Plan 038, plan registry, progress ledger, and final report. Mark the previous 2.
 proof as superseded local evidence. Keep Plan 038 `IN PROGRESS` until the final evidence review and
 closeout commit.
 
-- [ ] **Step 7: Run final evidence checks and commit**
+- [x] **Step 7: Run final evidence checks and commit**
 
 Run:
 

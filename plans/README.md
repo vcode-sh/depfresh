@@ -298,17 +298,22 @@ historical `41f0002` evidence; Plan 037 is DONE for its historically complete co
 contract on corrected local evidence. Its visual-composition objective moved to Plan 038. No
 publication, tag, push, hosted workflow, or public-artifact proof is claimed.
 
-Plan 038 is IN PROGRESS from the hybrid Visual+ design introduced as `48eec95` and subsequently
-approved in conversation. Tasks 1–3 are independently reviewed through `a6dd53d`: it replaces the
+Plan 038 is IN PROGRESS only through final evidence review. The hybrid Visual+ design introduced as
+`48eec95` was subsequently approved in conversation. Tasks 1–3 are independently reviewed through
+`a6dd53d`: it replaces the
 flat compact success transcript with responsive context, proportional severity, complete major-risk
 focus, and a canonical update ledger while preserving the exhaustive `--long` audit and all
 non-success/recovery evidence. Task 4 is independently Approved C0/I0/M0 over
 `a6dd53d..6e9f59c`. Its exact deterministic Visual+ contract passed 1 file/5 suites/69 tests with
 zero failed, pending, todo, or retry; the distinct focused and source-coupled gates passed
 4 files/92 tests and 5 files/161 tests respectively. The contained no-replace, complete
-default/`--long`, Bun-dispatch identity, and unchanged-repository proof hardening is reviewed local
-infrastructure and deterministic source evidence only. No retained Plan 038 artifact, Bun
-replacement, or live Spreadoo proof exists until Task 6; final evidence review also remains.
+default/`--long`, Bun-dispatch identity, and unchanged-repository proof hardening is reviewed.
+Task 6 packed exact source commit `70c4fcff728e4197362d86f286f451700fc4e11b` into the retained
+87-file, 282910-byte artifact with SHA-256 `145fa43d...9371df`; its installed replay passed the
+exact 1-file/5-suite/69-test contract. Bun `1.3.14` installed those exact bytes without changing
+unrelated global packages. Four fixed-argv live Spreadoo journeys at 80/118 columns, default and
+`--long`, exited 0 and retained complete membership. The default rendered 99/99 updates across 21
+files; HEAD, index, status, diffs, and `bun.lock` were unchanged. Final evidence review remains.
 
 Post-release retained-harness commit `de3c417` deterministically owns the nested PTY line-ending
 mapping after diagnostics isolated recurrent BSD `CRCRLF` below bare-LF-only child writes. Exact
