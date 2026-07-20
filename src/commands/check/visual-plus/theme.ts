@@ -11,6 +11,8 @@ export type VisualPlusSemanticStatus =
   | 'reverted'
   | 'not attempted'
 
+export type VisualPlusSeverity = 'major' | 'minor' | 'patch'
+
 export interface VisualPlusTheme {
   readonly capabilities: VisualPlusCapabilities
   readonly heading: (value: string) => string
@@ -18,6 +20,8 @@ export interface VisualPlusTheme {
   readonly muted: (value: string) => string
   readonly status: (status: VisualPlusSemanticStatus) => string
   readonly styleStatus: (status: VisualPlusSemanticStatus, fragment: string) => string
+  readonly severity: (severity: VisualPlusSeverity) => string
+  readonly styleSeverity: (severity: VisualPlusSeverity, fragment: string) => string
   readonly arrow: string
   readonly bullet: string
   readonly encodeWideGrapheme: (value: string) => string
@@ -61,6 +65,11 @@ export function createVisualPlusTheme(capabilities: VisualPlusCapabilities): Vis
     if (['active', 'unknown'].includes(status)) return ansi.yellow(value)
     return ansi.gray(value)
   }
+  const colorSeverity = (severity: VisualPlusSeverity, value: string): string => {
+    if (severity === 'major') return ansi.red(value)
+    if (severity === 'minor') return ansi.yellow(value)
+    return ansi.green(value)
+  }
 
   return {
     capabilities,
@@ -69,10 +78,16 @@ export function createVisualPlusTheme(capabilities: VisualPlusCapabilities): Vis
     muted: (value) => ansi.gray(sanitizeTerminalText(value)),
     status: (status) => `${symbol(status)} ${STATUS_LABELS[status]}`,
     styleStatus: (status, fragment) => colorStatus(status, sanitizeTerminalText(fragment)),
+    severity: (severity) => colorSeverity(severity, capitalize(severity)),
+    styleSeverity: (severity, fragment) => colorSeverity(severity, sanitizeTerminalText(fragment)),
     arrow: capabilities.unicode ? ' → ' : ' -> ',
     bullet: capabilities.unicode ? '•' : '-',
     encodeWideGrapheme: encodeWideGrapheme,
   }
+}
+
+function capitalize(value: string): string {
+  return `${value.slice(0, 1).toUpperCase()}${value.slice(1)}`
 }
 
 export function wrapVisualPlusText(
@@ -91,6 +106,83 @@ export function wrapVisualPlusStyledText(
 ): readonly string[] {
   return wrapSanitizedText(sanitizeTerminalText(value), width, theme).map((fragment) =>
     style(fragment),
+  )
+}
+
+export function wrapVisualPlusWords(
+  value: string,
+  width: number,
+  theme: VisualPlusTheme,
+): readonly string[] {
+  const safe = sanitizeTerminalText(value)
+  if (visualLength(safe) <= width) return [safe]
+  const words = safe.split(' ')
+  const lines: string[] = []
+  let line = ''
+  for (const word of words) {
+    const candidate = line.length === 0 ? word : `${line} ${word}`
+    if (line.length > 0 && visualLength(candidate) > width) {
+      lines.push(line)
+      line = word
+    } else {
+      line = candidate
+    }
+    if (visualLength(line) > width) {
+      const fragments = wrapVisualPlusText(line, width, theme)
+      lines.push(...fragments.slice(0, -1))
+      line = fragments.at(-1) ?? ''
+    }
+  }
+  if (line.length > 0 || lines.length === 0) lines.push(line)
+  return lines
+}
+
+export function wrapVisualPlusJoined(
+  values: readonly string[],
+  separator: string,
+  width: number,
+  theme: VisualPlusTheme,
+): readonly string[] {
+  const lines: string[] = []
+  let line = ''
+  for (const rawValue of values) {
+    const value = sanitizeTerminalText(rawValue)
+    const candidate = line.length === 0 ? value : `${line}${separator}${value}`
+    if (line.length > 0 && visualLength(candidate) > width) {
+      lines.push(line)
+      line = value
+    } else {
+      line = candidate
+    }
+    if (visualLength(line) > width) {
+      const fragments = wrapVisualPlusWords(line, width, theme)
+      lines.push(...fragments.slice(0, -1))
+      line = fragments.at(-1) ?? ''
+    }
+  }
+  if (line.length > 0 || lines.length === 0) lines.push(line)
+  return lines
+}
+
+export function wrapVisualPlusIndented(
+  value: string,
+  width: number,
+  theme: VisualPlusTheme,
+): readonly string[] {
+  const prefix = visualPlusIndentation(width)
+  const contentWidth = Math.max(1, width - visualLength(prefix))
+  return wrapVisualPlusWords(value, contentWidth, theme).map((line) => `${prefix}${line}`)
+}
+
+export function indentVisualPlusLines(
+  lines: readonly string[],
+  width: number,
+  theme: VisualPlusTheme,
+): readonly string[] {
+  const prefix = visualPlusIndentation(width)
+  const contentWidth = Math.max(1, width - visualLength(prefix))
+  return lines.flatMap((line) =>
+    wrapVisualPlusWords(line, contentWidth, theme).map((fragment) => `${prefix}${fragment}`),
   )
 }
 
@@ -182,6 +274,10 @@ function splitGraphemes(value: string): string[] {
     )
   }
   return [...value]
+}
+
+function visualPlusIndentation(width: number): string {
+  return ' '.repeat(Math.min(2, Math.max(0, width - 1)))
 }
 
 function encodeWideGrapheme(value: string): string {

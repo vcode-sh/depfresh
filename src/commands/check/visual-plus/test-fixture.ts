@@ -9,10 +9,68 @@ import type {
   CheckRunTarget,
 } from '../run-model'
 import type { VisualPlusCapabilities } from './capabilities'
-import type { VisualPlusSectionInput } from './input'
+import type { VisualPlusDisplayOptions, VisualPlusSectionInput } from './input'
 
 export const VISUAL_PLUS_MAJOR_AGE_MS = 432_000_000
 export const VISUAL_PLUS_OWNER_CAPACITIES = [6, ...Array.from({ length: 14 }, () => 5)] as const
+
+const HYBRID_DISPLAY_ORDER: Readonly<Record<VisualPlusDisplayOptions['sort'], readonly string[]>> =
+  {
+    'diff-asc': [
+      'hybrid-0',
+      'hybrid-1',
+      'hybrid-3',
+      'hybrid-2',
+      'hybrid-4',
+      'hybrid-5',
+      'hybrid-6',
+    ],
+    'diff-desc': [
+      'hybrid-5',
+      'hybrid-6',
+      'hybrid-2',
+      'hybrid-4',
+      'hybrid-0',
+      'hybrid-1',
+      'hybrid-3',
+    ],
+    'time-asc': [
+      'hybrid-1',
+      'hybrid-5',
+      'hybrid-6',
+      'hybrid-2',
+      'hybrid-3',
+      'hybrid-0',
+      'hybrid-4',
+    ],
+    'time-desc': [
+      'hybrid-4',
+      'hybrid-0',
+      'hybrid-3',
+      'hybrid-2',
+      'hybrid-6',
+      'hybrid-1',
+      'hybrid-5',
+    ],
+    'name-asc': [
+      'hybrid-6',
+      'hybrid-4',
+      'hybrid-5',
+      'hybrid-0',
+      'hybrid-3',
+      'hybrid-2',
+      'hybrid-1',
+    ],
+    'name-desc': [
+      'hybrid-1',
+      'hybrid-2',
+      'hybrid-0',
+      'hybrid-3',
+      'hybrid-5',
+      'hybrid-4',
+      'hybrid-6',
+    ],
+  }
 
 interface FixtureOwner {
   readonly owner: CheckRunOwnerReference
@@ -101,6 +159,202 @@ export function createVisualPlusFixtureInput(
       }
     }),
   }
+}
+
+export function createVisualPlusHybridFixtureInput(
+  capabilities: VisualPlusCapabilities,
+  display: Partial<VisualPlusDisplayOptions> = {},
+): VisualPlusSectionInput {
+  const resolvedDisplay: VisualPlusDisplayOptions = {
+    group: true,
+    sort: 'diff-asc',
+    timediff: true,
+    nodecompat: true,
+    ...display,
+  }
+  const snapshot = createVisualPlusHybridFixtureSnapshot()
+  const order = new Map(
+    HYBRID_DISPLAY_ORDER[resolvedDisplay.sort].map((operationId, displayOrder) => [
+      operationId,
+      displayOrder,
+    ]),
+  )
+  return {
+    snapshot,
+    capabilities,
+    run: {
+      detailLevel: 'compact',
+      display: resolvedDisplay,
+      repository: { name: 'hybrid-fixture', relativePath: '.' },
+      workspaceScope: 'workspace',
+      packageManager: {
+        status: 'observed',
+        name: 'pnpm',
+        version: '10.33.0',
+        sources: ['package.json'],
+      },
+    },
+    changes: snapshot.changes.map((change) => {
+      const insight = change.insight!
+      return {
+        operationId: change.id,
+        source:
+          insight.catalog.role === 'owner'
+            ? 'catalog'
+            : (insight.occurrencePath[0] as 'dependencies' | 'devDependencies'),
+        displayOrder: order.get(change.id)!,
+        ownerGroup: {
+          id: insight.owner.id,
+          label: insight.owner.label,
+          order: insight.owner.order,
+          physicalTarget: insight.owner.physicalTarget,
+        },
+        ageMs: insight.ageMs,
+        compatibility: { ...insight.compatibility },
+        ...(insight.catalog.role === 'owner'
+          ? { catalog: { name: insight.catalog.name, sourcePath: insight.catalog.sourcePath } }
+          : {}),
+      }
+    }),
+  }
+}
+
+export function createVisualPlusHybridFixtureSnapshot(): CheckRunSnapshot {
+  const ownersByOperation = [
+    hybridManifestOwner('apps/web/package.json', 'web', 0),
+    hybridManifestOwner('apps/web/package.json', 'web', 0),
+    hybridManifestOwner('apps/web/package.json', 'web', 0),
+    hybridManifestOwner('packages/web/package.json', 'web', 1),
+    hybridManifestOwner('packages/web/package.json', 'web', 1),
+    hybridManifestOwner('packages/web/package.json', 'web', 1),
+    catalogOwner('pnpm-workspace.yaml', 'default', 2, 'pnpm'),
+  ] as const
+  const values = [
+    [
+      'react-dropzone',
+      '^15.0.0',
+      '^17.0.0',
+      'major',
+      432_000_000,
+      'unknown',
+      'Node support unknown',
+      'dependencies',
+    ],
+    [
+      'vitest',
+      '^3.2.0',
+      '^4.0.0',
+      'major',
+      null,
+      'incompatible',
+      'requires Node >=22',
+      'devDependencies',
+    ],
+    [
+      'typescript',
+      '^5.8.0',
+      '^5.9.0',
+      'minor',
+      3_888_000_000,
+      'compatible',
+      undefined,
+      'devDependencies',
+    ],
+    [
+      'react-dropzone',
+      '^15.0.0',
+      '^18.0.0',
+      'major',
+      864_000_000,
+      'compatible',
+      undefined,
+      'dependencies',
+    ],
+    [
+      'nanoid',
+      '^5.1.0',
+      '^5.2.0',
+      'minor',
+      172_800_000,
+      'incompatible',
+      'requires Node >=20',
+      'dependencies',
+    ],
+    ['picocolors', '^1.1.0', '^1.1.1', 'patch', null, 'unknown', undefined, 'dependencies'],
+    ['eslint', '^9.0.0', '^9.1.0', 'patch', 10_368_000_000, 'unknown', undefined, 'catalog'],
+  ] as const
+  const changes: CheckRunChange[] = values.map((value, index) => {
+    const [name, current, target, diff, ageMs, compatibility, detail, source] = value
+    const fixtureOwner = ownersByOperation[index]!
+    const sourcePath = fixtureOwner.owner.physicalTarget
+    return {
+      id: `hybrid-${index}`,
+      name,
+      owner: sourcePath,
+      current,
+      target,
+      diff,
+      ...(ageMs === null ? {} : { ageMs }),
+      insight: {
+        dependencyId: createRepositoryId('dependency', name),
+        rawName: name,
+        sourceFileId: createRepositoryId('source', sourcePath),
+        sourcePath,
+        occurrencePath: source === 'catalog' ? ['catalogs', 'default', name] : [source, name],
+        owner: { ...fixtureOwner.owner },
+        catalog: { ...fixtureOwner.catalog },
+        ageMs,
+        compatibility: { status: compatibility, ...(detail ? { detail } : {}) },
+      },
+    }
+  })
+  const targets = [...new Set(changes.map((change) => change.owner))].map((path) => ({
+    path,
+    operationIds: changes.filter((change) => change.owner === path).map((change) => change.id),
+  }))
+  return {
+    sequence: 1,
+    mode: 'major',
+    write: false,
+    phases: [
+      { name: 'discover', status: 'passed' },
+      { name: 'inspect', status: 'passed' },
+      { name: 'resolve', status: 'passed' },
+      { name: 'review', status: 'active' },
+      { name: 'preflight', status: 'pending' },
+      { name: 'stage', status: 'pending' },
+      { name: 'apply', status: 'pending' },
+      { name: 'observe', status: 'pending' },
+      { name: 'recover', status: 'pending' },
+      { name: 'complete', status: 'pending' },
+    ],
+    counts: {
+      packages: 3,
+      declared: 7,
+      eligible: 7,
+      unresolved: 0,
+      updates: 7,
+      operations: 7,
+      targets: 3,
+    },
+    changes,
+    targets,
+    diagnostics: [],
+    results: {
+      operations: [],
+      targets: [],
+      totals: emptyTotals(),
+      targetTotals: emptyTotals(),
+    },
+    recovery: { executed: false, status: 'not-needed', restoredPaths: [], unrecoveredPaths: [] },
+    elapsedMs: null,
+    exitCode: null,
+    terminalEvents: [],
+  }
+}
+
+function hybridManifestOwner(path: string, label: string, order: number): FixtureOwner {
+  return manifestOwner(path, label, order)
 }
 
 function fixtureInventory(): { changes: CheckRunChange[]; targets: CheckRunTarget[] } {
