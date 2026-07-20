@@ -372,3 +372,147 @@ describe('memory fallback', () => {
     vi.doUnmock('node:sqlite')
   })
 })
+
+describe('runtime SQLite failover', () => {
+  it.each(['get', 'set', 'has', 'stats'] as const)(
+    'permanently transfers operations to memory after a %s failure',
+    async (operation) => {
+      const failure = { current: operation as RuntimeFailure | undefined }
+      const { closeMock, databaseSyncMock } = createOperationalDatabaseMock(failure)
+      vi.doMock('node:sqlite', () => ({ DatabaseSync: databaseSyncMock }))
+      vi.resetModules()
+
+      try {
+        const { createSqliteCache } = await import('./sqlite')
+        const cache = createSqliteCache()
+        const secretKey = 'npm|https://user:password@example.com/?token=secret#private|pkg'
+
+        expect(() => {
+          if (operation === 'get') cache.get(secretKey)
+          else if (operation === 'set') cache.set(secretKey, mockData, 60_000)
+          else if (operation === 'has') cache.has(secretKey)
+          else cache.stats()
+        }).not.toThrow()
+
+        cache.set('memory-safe', mockData, 60_000)
+        expect(cache.get('memory-safe')).toEqual(mockData)
+        expect(cache.has('memory-safe')).toBe(true)
+        expect(cache.stats()).toMatchObject({
+          hits: 1,
+          misses: operation === 'get' ? 1 : 0,
+          size: operation === 'set' ? 2 : 1,
+        })
+        expect(closeMock).toHaveBeenCalledTimes(1)
+        cache.close()
+      } finally {
+        vi.doUnmock('node:sqlite')
+      }
+    },
+  )
+
+  it('fails over when corrupt-row cleanup fails without exposing the raw key', async () => {
+    const failure = { current: 'corrupt-cleanup' as RuntimeFailure | undefined }
+    const { closeMock, databaseSyncMock } = createOperationalDatabaseMock(failure, '{invalid-json')
+    vi.doMock('node:sqlite', () => ({ DatabaseSync: databaseSyncMock }))
+    vi.resetModules()
+
+    try {
+      const { createSqliteCache } = await import('./sqlite')
+      const cache = createSqliteCache()
+      const secretKey = 'npm|https://user:password@example.com/?token=secret#private|pkg'
+
+      expect(() => cache.get(secretKey)).not.toThrow()
+      expect(cache.get(secretKey)).toBeUndefined()
+      cache.set('memory-safe', mockData, 60_000)
+      expect(cache.get('memory-safe')).toEqual(mockData)
+      expect(cache.stats()).toMatchObject({ hits: 1, misses: 2, size: 1 })
+      expect(closeMock).toHaveBeenCalledTimes(1)
+      cache.close()
+    } finally {
+      vi.doUnmock('node:sqlite')
+    }
+  })
+
+  it('keeps pre-failover and memory hit counters cumulative', async () => {
+    const failure: { current: RuntimeFailure | undefined } = { current: undefined }
+    const { databaseSyncMock } = createOperationalDatabaseMock(failure, JSON.stringify(mockData))
+    vi.doMock('node:sqlite', () => ({ DatabaseSync: databaseSyncMock }))
+    vi.resetModules()
+
+    try {
+      const { createSqliteCache } = await import('./sqlite')
+      const cache = createSqliteCache()
+
+      expect(cache.get('sqlite-hit')).toEqual(mockData)
+      failure.current = 'stats'
+      expect(cache.stats()).toMatchObject({ hits: 1, misses: 0 })
+      cache.set('memory-hit', mockData, 60_000)
+      expect(cache.get('memory-hit')).toEqual(mockData)
+      expect(cache.stats()).toEqual({ hits: 2, misses: 0, size: 1 })
+      cache.close()
+    } finally {
+      vi.doUnmock('node:sqlite')
+    }
+  })
+})
+
+type RuntimeFailure = 'get' | 'set' | 'has' | 'stats' | 'corrupt-cleanup'
+
+function createOperationalDatabaseMock(
+  failure: { current: RuntimeFailure | undefined },
+  rowData?: string,
+) {
+  const closeMock = vi.fn()
+  const databaseSyncMock = vi.fn(
+    class {
+      close = closeMock
+      exec = vi.fn()
+
+      prepare = (sql: string) => {
+        if (sql.startsWith('SELECT data FROM')) {
+          return {
+            get: vi.fn(() => {
+              if (failure.current === 'get') throw new Error('read failed with token=secret')
+              return rowData === undefined ? undefined : { data: rowData }
+            }),
+          }
+        }
+        if (sql.startsWith('INSERT OR REPLACE')) {
+          return {
+            run: vi.fn(() => {
+              if (failure.current === 'set') throw new Error('write failed with token=secret')
+            }),
+          }
+        }
+        if (sql.startsWith('SELECT 1 FROM')) {
+          return {
+            get: vi.fn(() => {
+              if (failure.current === 'has') throw new Error('has failed with token=secret')
+              return undefined
+            }),
+          }
+        }
+        if (sql.startsWith('SELECT COUNT(*)')) {
+          return {
+            get: vi.fn(() => {
+              if (failure.current === 'stats') throw new Error('stats failed with token=secret')
+              return { count: 0 }
+            }),
+          }
+        }
+        if (sql === 'DELETE FROM registry_cache WHERE package = ?') {
+          return {
+            run: vi.fn(() => {
+              if (failure.current === 'corrupt-cleanup') {
+                throw new Error('cleanup failed with token=secret')
+              }
+            }),
+          }
+        }
+        return { get: vi.fn(), run: vi.fn() }
+      }
+    },
+  )
+
+  return { closeMock, databaseSyncMock }
+}

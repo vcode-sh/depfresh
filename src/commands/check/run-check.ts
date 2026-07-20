@@ -494,7 +494,6 @@ export async function runCheck(
 
     const resolutionStart = performance.now()
     let commandReceiptEvidence: CommandWriteReceiptEvidence | undefined
-    let resolutionBodyFailed = false
     try {
       const pendingResolutions = new Map<PackageMeta, Promise<ResolvedDepChange[]>>()
 
@@ -651,25 +650,27 @@ export async function runCheck(
       if (!(runtimeOptions.write || visualRenderer)) {
         emitReadOnlySelection(runController, packages, executionRoot)
       }
-    } catch (error) {
-      resolutionBodyFailed = true
-      throw error
     } finally {
       progress?.done()
-      const stats = cache.stats()
-      cache.close()
+      let stats = { hits: 0, misses: 0, size: 0 }
+      try {
+        stats = cache.stats()
+      } catch {
+        // Cache diagnostics cannot replace the command result.
+      }
+      try {
+        cache.close()
+      } catch {
+        // Cache cleanup cannot replace the command result.
+      }
       const logCacheStats = () =>
         logger.debug(
           `Cache stats: ${stats.hits} hits, ${stats.misses} misses, ${stats.size} entries`,
         )
-      if (resolutionBodyFailed) {
-        try {
-          writeDurable(durableOwner, logCacheStats)
-        } catch {
-          // Debug output cannot replace the body error already being unwound.
-        }
-      } else {
+      try {
         writeDurable(durableOwner, logCacheStats)
+      } catch {
+        // Debug output cannot replace the command result.
       }
       runtimeOptions.profileReport = {
         discoveryMs,

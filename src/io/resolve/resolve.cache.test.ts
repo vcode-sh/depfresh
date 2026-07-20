@@ -12,7 +12,14 @@ vi.mock('../../cache/index', () => ({
 
 vi.mock('../../utils/npmrc', () => ({
   loadNpmrc: vi.fn(),
-  getRegistryForPackage: vi.fn((_name, config) => ({ url: config.defaultRegistry })),
+  getRegistryForPackage: vi.fn((name: string, config: NpmrcConfig) => {
+    const scope = name.match(/^(@[^/]+)\//u)?.[1]
+    if (scope) {
+      const scoped = config.registries.get(scope)
+      if (scoped) return scoped
+    }
+    return config.registries.get('default') ?? { url: config.defaultRegistry }
+  }),
 }))
 
 const mockPkgData: PackageData = {
@@ -304,6 +311,92 @@ describe('resolvePackage - cache behavior', () => {
       mockPkgData,
       options.cacheTTL,
     )
+  })
+
+  it('canonicalizes credential-free registry identities before persistent caching', async () => {
+    const { fetchPackageData } = await import('../registry')
+    const { resolvePackage } = await import('./index')
+
+    const cache = createMockCache()
+    vi.mocked(fetchPackageData).mockResolvedValue(mockPkgData)
+    const pkg = makePkg([makeDep()])
+    const options = makeOptions({ mode: 'latest' })
+    const canonicalNpmrc: NpmrcConfig = {
+      registries: new Map(),
+      defaultRegistry: 'https://REGISTRY.Example.COM:443/npm///',
+      strictSsl: true,
+    }
+
+    await resolvePackage(pkg, options, cache, canonicalNpmrc)
+
+    const expectedKey = 'npm|https://registry.example.com/npm/|test-pkg'
+    expect(cache.get).toHaveBeenCalledWith(expectedKey)
+    expect(cache.set).toHaveBeenCalledWith(expectedKey, mockPkgData, options.cacheTTL)
+  })
+
+  it('keeps authenticated registry contexts out of persistent and shared authorization keys', async () => {
+    const { fetchPackageData } = await import('../registry')
+    const { createResolveContext, resolvePackage } = await import('./index')
+
+    const cache = createMockCache()
+    const options = makeOptions({ mode: 'latest' })
+    const context = createResolveContext(options)
+    const pending: Array<(data: PackageData) => void> = []
+    vi.mocked(fetchPackageData).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          pending.push(resolve)
+        }),
+    )
+    const pkg = makePkg([makeDep()])
+    const firstRegistry = {
+      url: 'https://alice:url-password@PACKAGES.example.com/npm/?access=query-secret#fragment-secret',
+      token: 'bearer-secret-a',
+      authType: 'bearer' as const,
+    }
+    const secondRegistry = {
+      url: 'https://bob:other-password@packages.example.com/npm/?access=other-query#other-fragment',
+      token: 'bearer-secret-b',
+      authType: 'bearer' as const,
+    }
+    const firstNpmrc: NpmrcConfig = {
+      registries: new Map([['default', firstRegistry]]),
+      defaultRegistry: firstRegistry.url,
+      strictSsl: true,
+    }
+    const secondNpmrc: NpmrcConfig = {
+      registries: new Map([['default', secondRegistry]]),
+      defaultRegistry: secondRegistry.url,
+      strictSsl: true,
+    }
+
+    const resolutions = [
+      resolvePackage(pkg, options, cache, firstNpmrc, undefined, undefined, context),
+      resolvePackage(pkg, options, cache, secondNpmrc, undefined, undefined, context),
+    ]
+    await vi.waitFor(() => expect(fetchPackageData).toHaveBeenCalledTimes(2))
+
+    expect(context.inFlight.size).toBe(2)
+    const transientKeys = [...context.inFlight.keys()].join('\n')
+    for (const secret of [
+      'alice',
+      'url-password',
+      'query-secret',
+      'fragment-secret',
+      'bearer-secret-a',
+      'bob',
+      'other-password',
+      'other-query',
+      'other-fragment',
+      'bearer-secret-b',
+    ]) {
+      expect(transientKeys).not.toContain(secret)
+    }
+    expect(cache.get).not.toHaveBeenCalled()
+    expect(cache.set).not.toHaveBeenCalled()
+
+    for (const resolve of pending) resolve(mockPkgData)
+    await expect(Promise.all(resolutions)).resolves.toHaveLength(2)
   })
 
   it('calls onDependencyResolved callback per dep', async () => {

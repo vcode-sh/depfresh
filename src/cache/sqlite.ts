@@ -2,7 +2,6 @@ import { mkdirSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { DatabaseSync } from 'node:sqlite'
 import { join } from 'pathe'
-import { CacheError } from '../errors'
 import type { PackageData } from '../types'
 import type { Cache } from './index'
 import { createMemoryCache } from './memory'
@@ -49,6 +48,17 @@ export function createSqliteCache(): Cache {
     return createMemoryCache()
   }
 
+  try {
+    return createOperationalCache(db)
+  } catch {
+    try {
+      db.close()
+    } catch {}
+    return createMemoryCache()
+  }
+}
+
+function createOperationalCache(db: DatabaseSync): Cache {
   const getStmt = db.prepare('SELECT data FROM registry_cache WHERE package = ? AND expires_at > ?')
   const setStmt = db.prepare(
     'INSERT OR REPLACE INTO registry_cache (package, data, fetched_at, expires_at) VALUES (?, ?, ?, ?)',
@@ -59,9 +69,31 @@ export function createSqliteCache(): Cache {
   const pruneStmt = db.prepare('DELETE FROM registry_cache WHERE expires_at <= ?')
   const pruneLegacyStmt = db.prepare(LEGACY_KEY_PRUNE)
   const deleteStmt = db.prepare('DELETE FROM registry_cache WHERE package = ?')
+  const memory = createMemoryCache()
 
   let hits = 0
   let misses = 0
+  let usingMemory = false
+  let closeAttempted = false
+
+  const failOver = (): void => {
+    if (usingMemory) return
+    usingMemory = true
+    if (closeAttempted) return
+    closeAttempted = true
+    try {
+      db.close()
+    } catch {}
+  }
+
+  const cumulativeStats = () => {
+    const current = memory.stats()
+    return {
+      hits: hits + current.hits,
+      misses: misses + current.misses,
+      size: current.size,
+    }
+  }
 
   // Prune expired entries on startup
   pruneStmt.run(Date.now())
@@ -70,11 +102,14 @@ export function createSqliteCache(): Cache {
 
   return {
     get(key: string): PackageData | undefined {
+      if (usingMemory) return memory.get(key)
+
       let row: { data: string } | undefined
       try {
         row = getStmt.get(key, Date.now()) as { data: string } | undefined
-      } catch (error) {
-        throw new CacheError(`Failed to read cache entry for ${key}`, { cause: error })
+      } catch {
+        failOver()
+        return memory.get(key)
       }
       if (row) {
         try {
@@ -82,9 +117,14 @@ export function createSqliteCache(): Cache {
           hits++
           return parsed
         } catch {
-          deleteStmt.run(key)
-          misses++
-          return undefined
+          try {
+            deleteStmt.run(key)
+            misses++
+            return undefined
+          } catch {
+            failOver()
+            return memory.get(key)
+          }
         }
       }
       misses++
@@ -92,44 +132,69 @@ export function createSqliteCache(): Cache {
     },
 
     set(key: string, data: PackageData, ttl: number): void {
+      if (usingMemory) {
+        memory.set(key, data, ttl)
+        return
+      }
+
       const now = Date.now()
       try {
         setStmt.run(key, JSON.stringify(data), now, now + ttl)
-      } catch (error) {
-        throw new CacheError(`Failed to write cache entry for ${key}`, { cause: error })
+      } catch {
+        failOver()
+        memory.set(key, data, ttl)
       }
     },
 
     has(key: string): boolean {
+      if (usingMemory) return memory.has(key)
+
       try {
         return !!hasStmt.get(key, Date.now())
-      } catch (error) {
-        throw new CacheError(`Failed to check cache entry for ${key}`, { cause: error })
+      } catch {
+        failOver()
+        return memory.has(key)
       }
     },
 
     clear(): void {
+      if (usingMemory) {
+        memory.clear()
+        return
+      }
+
       try {
         clearStmt.run()
-      } catch (error) {
-        throw new CacheError('Failed to clear cache', { cause: error })
+      } catch {
+        failOver()
+        memory.clear()
       }
     },
 
     close(): void {
+      if (usingMemory) {
+        memory.close()
+        return
+      }
+
+      closeAttempted = true
       try {
         db.close()
-      } catch (error) {
-        throw new CacheError('Failed to close cache database', { cause: error })
+      } catch {
+        failOver()
+        memory.close()
       }
     },
 
     stats() {
+      if (usingMemory) return cumulativeStats()
+
       let row: { count: number | bigint }
       try {
         row = countStmt.get(Date.now()) as { count: number | bigint }
-      } catch (error) {
-        throw new CacheError('Failed to read cache stats', { cause: error })
+      } catch {
+        failOver()
+        return cumulativeStats()
       }
       return { hits, misses, size: Number(row.count) }
     },

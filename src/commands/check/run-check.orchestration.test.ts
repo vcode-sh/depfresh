@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSy
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { Cache } from '../../cache/index'
 import { createInvocationAuthority } from '../../invocation-authority'
 import type { depfreshOptions, PackageMeta, ResolvedDepChange } from '../../types'
 import { stripAnsi, visualLength } from '../../utils/format'
@@ -1153,6 +1154,65 @@ describe('run-check orchestration paths', () => {
     stdoutWriteSpy.mockRestore()
     errorSpy.mockRestore()
   })
+
+  it.each([
+    { cleanupFailure: 'stats', bodyFailure: false },
+    { cleanupFailure: 'close', bodyFailure: false },
+    { cleanupFailure: 'stats', bodyFailure: true },
+    { cleanupFailure: 'close', bodyFailure: true },
+  ] as const)(
+    'keeps the command outcome authoritative when $cleanupFailure fails (body failure: $bodyFailure)',
+    async ({ cleanupFailure, bodyFailure }) => {
+      const packages = makeMixedPackages()
+      mocks.loadPackagesMock.mockResolvedValue(packages)
+      mocks.resolvePackageMock.mockImplementation(async (pkg) => resolvedForPackage(pkg))
+      const stats = vi.fn(() => {
+        if (cleanupFailure === 'stats') throw new Error('cache stats secret')
+        return { hits: 0, misses: 0, size: 0 }
+      })
+      const close = vi.fn(() => {
+        if (cleanupFailure === 'close') throw new Error('cache close secret')
+      })
+      const cache: Cache = {
+        get: vi.fn(),
+        set: vi.fn(),
+        has: vi.fn(),
+        clear: vi.fn(),
+        stats,
+        close,
+      }
+      const cacheModule = await import('../../cache/index')
+      vi.mocked(cacheModule.createSqliteCache).mockReturnValueOnce(cache)
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+      try {
+        const { check } = await import('./index')
+        const result = await check({
+          ...baseOptions,
+          output: 'table',
+          loglevel: 'info',
+          ...(bodyFailure
+            ? {
+                afterPackagesEnd: () => {
+                  throw new Error('authoritative body failure')
+                },
+              }
+            : {}),
+        })
+
+        expect(result).toBe(bodyFailure ? 2 : 0)
+        expect(stats).toHaveBeenCalledTimes(1)
+        expect(close).toHaveBeenCalledTimes(1)
+        const errors = reconstructedLoggerText(errorSpy.mock.calls)
+        if (bodyFailure) expect(errors).toContain('authoritative body failure')
+        else expect(errors).not.toContain('Check failed')
+        expect(errors).not.toContain('cache stats secret')
+        expect(errors).not.toContain('cache close secret')
+      } finally {
+        errorSpy.mockRestore()
+      }
+    },
+  )
 
   it('never emits cursor control from the exported library check', async () => {
     const packages = makeMixedPackages()

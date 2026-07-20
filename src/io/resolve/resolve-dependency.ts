@@ -25,6 +25,9 @@ import { getResolveCachePolicy } from './cache-policy'
 import { type ResolveContext, recordResolutionMetadata, recordResolutionTrace } from './context'
 import { selectVersionCandidate, type VersionCandidateSelection } from './version-filter'
 
+const authenticatedNpmrcIds = new WeakMap<ReturnType<typeof loadNpmrc>, number>()
+let nextAuthenticatedNpmrcId = 1
+
 export async function resolveDependency(
   dep: RawDep,
   options: depfreshOptions,
@@ -40,7 +43,7 @@ export async function resolveDependency(
     dep.currentVersion,
     dep.protocol,
   )
-  const resolveKey = buildResolveKey(packageName, npmrc)
+  const cacheIdentity = buildResolveCacheIdentity(packageName, npmrc)
 
   if (dep.protocol === 'workspace' && !normalizedCurrentVersion) {
     logger.debug(`Skipping workspace dependency without explicit version: ${packageName}`)
@@ -82,11 +85,14 @@ export async function resolveDependency(
   }
 
   const cachePolicy = getResolveCachePolicy(options)
-  let pkgData = cachePolicy.bypassRead ? undefined : cache.get(resolveKey)
+  let pkgData =
+    cachePolicy.bypassRead || !cacheIdentity.persistentKey
+      ? undefined
+      : cache.get(cacheIdentity.persistentKey)
 
   if (!pkgData) {
     try {
-      const inFlight = resolveContext?.inFlight.get(resolveKey)
+      const inFlight = resolveContext?.inFlight.get(cacheIdentity.inFlightKey)
 
       if (inFlight) {
         if (resolveContext) {
@@ -103,16 +109,16 @@ export async function resolveDependency(
           retries: options.retries,
           logger,
         }).finally(() => {
-          resolveContext?.inFlight.delete(resolveKey)
+          resolveContext?.inFlight.delete(cacheIdentity.inFlightKey)
         })
 
-        resolveContext?.inFlight.set(resolveKey, fetchPromise)
+        resolveContext?.inFlight.set(cacheIdentity.inFlightKey, fetchPromise)
         pkgData = await fetchPromise
       }
 
-      if (cachePolicy.shouldWrite) {
+      if (cachePolicy.shouldWrite && cacheIdentity.persistentKey) {
         try {
-          cache.set(resolveKey, pkgData, options.cacheTTL)
+          cache.set(cacheIdentity.persistentKey, pkgData, options.cacheTTL)
         } catch (error) {
           logger.debug(
             `Failed to write cache entry for ${packageName}: ${error instanceof Error ? error.message : String(error)}`,
@@ -310,15 +316,46 @@ function normalizeWorkspaceCurrentVersion(
   return currentVersion
 }
 
-function buildResolveKey(packageName: string, npmrc: ReturnType<typeof loadNpmrc>): string {
+function buildResolveCacheIdentity(
+  packageName: string,
+  npmrc: ReturnType<typeof loadNpmrc>,
+): { persistentKey?: string; inFlightKey: string } {
   if (packageName.startsWith('github:')) {
-    return `github|${packageName}`
+    const key = `github|${packageName}`
+    return { persistentKey: key, inFlightKey: key }
   }
 
   if (packageName.startsWith('jsr:')) {
-    return `jsr|${packageName}`
+    const key = `jsr|${packageName}`
+    return { persistentKey: key, inFlightKey: key }
   }
 
   const registry = getRegistryForPackage(packageName, npmrc)
-  return `npm|${registry.url}|${packageName}`
+  const anonymousRegistry = canonicalAnonymousRegistryIdentity(registry)
+  if (anonymousRegistry) {
+    const key = `npm|${anonymousRegistry}|${packageName}`
+    return { persistentKey: key, inFlightKey: key }
+  }
+
+  let npmrcId = authenticatedNpmrcIds.get(npmrc)
+  if (npmrcId === undefined) {
+    npmrcId = nextAuthenticatedNpmrcId++
+    authenticatedNpmrcIds.set(npmrc, npmrcId)
+  }
+  return { inFlightKey: `npm-authenticated|${npmrcId}|${packageName}` }
+}
+
+function canonicalAnonymousRegistryIdentity(
+  registry: ReturnType<typeof getRegistryForPackage>,
+): string | undefined {
+  if (registry.token) return undefined
+
+  try {
+    const url = new URL(registry.url)
+    if (url.username || url.password || url.search || url.hash) return undefined
+    url.pathname = `${url.pathname.replace(/\/+$/u, '')}/`
+    return url.toString()
+  } catch {
+    return undefined
+  }
 }
