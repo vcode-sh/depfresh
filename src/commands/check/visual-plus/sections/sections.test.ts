@@ -889,7 +889,7 @@ describe('Visual+ pure sections', () => {
       'Target packages/target-10/package.json · 5 updates · skipped · blocked false · not attempted false · unknown true',
     )
     expect(output).toContain(
-      'Update dependency-8-0 · ^1.0.0 → ^1.1.0 · outcome skipped · blocked true · not attempted true · unknown false',
+      'Update dependency-8-0 · source dependencies · ^1.0.0 → ^1.1.0 · outcome skipped · blocked true · not attempted true · unknown false',
     )
     expect(lines.filter((line) => line.startsWith('Target '))).toHaveLength(14)
     expect(lines.filter((line) => line.startsWith('Update '))).toHaveLength(76)
@@ -1465,6 +1465,112 @@ describe('Visual+ receipt decision table', () => {
       run: { ...input.run, detailLevel: 'compact' },
     })
   }
+
+  function duplicateHumanOperations(width: number): VisualPlusSectionInput {
+    const base = compactInput(oneOperation({ outcome: 'blocked', exitCode: 2, receipt: false }))
+    const original = base.snapshot.changes[0]!
+    const owner = base.changes[0]!.ownerGroup
+    const changes: CheckRunChange[] = [
+      {
+        ...original,
+        id: 'dependency-result',
+        insight: {
+          ...original.insight!,
+          occurrencePath: ['dependencies', original.name],
+        },
+      },
+      {
+        ...original,
+        id: 'override-result',
+        insight: {
+          ...original.insight!,
+          occurrencePath: ['overrides', original.name],
+        },
+      },
+    ]
+    const target: CheckRunTarget = {
+      path: 'package.json',
+      operationIds: changes.map((change) => change.id),
+    }
+    const operationResults: CheckRunOperationResult[] = [
+      {
+        ...operationResult('dependency-result', 'blocked'),
+        reason: 'dependency policy blocked',
+      },
+      {
+        ...operationResult('override-result', 'unknown'),
+        reason: 'override evidence unavailable',
+      },
+    ]
+    return createVisualPlusSectionInput({
+      ...base,
+      capabilities: {
+        ...base.capabilities,
+        width,
+        layout: width >= 100 ? 'wide' : 'narrow',
+      },
+      snapshot: {
+        ...base.snapshot,
+        counts: {
+          ...base.snapshot.counts,
+          declared: 2,
+          eligible: 2,
+          updates: 2,
+          operations: 2,
+        },
+        changes,
+        targets: [target],
+        results: {
+          operations: operationResults,
+          targets: [
+            {
+              path: target.path,
+              operationIds: target.operationIds,
+              outcome: 'mixed',
+              blocked: true,
+              notAttempted: true,
+              unknown: true,
+            },
+          ],
+          totals: totals({ blocked: 1, notAttempted: 1, unknown: 1 }),
+          targetTotals: totals({ mixed: 1, blocked: 1, notAttempted: 1, unknown: 1 }),
+        },
+      },
+      changes: [
+        {
+          ...base.changes[0]!,
+          operationId: 'dependency-result',
+          source: 'dependencies',
+          displayOrder: 0,
+          ownerGroup: owner,
+        },
+        {
+          ...base.changes[0]!,
+          operationId: 'override-result',
+          source: 'overrides',
+          displayOrder: 1,
+          ownerGroup: owner,
+        },
+      ],
+      writeReceipt: undefined,
+    })
+  }
+
+  it('attributes identical compact transaction updates to their human sources', () => {
+    const wideLines = renderVisualPlusTransaction(duplicateHumanOperations(240)).map(stripAnsi)
+    const narrowLines = renderVisualPlusTransaction(duplicateHumanOperations(40)).map(stripAnsi)
+    const dependency =
+      'Update dep | source dependencies | 1.0.0 -> 2.0.0 | outcome blocked | blocked true | not attempted true | unknown false | reason dependency policy blocked'
+    const override =
+      'Update dep | source overrides | 1.0.0 -> 2.0.0 | outcome unknown | blocked false | not attempted false | unknown true | reason override evidence unavailable'
+
+    expect(wideLines, wideLines.join('\n')).toContain(dependency)
+    expect(wideLines, wideLines.join('\n')).toContain(override)
+    expect(narrowLines.every((line) => visualLength(line) <= 40)).toBe(true)
+    expect(narrowLines.join('')).toContain(dependency)
+    expect(narrowLines.join('')).toContain(override)
+    expect(wideLines.join('\n')).not.toMatch(/dependency-result|override-result|Operation ID/u)
+  })
 
   it('renders the exact concise compact read-only exit 0 receipt', () => {
     const base = fixture('not-attempted', 0)

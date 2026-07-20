@@ -79,6 +79,7 @@ function renderVisualPlusDetailedCompactTransaction(
     input.snapshot.results.operations.map((result) => [result.operationId, result]),
   )
   const changes = new Map(input.snapshot.changes.map((change) => [change.id, change]))
+  const metadata = new Map(input.changes.map((change) => [change.operationId, change]))
   const restored = new Set(input.snapshot.recovery.restoredPaths)
   const unrecovered = new Set(input.snapshot.recovery.unrecoveredPaths)
   const { arrow, separator } = visualPlusMapSymbols(input.capabilities)
@@ -98,8 +99,9 @@ function renderVisualPlusDetailedCompactTransaction(
     )
     for (const operationId of target.operationIds) {
       const change = changes.get(operationId)
+      const operationMetadata = metadata.get(operationId)
       const operation = operationResults.get(operationId)
-      if (!change) continue
+      if (!(change && operationMetadata)) continue
       const flags = operation
         ? `${separator}blocked ${operation.blocked}${separator}not attempted ${operation.notAttempted}${separator}unknown ${operation.unknown}`
         : ''
@@ -107,7 +109,7 @@ function renderVisualPlusDetailedCompactTransaction(
         ? `${separator}reason ${sanitizeTerminalText(operation.reason)}`
         : ''
       logical.push(
-        `Update ${sanitizeTerminalText(change.name)}${separator}${sanitizeTerminalText(change.current)}${arrow}${sanitizeTerminalText(change.target)}${separator}outcome ${operation?.outcome ?? 'pending'}${flags}${reason}`,
+        `Update ${sanitizeTerminalText(change.name)}${separator}source ${sanitizeTerminalText(operationMetadata.source)}${separator}${sanitizeTerminalText(change.current)}${arrow}${sanitizeTerminalText(change.target)}${separator}outcome ${operation?.outcome ?? 'pending'}${flags}${reason}`,
       )
     }
   }

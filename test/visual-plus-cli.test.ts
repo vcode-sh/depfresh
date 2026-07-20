@@ -908,25 +908,35 @@ describe('Visual+ built CLI', () => {
   it.each([40, 60, 80, 118, 175])(
     'renders hybrid success and exact safety journeys in a %i-column PTY by default',
     async (columns) => {
-      const successFixture = createFixture(`success-${columns}`)
-      const success = await runFixture(successFixture, columns, 'success', true)
-      assertJourney(success, columns, 'success', successFixture)
-      assertFixtureBytes(successFixture, 'after')
-      assertNoApplyResidue(successFixture.repository)
-      assertExpectedTargetDirtAndStage(successFixture)
-      execFileSync(successFixture.git, ['commit', '--quiet', '-m', 'expected update'], {
-        cwd: successFixture.repository,
-        env: successFixture.gitEnvironment,
-      })
-      assertGitClean(successFixture)
+      let successFixture: ReturnType<typeof createVisualPlusFixture> | undefined
+      let safetyFixture: ReturnType<typeof createVisualPlusFixture> | undefined
+      try {
+        successFixture = createFixture(`success-${columns}`)
+        const success = await runFixture(successFixture, columns, 'success', true)
+        assertJourney(success, columns, 'success', successFixture)
+        assertFixtureBytes(successFixture, 'after')
+        assertNoApplyResidue(successFixture.repository)
+        assertExpectedTargetDirtAndStage(successFixture)
+        execFileSync(successFixture.git, ['commit', '--quiet', '-m', 'expected update'], {
+          cwd: successFixture.repository,
+          env: successFixture.gitEnvironment,
+        })
+        assertGitClean(successFixture)
 
-      const safetyFixture = createFixture(`safety-${columns}`)
-      const safety = await runFixture(safetyFixture, columns, 'safety', true)
-      assertJourney(safety, columns, 'safety', safetyFixture)
-      assertFixtureBytes(safetyFixture, 'before')
-      expect(readFileSync(safetyFixture.variants.safety.counter, 'utf8')).toBe('2')
-      assertNoApplyResidue(safetyFixture.repository)
-      assertGitClean(safetyFixture)
+        safetyFixture = createFixture(`safety-${columns}`)
+        const safety = await runFixture(safetyFixture, columns, 'safety', true)
+        assertJourney(safety, columns, 'safety', safetyFixture)
+        assertFixtureBytes(safetyFixture, 'before')
+        expect(readFileSync(safetyFixture.variants.safety.counter, 'utf8')).toBe('2')
+        assertNoApplyResidue(safetyFixture.repository)
+        assertGitClean(safetyFixture)
+      } finally {
+        try {
+          if (safetyFixture) cleanupFixtureRepository(safetyFixture.repository)
+        } finally {
+          if (successFixture) cleanupFixtureRepository(successFixture.repository)
+        }
+      }
     },
     120_000,
   )
@@ -964,6 +974,24 @@ describe('Visual+ built CLI', () => {
 
     assertFixtureBytes(fixture, 'before')
     assertGitClean(fixture)
+  }, 120_000)
+
+  it('rejects a duplicated same-severity ledger row that hides a canonical operation', async () => {
+    const fixture = createFixture('ledger-membership-mutation')
+    try {
+      const result = await runDirectFixture(fixture, false)
+      const transcript = result.stdout.toString('utf8')
+      const mutated = transcript.replace('unique-01 [compat unknown]', 'unique-00 [compat unknown]')
+
+      expect(result.exitCode).toBe(0)
+      expect(mutated).not.toBe(transcript)
+      assertHybridReviewMembership(transcript, fixture)
+      expect(() => assertHybridReviewMembership(mutated, fixture)).toThrow()
+      assertFixtureBytes(fixture, 'before')
+      assertGitClean(fixture)
+    } finally {
+      cleanupFixtureRepository(fixture.repository)
+    }
   }, 120_000)
 
   it('uses the durable direct-pipe fallback for the complete --long audit', async () => {
@@ -1296,7 +1324,7 @@ function assertJourney(
   assertHybridContext(result.transcript, 'write')
   assertNoInternalIds(result.transcript)
   assertHybridReviewMembership(result.transcript, fixture)
-  assertHybridLayoutSignature(result.transcript, columns, 'write')
+  assertHybridLayoutSignature(result.transcript, columns, 'write', fixture)
   const transaction = result.transcript.slice(result.transcript.indexOf('Apply transaction'))
   const compact = result.transcript.replace(/\s+/gu, '')
   const compactTransaction = transaction.replace(/\s+/gu, '')
@@ -1308,6 +1336,7 @@ function assertJourney(
     expect(durableLineCount(result.transcript)).toBeGreaterThan(80)
     expect(compact).toContain('Complete·76updatesappliedacross14files')
     expect(compact).toContain('All14filesobservedattherequestedvalues·recoverynotneeded·')
+    assertExactStrictWriteFinalScreen(result.transcript, columns, fixture)
   } else {
     expect(
       result.transcript.match(/^preflight · .* (?:blocked|failed|unknown)$/gmu) ?? [],
@@ -1361,8 +1390,10 @@ function assertHybridLayoutSignature(
   transcript: string,
   width: number,
   intent: 'write' | 'read-only',
+  fixture: ReturnType<typeof createVisualPlusFixture>,
 ) {
   const lines = transcript.split('\n')
+  const majorAge = expectedFixtureAge(fixture, 432_000_000)
   const context =
     width === 40
       ? ['lab-editor · manager unknown · workspace', `major · ${intent}`]
@@ -1379,44 +1410,44 @@ function assertHybridLayoutSignature(
           '  dependencies',
           'dependency · transition · severity · age',
           'react-dropzone [compat unknown]',
-          '  ^15.0.0 → ^17.0.0 · Major · ~6d',
+          `  ^15.0.0 → ^17.0.0 · Major · ${majorAge}`,
         ]
       : width === 60
         ? [
             '  dependencies',
             'dependency              current → target   severity  age',
-            'react-dropzone          ^15.0.0 → ^17.0.0  Major     ~6d',
+            `react-dropzone          ^15.0.0 → ^17.0.0  Major     ${majorAge}`,
           ]
         : width === 80
           ? [
               '  dependencies',
               'dependency                                  current → target   severity  age',
-              'react-dropzone [compat unknown]             ^15.0.0 → ^17.0.0  Major     ~6d',
+              `react-dropzone [compat unknown]             ^15.0.0 → ^17.0.0  Major     ${majorAge}`,
             ]
           : [
               '  dependencies',
               'dependency                                current  target   severity  age',
-              'react-dropzone [compat unknown]           ^15.0.0  ^17.0.0  Major     ~6d',
+              `react-dropzone [compat unknown]           ^15.0.0  ^17.0.0  Major     ${majorAge}`,
             ]
   const risk =
     width === 40
       ? [
           'react-dropzone',
-          '  ^15.0.0 → ^17.0.0 · ~6d',
+          `  ^15.0.0 → ^17.0.0 · ${majorAge}`,
           '  lab-editor, web',
           '  0 compatible · 0 incompatible',
           '  2 unknown',
           'nanoid',
-          '  ^5.1.16 → ^6.0.0 · ~6d · root-catalog',
+          `  ^5.1.16 → ^6.0.0 · ${majorAge} · root-catalog`,
           '  0 compatible · 0 incompatible',
           '  1 unknown',
         ]
       : [
           'react-dropzone',
-          '  ^15.0.0 → ^17.0.0 · ~6d · lab-editor, web',
+          `  ^15.0.0 → ^17.0.0 · ${majorAge} · lab-editor, web`,
           '  0 compatible · 0 incompatible · 2 unknown',
           'nanoid',
-          '  ^5.1.16 → ^6.0.0 · ~6d · root-catalog',
+          `  ^5.1.16 → ^6.0.0 · ${majorAge} · root-catalog`,
           '  0 compatible · 0 incompatible · 1 unknown',
         ]
   assertOrderedExactLines(lines, [
@@ -1428,12 +1459,17 @@ function assertHybridLayoutSignature(
     ...risk,
     'lab-editor · package.json',
     ...table,
-    'root-catalog · pnpm-workspace.yaml',
+    ...expectedFinalLedgerSignature(width, false, fixture).header,
   ])
 }
 
-function assertPlainHybridLayoutSignature(transcript: string, width: number) {
+function assertPlainHybridLayoutSignature(
+  transcript: string,
+  width: number,
+  fixture: ReturnType<typeof createVisualPlusFixture>,
+) {
   const lines = transcript.split('\n')
+  const majorAge = expectedFixtureAge(fixture, 432_000_000)
   const context =
     width === 40
       ? ['lab-editor - manager unknown - workspace', 'major - read-only']
@@ -1450,44 +1486,44 @@ function assertPlainHybridLayoutSignature(transcript: string, width: number) {
           '  dependencies',
           'dependency - transition - severity - age',
           'react-dropzone [compat unknown]',
-          '  ^15.0.0 -> ^17.0.0 - Major - ~6d',
+          `  ^15.0.0 -> ^17.0.0 - Major - ${majorAge}`,
         ]
       : width === 60
         ? [
             '  dependencies',
             'dependency             current -> target   severity  age',
-            'react-dropzone         ^15.0.0 -> ^17.0.0  Major     ~6d',
+            `react-dropzone         ^15.0.0 -> ^17.0.0  Major     ${majorAge}`,
           ]
         : width === 80
           ? [
               '  dependencies',
               'dependency                                 current -> target   severity  age',
-              'react-dropzone [compat unknown]            ^15.0.0 -> ^17.0.0  Major     ~6d',
+              `react-dropzone [compat unknown]            ^15.0.0 -> ^17.0.0  Major     ${majorAge}`,
             ]
           : [
               '  dependencies',
               'dependency                                current  target   severity  age',
-              'react-dropzone [compat unknown]           ^15.0.0  ^17.0.0  Major     ~6d',
+              `react-dropzone [compat unknown]           ^15.0.0  ^17.0.0  Major     ${majorAge}`,
             ]
   const risk =
     width === 40
       ? [
           'react-dropzone',
-          '  ^15.0.0 -> ^17.0.0 - ~6d',
+          `  ^15.0.0 -> ^17.0.0 - ${majorAge}`,
           '  lab-editor, web',
           '  0 compatible - 0 incompatible',
           '  2 unknown',
           'nanoid',
-          '  ^5.1.16 -> ^6.0.0 - ~6d - root-catalog',
+          `  ^5.1.16 -> ^6.0.0 - ${majorAge} - root-catalog`,
           '  0 compatible - 0 incompatible',
           '  1 unknown',
         ]
       : [
           'react-dropzone',
-          '  ^15.0.0 -> ^17.0.0 - ~6d - lab-editor, web',
+          `  ^15.0.0 -> ^17.0.0 - ${majorAge} - lab-editor, web`,
           '  0 compatible - 0 incompatible - 2 unknown',
           'nanoid',
-          '  ^5.1.16 -> ^6.0.0 - ~6d - root-catalog',
+          `  ^5.1.16 -> ^6.0.0 - ${majorAge} - root-catalog`,
           '  0 compatible - 0 incompatible - 1 unknown',
         ]
   assertOrderedExactLines(lines, [
@@ -1499,8 +1535,174 @@ function assertPlainHybridLayoutSignature(transcript: string, width: number) {
     ...risk,
     'lab-editor - package.json',
     ...table,
-    'root-catalog - pnpm-workspace.yaml',
+    ...expectedFinalLedgerSignature(width, true, fixture).header,
   ])
+}
+
+function expectedFinalLedgerSignature(
+  width: number,
+  plain: boolean,
+  fixture: ReturnType<typeof createVisualPlusFixture>,
+) {
+  const separator = plain ? ' - ' : ' · '
+  const rule = (plain ? '-' : '─').repeat(width < 100 ? width : 76)
+  const patchAge = expectedFixtureAge(fixture, 86_400_000)
+  const catalogEvidence =
+    width === 40
+      ? ['  catalog root-catalog:', '  pnpm-workspace.yaml']
+      : ['  catalog root-catalog: pnpm-workspace.yaml']
+  if (width === 40) {
+    return {
+      header: [
+        `root-catalog${separator}pnpm-workspace.yaml`,
+        '  catalog',
+        plain
+          ? 'dependency - transition - severity - age'
+          : 'dependency · transition · severity · age',
+        rule,
+      ],
+      row: [
+        'unique-35 [compat unknown]',
+        plain
+          ? `  ^1.0.0 -> ^1.0.1 - Patch - ${patchAge}`
+          : `  ^1.0.0 → ^1.0.1 · Patch · ${patchAge}`,
+        ...catalogEvidence,
+      ],
+    }
+  }
+  if (width === 60) {
+    return {
+      header: [
+        `root-catalog${separator}pnpm-workspace.yaml`,
+        '  catalog',
+        plain
+          ? 'dependency              current -> target  severity  age'
+          : 'dependency               current → target  severity  age',
+        rule,
+      ],
+      row: [
+        plain
+          ? `unique-35               ^1.0.0 -> ^1.0.1   Patch     ${patchAge}`
+          : `unique-35                ^1.0.0 → ^1.0.1   Patch     ${patchAge}`,
+        '  compat unknown',
+        ...catalogEvidence,
+      ],
+    }
+  }
+  if (width === 80) {
+    return {
+      header: [
+        `root-catalog${separator}pnpm-workspace.yaml`,
+        '  catalog',
+        plain
+          ? 'dependency                                  current -> target  severity  age'
+          : 'dependency                                   current → target  severity  age',
+        rule,
+      ],
+      row: [
+        plain
+          ? `unique-35 [compat unknown]                  ^1.0.0 -> ^1.0.1   Patch     ${patchAge}`
+          : `unique-35 [compat unknown]                   ^1.0.0 → ^1.0.1   Patch     ${patchAge}`,
+        ...catalogEvidence,
+      ],
+    }
+  }
+  return {
+    header: [
+      `root-catalog${separator}pnpm-workspace.yaml`,
+      '  catalog',
+      'dependency                                current  target  severity  age',
+      rule,
+    ],
+    row: [
+      `unique-35 [compat unknown]                ^1.0.0   ^1.0.1  Patch     ${patchAge}`,
+      ...catalogEvidence,
+    ],
+  }
+}
+
+function expectedFixtureAge(
+  fixture: ReturnType<typeof createVisualPlusFixture>,
+  ageAtFixtureClockMs: number,
+) {
+  const ageMs = Date.now() - (fixture.asOfMs - ageAtFixtureClockMs)
+  const days = ageMs / 86_400_000
+  if (days < 1) return '~0d'
+  if (days < 90) return `~${Math.round(days)}d`
+  if (days < 365) return `~${Math.round(days / 30)}mo`
+  const years = days / 365
+  return years >= 10 ? `~${Math.round(years)}y` : `~${years.toFixed(1)}y`
+}
+
+function exactTranscriptLines(transcript: string) {
+  expect(transcript.endsWith('\n')).toBe(true)
+  return transcript.slice(0, -1).split('\n')
+}
+
+function assertExactReadOnlyFinalScreen(
+  transcript: string,
+  width: number,
+  plain: boolean,
+  fixture: ReturnType<typeof createVisualPlusFixture>,
+) {
+  const receipt =
+    width === 40
+      ? [
+          plain
+            ? 'Review complete - 76 updates across 14 f'
+            : 'Review complete · 76 updates across 14 f',
+          plain ? 'iles - write not attempted' : 'iles · write not attempted',
+          'Exit 0',
+        ]
+      : width === 60
+        ? [
+            plain
+              ? 'Review complete - 76 updates across 14 files - write not att'
+              : 'Review complete · 76 updates across 14 files · write not att',
+            'empted',
+            'Exit 0',
+          ]
+        : [
+            plain
+              ? 'Review complete - 76 updates across 14 files - write not attempted'
+              : 'Review complete · 76 updates across 14 files · write not attempted',
+            'Exit 0',
+          ]
+  const expected = [...expectedFinalLedgerSignature(width, plain, fixture).row, ...receipt]
+  expect(exactTranscriptLines(transcript).slice(-expected.length)).toEqual(expected)
+}
+
+function assertExactStrictWriteFinalScreen(
+  transcript: string,
+  width: number,
+  fixture: ReturnType<typeof createVisualPlusFixture>,
+) {
+  const receipt =
+    width === 40
+      ? [
+          'Complete · 76 updates applied across 14',
+          'files',
+          'All 14 files observed at the requested v',
+          'alues · recovery not needed · <elapsed>',
+          'Exit 0',
+        ]
+      : width === 60
+        ? [
+            'Complete · 76 updates applied across 14 files',
+            'All 14 files observed at the requested values · recovery not',
+            ' needed · <elapsed>',
+            'Exit 0',
+          ]
+        : [
+            'Complete · 76 updates applied across 14 files',
+            'All 14 files observed at the requested values · recovery not needed · <elapsed>',
+            'Exit 0',
+          ]
+  const expected = [...expectedFinalLedgerSignature(width, false, fixture).row, ...receipt]
+  const actual = exactTranscriptLines(transcript).map((line) =>
+    line.replace(/\b(?:\d+ms|\d+(?:\.\d+)?s)\b/gu, '<elapsed>'),
+  )
+  expect(actual.slice(-expected.length)).toEqual(expected)
 }
 
 function assertOrderedExactLines(lines: readonly string[], expected: readonly string[]) {
@@ -1522,13 +1724,28 @@ function assertHybridReviewMembership(
   )
   expect(ledgerStart).toBeGreaterThan(-1)
   const ledger = lines.slice(ledgerStart)
-  const severities = ledger.flatMap((line) => line.match(/\b(?:Major|Minor|Patch)\b/gu) ?? [])
-  expect(severities).toHaveLength(76)
-  expect(severities.filter((severity) => severity === 'Major')).toHaveLength(3)
-  expect(severities.filter((severity) => severity === 'Minor')).toHaveLength(37)
-  expect(severities.filter((severity) => severity === 'Patch')).toHaveLength(36)
-  expect(ledger.join('\n')).toContain(fixture.selectedDeclarations.at(-1)!.name)
+  const expected = expectedHumanLedgerSignatures(fixture)
+  const actual = parseHumanLedgerSignatures(ledger, expected)
 
+  expect(expected).toHaveLength(76)
+  expect(new Set(expected.map((signature) => signature.ownerKey))).toHaveLength(15)
+  expect(actual).toEqual(expected)
+}
+
+interface HumanLedgerSignature {
+  readonly ownerKey: string
+  readonly owner: string
+  readonly physicalTarget: string
+  readonly source: string
+  readonly name: string
+  readonly current: string
+  readonly target: string
+  readonly severity: string
+}
+
+function expectedHumanLedgerSignatures(
+  fixture: ReturnType<typeof createVisualPlusFixture>,
+): HumanLedgerSignature[] {
   const ownerLabels = new Map<string, string>()
   for (const declaration of fixture.selectedDeclarations) {
     const label =
@@ -1538,17 +1755,72 @@ function assertHybridReviewMembership(
             .name
     ownerLabels.set(`${declaration.ownerType}:${label}:${declaration.physicalTarget}`, label)
   }
-  const ownerHeadings = [...ownerLabels.values()].reduce(
-    (count, label) =>
-      count +
-      ledger.filter(
-        (line) =>
-          line === label || line.startsWith(`${label} · `) || line.startsWith(`${label} - `),
-      ).length,
-    0,
+  return fixture.selectedDeclarations.map((declaration) => {
+    const label =
+      declaration.ownerType === 'catalog'
+        ? declaration.catalogName
+        : JSON.parse(readFileSync(join(fixture.repository, declaration.physicalTarget), 'utf8'))
+            .name
+    return {
+      ownerKey: `${declaration.ownerType}:${label}:${declaration.physicalTarget}`,
+      owner: ownerLabels.get(`${declaration.ownerType}:${label}:${declaration.physicalTarget}`)!,
+      physicalTarget: declaration.physicalTarget,
+      source: declaration.ownerType === 'catalog' ? 'catalog' : 'dependencies',
+      name: declaration.name,
+      current: declaration.current,
+      target: declaration.target,
+      severity: `${declaration.diff.slice(0, 1).toUpperCase()}${declaration.diff.slice(1)}`,
+    }
+  })
+}
+
+function parseHumanLedgerSignatures(
+  ledger: readonly string[],
+  expected: readonly HumanLedgerSignature[],
+): HumanLedgerSignature[] {
+  const separator = ledger.includes('lab-editor · package.json') ? ' · ' : ' - '
+  const owners = new Map(expected.map((signature) => [signature.ownerKey, signature]))
+  const names = [...new Set(expected.map((signature) => signature.name))].sort(
+    (left, right) => right.length - left.length || left.localeCompare(right),
   )
-  expect(ownerLabels.size).toBe(15)
-  expect(ownerHeadings).toBe(15)
+  const signatures: HumanLedgerSignature[] = []
+  let owner: HumanLedgerSignature | undefined
+  let source: string | undefined
+  for (let index = 0; index < ledger.length; index += 1) {
+    const line = ledger[index]!
+    const ownerHeading = [...owners.values()].find(
+      (candidate) =>
+        line === `${candidate.owner}${separator}${candidate.physicalTarget}` ||
+        (line === candidate.owner && ledger[index + 1] === candidate.physicalTarget),
+    )
+    if (ownerHeading) {
+      owner = ownerHeading
+      source = undefined
+      continue
+    }
+    if (line === '  dependencies' || line === '  catalog') {
+      source = line.slice(2)
+      continue
+    }
+    const name = names.find((candidate) => line === candidate || line.startsWith(`${candidate} `))
+    if (!name) continue
+    if (!(owner && source)) throw new Error(`Ledger context is missing for ${name}`)
+    const transition = `${line}\n${ledger[index + 1] ?? ''}`.match(
+      /(\^[^\s]+)\s*(?:(?:→|->)\s*)?(\^[^\s]+)\s*(?:[·-]\s*)?(Major|Minor|Patch)\b/u,
+    )
+    if (!transition) throw new Error(`Ledger transition is missing for ${name}`)
+    signatures.push({
+      ownerKey: owner.ownerKey,
+      owner: owner.owner,
+      physicalTarget: owner.physicalTarget,
+      source,
+      name,
+      current: transition[1]!,
+      target: transition[2]!,
+      severity: transition[3]!,
+    })
+  }
+  return signatures
 }
 
 function assertNoInternalIds(transcript: string) {
@@ -1576,8 +1848,9 @@ function assertHybridReadOnlySemantics(
   assertHybridContext(transcript, 'read-only')
   assertNoInternalIds(transcript)
   assertHybridReviewMembership(transcript, fixture)
-  if (plain) assertPlainHybridLayoutSignature(transcript, width)
-  else assertHybridLayoutSignature(transcript, width, 'read-only')
+  if (plain) assertPlainHybridLayoutSignature(transcript, width, fixture)
+  else assertHybridLayoutSignature(transcript, width, 'read-only', fixture)
+  assertExactReadOnlyFinalScreen(transcript, width, plain, fixture)
   expect(durableLineCount(transcript)).toBeGreaterThan(80)
   expect(transcript).not.toMatch(
     /Lifecycle|Update preview|audit preview|omitted|more updates|Reviewed physical targets/iu,
