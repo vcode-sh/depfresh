@@ -101,6 +101,74 @@ describe('fetchWithRetry', () => {
     expect(result.name).toBe('test-pkg')
   }, 10_000)
 
+  it('clears a completed attempt timeout before waiting to retry', async () => {
+    const successResponse = {
+      versions: { '1.0.0': {} },
+      'dist-tags': { latest: '1.0.0' },
+    }
+    const signals: AbortSignal[] = []
+
+    globalThis.fetch = vi.fn().mockImplementation((_url, init?: RequestInit) => {
+      if (init?.signal) signals.push(init.signal)
+      if (signals.length === 1) {
+        return Promise.resolve({
+          ok: false,
+          status: 500,
+          statusText: 'Internal Server Error',
+          json: () => Promise.resolve({}),
+        })
+      }
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: () => Promise.resolve(successResponse),
+      })
+    })
+
+    const { fetchPackageData } = await import('./registry')
+    await fetchPackageData('test-pkg', {
+      ...defaultOptions,
+      timeout: 50,
+      retries: 1,
+    })
+
+    expect(globalThis.fetch).toHaveBeenCalledTimes(2)
+    expect(signals[0]?.aborted).toBe(false)
+  }, 10_000)
+
+  it('cancels an unsuccessful response body before waiting to retry', async () => {
+    const cancel = vi.fn().mockResolvedValue(undefined)
+    const successResponse = {
+      versions: { '1.0.0': {} },
+      'dist-tags': { latest: '1.0.0' },
+    }
+
+    globalThis.fetch = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        statusText: 'Internal Server Error',
+        body: { cancel },
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: () => Promise.resolve(successResponse),
+      })
+
+    const { fetchPackageData } = await import('./registry')
+    await fetchPackageData('test-pkg', {
+      ...defaultOptions,
+      retries: 1,
+    })
+
+    expect(cancel).toHaveBeenCalledTimes(1)
+    expect(globalThis.fetch).toHaveBeenCalledTimes(2)
+  }, 10_000)
+
   it('does NOT retry on 404', async () => {
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: false,

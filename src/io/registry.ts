@@ -416,6 +416,9 @@ async function fetchWithRetry(
     })
 
     if (!response.ok) {
+      // The error body is untrusted and unnecessary. Cancel it before retry backoff so the
+      // transport can release this request without buffering an arbitrarily large payload.
+      await response.body?.cancel().catch(() => undefined)
       if (isGithubRateLimit(response, url)) {
         throw createGithubRateLimitError(response, url)
       }
@@ -428,6 +431,10 @@ async function fetchWithRetry(
 
     return await response.json()
   } catch (error) {
+    // This attempt has settled. Do not let its timeout abort the response or connection while a
+    // retry is waiting in backoff; the recursive attempt owns an independent timeout.
+    clearTimeout(timer)
+
     // Never retry 4xx client errors — they won't resolve with retries.
     // 429 is treated as retryable because rate limits are transient.
     if (

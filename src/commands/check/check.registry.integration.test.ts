@@ -137,6 +137,7 @@ describe('check registry integration (mocked real registries)', () => {
     })
 
     const { exitCode, payload, rawOutput } = await runCheck(cwd, {
+      timeout: 10_000,
       retries: 2,
     })
 
