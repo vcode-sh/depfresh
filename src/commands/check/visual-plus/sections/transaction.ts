@@ -1,10 +1,22 @@
 import { sanitizeTerminalText } from '../../../../utils/format'
 import type { VisualPlusSectionInput } from '../input'
-import { visualPlusSectionLines, visualPlusSeparator } from '../theme'
-import { renderVisualPlusCompactTransaction } from './compact'
+import { visualPlusMapSymbols, visualPlusSectionLines, visualPlusSeparator } from '../theme'
+import { isStrictVisualPlusWriteSuccess } from './receipt'
+
+export function requiresVisualPlusDetailedTransaction(input: VisualPlusSectionInput): boolean {
+  if (input.snapshot.exitCode === null) return false
+  return !(
+    (!input.snapshot.write && input.snapshot.exitCode === 0) ||
+    isStrictVisualPlusWriteSuccess(input)
+  )
+}
 
 export function renderVisualPlusTransaction(input: VisualPlusSectionInput): readonly string[] {
-  if (input.run.detailLevel === 'compact') return renderVisualPlusCompactTransaction(input)
+  if (input.run.detailLevel === 'compact') {
+    return requiresVisualPlusDetailedTransaction(input)
+      ? renderVisualPlusDetailedCompactTransaction(input)
+      : []
+  }
   const results = new Map(input.snapshot.results.targets.map((result) => [result.path, result]))
   const operations = new Map(
     input.snapshot.results.operations.map((result) => [result.operationId, result]),
@@ -51,6 +63,51 @@ export function renderVisualPlusTransaction(input: VisualPlusSectionInput): read
         : ''
       logical.push(
         `Operations${separator}outcome ${group.result?.outcome ?? 'pending'}${details}${reason}${separator}IDs ${group.operationIds.map(sanitizeTerminalText).join(', ')}`,
+      )
+    }
+  }
+  return visualPlusSectionLines(input, logical)
+}
+
+function renderVisualPlusDetailedCompactTransaction(
+  input: VisualPlusSectionInput,
+): readonly string[] {
+  const targetResults = new Map(
+    input.snapshot.results.targets.map((result) => [result.path, result]),
+  )
+  const operationResults = new Map(
+    input.snapshot.results.operations.map((result) => [result.operationId, result]),
+  )
+  const changes = new Map(input.snapshot.changes.map((change) => [change.id, change]))
+  const restored = new Set(input.snapshot.recovery.restoredPaths)
+  const unrecovered = new Set(input.snapshot.recovery.unrecoveredPaths)
+  const { arrow, separator } = visualPlusMapSymbols(input.capabilities)
+  const logical = [input.snapshot.write ? 'Apply transaction' : 'Reviewed physical targets']
+  for (const target of input.snapshot.targets) {
+    const result = targetResults.get(target.path)
+    const recovery = restored.has(target.path)
+      ? `${separator}restored`
+      : unrecovered.has(target.path)
+        ? `${separator}unrecovered`
+        : ''
+    const safety = result
+      ? `${separator}blocked ${result.blocked}${separator}not attempted ${result.notAttempted}${separator}unknown ${result.unknown}`
+      : ''
+    logical.push(
+      `Target ${sanitizeTerminalText(target.path)}${separator}${target.operationIds.length} ${target.operationIds.length === 1 ? 'update' : 'updates'}${separator}${result?.outcome ?? 'pending'}${safety}${recovery}`,
+    )
+    for (const operationId of target.operationIds) {
+      const change = changes.get(operationId)
+      const operation = operationResults.get(operationId)
+      if (!change) continue
+      const flags = operation
+        ? `${separator}blocked ${operation.blocked}${separator}not attempted ${operation.notAttempted}${separator}unknown ${operation.unknown}`
+        : ''
+      const reason = operation?.reason
+        ? `${separator}reason ${sanitizeTerminalText(operation.reason)}`
+        : ''
+      logical.push(
+        `Update ${sanitizeTerminalText(change.name)}${separator}${sanitizeTerminalText(change.current)}${arrow}${sanitizeTerminalText(change.target)}${separator}outcome ${operation?.outcome ?? 'pending'}${flags}${reason}`,
       )
     }
   }

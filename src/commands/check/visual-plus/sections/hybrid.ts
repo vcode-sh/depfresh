@@ -150,8 +150,10 @@ function renderRiskFocus(
   const theme = createVisualPlusTheme(input.capabilities)
   const separator = visualPlusSeparator(input.capabilities)
   const width = input.capabilities.width
-  const lines = [theme.heading('Breaking changes')]
-  if (groups.length === 0) return [...lines, 'No breaking changes']
+  const lines = wrapVisualPlusText('Breaking changes', width, theme).map(theme.heading)
+  if (groups.length === 0) {
+    return [...lines, ...wrapVisualPlusText('No breaking changes', width, theme)]
+  }
   const duplicateLabels = duplicateOwnerLabels(input)
   for (const group of groups) {
     lines.push(...wrapVisualPlusWords(group.name, width, theme).map(theme.emphasis))

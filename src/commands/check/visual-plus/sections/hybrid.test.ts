@@ -45,6 +45,35 @@ function internalIdentifiers(input: ReturnType<typeof createVisualPlusFixtureInp
 }
 
 describe('Visual+ hybrid exact geometry', () => {
+  it('wraps fixed heading chrome losslessly at a constrained width of 8', () => {
+    const lines = renderFixture(8).map(stripAnsi)
+    const headingStart = lines.indexOf('Breaking')
+    const input = createVisualPlusHybridFixtureInput(capabilities(8))
+    const snapshot = {
+      ...input.snapshot,
+      changes: input.snapshot.changes.map((change) => ({ ...change, diff: 'minor' as const })),
+    }
+    const noMajorsInput = { ...input, snapshot }
+    const noMajorsLines = renderVisualPlusHybridReview(
+      noMajorsInput,
+      buildVisualPlusInsights(snapshot),
+    ).map(stripAnsi)
+    const emptyHeadingStart = noMajorsLines.indexOf('No break')
+
+    expect(lines.every((line) => visualLength(line) <= 8)).toBe(true)
+    expect(lines.slice(headingStart, headingStart + 2)).toEqual(['Breaking', ' changes'])
+    expect(lines.slice(headingStart, headingStart + 2).join('')).toBe('Breaking changes')
+    expect(noMajorsLines.every((line) => visualLength(line) <= 8)).toBe(true)
+    expect(noMajorsLines.slice(emptyHeadingStart, emptyHeadingStart + 3)).toEqual([
+      'No break',
+      'ing chan',
+      'ges',
+    ])
+    expect(noMajorsLines.slice(emptyHeadingStart, emptyHeadingStart + 3).join('')).toBe(
+      'No breaking changes',
+    )
+  })
+
   it('renders the exact Unicode color-capable 40-column geometry after ANSI stripping', () => {
     expect(renderFixture(40).map(stripAnsi).join('\n')).toMatchInlineSnapshot(`
       "hybrid-fixture · pnpm 10.33.0

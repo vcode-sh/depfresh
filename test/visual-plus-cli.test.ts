@@ -14,7 +14,7 @@ import {
 } from 'node:fs'
 import { createServer, type Server } from 'node:http'
 import { tmpdir } from 'node:os'
-import { join, relative } from 'node:path'
+import { isAbsolute, join, relative } from 'node:path'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { visualLength } from '../src/utils/format'
 import {
@@ -906,7 +906,7 @@ describe('Visual+ built CLI', () => {
   })
 
   it.each([40, 60, 80, 118, 175])(
-    'renders compact success and exact safety journeys in a %i-column PTY by default',
+    'renders hybrid success and exact safety journeys in a %i-column PTY by default',
     async (columns) => {
       const successFixture = createFixture(`success-${columns}`)
       const success = await runFixture(successFixture, columns, 'success', true)
@@ -959,8 +959,8 @@ describe('Visual+ built CLI', () => {
     expect(direct.stderr.toString('utf8')).toContain('Tip: Use --output json')
     expect(slow.stderr).toEqual(direct.stderr)
     expect(direct.stdout.toString('utf8').endsWith('Exit 0\n')).toBe(true)
-    assertCompactReadOnlySemantics(direct.stdout.toString('utf8'), fixture)
-    assertCompactReadOnlySemantics(slow.stdout.toString('utf8'), fixture)
+    assertHybridReadOnlySemantics(direct.stdout.toString('utf8'), fixture, 80)
+    assertHybridReadOnlySemantics(slow.stdout.toString('utf8'), fixture, 80)
 
     assertFixtureBytes(fixture, 'before')
     assertGitClean(fixture)
@@ -1006,7 +1006,7 @@ describe('Visual+ built CLI', () => {
     expect(result.stderr.toString('utf8')).toContain('Tip: Use --output json')
     const transcript = result.stdout.toString('utf8')
     expect(transcript.endsWith('Exit 2\n')).toBe(true)
-    assertRunContext(transcript)
+    assertHybridContext(transcript, 'write')
     assertNoInternalIds(transcript)
     expect(transcript).toContain('Recovery incomplete')
     expect(transcript).toContain('Applied: none')
@@ -1044,7 +1044,7 @@ describe('Visual+ built CLI', () => {
       expect(result.evidence.columns).toBe(80)
       expect(result.finalCursorVisible).toBe(true)
       expect(result.transcript.endsWith('Exit 0\n')).toBe(true)
-      assertCompactReadOnlySemantics(result.transcript, fixture)
+      assertHybridReadOnlySemantics(result.transcript, fixture, 80)
     }
     expect(baseline.controls.sgr).toBeGreaterThan(0)
     expect(baseline.controls.cursorUp).toBeGreaterThan(0)
@@ -1055,6 +1055,32 @@ describe('Visual+ built CLI', () => {
     assertFixtureBytes(fixture, 'before')
     assertGitClean(fixture)
   }, 120_000)
+
+  it.each([40, 60, 80, 118])(
+    'renders the exact plain TERM=dumb hybrid signature at %i columns',
+    async (columns) => {
+      const fixture = createFixture(`dumb-hybrid-${columns}`)
+      try {
+        const result = await runReadOnlyPty(fixture, { TERM: 'dumb' }, true, false, columns)
+
+        expect(result.exitCode).toBe(0)
+        expect(result.evidence.columns).toBe(columns)
+        expect(result.finalCursorVisible).toBe(true)
+        expect(result.controls.sgr).toBe(0)
+        expect(result.controls.cursorUp).toBe(0)
+        expect(result.controls.eraseLine).toBe(0)
+        assertHybridReadOnlySemantics(result.transcript, fixture, columns, true)
+        for (const line of result.transcript.split('\n')) {
+          expect(visualLength(line), line).toBeLessThanOrEqual(columns)
+        }
+        assertFixtureBytes(fixture, 'before')
+        assertGitClean(fixture)
+      } finally {
+        cleanupFixtureRepository(fixture.repository)
+      }
+    },
+    120_000,
+  )
 
   describe.sequential('CI constrained PTY fallback', () => {
     let fixture: ReturnType<typeof createVisualPlusFixture> | undefined
@@ -1086,7 +1112,7 @@ describe('Visual+ built CLI', () => {
     it('preserves read-only semantic output', () => {
       if (!(executionReady && fixture && result)) return
       expect(result.transcript.endsWith('Exit 0\n')).toBe(true)
-      assertCompactReadOnlySemantics(result.transcript, fixture)
+      assertHybridReadOnlySemantics(result.transcript, fixture, 80)
       semanticsReady = true
     })
 
@@ -1115,10 +1141,7 @@ describe('Visual+ built CLI', () => {
 
     it('emits each active transition once', () => {
       if (!(controlsReady && result)) return
-      const activeTransitions = result.transcript
-        .split('\n')
-        .filter((line) => /\bactive\b/u.test(line))
-      expect(new Set(activeTransitions).size).toBe(activeTransitions.length)
+      expect(result.transcript).not.toMatch(/Lifecycle|\bactive\b/u)
       transitionsReady = true
     })
 
@@ -1152,7 +1175,7 @@ describe('Visual+ built CLI', () => {
       expect(result.evidence.columns).toBe(80)
       expect(result.finalCursorVisible).toBe(true)
       expect(result.transcript.endsWith('Exit 0\n')).toBe(true)
-      assertCompactReadOnlySemantics(result.transcript, fixture)
+      assertHybridReadOnlySemantics(result.transcript, fixture, 80, true)
       journeyReady = true
     })
 
@@ -1178,11 +1201,8 @@ describe('Visual+ built CLI', () => {
       expect(result.controls.eraseLine).toBe(0)
       expect(result.controls.cursorHide).toBe(0)
       expect(result.controls.cursorShow).toBe(1)
-      const activeTransitions = result.transcript
-        .split('\n')
-        .filter((line) => /\bactive\b/u.test(line))
-      expect(new Set(activeTransitions).size).toBe(activeTransitions.length)
-      expect(result.transcript).toMatch(/66 packages -> 616 declared -> 612 eligible/u)
+      expect(result.transcript).not.toMatch(/Lifecycle|\bactive\b/u)
+      expect(result.transcript).toMatch(/66 packages - 616 declared - 612 eligible/u)
       expect([...result.transcript].every((character) => character.codePointAt(0)! <= 0x7f)).toBe(
         true,
       )
@@ -1203,7 +1223,7 @@ describe('Visual+ built CLI', () => {
     })
     expect(result.exitCode).toBe(0)
     expect(result.controls.sgr).toBe(0)
-    expect(result.transcript).toContain(`Owner ${hostile.sanitizedOwner}`)
+    expect(result.transcript).toContain(`${hostile.sanitizedOwner} · package.json`)
     expect(result.transcript).not.toContain('\u001b]')
     expect(result.transcript).not.toContain('\u202e')
   }, 120_000)
@@ -1273,47 +1293,27 @@ function assertJourney(
   expect(result.finalCursorVisible).toBe(true)
   expect(result.controls.cursorUp).toBeGreaterThan(0)
   expect(result.controls.eraseLine).toBeGreaterThan(0)
-  assertRunContext(result.transcript)
+  assertHybridContext(result.transcript, 'write')
   assertNoInternalIds(result.transcript)
-  expect(result.transcript.match(/^Major card /gmu) ?? []).toHaveLength(2)
-  const compact = result.transcript.replace(/\s+/gu, '')
-  expect(compact).toContain('66packages→616declared→612eligible→76updates→14files')
-  expect(result.transcript).toContain('Major 3')
-  expect(result.transcript).toContain('Minor 37')
-  expect(result.transcript).toContain('Patch 36')
+  assertHybridReviewMembership(result.transcript, fixture)
+  assertHybridLayoutSignature(result.transcript, columns, 'write')
   const transaction = result.transcript.slice(result.transcript.indexOf('Apply transaction'))
+  const compact = result.transcript.replace(/\s+/gu, '')
   const compactTransaction = transaction.replace(/\s+/gu, '')
-  for (const phase of [
-    'discover',
-    'inspect',
-    'resolve',
-    'review',
-    'preflight',
-    'stage',
-    'apply',
-    'observe',
-    'recover',
-    'complete',
-  ]) {
-    expect(result.transcript.match(new RegExp(`^${phase} · `, 'gmu')) ?? [], phase).toHaveLength(1)
-  }
+  expect(result.transcript).not.toContain('Lifecycle')
   expect(result.transcript).not.toMatch(/\bactive\b/u)
   if (outcome === 'success') {
-    expect(transaction.match(/^Target /gmu) ?? []).toHaveLength(0)
-    for (const target of fixture.targets.slice(0, 8)) {
-      expect(
-        transaction.match(new RegExp(`^${escapeRegExp(target.path)}$`, 'gmu')) ?? [],
-      ).toHaveLength(1)
-    }
-    expect(transaction).toMatch(/(?:…|\.\.\.) 6 more targets/u)
-    expect(durableLineCount(result.transcript)).toBeLessThanOrEqual(80)
+    expect(result.transcript).not.toContain('Apply transaction')
+    expect(result.transcript).not.toContain('Reviewed physical targets')
+    expect(durableLineCount(result.transcript)).toBeGreaterThan(80)
     expect(compact).toContain('Complete·76updatesappliedacross14files')
-    expect(compact).toContain('Applied76Blocked0Notattempted0Failed0Unknown0')
-    expect(compact).toContain(
-      'All14targetfileswereobservedattherequestedvalues.Recoverywasnotneeded.',
-    )
+    expect(compact).toContain('All14filesobservedattherequestedvalues·recoverynotneeded·')
   } else {
+    expect(
+      result.transcript.match(/^preflight · .* (?:blocked|failed|unknown)$/gmu) ?? [],
+    ).toHaveLength(1)
     expect(transaction.match(/^Target /gmu) ?? []).toHaveLength(14)
+    expect(transaction.match(/^Update /gmu) ?? []).toHaveLength(76)
     for (const target of fixture.targets) {
       expect(compactTransaction.split(`Target${target.path}`).length - 1, target.path).toBe(1)
     }
@@ -1348,6 +1348,209 @@ function assertRunContext(transcript: string) {
   expect(transcript).not.toContain('Repository unknown')
 }
 
+function assertHybridContext(transcript: string, intent: 'write' | 'read-only') {
+  expect(transcript).toContain('lab-editor')
+  expect(transcript).toContain('manager unknown')
+  expect(transcript).toContain('workspace')
+  expect(transcript).toContain(intent)
+  expect(transcript).not.toContain('Repository unknown')
+  expect(transcript).not.toContain('Package manager unknown')
+}
+
+function assertHybridLayoutSignature(
+  transcript: string,
+  width: number,
+  intent: 'write' | 'read-only',
+) {
+  const lines = transcript.split('\n')
+  const context =
+    width === 40
+      ? ['lab-editor · manager unknown · workspace', `major · ${intent}`]
+      : [`lab-editor · manager unknown · workspace · major · ${intent}`]
+  const topology =
+    width === 40
+      ? ['66 packages · 616 declared', '612 eligible · 76 updates · 14 files']
+      : width === 60
+        ? ['66 packages · 616 declared · 612 eligible · 76 updates', '14 files']
+        : ['66 packages · 616 declared · 612 eligible · 76 updates · 14 files']
+  const table =
+    width === 40
+      ? [
+          '  dependencies',
+          'dependency · transition · severity · age',
+          'react-dropzone [compat unknown]',
+          '  ^15.0.0 → ^17.0.0 · Major · ~6d',
+        ]
+      : width === 60
+        ? [
+            '  dependencies',
+            'dependency              current → target   severity  age',
+            'react-dropzone          ^15.0.0 → ^17.0.0  Major     ~6d',
+          ]
+        : width === 80
+          ? [
+              '  dependencies',
+              'dependency                                  current → target   severity  age',
+              'react-dropzone [compat unknown]             ^15.0.0 → ^17.0.0  Major     ~6d',
+            ]
+          : [
+              '  dependencies',
+              'dependency                                current  target   severity  age',
+              'react-dropzone [compat unknown]           ^15.0.0  ^17.0.0  Major     ~6d',
+            ]
+  const risk =
+    width === 40
+      ? [
+          'react-dropzone',
+          '  ^15.0.0 → ^17.0.0 · ~6d',
+          '  lab-editor, web',
+          '  0 compatible · 0 incompatible',
+          '  2 unknown',
+          'nanoid',
+          '  ^5.1.16 → ^6.0.0 · ~6d · root-catalog',
+          '  0 compatible · 0 incompatible',
+          '  1 unknown',
+        ]
+      : [
+          'react-dropzone',
+          '  ^15.0.0 → ^17.0.0 · ~6d · lab-editor, web',
+          '  0 compatible · 0 incompatible · 2 unknown',
+          'nanoid',
+          '  ^5.1.16 → ^6.0.0 · ~6d · root-catalog',
+          '  0 compatible · 0 incompatible · 1 unknown',
+        ]
+  assertOrderedExactLines(lines, [
+    ...context,
+    ...topology,
+    'Major 3 · Minor 37 · Patch 36',
+    '████████████████████████████████████████',
+    'Breaking changes',
+    ...risk,
+    'lab-editor · package.json',
+    ...table,
+    'root-catalog · pnpm-workspace.yaml',
+  ])
+}
+
+function assertPlainHybridLayoutSignature(transcript: string, width: number) {
+  const lines = transcript.split('\n')
+  const context =
+    width === 40
+      ? ['lab-editor - manager unknown - workspace', 'major - read-only']
+      : ['lab-editor - manager unknown - workspace - major - read-only']
+  const topology =
+    width === 40
+      ? ['66 packages - 616 declared', '612 eligible - 76 updates - 14 files']
+      : width === 60
+        ? ['66 packages - 616 declared - 612 eligible - 76 updates', '14 files']
+        : ['66 packages - 616 declared - 612 eligible - 76 updates - 14 files']
+  const table =
+    width === 40
+      ? [
+          '  dependencies',
+          'dependency - transition - severity - age',
+          'react-dropzone [compat unknown]',
+          '  ^15.0.0 -> ^17.0.0 - Major - ~6d',
+        ]
+      : width === 60
+        ? [
+            '  dependencies',
+            'dependency             current -> target   severity  age',
+            'react-dropzone         ^15.0.0 -> ^17.0.0  Major     ~6d',
+          ]
+        : width === 80
+          ? [
+              '  dependencies',
+              'dependency                                 current -> target   severity  age',
+              'react-dropzone [compat unknown]            ^15.0.0 -> ^17.0.0  Major     ~6d',
+            ]
+          : [
+              '  dependencies',
+              'dependency                                current  target   severity  age',
+              'react-dropzone [compat unknown]           ^15.0.0  ^17.0.0  Major     ~6d',
+            ]
+  const risk =
+    width === 40
+      ? [
+          'react-dropzone',
+          '  ^15.0.0 -> ^17.0.0 - ~6d',
+          '  lab-editor, web',
+          '  0 compatible - 0 incompatible',
+          '  2 unknown',
+          'nanoid',
+          '  ^5.1.16 -> ^6.0.0 - ~6d - root-catalog',
+          '  0 compatible - 0 incompatible',
+          '  1 unknown',
+        ]
+      : [
+          'react-dropzone',
+          '  ^15.0.0 -> ^17.0.0 - ~6d - lab-editor, web',
+          '  0 compatible - 0 incompatible - 2 unknown',
+          'nanoid',
+          '  ^5.1.16 -> ^6.0.0 - ~6d - root-catalog',
+          '  0 compatible - 0 incompatible - 1 unknown',
+        ]
+  assertOrderedExactLines(lines, [
+    ...context,
+    ...topology,
+    'Major 3 - Minor 37 - Patch 36',
+    '########################################',
+    'Breaking changes',
+    ...risk,
+    'lab-editor - package.json',
+    ...table,
+    'root-catalog - pnpm-workspace.yaml',
+  ])
+}
+
+function assertOrderedExactLines(lines: readonly string[], expected: readonly string[]) {
+  let cursor = 0
+  for (const line of expected) {
+    const index = lines.indexOf(line, cursor)
+    expect(index, `missing exact line after ${cursor}: ${line}`).toBeGreaterThanOrEqual(cursor)
+    cursor = index + 1
+  }
+}
+
+function assertHybridReviewMembership(
+  transcript: string,
+  fixture: ReturnType<typeof createVisualPlusFixture>,
+) {
+  const lines = transcript.split('\n')
+  const ledgerStart = lines.findIndex(
+    (line) => line === 'lab-editor · package.json' || line === 'lab-editor - package.json',
+  )
+  expect(ledgerStart).toBeGreaterThan(-1)
+  const ledger = lines.slice(ledgerStart)
+  const severities = ledger.flatMap((line) => line.match(/\b(?:Major|Minor|Patch)\b/gu) ?? [])
+  expect(severities).toHaveLength(76)
+  expect(severities.filter((severity) => severity === 'Major')).toHaveLength(3)
+  expect(severities.filter((severity) => severity === 'Minor')).toHaveLength(37)
+  expect(severities.filter((severity) => severity === 'Patch')).toHaveLength(36)
+  expect(ledger.join('\n')).toContain(fixture.selectedDeclarations.at(-1)!.name)
+
+  const ownerLabels = new Map<string, string>()
+  for (const declaration of fixture.selectedDeclarations) {
+    const label =
+      declaration.ownerType === 'catalog'
+        ? declaration.catalogName
+        : JSON.parse(readFileSync(join(fixture.repository, declaration.physicalTarget), 'utf8'))
+            .name
+    ownerLabels.set(`${declaration.ownerType}:${label}:${declaration.physicalTarget}`, label)
+  }
+  const ownerHeadings = [...ownerLabels.values()].reduce(
+    (count, label) =>
+      count +
+      ledger.filter(
+        (line) =>
+          line === label || line.startsWith(`${label} · `) || line.startsWith(`${label} - `),
+      ).length,
+    0,
+  )
+  expect(ownerLabels.size).toBe(15)
+  expect(ownerHeadings).toBe(15)
+}
+
 function assertNoInternalIds(transcript: string) {
   expect(transcript).not.toMatch(/Operation ID|Owner ID|Dependency ID/u)
   expect(transcript).not.toMatch(/operation-|dependency:|package:|source:/iu)
@@ -1364,22 +1567,27 @@ function logicalFieldStarts(transcript: string, label: string) {
   ).length
 }
 
-function assertCompactReadOnlySemantics(
+function assertHybridReadOnlySemantics(
   transcript: string,
   fixture: ReturnType<typeof createVisualPlusFixture>,
+  width: number,
+  plain = false,
 ) {
-  assertRunContext(transcript)
+  assertHybridContext(transcript, 'read-only')
   assertNoInternalIds(transcript)
-  expect(durableLineCount(transcript)).toBeLessThanOrEqual(80)
-  expect(transcript.match(/^Major card /gmu) ?? []).toHaveLength(2)
-  expect(transcript).toContain('Details: rerun with --long for the complete audit.')
-  for (const target of fixture.targets.slice(0, 8)) expect(transcript).toContain(target.path)
-  expect(transcript).toMatch(/(?:…|\.\.\.) 6 more targets/u)
-  const compact = transcript.replace(/\s+/gu, '')
-  expect(compact).toMatch(
-    /66packages(?:→|->)616declared(?:→|->)612eligible(?:→|->)76updates(?:→|->)14files/u,
+  assertHybridReviewMembership(transcript, fixture)
+  if (plain) assertPlainHybridLayoutSignature(transcript, width)
+  else assertHybridLayoutSignature(transcript, width, 'read-only')
+  expect(durableLineCount(transcript)).toBeGreaterThan(80)
+  expect(transcript).not.toMatch(
+    /Lifecycle|Update preview|audit preview|omitted|more updates|Reviewed physical targets/iu,
   )
-  expect(compact).toContain('76updatesreviewedacross14targets.')
+  expect(transcript).not.toMatch(/\bactive\b/u)
+  expect(transcript.replace(/\s+/gu, '')).toContain(
+    plain
+      ? 'Reviewcomplete-76updatesacross14files-writenotattempted'
+      : 'Reviewcomplete·76updatesacross14files·writenotattempted',
+  )
 }
 
 function assertFullReadOnlySemantics(
@@ -1544,6 +1752,20 @@ function createFixture(name: string) {
   return fixture
 }
 
+function cleanupFixtureRepository(repository: string) {
+  const canonicalParent = realpathSync(fixtureParent)
+  const relativeRepository = relative(canonicalParent, repository)
+  if (
+    !fixtureParent ||
+    relativeRepository.length === 0 ||
+    isAbsolute(relativeRepository) ||
+    relativeRepository.split(/[\\/]/u)[0] === '..'
+  ) {
+    throw new Error('Visual+ fixture cleanup escaped its temporary parent')
+  }
+  rmSync(repository, { recursive: true, force: true })
+}
+
 function capableEnvironment(environment: Record<string, string>, overrides = {}) {
   const clean = Object.fromEntries(
     Object.entries(environment).filter(
@@ -1584,6 +1806,7 @@ function runReadOnlyPty(
   overrides: Record<string, string>,
   diagnoseChildWrites = false,
   long = false,
+  columns = 80,
 ) {
   return runInPty({
     cliPath: process.execPath,
@@ -1596,7 +1819,7 @@ function runReadOnlyPty(
       'major',
       ...(long ? ['--long'] : []),
     ],
-    columns: 80,
+    columns,
     diagnoseChildWrites,
     env: capableEnvironment(fixture.variants.success.environment, overrides),
     input: Buffer.alloc(0),

@@ -3,10 +3,76 @@ import type { CheckRunResultTotals } from '../../run-model'
 import type { VisualPlusSectionInput } from '../input'
 import { pluralVisualPlus, visualPlusSectionLines, visualPlusSeparator } from '../theme'
 
+export function isStrictVisualPlusWriteSuccess(input: VisualPlusSectionInput): boolean {
+  const { snapshot, writeReceipt } = input
+  if (!(snapshot.write && snapshot.exitCode === 0 && writeReceipt)) return false
+  if (
+    snapshot.results.operations.length !== snapshot.counts.operations ||
+    snapshot.results.targets.length !== snapshot.counts.targets ||
+    snapshot.results.operations.some(
+      (result) =>
+        result.outcome !== 'applied' || result.blocked || result.notAttempted || result.unknown,
+    ) ||
+    snapshot.results.targets.some(
+      (result) =>
+        result.outcome !== 'applied' || result.blocked || result.notAttempted || result.unknown,
+    )
+  ) {
+    return false
+  }
+  if (
+    !(
+      strictAppliedTotals(snapshot.results.totals, snapshot.counts.operations) &&
+      strictAppliedTotals(snapshot.results.targetTotals, snapshot.counts.targets)
+    ) ||
+    phaseStatus(input, 'observe') !== 'passed' ||
+    snapshot.recovery.executed ||
+    snapshot.recovery.status !== 'not-needed'
+  ) {
+    return false
+  }
+  const canonical = writeReceipt.canonical
+  return (
+    canonical.verdict === 'complete' &&
+    !canonical.noFilesChanged &&
+    canonical.groups.length === 0 &&
+    canonical.operations.planned === snapshot.counts.operations &&
+    canonical.operations.applied === snapshot.counts.operations &&
+    canonical.operations.skipped === 0 &&
+    canonical.operations.conflicted === 0 &&
+    canonical.operations.reverted === 0 &&
+    canonical.operations.failed === 0 &&
+    canonical.operations.unknown === 0 &&
+    canonical.files.planned === snapshot.counts.targets &&
+    canonical.files.applied === snapshot.counts.targets &&
+    canonical.files.skipped === 0 &&
+    canonical.files.blocked === 0 &&
+    canonical.files.conflicted === 0 &&
+    canonical.files.reverted === 0 &&
+    canonical.files.failed === 0 &&
+    canonical.files.unknown === 0
+  )
+}
+
 export function renderVisualPlusReceipt(input: VisualPlusSectionInput): readonly string[] {
   const { snapshot } = input
   const separator = visualPlusSeparator(input.capabilities)
   if (snapshot.exitCode === null) return visualPlusSectionLines(input, ['Pending'])
+
+  if (input.run.detailLevel === 'compact' && !snapshot.write && snapshot.exitCode === 0) {
+    return visualPlusSectionLines(input, [
+      `Review complete${separator}${pluralVisualPlus(snapshot.counts.operations, 'update')} across ${pluralVisualPlus(snapshot.counts.targets, 'file')}${separator}write not attempted`,
+      'Exit 0',
+    ])
+  }
+
+  if (input.run.detailLevel === 'compact' && isStrictVisualPlusWriteSuccess(input)) {
+    return visualPlusSectionLines(input, [
+      `Complete${separator}${pluralVisualPlus(snapshot.counts.operations, 'update')} applied across ${pluralVisualPlus(snapshot.counts.targets, 'file')}`,
+      `All ${snapshot.counts.targets} files observed at the requested values${separator}recovery not needed${separator}${formatMs(snapshot.elapsedMs ?? 0)}`,
+      'Exit 0',
+    ])
+  }
 
   if (!snapshot.write) {
     const headline =
@@ -257,5 +323,18 @@ function phaseStatus(input: VisualPlusSectionInput, phase: 'observe'): string | 
 function onlyAppliedOrSkipped(totals: CheckRunResultTotals): boolean {
   return (
     totals.blocked === 0 && totals.failed === 0 && totals.reverted === 0 && totals.unknown === 0
+  )
+}
+
+function strictAppliedTotals(totals: CheckRunResultTotals, count: number): boolean {
+  return (
+    totals.applied === count &&
+    totals.skipped === 0 &&
+    totals.mixed === 0 &&
+    totals.blocked === 0 &&
+    totals.notAttempted === 0 &&
+    totals.failed === 0 &&
+    totals.reverted === 0 &&
+    totals.unknown === 0
   )
 }

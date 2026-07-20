@@ -41,6 +41,11 @@ const startupRun: VisualPlusRunMetadata = {
   packageManager: { status: 'unknown', sources: [] },
 }
 
+const compactRun: VisualPlusRunMetadata = {
+  ...run,
+  detailLevel: 'compact',
+}
+
 const capable: VisualPlusCapabilities = {
   interactive: true,
   color: false,
@@ -396,7 +401,7 @@ describe('Visual+ live renderer', () => {
   })
 
   it.each([40, 60, 80, 118, 175])(
-    'keeps the successful compact read-only journey within 80 durable lines at %i columns',
+    'renders the complete successful hybrid read-only journey at %i columns',
     (width) => {
       const caps: VisualPlusCapabilities = {
         ...capable,
@@ -406,9 +411,8 @@ describe('Visual+ live renderer', () => {
         motion: false,
         cursorControl: false,
         width,
-        layout: width === 40 ? 'plain' : width >= 96 ? 'wide' : 'medium',
+        layout: width === 40 ? 'plain' : width >= 100 ? 'wide' : 'medium',
       }
-      const compactRun = { ...run, detailLevel: 'compact' as const }
       const initial = snapshot({ write: false })
       const source = fakeController(initial)
       const view = harness(caps)
@@ -437,7 +441,7 @@ describe('Visual+ live renderer', () => {
           complete: 'passed',
         }),
         elapsedMs: 20,
-        exitCode: 1,
+        exitCode: 0,
       }
       source.push(final)
       view.renderer.finalize({
@@ -448,19 +452,153 @@ describe('Visual+ live renderer', () => {
       const lines = view.output().trimEnd().split('\n').map(stripAnsi)
       const output = lines.join('\n')
 
-      expect(lines.length).toBeLessThanOrEqual(80)
+      expect(lines.length).toBeGreaterThan(80)
       expect(lines.every((line) => visualLength(line) <= width)).toBe(true)
-      expect(output).toContain('Repository topology')
-      expect(output).toContain('Distribution')
-      expect(output).toContain('Details: rerun with --long for the')
+      expect(output).toContain('Breaking changes')
+      expect(output).toContain('Major 3')
+      expect(output).toContain('Minor 37')
+      expect(output).toContain('Patch 36')
+      expect(output).toContain('lab-editor')
+      expect(output).toContain('root-catalog')
+      expect(output).toContain('dependency')
       expect(output.replaceAll('\n', '')).toContain(
-        'Details: rerun with --long for the complete audit.',
+        `Review complete ${caps.unicode ? '·' : '-'} 76 updates across 14 files ${caps.unicode ? '·' : '-'} write not attempted`,
       )
+      expect(output).not.toMatch(/Lifecycle|Update preview|audit preview|omitted|more updates/iu)
       expect(output).not.toMatch(
         /Operation ID|Owner ID|Dependency ID|operation-|dependency:|package:|source:/u,
       )
     },
   )
+
+  it('owns one replaceable compact active-phase line and clears it on successful finalization', () => {
+    const source = fakeController(snapshot({ write: false }))
+    const view = harness()
+
+    view.renderer.start(source.controller, compactRun)
+    expect(view.output()).toBe('\r\u001B[2Kdiscover - [*] active\n')
+
+    source.push(
+      snapshot({
+        write: false,
+        sequence: 1,
+        phases: statuses({ discover: 'passed', inspect: 'active' }),
+      }),
+    )
+    view.scheduled.flushNewest()
+    expect(view.output()).not.toContain('discover - [+] passed')
+    expect(view.output().endsWith('\r\u001B[2Kinspect - [*] active\n')).toBe(true)
+
+    const beforeSuspend = view.output().length
+    view.renderer.suspend(() => view.writeExternal('durable callback\n'))
+    expect(view.output().slice(beforeSuspend)).toBe(
+      '\u001B[1A\r\u001B[2K\n\u001B[1Adurable callback\n\r\u001B[2Kinspect - [*] active\n',
+    )
+
+    view.renderer.setRunMetadata(compactRun)
+    const selected = { ...createVisualPlusFixtureSnapshot(), write: false }
+    source.push(selected)
+    view.renderer.writeReview({
+      ...createVisualPlusFixtureInput(capable),
+      snapshot: selected,
+      run: compactRun,
+    })
+    const final: CheckRunSnapshot = {
+      ...selected,
+      sequence: 10,
+      phases: statuses({
+        discover: 'passed',
+        inspect: 'passed',
+        resolve: 'passed',
+        review: 'passed',
+        preflight: 'skipped',
+        stage: 'skipped',
+        apply: 'skipped',
+        observe: 'skipped',
+        recover: 'skipped',
+        complete: 'passed',
+      }),
+      elapsedMs: 20,
+      exitCode: 0,
+    }
+    source.push(final)
+    view.renderer.finalize({
+      ...createVisualPlusFixtureInput(capable),
+      snapshot: final,
+      run: compactRun,
+    })
+
+    const output = stripAnsi(view.output())
+    expect(output).not.toContain('Lifecycle')
+    for (const phase of phaseNames) expect(output).not.toContain(`${phase} - [+] passed`)
+    expect(output).not.toContain('complete - [+] passed')
+    expect(output).toContain('Review complete - 76 updates across 14 files - write not attempted')
+    expect(view.output()).not.toContain('\u001B[?25l')
+  })
+
+  it('emits no compact lifecycle history in constrained mode across every output boundary', () => {
+    const constrained = {
+      ...capable,
+      interactive: false,
+      color: false,
+      unicode: false,
+      motion: false,
+      cursorControl: false,
+      layout: 'plain' as const,
+    }
+    const source = fakeController(snapshot({ write: false }))
+    const view = harness(constrained)
+
+    view.renderer.start(source.controller, compactRun)
+    source.push(
+      snapshot({
+        write: false,
+        sequence: 1,
+        phases: statuses({ discover: 'passed', inspect: 'active' }),
+      }),
+    )
+    view.renderer.setRunMetadata(compactRun)
+    view.renderer.suspend(() => undefined)
+    expect(view.output()).toBe('')
+
+    const selected = { ...createVisualPlusFixtureSnapshot(), write: false }
+    source.push(selected)
+    view.renderer.writeReview({
+      ...createVisualPlusFixtureInput(constrained),
+      snapshot: selected,
+      run: compactRun,
+    })
+    const final: CheckRunSnapshot = {
+      ...selected,
+      sequence: 10,
+      phases: statuses({
+        discover: 'passed',
+        inspect: 'passed',
+        resolve: 'passed',
+        review: 'passed',
+        preflight: 'skipped',
+        stage: 'skipped',
+        apply: 'skipped',
+        observe: 'skipped',
+        recover: 'skipped',
+        complete: 'passed',
+      }),
+      elapsedMs: 20,
+      exitCode: 0,
+    }
+    source.push(final)
+    view.renderer.finalize({
+      ...createVisualPlusFixtureInput(constrained),
+      snapshot: final,
+      run: compactRun,
+    })
+
+    expect(view.output()).toContain('Breaking changes')
+    expect(view.output()).not.toMatch(/Lifecycle|\bactive\b/u)
+    for (const phase of phaseNames) {
+      expect(view.output()).not.toMatch(new RegExp(`^${phase} - `, 'mu'))
+    }
+  })
 
   it('reconciles the full synchronous initial notification before writing any bytes', () => {
     const advertised = snapshot()

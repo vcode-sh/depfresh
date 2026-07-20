@@ -27,6 +27,19 @@ export function renderVisualPlusLifecyclePhase(
   )
 }
 
+export function renderVisualPlusCompactFailurePhase(
+  input: VisualPlusSectionInput,
+): readonly string[] {
+  const phase = input.snapshot.phases.find(
+    (candidate) =>
+      candidate.name !== 'complete' &&
+      (candidate.status === 'blocked' ||
+        candidate.status === 'failed' ||
+        candidate.status === 'unknown'),
+  )
+  return phase ? renderVisualPlusLifecyclePhase(phase, input.capabilities) : []
+}
+
 export function renderVisualPlusLifecycle(input: VisualPlusSectionInput): readonly string[] {
   const lines = [...visualPlusSectionLines(input, ['Lifecycle'])]
   for (const phase of input.snapshot.phases) {

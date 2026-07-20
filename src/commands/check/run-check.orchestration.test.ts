@@ -124,11 +124,11 @@ describe('run-check orchestration paths', () => {
       ).resolves.toBe(0)
 
       const output = stripAnsi(stdoutWriteSpy.mock.calls.flat().map(String).join(''))
-      expect(output).toContain('Repository spreadoo · . · workspace')
-      expect(output).toContain('Package manager observed · pnpm 10.33.0 · package.json')
-      expect(output.indexOf('Repository spreadoo')).toBeLessThan(
-        output.indexOf('Repository topology'),
-      )
+      expect(output).toContain('spreadoo · pnpm 10.33.0 · workspace · default · read-only')
+      expect(output).not.toContain('Repository spreadoo')
+      expect(output).not.toContain('Package manager observed')
+      expect(output).not.toContain('Repository topology')
+      expect(output).not.toContain('Lifecycle')
     } finally {
       stdoutWriteSpy.mockRestore()
       rmSync(root, { recursive: true, force: true })
@@ -411,7 +411,7 @@ describe('run-check orchestration paths', () => {
       expect(compact).toContain('^1.0.0-hostile continued')
       expect(output).not.toContain('\u001B]0;owned')
       for (const line of output.split('\n')) {
-        expect(visualLength(line)).toBeLessThanOrEqual(8)
+        expect(visualLength(line), line).toBeLessThanOrEqual(8)
       }
       expect(consoleSpy.mock.calls.flat().map(String).join(' ')).not.toContain('resolution errors')
     } finally {
@@ -472,6 +472,7 @@ describe('run-check orchestration paths', () => {
     )
     setStdoutTTY(false)
     setStderrTTY(false)
+    const stdoutWriteSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
 
     try {
@@ -485,7 +486,12 @@ describe('run-check orchestration paths', () => {
       expect(args.every((value) => !/[\n\r]/u.test(value))).toBe(true)
       expect(hasTerminalControl(args.join(''))).toBe(false)
       expect(args.join('')).not.toMatch(/[\u202A-\u202E\u2066-\u2069]/u)
+      const output = stdoutWriteSpy.mock.calls.flat().map(String).join('')
+      expect(output).not.toMatch(
+        /Breaking changes|dependency\s+source|Lifecycle|Apply transaction|Reviewed physical targets|Exit /u,
+      )
     } finally {
+      stdoutWriteSpy.mockRestore()
       errorSpy.mockRestore()
     }
   })
@@ -1766,7 +1772,9 @@ describe('run-check orchestration paths', () => {
         const callbackIndexes = writes.flatMap((chunk, index) =>
           chunk === 'callback-output\n' ? [index] : [],
         )
-        expect(output).toContain('Check')
+        expect(output).not.toContain('Check\n')
+        expect(output).toContain('Breaking changes')
+        expect(output).toContain('Review complete')
         expect(callbackIndexes).toHaveLength(2)
         expect(writes[callbackIndexes[0]! - 1]).toContain('\x1B[')
         expect(

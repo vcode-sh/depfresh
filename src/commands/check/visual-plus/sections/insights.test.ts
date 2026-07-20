@@ -3,8 +3,8 @@ import { sanitizeTerminalText, stripAnsi, visualLength } from '../../../../utils
 import type { VisualPlusCapabilities } from '../capabilities'
 import { buildVisualPlusInsights } from '../insights'
 import { createVisualPlusFixtureInput, createVisualPlusFixtureSnapshot } from '../test-fixture'
-import { renderVisualPlusCompactReview } from './compact'
 import { renderVisualPlusDistribution } from './distribution'
+import { renderVisualPlusHybridReview } from './hybrid'
 import { renderVisualPlusImpact } from './impact'
 import { renderVisualPlusRisk } from './risk'
 import { renderVisualPlusShared } from './shared'
@@ -39,58 +39,39 @@ function renderAll(width: number, overrides: Partial<VisualPlusCapabilities> = {
 }
 
 describe('Visual+ relationship maps', () => {
-  it('renders deterministic bounded compact review previews without internal identifiers', () => {
+  it('renders the complete hybrid review without preview limits or internal identifiers', () => {
     const caps = capabilities(175)
     const input = createVisualPlusFixtureInput(caps)
     const insights = buildVisualPlusInsights(input.snapshot)
-    const lines = renderVisualPlusCompactReview(input, insights).map(stripAnsi)
+    const lines = renderVisualPlusHybridReview(input, insights).map(stripAnsi)
     const output = lines.join('\n')
 
-    expect(output).toContain('Repository topology')
-    expect(output).toContain('Distribution')
-    expect(lines.filter((line) => line.startsWith('Major card '))).toHaveLength(
-      insights.majors.length,
-    )
-    expect(
-      lines.filter((line) => line.startsWith('Owner ') && line !== 'Owner impact'),
-    ).toHaveLength(5)
-    expect(lines).toContain('… 10 more owners')
-    expect(
-      lines.filter((line) => line.startsWith('Shared ') && line !== 'Shared dependencies'),
-    ).toHaveLength(5)
-    expect(lines).toContain('… 13 more shared dependencies')
-    expect(
-      lines.filter((line) => line.startsWith('Update ') && line !== 'Update preview'),
-    ).toHaveLength(8)
-    expect(lines).toContain('… 68 more updates')
-    expect(lines.slice(-1)).toEqual(['Details: rerun with --long for the complete audit.'])
+    expect(output).toContain('visual-plus-fixture · pnpm 10.33.0 · workspace · major · read-only')
+    expect(output).toContain('Breaking changes')
+    expect(output).toContain('Major 3 · Minor 37 · Patch 36')
+    expect(output.match(/^dependency\s+/gmu) ?? []).toHaveLength(15)
+    expect(output).not.toMatch(/Update preview|audit preview|omitted|more updates/iu)
+    expect(output).not.toContain('…')
     expect(output).not.toMatch(
       /Operation ID|Owner ID|Dependency ID|operation-|dependency:|package:|source:/u,
     )
 
-    const updates = lines.filter((line) => line.startsWith('Update ') && line !== 'Update preview')
-    expect(updates.slice(0, 3)).toEqual([
-      expect.stringMatching(/^Update Major react-dropzone .* lab-editor$/u),
-      expect.stringMatching(/^Update Major react-dropzone .* web$/u),
-      expect.stringMatching(/^Update Major nanoid .* root-catalog$/u),
-    ])
+    expect(lines.every((line) => visualLength(line) <= 175)).toBe(true)
   })
 
   it.each([40, 60, 80, 118, 175])(
-    'keeps every compact review line within %i columns and uses portable omission text',
+    'keeps every complete hybrid review line within %i columns without omission text',
     (width) => {
       const caps = capabilities(
         width,
         width === 40 ? { unicode: false, layout: 'plain' } : { unicode: true },
       )
       const input = createVisualPlusFixtureInput(caps)
-      const lines = renderVisualPlusCompactReview(input, buildVisualPlusInsights(input.snapshot))
+      const lines = renderVisualPlusHybridReview(input, buildVisualPlusInsights(input.snapshot))
 
       expect(lines.every((line) => visualLength(line) <= width)).toBe(true)
-      if (width === 40) {
-        expect(lines).toContain('... 10 more owners')
-        expect(lines.join('\n')).not.toContain('…')
-      }
+      expect(lines.join('\n')).not.toMatch(/Update preview|audit preview|omitted|more updates/iu)
+      expect(lines.join('\n')).not.toMatch(/Operation ID|operation-|dependency:|package:|source:/u)
     },
   )
 

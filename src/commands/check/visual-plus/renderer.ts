@@ -11,11 +11,12 @@ import {
 } from './input'
 import { buildVisualPlusInsights, VisualPlusInsightError } from './insights'
 import { renderVisualPlusChanges } from './sections/changes'
-import { renderVisualPlusCompactReview } from './sections/compact'
 import { renderVisualPlusDistribution } from './sections/distribution'
 import { renderVisualPlusCheckHeading, renderVisualPlusRunContext } from './sections/header'
+import { renderVisualPlusHybridReview } from './sections/hybrid'
 import { renderVisualPlusImpact } from './sections/impact'
 import {
+  renderVisualPlusCompactFailurePhase,
   renderVisualPlusLifecycleHeading,
   renderVisualPlusLifecyclePhase,
 } from './sections/lifecycle'
@@ -101,6 +102,8 @@ export function createVisualPlusRenderer(
   let deferredReentrantError: VisualPlusRendererContractError | undefined
   const durablePhases = new Map<string, string>()
   let plainCurrentPhase = ''
+
+  const compact = (): boolean => startupRun?.detailLevel === 'compact'
 
   const writeChunk = (chunk: string, onAccepted?: () => void): void => {
     if (writerActive) rejectReentrant('reentrant output write')
@@ -283,6 +286,7 @@ export function createVisualPlusRenderer(
     })
 
   const appendTerminalFacts = (snapshot: CheckRunSnapshot): boolean => {
+    if (compact()) return false
     const fresh: string[] = []
     for (const phase of terminalPhases(snapshot)) {
       const signature = semanticSignature(phase)
@@ -303,6 +307,7 @@ export function createVisualPlusRenderer(
     const snapshot = latestSnapshot
     if (!snapshot) return
     appendTerminalFacts(snapshot)
+    if (compact() && !cursorMode) return
     const active = currentActivePhase(snapshot)
     const lines = active ? renderVisualPlusLifecyclePhase(active, capabilities) : []
     const signature = semanticSignature(lines)
@@ -513,8 +518,10 @@ export function createVisualPlusRenderer(
       })
       startupRun = initialInput.run
       latestSnapshot = reconciledSnapshot
-      writeDurableLines(renderVisualPlusCheckHeading(initialInput))
-      writeDurableLines(renderVisualPlusLifecycleHeading(capabilities))
+      if (!compact()) {
+        writeDurableLines(renderVisualPlusCheckHeading(initialInput))
+        writeDurableLines(renderVisualPlusLifecycleHeading(capabilities))
+      }
       renderLatest()
     } catch (error) {
       explicitFailure(error)
@@ -548,6 +555,11 @@ export function createVisualPlusRenderer(
         changes: [],
       })
       cancelPending()
+      if (compact()) {
+        discoveredRun = input.run
+        renderLatest()
+        return
+      }
       appendTerminalFacts(snapshot)
       clearFrame()
       writeDurableLines(renderVisualPlusRunContext(input))
@@ -582,7 +594,7 @@ export function createVisualPlusRenderer(
       if (latestSnapshot) appendTerminalFacts(latestSnapshot)
       clearFrame()
       if (input.run.detailLevel === 'compact') {
-        writeDurableLines(renderVisualPlusCompactReview(input, insights))
+        writeDurableLines(renderVisualPlusHybridReview(input, insights))
       } else {
         writeDurableLines(renderVisualPlusTopology(insights, capabilities))
         writeDurableLines(renderVisualPlusDistribution(insights, capabilities))
@@ -619,13 +631,20 @@ export function createVisualPlusRenderer(
     try {
       if (latestSnapshot) appendTerminalFacts(latestSnapshot)
       clearFrame()
-      const complete = input.snapshot.phases.find((phase) => phase.name === 'complete')
-      if (complete && TERMINAL_PHASE_STATUSES.has(complete.status)) {
-        writeDurableLines(renderVisualPlusLifecyclePhase(complete, capabilities))
-        durablePhases.set(complete.name, semanticSignature(complete))
-      }
-      if (input.snapshot.counts.operations > 0 || input.snapshot.counts.targets > 0) {
-        writeDurableLines(renderVisualPlusTransaction(input))
+      if (compact()) {
+        writeDurableLines(renderVisualPlusCompactFailurePhase(input))
+        if (input.snapshot.counts.operations > 0 || input.snapshot.counts.targets > 0) {
+          writeDurableLines(renderVisualPlusTransaction(input))
+        }
+      } else {
+        const complete = input.snapshot.phases.find((phase) => phase.name === 'complete')
+        if (complete && TERMINAL_PHASE_STATUSES.has(complete.status)) {
+          writeDurableLines(renderVisualPlusLifecyclePhase(complete, capabilities))
+          durablePhases.set(complete.name, semanticSignature(complete))
+        }
+        if (input.snapshot.counts.operations > 0 || input.snapshot.counts.targets > 0) {
+          writeDurableLines(renderVisualPlusTransaction(input))
+        }
       }
       writeDurableLines(renderVisualPlusReceipt(input))
       finalInput = input

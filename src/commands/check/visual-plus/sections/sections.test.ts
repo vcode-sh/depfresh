@@ -27,7 +27,6 @@ import {
 import { buildVisualPlusInsights } from '../insights'
 import { createVisualPlusTheme, wrapVisualPlusText } from '../theme'
 import { renderVisualPlusChanges } from './changes'
-import { renderVisualPlusCompactTransaction } from './compact'
 import { renderVisualPlusDistribution } from './distribution'
 import { renderVisualPlusHeader } from './header'
 import { renderVisualPlusImpact } from './impact'
@@ -36,10 +35,12 @@ import {
   renderVisualPlusLifecycleHeading,
   renderVisualPlusLifecyclePhase,
 } from './lifecycle'
+import * as receiptExports from './receipt'
 import { renderVisualPlusReceipt } from './receipt'
 import { renderVisualPlusRisk } from './risk'
 import { renderVisualPlusShared } from './shared'
 import { renderVisualPlusTopology } from './topology'
+import * as transactionExports from './transaction'
 import { renderVisualPlusTransaction } from './transaction'
 
 const phaseNames: readonly CheckRunPhaseName[] = [
@@ -63,6 +64,26 @@ const capable: VisualPlusCapabilities = {
   cursorControl: true,
   width: 118,
   layout: 'wide',
+}
+
+function isStrictVisualPlusWriteSuccess(input: VisualPlusSectionInput): boolean {
+  const predicate = (
+    receiptExports as typeof receiptExports & {
+      isStrictVisualPlusWriteSuccess?: (value: VisualPlusSectionInput) => boolean
+    }
+  ).isStrictVisualPlusWriteSuccess
+  expect(predicate).toBeTypeOf('function')
+  return predicate!(input)
+}
+
+function requiresVisualPlusDetailedTransaction(input: VisualPlusSectionInput): boolean {
+  const predicate = (
+    transactionExports as typeof transactionExports & {
+      requiresVisualPlusDetailedTransaction?: (value: VisualPlusSectionInput) => boolean
+    }
+  ).requiresVisualPlusDetailedTransaction
+  expect(predicate).toBeTypeOf('function')
+  return predicate!(input)
 }
 
 function renderedNextAction(lines: readonly string[]): string | undefined {
@@ -773,17 +794,17 @@ describe('Visual+ section input', () => {
 })
 
 describe('Visual+ pure sections', () => {
-  it('bounds successful compact targets and retains every non-success target without IDs', () => {
+  it('omits strict compact success transactions and retains every non-success fact without IDs', () => {
     const successful = createVisualPlusSectionInput({
       ...fixture(),
       run: { ...fixture().run, detailLevel: 'compact' },
       capabilities: { ...capable, color: false, width: 175 },
     })
-    const successfulLines = renderVisualPlusCompactTransaction(successful).map(stripAnsi)
+    const successfulLines = renderVisualPlusTransaction(successful).map(stripAnsi)
 
-    expect(successfulLines.filter((line) => line.startsWith('packages/target-'))).toHaveLength(8)
-    expect(successfulLines).toContain('… 6 more targets')
-    expect(successfulLines.join('\n')).not.toMatch(/Operation ID|operation-|IDs /u)
+    expect(isStrictVisualPlusWriteSuccess(successful)).toBe(true)
+    expect(requiresVisualPlusDetailedTransaction(successful)).toBe(false)
+    expect(successfulLines).toEqual([])
 
     const blockedSource = fixture('blocked', 2)
     const blocked = createVisualPlusSectionInput({
@@ -791,14 +812,17 @@ describe('Visual+ pure sections', () => {
       run: { ...blockedSource.run, detailLevel: 'compact' },
       capabilities: { ...capable, color: false, width: 175 },
     })
-    const blockedLines = renderVisualPlusCompactTransaction(blocked).map(stripAnsi)
+    const blockedLines = renderVisualPlusTransaction(blocked).map(stripAnsi)
 
+    expect(isStrictVisualPlusWriteSuccess(blocked)).toBe(false)
+    expect(requiresVisualPlusDetailedTransaction(blocked)).toBe(true)
     expect(blockedLines.filter((line) => line.startsWith('Target '))).toHaveLength(14)
-    expect(blockedLines.join('\n')).not.toContain('more targets')
+    expect(blockedLines.filter((line) => line.startsWith('Update '))).toHaveLength(76)
+    expect(blockedLines.join('\n')).not.toMatch(/more targets|omitted/iu)
     expect(blockedLines.join('\n')).not.toMatch(/Operation ID|operation-|IDs /u)
   })
 
-  it('retains over-limit compact targets with independent safety receipts and renders each flag', () => {
+  it('renders all compact targets and human operation facts with independent safety flags', () => {
     const source = fixture()
     const blockedIds = new Set(source.snapshot.targets[8]!.operationIds)
     const notAttemptedIds = new Set(source.snapshot.targets[9]!.operationIds)
@@ -830,6 +854,7 @@ describe('Visual+ pure sections', () => {
       snapshot: {
         ...source.snapshot,
         write: false,
+        exitCode: 1,
         results: {
           operations: operationResults,
           targets: targetResults,
@@ -851,7 +876,8 @@ describe('Visual+ pure sections', () => {
       },
       writeReceipt: undefined,
     })
-    const output = renderVisualPlusCompactTransaction(input).map(stripAnsi).join('\n')
+    const lines = renderVisualPlusTransaction(input).map(stripAnsi)
+    const output = lines.join('\n')
 
     expect(output).toContain(
       'Target packages/target-8/package.json · 5 updates · skipped · blocked true · not attempted true · unknown false',
@@ -862,7 +888,12 @@ describe('Visual+ pure sections', () => {
     expect(output).toContain(
       'Target packages/target-10/package.json · 5 updates · skipped · blocked false · not attempted false · unknown true',
     )
-    expect(output).toContain('… 3 more targets')
+    expect(output).toContain(
+      'Update dependency-8-0 · ^1.0.0 → ^1.1.0 · outcome skipped · blocked true · not attempted true · unknown false',
+    )
+    expect(lines.filter((line) => line.startsWith('Target '))).toHaveLength(14)
+    expect(lines.filter((line) => line.startsWith('Update '))).toHaveLength(76)
+    expect(output).not.toMatch(/more targets|omitted|operation-|IDs /iu)
   })
 
   it('renders the exact complete hierarchy, every row once, and every transaction target once', () => {
@@ -1427,6 +1458,60 @@ describe('Visual+ receipt decision table', () => {
         : {}),
     }
   }
+
+  function compactInput(input: VisualPlusSectionInput): VisualPlusSectionInput {
+    return createVisualPlusSectionInput({
+      ...input,
+      run: { ...input.run, detailLevel: 'compact' },
+    })
+  }
+
+  it('renders the exact concise compact read-only exit 0 receipt', () => {
+    const base = fixture('not-attempted', 0)
+    const input = compactInput({
+      ...base,
+      snapshot: { ...base.snapshot, write: false },
+      writeReceipt: undefined,
+    })
+
+    expect(renderVisualPlusReceipt(input).map(stripAnsi)).toEqual([
+      'Review complete · 76 updates across 14 files · write not attempted',
+      'Exit 0',
+    ])
+    expect(isStrictVisualPlusWriteSuccess(input)).toBe(false)
+    expect(requiresVisualPlusDetailedTransaction(input)).toBe(false)
+  })
+
+  it('renders the exact concise strict compact write receipt', () => {
+    const input = compactInput(fixture())
+
+    expect(renderVisualPlusReceipt(input).map(stripAnsi)).toEqual([
+      'Complete · 76 updates applied across 14 files',
+      'All 14 files observed at the requested values · recovery not needed · 2.4s',
+      'Exit 0',
+    ])
+    expect(isStrictVisualPlusWriteSuccess(input)).toBe(true)
+    expect(requiresVisualPlusDetailedTransaction(input)).toBe(false)
+  })
+
+  it.each([
+    ['read-only exit 1', { write: false, exitCode: 1 }],
+    ['read-only exit 2', { write: false, exitCode: 2 }],
+    ['skipped write', { outcome: 'skipped' }],
+    ['safety block', { outcome: 'blocked', exitCode: 2 }],
+    ['partial write', { outcome: 'reverted', verdict: 'partial', exitCode: 2 }],
+    ['failed write', { outcome: 'failed', verdict: 'failed', exitCode: 2 }],
+    ['unknown write', { outcome: 'unknown', verdict: 'unknown', exitCode: 2 }],
+  ] as const)('keeps compact %s on the detailed transaction and receipt path', (_name, options) => {
+    const input = compactInput(oneOperation(options))
+
+    expect(isStrictVisualPlusWriteSuccess(input)).toBe(false)
+    expect(requiresVisualPlusDetailedTransaction(input)).toBe(true)
+    expect(renderVisualPlusTransaction(input).map(stripAnsi)).not.toEqual([])
+    expect(renderVisualPlusReceipt(input).map(stripAnsi).at(-1)).toBe(
+      `Exit ${input.snapshot.exitCode}`,
+    )
+  })
 
   it.each([
     ['Pending', { exitCode: null }],
