@@ -1,6 +1,6 @@
 # Visual+ Hybrid Default Design
 
-**Status:** Product direction approved in conversation on 2026-07-20; written-spec review pending.
+**Status:** Approved in conversation on 2026-07-20; implementation owned by Plan 038.
 
 ## Problem
 

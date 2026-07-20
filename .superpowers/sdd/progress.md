@@ -410,3 +410,9 @@ installed tests across 5/5 suites. Bun replaced only global depfresh with those 
 printed 2.1.1. The current 63-line Spreadoo true-PTY smoke exited 0 with truthful context, no
 internal IDs, a visible cursor, and unchanged successful-run Git and `bun.lock` evidence. Plan 037
 is DONE. No publish, tag, push, hosted workflow, GitHub release, or public-artifact proof is claimed.
+
+Plan 038 planning: commit `48eec95` introduced the hybrid Visual+ human-default design; its approval
+is recorded with Plan 038. The implementation plan is READY with six TDD tasks and a bounded
+parallel Wave 3 for proof tooling and documentation. No Plan 038 implementation, repack, Bun
+replacement, publish, tag, push, hosted workflow, GitHub release, or public-artifact proof has
+started.

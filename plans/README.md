@@ -65,6 +65,7 @@ may grant side effects. Unknown state is never reported as success.
 | [035](./035-visual-plus-insights-pty-proof.md) | Visual+ insights and PTY proof | P1 | L | 034 | DONE |
 | [036](./036-v2.1.0-release.md) | Publish and prove depfresh 2.1.0 | P1 | M | 035 | DONE |
 | [037](./037-visual-plus-compact-2.1.1.md) | Compact Visual+ output and prepare 2.1.1 | P1 | M | 036 | DONE |
+| [038](./038-visual-plus-hybrid-default.md) | Hybrid Visual+ human default | P1 | L | 037 | READY |
 
 The implementation order through 016 is present locally. Plans 011 through 013 passed their final
 blocker replays, regression fixes, full gates, and independent re-reviews on 2026-07-16. Plans 014
@@ -295,6 +296,12 @@ suite, and all static/build/package checks. A new isolated 56-file artifact pass
 63-line Spreadoo true-PTY smoke exited 0 without Git changes. The original artifact remains
 historical `41f0002` evidence; Plan 037 is DONE on corrected local evidence. No publication, tag,
 push, hosted workflow, or public-artifact proof is claimed.
+
+Plan 038 is READY from the hybrid Visual+ design introduced as `48eec95` and subsequently approved
+in conversation. It replaces the flat compact success transcript with responsive context,
+proportional severity, complete major-risk focus, and a canonical update ledger while preserving
+the exhaustive `--long` audit and all non-success/recovery evidence. Implementation and corrected
+2.1.1 artifact proof have not started.
 
 Post-release retained-harness commit `de3c417` deterministically owns the nested PTY line-ending
 mapping after diagnostics isolated recurrent BSD `CRCRLF` below bare-LF-only child writes. Exact
