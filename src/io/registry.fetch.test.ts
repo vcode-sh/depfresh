@@ -180,6 +180,17 @@ describe('fetchPackageData', () => {
     expect(result.distTags.latest).toBe('2.0.0')
   })
 
+  it('rejects an unsafe GitHub repository identity before fetch', async () => {
+    globalThis.fetch = vi.fn()
+
+    const { fetchPackageData } = await import('./registry')
+    await expect(fetchPackageData('github:owner/repo/extra', defaultOptions)).rejects.toThrow(
+      'Invalid GitHub repository identity',
+    )
+
+    expect(globalThis.fetch).not.toHaveBeenCalled()
+  })
+
   it('sends GitHub authorization header when token env var is set', async () => {
     process.env.GITHUB_TOKEN = 'ghs_test_token'
     process.env.GH_TOKEN = undefined

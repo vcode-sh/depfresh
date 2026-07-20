@@ -974,6 +974,43 @@ describe('run-check orchestration paths', () => {
     stdoutWriteSpy.mockRestore()
   })
 
+  it('redacts Visual+ dependency callback failures from debug output', async () => {
+    const packages = makeMixedPackages()
+    mocks.loadPackagesMock.mockResolvedValue(packages)
+    mocks.resolvePackageMock.mockImplementation(async (pkg, options) => {
+      const changes = resolvedForPackage(pkg)
+      for (const dependency of changes) {
+        await options.onDependencyResolved?.(pkg, dependency)
+      }
+      return changes
+    })
+    setStdoutTTY(true)
+    setStderrTTY(true)
+    const stdoutWriteSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+
+    try {
+      const { checkFromCli } = await import('./run-check')
+      await expect(
+        checkFromCli({
+          ...baseOptions,
+          output: 'table',
+          loglevel: 'debug',
+          onDependencyResolved: () => {
+            throw new Error('PRIVATE_KEY=visual-callback-secret')
+          },
+        }),
+      ).resolves.toBe(0)
+
+      const output = logSpy.mock.calls.flat().map(String).join(' ')
+      expect(output).toContain('[REDACTED]')
+      expect(output).not.toContain('visual-callback-secret')
+    } finally {
+      stdoutWriteSpy.mockRestore()
+      logSpy.mockRestore()
+    }
+  })
+
   it('suspends debug resolver and callback bytes until the whole resolution interval completes', async () => {
     const packages = makeMixedPackages()
     const releases = new Map<string, () => Promise<void>>()

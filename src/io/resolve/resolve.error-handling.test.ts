@@ -330,6 +330,61 @@ describe('unexpected resolution failures', () => {
     })
   })
 
+  it('redacts arbitrary dependency callback failures from debug output', async () => {
+    const { fetchPackageData } = await import('../registry')
+    const { resolvePackage } = await import('./index')
+
+    const cache = createMockCache()
+    vi.mocked(fetchPackageData).mockResolvedValue({
+      name: 'test-pkg',
+      versions: ['1.0.0', '2.0.0'],
+      distTags: { latest: '2.0.0' },
+    })
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+
+    const result = await resolvePackage(
+      makePkg([makeDep()]),
+      makeOptions({
+        loglevel: 'debug',
+        mode: 'latest',
+        onDependencyResolved: () => {
+          throw new Error('API_KEY=callback-secret')
+        },
+      }),
+      cache,
+      defaultNpmrc,
+    )
+
+    expect(result).toHaveLength(1)
+    const output = logSpy.mock.calls.flat().map(String).join(' ')
+    expect(output).toContain('[REDACTED]')
+    expect(output).not.toContain('callback-secret')
+    logSpy.mockRestore()
+  })
+
+  it('redacts arbitrary resolution failures from debug output', async () => {
+    const { resolvePackage } = await import('./index')
+
+    const cache = createMockCache()
+    vi.mocked(cache.get).mockImplementation(() => {
+      throw new Error('NPM_TOKEN=resolution-secret')
+    })
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+
+    const result = await resolvePackage(
+      makePkg([makeDep()]),
+      makeOptions({ loglevel: 'debug', mode: 'latest' }),
+      cache,
+      defaultNpmrc,
+    )
+
+    expect(result[0]?.diff).toBe('error')
+    const output = logSpy.mock.calls.flat().map(String).join(' ')
+    expect(output).toContain('[REDACTED]')
+    expect(output).not.toContain('resolution-secret')
+    logSpy.mockRestore()
+  })
+
   it('keeps resolved deps when onDependencyProcessed throws', async () => {
     const { fetchPackageData } = await import('../registry')
     const { resolvePackage } = await import('./index')

@@ -239,7 +239,7 @@ const main = defineCommand({
         return
       }
       // biome-ignore lint/suspicious/noConsole: intentional error output
-      console.error('Fatal error:', error instanceof Error ? error.message : String(error))
+      console.error('Fatal error:', getSafeErrorDetails(error).message)
       process.exitCode = 2
     }
   },

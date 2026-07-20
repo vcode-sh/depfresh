@@ -11,6 +11,7 @@ import type {
 import type { createLogger } from '../../utils/logger'
 import type { loadNpmrc } from '../../utils/npmrc'
 import { getRegistryForPackage } from '../../utils/npmrc'
+import { getSafeErrorDetails } from '../../utils/redact'
 import {
   applyVersionPrefix,
   getDiff,
@@ -127,12 +128,12 @@ export async function resolveDependency(
           cache.set(cacheIdentity.persistentKey, pkgData, options.cacheTTL)
         } catch (error) {
           logger.debug(
-            `Failed to write cache entry for ${packageName}: ${error instanceof Error ? error.message : String(error)}`,
+            `Failed to write cache entry for ${packageName}: ${getSafeErrorDetails(error).message}`,
           )
         }
       }
     } catch (error) {
-      logger.debug(`Failed to fetch ${packageName}: ${error}`)
+      logger.debug(`Failed to fetch ${packageName}: ${getSafeErrorDetails(error).message}`)
       recordResolutionTrace(resolveContext, dep.occurrenceId, {
         status: 'unknown',
         reason: 'REGISTRY_UNAVAILABLE',

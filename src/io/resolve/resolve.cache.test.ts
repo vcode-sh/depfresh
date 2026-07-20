@@ -174,6 +174,31 @@ describe('resolvePackage - cache behavior', () => {
     expect(result[0]!.diff).toBe('major')
   })
 
+  it('redacts cache write failures from debug output', async () => {
+    const { fetchPackageData } = await import('../registry')
+    const { resolvePackage } = await import('./index')
+
+    const cache = createMockCache()
+    vi.mocked(fetchPackageData).mockResolvedValue(mockPkgData)
+    vi.mocked(cache.set).mockImplementation(() => {
+      throw new Error('CACHE_TOKEN=cache-secret')
+    })
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+
+    const result = await resolvePackage(
+      makePkg([makeDep()]),
+      makeOptions({ loglevel: 'debug', mode: 'latest' }),
+      cache,
+      npmrc,
+    )
+
+    expect(result[0]?.diff).toBe('major')
+    const output = logSpy.mock.calls.flat().map(String).join(' ')
+    expect(output).toContain('[REDACTED]')
+    expect(output).not.toContain('cache-secret')
+    logSpy.mockRestore()
+  })
+
   it('returns error diff on registry fetch failure', async () => {
     const { fetchPackageData } = await import('../registry')
     const { resolvePackage } = await import('./index')
@@ -190,6 +215,30 @@ describe('resolvePackage - cache behavior', () => {
     expect(result.length).toBe(1)
     expect(result[0]!.diff).toBe('error')
     expect(result[0]!.targetVersion).toBe('^1.0.0')
+  })
+
+  it('redacts registry fetch failures from debug output', async () => {
+    const { fetchPackageData } = await import('../registry')
+    const { resolvePackage } = await import('./index')
+
+    const cache = createMockCache()
+    vi.mocked(fetchPackageData).mockRejectedValue(
+      new Error('Authorization: Bearer registry-secret'),
+    )
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+
+    const result = await resolvePackage(
+      makePkg([makeDep()]),
+      makeOptions({ loglevel: 'debug', mode: 'latest' }),
+      cache,
+      npmrc,
+    )
+
+    expect(result[0]?.diff).toBe('error')
+    const output = logSpy.mock.calls.flat().map(String).join(' ')
+    expect(output).toContain('[REDACTED]')
+    expect(output).not.toContain('registry-secret')
+    logSpy.mockRestore()
   })
 
   it('resolves multiple deps with concurrency', async () => {

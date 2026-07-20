@@ -164,7 +164,7 @@ export async function runCheck(
       const callback = () => addons.onDependencyResolved(pkg, dep)
       const onFailure = (error: unknown) =>
         logger.debug(
-          `Ignored onDependencyResolved callback failure: ${error instanceof Error ? error.message : String(error)}`,
+          `Ignored onDependencyResolved callback failure: ${getSafeErrorDetails(error).message}`,
         )
       if (!visualRenderer) return callback()
       return visualResolutionSuspended

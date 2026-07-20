@@ -12,6 +12,7 @@ import type {
 } from '../../types'
 import { createLogger, type Logger } from '../../utils/logger'
 import { loadNpmrc } from '../../utils/npmrc'
+import { getSafeErrorDetails } from '../../utils/redact'
 import { resolveDiscoveryContext } from '../packages/root-detection'
 import { type ResolveContext, recordResolutionTrace } from './context'
 import { resolveDependency } from './resolve-dependency'
@@ -39,9 +40,7 @@ async function runBestEffortCallback(
   try {
     await callback()
   } catch (error) {
-    logger.debug(
-      `Ignored ${label} callback failure: ${error instanceof Error ? error.message : String(error)}`,
-    )
+    logger.debug(`Ignored ${label} callback failure: ${getSafeErrorDetails(error).message}`)
   }
 }
 
@@ -110,7 +109,7 @@ export async function resolvePackageWithLogger(
               return resolved
             } catch (error) {
               logger.debug(
-                `Resolution failed for ${dep.aliasName ?? dep.name}: ${error instanceof Error ? error.message : String(error)}`,
+                `Resolution failed for ${dep.aliasName ?? dep.name}: ${getSafeErrorDetails(error).message}`,
               )
               recordResolutionTrace(resolveContext, dep.occurrenceId, {
                 status: 'unknown',
@@ -135,7 +134,7 @@ export async function resolvePackageWithLogger(
     for (const result of results) {
       if (result.status !== 'fulfilled' || !result.value) {
         if (result.status === 'rejected') {
-          logger.debug(`Resolution failed: ${result.reason}`)
+          logger.debug(`Resolution failed: ${getSafeErrorDetails(result.reason).message}`)
         }
         continue
       }

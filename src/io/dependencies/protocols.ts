@@ -11,15 +11,36 @@ interface ParsedGithubSpec {
   currentVersion: string
 }
 
+export interface GithubRepositoryIdentity {
+  owner: string
+  repository: string
+}
+
+const GITHUB_OWNER_PATTERN = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/u
+const GITHUB_REPOSITORY_PATTERN = /^[A-Za-z0-9._-]{1,100}$/u
+
+export function parseGithubRepositoryIdentity(value: string): GithubRepositoryIdentity | null {
+  const segments = value.split('/')
+  if (segments.length !== 2) return null
+
+  const [owner, repository] = segments
+  if (!(owner && repository)) return null
+  if (!GITHUB_OWNER_PATTERN.test(owner)) return null
+  if (!GITHUB_REPOSITORY_PATTERN.test(repository)) return null
+  if (repository === '.' || repository === '..') return null
+
+  return { owner, repository }
+}
+
 export function parseGithubSpec(version: string): ParsedGithubSpec | null {
   const githubMatch = version.match(/^github:([^#]+)#(.+)$/)
   if (!githubMatch) {
     return null
   }
 
-  const repository = githubMatch[1]?.trim()
+  const repository = githubMatch[1]
   const ref = githubMatch[2]?.trim()
-  if (!(repository && ref)) {
+  if (!(repository && ref && parseGithubRepositoryIdentity(repository))) {
     return null
   }
 

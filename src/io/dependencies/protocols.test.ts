@@ -54,6 +54,14 @@ describe('parseProtocol', () => {
 })
 
 describe('parseGithubSpec', () => {
+  it.each([
+    'github:owner/repo#v1.2.3',
+    'github:owner-name/repo_name#1.2.3',
+    'github:uNetworking/uWebSockets.js#refs/tags/v20.51.0',
+  ])('accepts an ordinary owner/repository identity in %s', (version) => {
+    expect(parseGithubSpec(version)).not.toBeNull()
+  })
+
   it('supports refs/tags/ prefix', () => {
     const result = parseGithubSpec('github:owner/repo#refs/tags/v1.2.3')
     expect(result).toEqual({
@@ -65,5 +73,29 @@ describe('parseGithubSpec', () => {
   it('returns null for non-semver refs', () => {
     expect(parseGithubSpec('github:owner/repo#main')).toBeNull()
     expect(parseGithubSpec('github:owner/repo#a1b2c3d')).toBeNull()
+  })
+
+  it.each([
+    'owner/repo/extra',
+    './repo',
+    '../repo',
+    'owner/.',
+    'owner/..',
+    'owner%2Frepo',
+    'owner%5Crepo',
+    String.raw`owner\repo`,
+    'owner/repo?token=value',
+    'owner/repo%23fragment',
+    'owner/repo\u0000suffix',
+    'owner/repo\n',
+    ' owner/repo',
+    'owner/repo ',
+    'owner/re po',
+    '/repo',
+    'owner/',
+    'owner//repo',
+    'https://github.com/owner/repo',
+  ])('rejects unsafe GitHub repository identity %j', (repository) => {
+    expect(parseGithubSpec(`github:${repository}#v1.2.3`)).toBeNull()
   })
 })

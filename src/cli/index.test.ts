@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process'
-import { existsSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -191,6 +191,32 @@ describe('CLI raw argument validation', () => {
     expect(result.status).toBe(2)
     expect(result.stdout).toContain('[REDACTED]')
     expect(result.stdout).not.toContain('top-secret')
+  })
+
+  it('redacts arbitrary fatal errors from executable config evaluation', () => {
+    const root = mkdtempSync(join(tmpdir(), 'depfresh-cli-fatal-redaction-'))
+    writeFileSync(join(root, 'package.json'), JSON.stringify({ name: 'fixture' }))
+    writeFileSync(
+      join(root, 'depfresh.config.mjs'),
+      `export default new Proxy({}, {
+  ownKeys() {
+    throw new Error('Authorization: Bearer fatal-secret', {
+      cause: new Error('NPM_TOKEN=nested-secret'),
+    })
+  },
+})\n`,
+    )
+
+    try {
+      const result = runCli(['--cwd', root])
+
+      expect(result.status).toBe(2)
+      expect(significantStderr(result.stderr)).toContain('Fatal error:')
+      expect(result.stderr).toContain('[REDACTED]')
+      expect(result.stderr).not.toMatch(/fatal-secret|nested-secret/u)
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
   })
 })
 

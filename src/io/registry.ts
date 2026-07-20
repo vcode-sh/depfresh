@@ -12,6 +12,7 @@ import type { Logger } from '../utils/logger'
 import { getRegistryForPackage } from '../utils/npmrc'
 import { isValidPackageName } from '../utils/package-name'
 import { redactSensitiveText } from '../utils/redact'
+import { parseGithubRepositoryIdentity } from './dependencies/protocols'
 import { getFetchTransportInit } from './transport'
 
 interface FetchOptions {
@@ -330,6 +331,11 @@ async function fetchJsrPackage(name: string, options: FetchOptions): Promise<Pac
 }
 
 async function fetchGithubPackage(repository: string, options: FetchOptions): Promise<PackageData> {
+  const identity = parseGithubRepositoryIdentity(repository)
+  if (!identity) {
+    throw new ResolveError('Invalid GitHub repository identity')
+  }
+  const encodedRepository = `${encodeURIComponent(identity.owner)}/${encodeURIComponent(identity.repository)}`
   const token = process.env.GITHUB_TOKEN ?? process.env.GH_TOKEN
   const headers: Record<string, string> = {
     accept: 'application/vnd.github+json',
@@ -343,7 +349,7 @@ async function fetchGithubPackage(repository: string, options: FetchOptions): Pr
 
   // Fetch tags until GitHub returns an empty page.
   for (let page = 1; ; page++) {
-    const url = `https://api.github.com/repos/${repository}/tags?per_page=100&page=${page}`
+    const url = `https://api.github.com/repos/${encodedRepository}/tags?per_page=100&page=${page}`
     const payload = await fetchWithRetry(url, headers, options)
     if (!Array.isArray(payload)) {
       throw new ResolveError(`Unexpected GitHub tags payload shape for ${url}`)
