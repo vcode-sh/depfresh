@@ -242,6 +242,12 @@ describe('Visual+ practical fixture', () => {
         const projection = createVisualPlusSelectionProjection(
           construction.selectionEvidence.evidence,
           AS_OF_MS,
+          {
+            group: options.group,
+            sort: options.sort,
+            timediff: options.timediff,
+            nodecompat: options.nodecompat,
+          },
         )
         let snapshot = createCheckRunState({ mode: 'major', write: false })
         snapshot = reduceCheckRun(snapshot, { type: 'packages-discovered', packages: 66, declared })
