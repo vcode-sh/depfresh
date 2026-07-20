@@ -10,21 +10,21 @@ reviewable plan/apply workflow when you need stronger guarantees.
 
 ## Try it
 
-Run depfresh from any project root. Recursive workspace discovery is on by default, so `-r` is not
-needed.
+Run the current public release from any project root. Recursive workspace discovery is on by
+default, so `-r` is not needed.
 
 ```bash
 # Bun
-bunx depfresh@2.1.1
+bunx depfresh@2.1.0
 
 # pnpm
-pnpm dlx depfresh@2.1.1
+pnpm dlx depfresh@2.1.0
 
 # npm
-npm exec --yes --package=depfresh@2.1.1 -- depfresh
+npm exec --yes --package=depfresh@2.1.0 -- depfresh
 
 # Yarn
-yarn dlx depfresh@2.1.1
+yarn dlx depfresh@2.1.0
 ```
 
 Node.js 24.15.0 or newer is required.
@@ -32,7 +32,7 @@ Node.js 24.15.0 or newer is required.
 For a team or CI, pin depfresh in the project instead:
 
 ```bash
-pnpm add -D --save-exact depfresh@2.1.1
+pnpm add -D --save-exact depfresh@2.1.0
 pnpm exec depfresh
 ```
 

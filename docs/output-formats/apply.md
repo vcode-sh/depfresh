@@ -70,9 +70,9 @@ The schema-v1 supported command arrays are exact:
 
 | Manager | Lockfile-only sync argv | Full-install argv |
 | --- | --- | --- |
-| npm 10/11 | `["install","--package-lock-only","--ignore-scripts","--no-audit","--no-fund"]` | `["install","--ignore-scripts","--no-audit","--no-fund"]` |
-| pnpm 10/11 | `["install","--lockfile-only","--ignore-scripts","--ignore-pnpmfile","--no-frozen-lockfile","--config.lockfile-dir=.","--config.modules-dir=node_modules","--config.virtual-store-dir=node_modules/.pnpm","--config.node-linker=isolated","--config.enable-global-virtual-store=false","--config.enable-modules-dir=true","--config.shared-workspace-lockfile=true","--config.lockfile=true"]` | `["install","--ignore-scripts","--ignore-pnpmfile","--no-frozen-lockfile","--config.lockfile-dir=.","--config.modules-dir=node_modules","--config.virtual-store-dir=node_modules/.pnpm","--config.node-linker=isolated","--config.enable-global-virtual-store=false","--config.enable-modules-dir=true","--config.shared-workspace-lockfile=true","--config.lockfile=true"]` |
-| Bun 1.2 through 1.x | `["install","--lockfile-only","--ignore-scripts","--no-progress","--no-summary"]` | `["install","--ignore-scripts","--no-progress","--no-summary"]` |
+| npm `>=10.0.0 <13.0.0` | `["install","--package-lock-only","--ignore-scripts","--no-audit","--no-fund"]` | `["install","--ignore-scripts","--no-audit","--no-fund"]` |
+| pnpm `>=10.0.0 <12.0.0` | `["install","--lockfile-only","--ignore-scripts","--ignore-pnpmfile","--no-frozen-lockfile","--config.lockfile-dir=.","--config.modules-dir=node_modules","--config.virtual-store-dir=node_modules/.pnpm","--config.node-linker=isolated","--config.enable-global-virtual-store=false","--config.enable-modules-dir=true","--config.shared-workspace-lockfile=true","--config.lockfile=true"]` | `["install","--ignore-scripts","--ignore-pnpmfile","--no-frozen-lockfile","--config.lockfile-dir=.","--config.modules-dir=node_modules","--config.virtual-store-dir=node_modules/.pnpm","--config.node-linker=isolated","--config.enable-global-virtual-store=false","--config.enable-modules-dir=true","--config.shared-workspace-lockfile=true","--config.lockfile=true"]` |
+| Bun `>=1.2.0 <2.0.0` | `["install","--lockfile-only","--ignore-scripts","--no-progress","--no-summary"]` | `["install","--ignore-scripts","--no-progress","--no-summary"]` |
 
 Pnpm containment arguments override project output redirects; its package store remains the declared
 non-transactional manager-cache effect. Verification argv is contract-public data: absolute paths

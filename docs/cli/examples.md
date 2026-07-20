@@ -153,12 +153,13 @@ depfresh plan --json --sync-lockfile --verify-argv '["pnpm","test"]' > depfresh-
 depfresh apply --json --write --sync-lockfile --verify --plan-file depfresh-plan.json
 ```
 
-Supported execution is limited to npm 10/11 with `package-lock.json` or `npm-shrinkwrap.json`, pnpm
-10/11 with `pnpm-lock.yaml`, and Bun 1.2 through 1.x with text `bun.lock` on Linux and macOS. Yarn,
-`bun.lockb`, Windows manager execution, manager fallback, shell strings, and legacy `--execute`,
-`--update`, or `--verify-command` flows are rejected. Manager phases accept only registry-backed
-`semver` and `npm:` alias occurrences; unsupported dependency protocols remain available to the
-file-only plan and block manager execution before apply.
+Supported execution is limited to npm `>=10.0.0 <13.0.0` with `package-lock.json` or
+`npm-shrinkwrap.json`, pnpm `>=10.0.0 <12.0.0` with `pnpm-lock.yaml`, and Bun
+`>=1.2.0 <2.0.0` with text `bun.lock` on Linux and macOS. Yarn, `bun.lockb`, Windows manager
+execution, manager fallback, shell strings, and legacy `--execute`, `--update`, or
+`--verify-command` flows are rejected. Manager phases accept only registry-backed `semver` and
+`npm:` alias occurrences; unsupported dependency protocols remain available to the file-only plan
+and block manager execution before apply.
 
 ---
 

@@ -188,15 +188,16 @@ describe('2.1.1 release readiness', () => {
     expect(read('test/wun-demo-proof.mjs')).toContain("capabilities.version, '2.1.1'")
   })
 
-  it('pins every maintained README runner command to 2.1.1', () => {
+  it('uses the published 2.1.0 package in maintained README install commands', () => {
     const readme = read('README.md')
     const currentInstructions = readme.slice(
       readme.indexOf('## Try it'),
       readme.indexOf('## Everyday commands'),
     )
 
-    expect(currentInstructions.match(/depfresh@2\.1\.1/gu)).toHaveLength(5)
-    expect(currentInstructions).not.toContain('depfresh@2.1.0')
+    expect(currentInstructions.match(/depfresh@2\.1\.0/gu)).toHaveLength(5)
+    expect(currentInstructions).not.toContain('depfresh@2.1.1')
+    expect(readme.replace(/\s+/gu, ' ')).toContain('The 2.1.1 local candidate remains unpublished')
   })
 
   it('pins both maintained WUN published-runner commands to 2.1.1', () => {
@@ -339,6 +340,21 @@ describe('2.1.1 release readiness', () => {
     expect(normalized('docs/output-formats/global-apply.md')).toContain('npm `>=10.0.0 <13.0.0`')
     expect(normalized('docs/output-formats/global-apply.md')).toContain('pnpm `>=10.0.0 <12.0.0`')
     expect(normalized('docs/output-formats/global-apply.md')).toContain('Bun `>=1.2.0 <2.0.0`')
+    expect(normalized('docs/output-formats/apply.md')).toContain('npm `>=10.0.0 <13.0.0`')
+    expect(normalized('docs/output-formats/apply.md')).toContain('pnpm `>=10.0.0 <12.0.0`')
+    expect(normalized('docs/output-formats/apply.md')).toContain('Bun `>=1.2.0 <2.0.0`')
+    expect(normalized('docs/output-formats/apply.md')).toContain(
+      'npm `>=11.12.0 <12.0.0 || >=12.0.0 <12.1.0`',
+    )
+    expect(normalized('docs/output-formats/inspect-plan.md')).toContain(
+      'npm `>=11.12.0 <12.0.0 || >=12.0.0 <12.1.0`',
+    )
+    expect(normalized('docs/cli/examples.md')).toContain('npm `>=10.0.0 <13.0.0`')
+    expect(normalized('docs/cli/examples.md')).toContain('pnpm `>=10.0.0 <12.0.0`')
+    expect(normalized('docs/cli/examples.md')).toContain('Bun `>=1.2.0 <2.0.0`')
+    expect(normalized('docs/api/functions.md')).toContain(
+      'npm `>=11.12.0 <12.0.0 || >=12.0.0 <12.1.0`',
+    )
     expect(normalized('SECURITY.md')).toContain('npm `>=10.0.0 <13.0.0`')
     expect(normalized('SECURITY.md')).toContain('pnpm `>=10.0.0 <12.0.0`')
     expect(normalized('SECURITY.md')).toContain('Bun `>=1.2.0 <2.0.0`')
