@@ -3,6 +3,7 @@ import { glob } from 'tinyglobby'
 import type { InvocationScopeExclusions } from '../../cli/scope-exclusions'
 import type { depfreshOptions, PackageMeta } from '../../types'
 import { createLogger, type Logger } from '../../utils/logger'
+import { getSafeErrorDetails } from '../../utils/redact'
 import { loadCatalogs } from '../catalogs/index'
 import { resolveContainedPath } from './containment'
 import { loadPackage } from './load-package'
@@ -183,7 +184,9 @@ export async function discoverPackages(
         loaded = true
         break
       } catch (error) {
-        writeDiscoveryOutput(observer, () => logger.warn(`Failed to load ${filepath}:`, error))
+        writeDiscoveryOutput(observer, () =>
+          logger.warn(`Failed to load ${filepath}: ${getSafeErrorDetails(error).message}`),
+        )
       }
     }
 
@@ -231,7 +234,9 @@ export async function discoverPackages(
         )
       }
     } catch (error) {
-      writeDiscoveryOutput(observer, () => logger.warn('Failed to load workspace catalogs:', error))
+      writeDiscoveryOutput(observer, () =>
+        logger.warn(`Failed to load workspace catalogs: ${getSafeErrorDetails(error).message}`),
+      )
     }
   } else {
     writeDiscoveryDebug(options, observer, () =>
