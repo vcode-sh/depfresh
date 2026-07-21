@@ -1055,8 +1055,23 @@ describe('Visual+ built CLI', () => {
         'needed · 1.25s',
         'needed · 857.690498\nms',
         'needed · 857.690498\r\nms',
+        'needed · 974.681422\n011ms',
+        'needed · 974.681422\r\n011ms',
+        'needed · 966.24986m\ns',
+        'needed · 966.24986m\r\ns',
       ].map(normalizeElapsedDurations),
-    ).toEqual(Array.from({ length: 6 }, () => 'needed · <elapsed>'))
+    ).toEqual(Array.from({ length: 10 }, () => 'needed · <elapsed>'))
+  })
+
+  it('preserves invalid or unrelated multiline duration-like text', () => {
+    for (const value of [
+      'needed · 974..681\n011ms',
+      'needed · 974.681422\n\n011ms',
+      'needed · 974.681422\nnot-a-duration\n011ms',
+      'unrelated 974.681422\n011ms',
+    ]) {
+      expect(normalizeElapsedDurations(value)).toBe(value)
+    }
   })
 
   it.each([40, 60, 80, 118, 175])(
@@ -1922,7 +1937,13 @@ function assertExactStrictWriteFinalScreen(
 }
 
 function normalizeElapsedDurations(transcript: string): string {
-  return transcript.replace(/\b\d+(?:\.\d+)?(?:\r?\n)?(?:ms|s)\b/gu, '<elapsed>')
+  return transcript.replace(
+    /· (\d(?:(?:\r?\n)?[\d.])*(?:\r?\n)?(?:m(?:\r?\n)?s|s))(?=\r?\n|$)/gu,
+    (match, wrappedToken: string) => {
+      const flattenedToken = wrappedToken.replace(/\r?\n/gu, '')
+      return /^\d+(?:\.\d+)?(?:ms|s)$/u.test(flattenedToken) ? '· <elapsed>' : match
+    },
+  )
 }
 
 function assertOrderedExactLines(lines: readonly string[], expected: readonly string[]) {
