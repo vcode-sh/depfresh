@@ -902,7 +902,7 @@ describe('Visual+ built CLI', () => {
       encoding: 'utf8',
     })
 
-    expect(version.trim()).toBe('2.1.1')
+    expect(version.trim()).toBe('2.1.2')
   })
 
   it('removes a partial fixture directory and retains its builder failure', () => {

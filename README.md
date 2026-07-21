@@ -10,21 +10,21 @@ reviewable plan/apply workflow when you need stronger guarantees.
 
 ## Try it
 
-Run the current public release from any project root. Recursive workspace discovery is on by
-default, so `-r` is not needed.
+These exact commands are prepared for 2.1.2; use them after the hosted release completes. Recursive
+workspace discovery is on by default, so `-r` is not needed.
 
 ```bash
 # Bun
-bunx depfresh@2.1.0
+bunx depfresh@2.1.2
 
 # pnpm
-pnpm dlx depfresh@2.1.0
+pnpm dlx depfresh@2.1.2
 
 # npm
-npm exec --yes --package=depfresh@2.1.0 -- depfresh
+npm exec --yes --package=depfresh@2.1.2 -- depfresh
 
 # Yarn
-yarn dlx depfresh@2.1.0
+yarn dlx depfresh@2.1.2
 ```
 
 Node.js 24.15.0 or newer is required.
@@ -32,7 +32,7 @@ Node.js 24.15.0 or newer is required.
 For a team or CI, pin depfresh in the project instead:
 
 ```bash
-pnpm add -D --save-exact depfresh@2.1.0
+pnpm add -D --save-exact depfresh@2.1.2
 pnpm exec depfresh
 ```
 
@@ -63,7 +63,8 @@ line before writing the final review. Every non-success target and recovery path
 The former bounded-preview projection is the historical compact semantic contract completed by
 [Plan 037](plans/037-visual-plus-compact-2.1.1.md). [Plan 038](plans/038-visual-plus-hybrid-default.md)
 owns the completed and locally proven visual-composition successor. The 2.1.1 local candidate
-remains unpublished until its release work is complete.
+is preserved as historical evidence. The 2.1.2 release candidate is locally verified; hosted CI,
+tag, npm, and GitHub release proof remain pending.
 
 Eligibility requires the CLI progress route, non-silent output, non-interactive and non-global
 operation, and no direct or addon `beforePackageWrite` hook. `--write --interactive` keeps the
@@ -210,6 +211,7 @@ registry and does not inherit project npm configuration.
 - [Output contracts](docs/output-formats/README.md)
 - [GitHub Action and integrations](docs/integrations/README.md)
 - [Troubleshooting](docs/troubleshooting.md)
+- [2.1.2 release notes](docs/releases/v2.1.2.md)
 - [2.1.1 release notes](docs/releases/v2.1.1.md)
 - [2.1.0 release notes](docs/releases/v2.1.0.md)
 - [2.0.2 release notes](docs/releases/v2.0.2.md)

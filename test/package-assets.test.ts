@@ -29,8 +29,8 @@ const publicAssets = [
 ]
 
 describe('published workflow assets', () => {
-  it('pins the publishable package manifest to the 2.1.1 release candidate', () => {
-    expect(packageJson.version).toBe('2.1.1')
+  it('pins the publishable package manifest to the 2.1.2 release candidate', () => {
+    expect(packageJson.version).toBe('2.1.2')
   })
 
   it('allowlists dist and skills without publishing plans or scratch state', () => {

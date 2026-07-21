@@ -4,6 +4,38 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Semver
 
 ## Unreleased
 
+## [2.1.2] - 2026-07-21
+
+### Changed
+
+- **Completed Plan 038 Visual+ default** -- the five-region hybrid review is the locally proven
+  human default: context, overview, risk focus, a complete one-row-per-update ledger, and an exact
+  receipt. `--long` remains the exhaustive operation, owner, shared-dependency, occurrence, and
+  physical-target audit, while non-capable terminals keep deterministic append-only output.
+- **Artifact-exact release verification** -- release automation accepts both npm 11 and npm 12 pack
+  manifests, builds the distribution once, reuses those exact bytes across downstream Linux/macOS
+  jobs, and passes the verified tarball to a read-only Windows command-shim proof. Process-observer
+  tests run in one isolated serial project; all other tests retain retry-zero parallel execution.
+- **Current compatibility truth** -- exact hashes now freeze all seven published v1 schemas,
+  maintained docs match current npm, pnpm, Bun, and npm artifact-verifier support, and Dependabot
+  continues Node 24 type updates while ignoring only the next `@types/node` major.
+- **Faster plan validation** -- indexed semantic validation removes repeated full-plan scans for
+  occurrences, decisions, boundaries, owner/name groups, and cohort membership without changing
+  canonical order, duplicate rejection, ambiguity handling, or any public schema.
+
+### Fixed
+
+- **Registry isolation and resilience** -- credential-safe registry caching bypasses persistent
+  storage for authenticated contexts, excludes unsafe URL material from persistent identities, and
+  permanently falls back from operational SQLite errors to the owned memory cache without replacing
+  the command's primary result.
+- **Bounded registry responses** -- npm, JSR, and GitHub JSON bodies have a fixed byte limit, while
+  GitHub traversal also has fixed page, record, and aggregate-time budgets. Boundary failures cancel
+  unread data, return no partial candidates, and do not retry deterministic invalid payloads.
+- **Sanitized request and error boundaries** -- arbitrary CLI, debug, discovery, and orchestration
+  errors pass through central redaction. GitHub dependencies require exactly one conservative owner
+  and repository segment before any token-bearing request can be made.
+
 ## [2.1.1] - 2026-07-20
 
 ### Changed
@@ -784,7 +816,8 @@ First release. Wrote it from scratch because waiting for PRs to get merged in ta
 - TTY detection. No spinners in your CI logs. `NO_COLOR` respected.
 - 54 tests. More than some production apps I've seen.
 
-[Unreleased]: https://github.com/vcode-sh/depfresh/compare/v2.1.1...HEAD
+[Unreleased]: https://github.com/vcode-sh/depfresh/compare/v2.1.2...HEAD
+[2.1.2]: https://github.com/vcode-sh/depfresh/compare/v2.1.1...v2.1.2
 [2.1.1]: https://github.com/vcode-sh/depfresh/compare/v2.1.0...v2.1.1
 [2.1.0]: https://github.com/vcode-sh/depfresh/compare/v2.0.2...v2.1.0
 [2.0.2]: https://github.com/vcode-sh/depfresh/compare/v2.0.1...v2.0.2

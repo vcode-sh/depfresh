@@ -283,7 +283,7 @@ setInterval(() => {}, 1_000)
     expect(evidence).toEqual({
       schemaVersion: 1,
       kind: 'depfresh-installed-visual-plus-replay',
-      packageVersion: '2.1.1',
+      packageVersion: '2.1.2',
       tarball: {
         realpath: fixture.tarballPath,
         sha256: fixture.tarballSha256,
@@ -499,7 +499,7 @@ function temporaryAliasRoot(prefix: string): string {
 }
 
 function replayFixture(root = temporaryRoot('depfresh-installed-replay-')) {
-  const tarballPath = join(root, 'depfresh-2.1.1.tgz')
+  const tarballPath = join(root, 'depfresh-2.1.2.tgz')
   const installedRoot = join(root, 'node_modules', 'depfresh')
   const cliPath = join(installedRoot, 'dist', 'cli.mjs')
   const outputPath = join(root, 'installed-replay.json')
@@ -507,7 +507,7 @@ function replayFixture(root = temporaryRoot('depfresh-installed-replay-')) {
   const cliBytes = Buffer.from('#!/usr/bin/env node\n')
   mkdirSync(join(installedRoot, 'dist'), { recursive: true })
   writeFileSync(tarballPath, tarballBytes)
-  writeFileSync(join(installedRoot, 'package.json'), '{"name":"depfresh","version":"2.1.1"}\n')
+  writeFileSync(join(installedRoot, 'package.json'), '{"name":"depfresh","version":"2.1.2"}\n')
   writeFileSync(cliPath, cliBytes)
   const completeReport = {
     numFailedTests: 0,
@@ -544,7 +544,7 @@ function replayFixture(root = temporaryRoot('depfresh-installed-replay-')) {
       expected: { files: 1, suites: 5, tests: 69 },
       installedRoot,
       outputPath,
-      packageVersion: '2.1.1',
+      packageVersion: '2.1.2',
       report: completeReport,
       tarballPath,
       tarballSha256,

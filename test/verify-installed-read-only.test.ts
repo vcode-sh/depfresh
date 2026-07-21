@@ -31,7 +31,7 @@ function createFakeCommandShim(readOnlySource: string) {
   mkdirSync(commandDirectory)
   writeFileSync(
     join(packageRoot, 'package.json'),
-    '{"name":"depfresh","version":"2.1.1","bin":{"depfresh":"dist/cli.mjs"}}\n',
+    '{"name":"depfresh","version":"2.1.2","bin":{"depfresh":"dist/cli.mjs"}}\n',
   )
   const cli = join(dist, 'cli.mjs')
   writeFileSync(
@@ -40,9 +40,9 @@ function createFakeCommandShim(readOnlySource: string) {
 import { spawnSync } from 'node:child_process'
 import { writeFileSync } from 'node:fs'
 const args = process.argv.slice(2)
-if (args.includes('--version')) process.stdout.write('2.1.1\\n')
+if (args.includes('--version')) process.stdout.write('2.1.2\\n')
 else if (args.includes('--help')) process.stdout.write('depfresh usage help\\n')
-else if (args[0] === 'capabilities') process.stdout.write(JSON.stringify({ contract: 'depfresh.capabilities', schemaVersion: 2, version: '2.1.1' }))
+else if (args[0] === 'capabilities') process.stdout.write(JSON.stringify({ contract: 'depfresh.capabilities', schemaVersion: 2, version: '2.1.2' }))
 else {
 ${readOnlySource}
 }
@@ -82,7 +82,7 @@ describe('installed read-only distribution verifier', () => {
       help: true,
       managerExecutionRequested: false,
       managerExecutionSupported: false,
-      version: '2.1.1',
+      version: '2.1.2',
     })
   })
 

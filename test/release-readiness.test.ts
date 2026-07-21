@@ -138,7 +138,7 @@ function steps(path: string): WorkflowStep[] {
   return Object.values(workflow(path).jobs ?? {}).flatMap((job) => job.steps ?? [])
 }
 
-describe('2.1.1 release readiness', () => {
+describe('2.1.2 release readiness', () => {
   it('pins the current Node 24 compatible dependency and build toolchain', () => {
     const packageJson = JSON.parse(read('package.json')) as {
       packageManager?: string
@@ -164,10 +164,14 @@ describe('2.1.1 release readiness', () => {
     expect(pnpmWorkspace.minimumReleaseAgeExclude).toEqual(['undici@8.8.0', 'tsdown@0.22.12'])
   })
 
-  it('moves compact Visual+ work into the dated 2.1.1 changelog section', () => {
+  it('preserves compact Visual+ history below the dated 2.1.2 hardening section', () => {
     const changelog = read('CHANGELOG.md')
     const unreleased = changelog.slice(
       changelog.indexOf('## Unreleased') + '## Unreleased'.length,
+      changelog.indexOf('## [2.1.2]'),
+    )
+    const hardeningRelease = changelog.slice(
+      changelog.indexOf('## [2.1.2]'),
       changelog.indexOf('## [2.1.1]'),
     )
     const candidateRelease = changelog.slice(
@@ -198,18 +202,26 @@ describe('2.1.1 release readiness', () => {
     const groupedReceiptEntry = 'Truthful grouped legacy write receipts'
 
     expect(unreleased.trim()).toBe('')
+    expect(hardeningRelease).toContain('Plan 038')
+    expect(hardeningRelease.toLowerCase()).toContain('credential-safe registry caching')
+    expect(hardeningRelease.toLowerCase()).toContain('bounded registry responses')
+    expect(hardeningRelease.toLowerCase()).toContain('indexed semantic validation')
     expect(candidateRelease).toContain(compactVisualPlusEntry)
     expect(minorRelease).toContain(visualPlusEntry)
     expect(minorRelease).toContain(commandApplyEntry)
     expect(candidateRelease).not.toContain(visualPlusEntry)
     expect(unreleased).not.toContain(groupedReceiptEntry)
+    expect(changelog).toContain('## [2.1.2] - 2026-07-21')
     expect(changelog).toContain('## [2.1.1] - 2026-07-20')
     expect(changelog).toContain('## [2.1.0] - 2026-07-19')
     expect(hotfixRelease).toContain(groupedReceiptEntry)
     expect(patchRelease).toContain(workspaceCatalogEntry)
     expect(historicalRelease).toContain('Portable isolated npm bootstrap in the release workflow')
     expect(changelog).toContain(
-      '[Unreleased]: https://github.com/vcode-sh/depfresh/compare/v2.1.1...HEAD',
+      '[Unreleased]: https://github.com/vcode-sh/depfresh/compare/v2.1.2...HEAD',
+    )
+    expect(changelog).toContain(
+      '[2.1.2]: https://github.com/vcode-sh/depfresh/compare/v2.1.1...v2.1.2',
     )
     expect(changelog).toContain(
       '[2.1.1]: https://github.com/vcode-sh/depfresh/compare/v2.1.0...v2.1.1',
@@ -226,47 +238,82 @@ describe('2.1.1 release readiness', () => {
     expect(read('README.md')).toContain('<a id="skip-native-or-expo-updates-in-a-monorepo"></a>')
   })
 
-  it('couples all current package and runner surfaces to 2.1.1', () => {
+  it('couples all current package and runner surfaces to 2.1.2', () => {
     const packageJson = JSON.parse(read('package.json')) as { version: string }
-    expect(packageJson.version).toBe('2.1.1')
+    expect(packageJson.version).toBe('2.1.2')
     expect(read('.nvmrc')).toBe('24.15.0\n')
 
+    expect(read('README.md')).toContain('[2.1.2 release notes](docs/releases/v2.1.2.md)')
     expect(read('README.md')).toContain('[2.1.1 release notes](docs/releases/v2.1.1.md)')
     expect(read('README.md')).toContain('[2.1.0 release notes](docs/releases/v2.1.0.md)')
+    expect(read('docs/README.md')).toContain('[2.1.2 Release Notes](./releases/v2.1.2.md)')
     expect(read('docs/README.md')).toContain('[2.1.1 Release Notes](./releases/v2.1.1.md)')
     for (const path of ['docs/agents/README.md', 'skills/depfresh/recipes/runners.md']) {
-      expect(read(path), path).toContain('DEPFRESH_VERSION=2.1.1')
+      expect(read(path), path).toContain('DEPFRESH_VERSION=2.1.2')
+      expect(read(path), path).not.toContain('DEPFRESH_VERSION=2.1.1')
       expect(read(path), path).not.toContain('DEPFRESH_VERSION=2.1.0')
       expect(read(path), path).not.toContain('DEPFRESH_VERSION=2.0.2')
       expect(read(path), path).toContain('depfresh@$DEPFRESH_VERSION')
       expect(read(path), path).not.toContain('depfresh@1.2.0')
     }
-    expect(read('docs/integrations/README.md')).toContain('capabilities-v2.json` in 2.1.1')
-    expect(read('.github/ISSUE_TEMPLATE/bug_report.yml')).toContain('placeholder: "2.1.1"')
-    expect(read('test/wun-demo-proof.mjs')).toContain("capabilities.version, '2.1.1'")
+    expect(read('docs/integrations/README.md')).toContain('capabilities-v2.json` in 2.1.2')
+    expect(read('.github/ISSUE_TEMPLATE/bug_report.yml')).toContain('placeholder: "2.1.2"')
+    expect(read('test/wun-demo-proof.mjs')).toContain("capabilities.version, '2.1.2'")
   })
 
-  it('uses the published 2.1.0 package in maintained README install commands', () => {
+  it('pins maintained README install commands to the prepared 2.1.2 release', () => {
     const readme = read('README.md')
     const currentInstructions = readme.slice(
       readme.indexOf('## Try it'),
       readme.indexOf('## Everyday commands'),
     )
 
-    expect(currentInstructions.match(/depfresh@2\.1\.0/gu)).toHaveLength(5)
+    expect(currentInstructions.match(/depfresh@2\.1\.2/gu)).toHaveLength(5)
     expect(currentInstructions).not.toContain('depfresh@2.1.1')
-    expect(readme.replace(/\s+/gu, ' ')).toContain('The 2.1.1 local candidate remains unpublished')
+    expect(currentInstructions).not.toContain('current public release')
+    expect(readme.replace(/\s+/gu, ' ')).toContain(
+      'The 2.1.2 release candidate is locally verified; hosted CI, tag, npm, and GitHub release proof remain pending.',
+    )
   })
 
-  it('pins both maintained WUN published-runner commands to 2.1.1', () => {
+  it('pins both maintained WUN published-runner commands to 2.1.2', () => {
     const demo = read('test/wun-demo-proof.mjs')
     const currentInstructions = demo.slice(
-      demo.indexOf('Run from this directory after depfresh 2.1.1 is available:'),
+      demo.indexOf('Run from this directory after depfresh 2.1.2 is available:'),
       demo.indexOf('The `native` catalog'),
     )
 
-    expect(currentInstructions.match(/bunx depfresh@2\.1\.1/gu)).toHaveLength(2)
+    expect(currentInstructions.match(/bunx depfresh@2\.1\.2/gu)).toHaveLength(2)
     expect(currentInstructions).not.toContain('bunx depfresh@2.1.0')
+  })
+
+  it('binds the 2.1.2 hardening notes to local-candidate truth', () => {
+    expect(existsSync(join(root, 'docs/releases/v2.1.2.md'))).toBe(true)
+    const release = read('docs/releases/v2.1.2.md')
+
+    expect(release).toContain('# depfresh 2.1.2')
+    for (const item of [
+      'Plan 038',
+      'npm 11 and npm 12 pack manifests',
+      'Credential-safe registry caching',
+      'Central error redaction',
+      'Bounded registry response processing',
+      'Published v1 schema bytes',
+      'Process-observation tests',
+      'Indexed semantic plan validation',
+    ]) {
+      expect(release, item).toContain(item)
+    }
+    expect(release.replace(/\s+/gu, ' ')).toContain(
+      'Status: locally verified release candidate; hosted CI, tag, npm, and GitHub release proof remain pending.',
+    )
+    expect(release).toContain('../../plans/038-visual-plus-hybrid-default.md')
+    expect(release).toContain('../superpowers/plans/2026-07-20-2.1.2-hardening.md')
+    expect(release).not.toMatch(
+      /npm exposes|published to npm|hosted run .*passed|public .*byte-identical/iu,
+    )
+    expect(release).not.toContain('TBD')
+    expect(release).not.toContain('TODO')
   })
 
   it('binds the 2.1.1 local evidence to the hybrid release candidate', () => {
@@ -378,8 +425,8 @@ describe('2.1.1 release readiness', () => {
     expect(normalized('README.md')).toContain('pnpm `>=10.0.0 <12.0.0`')
     expect(normalized('README.md')).toContain('Bun `>=1.2.0 <2.0.0`')
     expect(normalized('README.md')).toContain('npm `>=11.12.0 <12.0.0 || >=12.0.0 <12.1.0`')
-    expect(read('docs/README.md')).toContain(
-      'completed Plan 038 hybrid-default boundary; the 2.1.1 local candidate remains unpublished',
+    expect(normalized('docs/README.md')).toContain(
+      'completed Plan 038 hybrid default and the 2.1.2 locally verified release candidate',
     )
     expect(read('docs/integrations/README.md')).toContain('completed and locally proven Plan 038')
     expect(read('docs/troubleshooting.md')).toContain(
@@ -817,7 +864,7 @@ describe('2.1.1 release readiness', () => {
       'npm publish "file:$GITHUB_WORKSPACE/$PACKAGE_TARBALL" --access public --ignore-scripts',
     )
     expect(release).not.toContain('npm publish "$PACKAGE_TARBALL" --access public --ignore-scripts')
-    expect(release).toContain('body_path: docs/releases/v2.1.1.md')
+    expect(release).toContain('body_path: docs/releases/v2.1.2.md')
     expect(
       release.match(/node scripts\/read-pack-manifest\.mjs artifacts\/pack\.json filename/gu),
     ).toHaveLength(1)

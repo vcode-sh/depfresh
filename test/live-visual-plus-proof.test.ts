@@ -177,7 +177,7 @@ describe('live Visual+ proof harness', () => {
         replayEvidenceRealpath: fixture.replayEvidencePath,
         tarballRealpath: fixture.tarballPath,
         tarballSha256: fixture.tarballSha256,
-        packageVersion: '2.1.1',
+        packageVersion: '2.1.2',
       },
       repository: { unchanged: true },
     })
@@ -479,9 +479,9 @@ function liveProofFixture(
   const packJsonPath = join(artifactRoot, 'pack.json')
   const replayEvidencePath = join(artifactRoot, 'installed-replay.json')
   const outputPath = join(artifactRoot, 'spreadoo-live.json')
-  const tarballPath = join(artifactRoot, 'depfresh-2.1.1.tgz')
+  const tarballPath = join(artifactRoot, 'depfresh-2.1.2.tgz')
   const cliBytes = Buffer.from('#!/usr/bin/env node\n')
-  const tarballBytes = Buffer.from('packed depfresh 2.1.1')
+  const tarballBytes = Buffer.from('packed depfresh 2.1.2')
   for (const path of [
     repository,
     artifactRoot,
@@ -517,13 +517,13 @@ function liveProofFixture(
     JSON.stringify([
       {
         name: 'depfresh',
-        version: '2.1.1',
-        filename: 'depfresh-2.1.1.tgz',
+        version: '2.1.2',
+        filename: 'depfresh-2.1.2.tgz',
         size: tarballBytes.byteLength,
       },
     ]),
   )
-  writeFileSync(join(installedRoot, 'package.json'), '{"name":"depfresh","version":"2.1.1"}\n')
+  writeFileSync(join(installedRoot, 'package.json'), '{"name":"depfresh","version":"2.1.2"}\n')
   writeFileSync(replayCli, cliBytes)
   writeFileSync(globalCli, cliBytes)
   chmodSync(globalCli, 0o755)
@@ -536,7 +536,7 @@ function liveProofFixture(
     expected: { files: 1, suites: 5, tests: 69 },
     installedRoot,
     outputPath: replayEvidencePath,
-    packageVersion: '2.1.1',
+    packageVersion: '2.1.2',
     report: completeReplayReport(),
     tarballPath,
     tarballSha256,

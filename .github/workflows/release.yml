@@ -268,6 +268,6 @@ jobs:
       - name: Create curated GitHub release
         uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228  # v3.0.2
         with:
-          body_path: docs/releases/v2.1.1.md
+          body_path: docs/releases/v2.1.2.md
           files: artifacts/${{ needs.verify.outputs.package-tarball }}
           generate_release_notes: false
