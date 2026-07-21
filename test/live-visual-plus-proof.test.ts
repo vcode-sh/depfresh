@@ -8,6 +8,7 @@ import {
   mkdtempSync,
   readdirSync,
   readFileSync,
+  readlinkSync,
   realpathSync,
   renameSync,
   rmSync,
@@ -374,6 +375,12 @@ describe('live Visual+ proof harness', () => {
 
       await expect(runLiveVisualPlusProof(fixture.options), fault).rejects.toThrow()
       expect(() => readFileSync(fixture.outputPath), fault).toThrow()
+      if (fault === 'global-link-replacement') {
+        expect(readlinkSync(fixture.globalLink)).toBe(
+          '../install/global/node_modules/depfresh/dist/./cli.mjs',
+        )
+        expect(realpathSync(fixture.globalLink)).toBe(fixture.globalCli)
+      }
     },
     30_000,
   )
@@ -587,7 +594,7 @@ if (launcherName === 'bunx' && args[0] === 'pm') {
   if (invocationCount === 2 && process.env.DEPFRESH_LIVE_TEST_IDENTITY_FAULT === 'regular-bunx-replacement') replaceSameBytes(${JSON.stringify(bunxPath)})
   if (invocationCount === 2 && process.env.DEPFRESH_LIVE_TEST_IDENTITY_FAULT === 'global-link-replacement') {
     unlinkSync(${JSON.stringify(globalLink)})
-    symlinkSync('../install/global/node_modules/depfresh/dist/cli.mjs', ${JSON.stringify(globalLink)})
+    symlinkSync('../install/global/node_modules/depfresh/dist/./cli.mjs', ${JSON.stringify(globalLink)})
   }
   if (invocationCount === 2 && process.env.DEPFRESH_LIVE_TEST_IDENTITY_FAULT === 'global-target-replacement') replaceSameBytes(${JSON.stringify(globalCli)})
   if (invocationCount === 2 && process.env.DEPFRESH_LIVE_TEST_IDENTITY_FAULT === 'index-same-bytes') replaceSameBytes(${JSON.stringify(join(repository, '.git', 'index'))})

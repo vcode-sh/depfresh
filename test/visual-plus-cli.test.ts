@@ -1046,12 +1046,17 @@ describe('Visual+ built CLI', () => {
     )
   })
 
-  it('normalizes integer and fractional elapsed receipt durations', () => {
+  it('normalizes integer, fractional, and wrapped elapsed receipt durations', () => {
     expect(
-      ['needed · 882ms', 'needed · 882.4ms', 'needed · 1s', 'needed · 1.25s'].map(
-        normalizeElapsedDuration,
-      ),
-    ).toEqual(Array.from({ length: 4 }, () => 'needed · <elapsed>'))
+      [
+        'needed · 882ms',
+        'needed · 882.4ms',
+        'needed · 1s',
+        'needed · 1.25s',
+        'needed · 857.690498\nms',
+        'needed · 857.690498\r\nms',
+      ].map(normalizeElapsedDurations),
+    ).toEqual(Array.from({ length: 6 }, () => 'needed · <elapsed>'))
   })
 
   it.each([40, 60, 80, 118, 175])(
@@ -1912,12 +1917,12 @@ function assertExactStrictWriteFinalScreen(
     ...expectedFinalLedgerSignature(width, false, fixture, launchClockMs).row,
     ...receipt,
   ]
-  const actual = exactTranscriptLines(transcript).map(normalizeElapsedDuration)
+  const actual = exactTranscriptLines(normalizeElapsedDurations(transcript))
   expect(actual.slice(-expected.length)).toEqual(expected)
 }
 
-function normalizeElapsedDuration(line: string): string {
-  return line.replace(/\b\d+(?:\.\d+)?(?:ms|s)\b/gu, '<elapsed>')
+function normalizeElapsedDurations(transcript: string): string {
+  return transcript.replace(/\b\d+(?:\.\d+)?(?:\r?\n)?(?:ms|s)\b/gu, '<elapsed>')
 }
 
 function assertOrderedExactLines(lines: readonly string[], expected: readonly string[]) {
