@@ -161,10 +161,12 @@ describe('live Visual+ proof harness', () => {
     ])
   })
 
-  it('treats an absent relocated output directory as free of pending residue', () => {
+  it('keeps an absent normal residue root fail closed while allowing relocation cleanup', () => {
     const root = temporaryRoot('depfresh-live-proof-residue-')
+    const missingRoot = join(root, 'artifact-missing')
 
-    expect(pendingNames(join(root, 'artifact-relocated'))).toEqual([])
+    expect(() => pendingNames(missingRoot)).toThrow()
+    expect(pendingNames(missingRoot, { allowMissing: true })).toEqual([])
   })
 
   it('binds fixed bunx PTY runs to the pack, replay, global CLI, and unchanged Git state', async () => {
@@ -419,7 +421,7 @@ describe('live Visual+ proof harness', () => {
     await expect(runLiveVisualPlusProof(replaced.options)).rejects.toThrow()
     expect(() => readFileSync(replaced.outputPath)).toThrow()
     expect(pendingNames(replaced.artifactRoot)).toEqual([])
-    expect(pendingNames(relocated)).toEqual([])
+    expect(pendingNames(relocated, { allowMissing: true })).toEqual([])
   }, 30_000)
 
   it('exposes output cleanup faults without report or pending residue', async () => {
@@ -1038,11 +1040,13 @@ Exit 0
 `
 }
 
-function pendingNames(root: string): string[] {
+function pendingNames(root: string, options: { allowMissing?: boolean } = {}): string[] {
   try {
     return readdirSync(root).filter((name) => name.includes('.pending-'))
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return []
+    if (options.allowMissing === true && (error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return []
+    }
     throw error
   }
 }
