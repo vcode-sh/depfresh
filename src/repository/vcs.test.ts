@@ -113,6 +113,7 @@ afterEach(() => {
 })
 
 describe('read-only repository VCS evidence', () => {
+  // Constructing and probing a >1 MiB Git index is intentionally slow under hosted coverage.
   it('classifies an exact clean target when the tracked index exceeds the output limit', () => {
     const root = temporaryRoot()
     initialize(root)
@@ -142,7 +143,7 @@ describe('read-only repository VCS evidence', () => {
     })
     expect(readFileSync(repositoryIndexPath)).toEqual(indexBefore)
     expect(readFileSync(join(root, 'package.json'))).toEqual(packageBefore)
-  })
+  }, 30_000)
 
   it('treats hostile exact targets literally and classifies only requested files', () => {
     const root = temporaryRoot()

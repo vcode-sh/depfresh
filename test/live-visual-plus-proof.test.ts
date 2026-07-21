@@ -151,6 +151,22 @@ describe('live Visual+ proof harness', () => {
     }
   })
 
+  it('uses only the required canonical directories in the fixture PATH', () => {
+    const fixture = liveProofFixture()
+
+    expect(fixture.options.environment.PATH.split(':')).toEqual([
+      dirname(fixture.bunPath),
+      dirname(process.execPath),
+      '/usr/bin',
+    ])
+  })
+
+  it('treats an absent relocated output directory as free of pending residue', () => {
+    const root = temporaryRoot('depfresh-live-proof-residue-')
+
+    expect(pendingNames(join(root, 'artifact-relocated'))).toEqual([])
+  })
+
   it('binds fixed bunx PTY runs to the pack, replay, global CLI, and unchanged Git state', async () => {
     const fixture = liveProofFixture()
 
@@ -618,7 +634,7 @@ if (launcherName === 'bunx' && args[0] === 'pm') {
     HOME: root,
     LANG: 'C.UTF-8',
     LC_ALL: 'C.UTF-8',
-    PATH: [fakeBin, dirname(process.execPath), '/usr/bin', '/bin'].join(':'),
+    PATH: [fakeBin, dirname(process.execPath), '/usr/bin'].join(':'),
     TERM: 'xterm-256color',
   }
   return {
@@ -1023,7 +1039,12 @@ Exit 0
 }
 
 function pendingNames(root: string): string[] {
-  return readdirSync(root).filter((name) => name.includes('.pending-'))
+  try {
+    return readdirSync(root).filter((name) => name.includes('.pending-'))
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return []
+    throw error
+  }
 }
 
 function replaceSameBytes(path: string): void {

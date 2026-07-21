@@ -1046,6 +1046,14 @@ describe('Visual+ built CLI', () => {
     )
   })
 
+  it('normalizes integer and fractional elapsed receipt durations', () => {
+    expect(
+      ['needed · 882ms', 'needed · 882.4ms', 'needed · 1s', 'needed · 1.25s'].map(
+        normalizeElapsedDuration,
+      ),
+    ).toEqual(Array.from({ length: 4 }, () => 'needed · <elapsed>'))
+  })
+
   it.each([40, 60, 80, 118, 175])(
     'renders hybrid success and exact safety journeys in a %i-column PTY by default',
     async (columns) => {
@@ -1904,10 +1912,12 @@ function assertExactStrictWriteFinalScreen(
     ...expectedFinalLedgerSignature(width, false, fixture, launchClockMs).row,
     ...receipt,
   ]
-  const actual = exactTranscriptLines(transcript).map((line) =>
-    line.replace(/\b(?:\d+ms|\d+(?:\.\d+)?s)\b/gu, '<elapsed>'),
-  )
+  const actual = exactTranscriptLines(transcript).map(normalizeElapsedDuration)
   expect(actual.slice(-expected.length)).toEqual(expected)
+}
+
+function normalizeElapsedDuration(line: string): string {
+  return line.replace(/\b\d+(?:\.\d+)?(?:ms|s)\b/gu, '<elapsed>')
 }
 
 function assertOrderedExactLines(lines: readonly string[], expected: readonly string[]) {
