@@ -204,8 +204,9 @@ function runCommandShim(commandShim, arguments_, cwd, env) {
   }
   const windows = process.platform === 'win32'
   const command = windows ? resolveWindowsCommandProcessor() : commandShim
+  const windowsCommand = `""%DEPFRESH_COMMAND_SHIM%" ${arguments_.join(' ')}"`
   const commandArguments = windows
-    ? ['/d', '/q', '/v:off', '/c', `call "%DEPFRESH_COMMAND_SHIM%" ${arguments_.join(' ')}`]
+    ? ['/d', '/s', '/c', windowsCommand]
     : arguments_
   const result = spawnSync(command, commandArguments, {
     cwd,
@@ -214,15 +215,37 @@ function runCommandShim(commandShim, arguments_, cwd, env) {
     maxBuffer: OUTPUT_LIMIT,
     shell: false,
     timeout: PROCESS_TIMEOUT_MS,
+    windowsVerbatimArguments: windows,
     windowsHide: true,
   })
   if (result.error || result.signal || result.status !== 0) {
-    throw new Error(`Installed CLI command failed: ${arguments_.join(' ')}`)
+    throw new Error(
+      `Installed CLI command failed: ${arguments_.join(' ')} (${commandFailureSummary(result)})`,
+    )
   }
   if (Buffer.byteLength(result.stderr) !== 0) {
     throw new Error(`Installed CLI command wrote stderr: ${arguments_.join(' ')}`)
   }
   return result.stdout
+}
+
+function commandFailureSummary(result) {
+  const errorCode =
+    typeof result.error?.code === 'string' && /^[A-Z0-9_]+$/u.test(result.error.code)
+      ? result.error.code
+      : 'none'
+  const status = Number.isSafeInteger(result.status) ? String(result.status) : 'none'
+  const signal =
+    typeof result.signal === 'string' && /^[A-Z0-9]+$/u.test(result.signal)
+      ? result.signal
+      : 'none'
+  return [
+    `error=${errorCode}`,
+    `status=${status}`,
+    `signal=${signal}`,
+    `stdoutBytes=${Buffer.byteLength(result.stdout ?? '')}`,
+    `stderrBytes=${Buffer.byteLength(result.stderr ?? '')}`,
+  ].join(', ')
 }
 
 function resolveWindowsCommandProcessor() {

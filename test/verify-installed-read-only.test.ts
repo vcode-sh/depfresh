@@ -109,6 +109,29 @@ describe('installed read-only distribution verifier', () => {
     expect(result.stderr).toContain('Read-only fixture changed')
   })
 
+  it('reports bounded process metadata without exposing failed command output', () => {
+    const { commandShim, entrypoint } = createFakeCommandShim(
+      `  process.stdout.write(JSON.stringify({ packages: [], errors: [], summary: { total: 0 }, meta: { didWrite: false } }))`,
+    )
+    writeFileSync(
+      entrypoint,
+      `#!/usr/bin/env node
+process.stdout.write('private stdout')
+process.stderr.write('private stderr')
+process.exitCode = 17
+`,
+    )
+
+    const result = runVerifier(commandShim)
+
+    expect(result.status).toBe(1)
+    expect(result.stderr).toContain('status=17')
+    expect(result.stderr).toContain('stdoutBytes=14')
+    expect(result.stderr).toContain('stderrBytes=14')
+    expect(result.stderr).not.toContain('private stdout')
+    expect(result.stderr).not.toContain('private stderr')
+  })
+
   it('makes package-manager executables unavailable to the installed CLI proof', () => {
     const managerExecutable = process.platform === 'win32' ? 'npm.cmd' : 'npm'
     expect(spawnSync(managerExecutable, ['--version']).status).toBe(0)
