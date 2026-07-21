@@ -548,6 +548,107 @@ function isNpmInstallLocation(path: string): boolean {
   return /^(?:[^/]+\/)*node_modules\/(?:@[^/]+\/)?[^/]+$/u.test(path)
 }
 
+type PlanOccurrence = PlanResult['occurrences'][number]
+type PlanDecision = PlanResult['decisions'][number]
+type PlanOperation = PlanResult['operations'][number]
+
+interface PlanValidationContext {
+  readonly occurrencesById: ReadonlyMap<string, PlanOccurrence>
+  readonly decisionsByOccurrenceId: ReadonlyMap<string, PlanDecision>
+  readonly operationsById: ReadonlyMap<string, PlanOperation>
+  readonly operationsByOccurrenceId: ReadonlyMap<string, PlanOperation>
+  readonly packageWorkspacePathsById: ReadonlyMap<string, string>
+  readonly boundaryIdByPackageId: ReadonlyMap<string, string>
+  readonly packageIdsByBoundaryId: ReadonlyMap<string, ReadonlySet<string>>
+  readonly occurrencesByOwnerAndName: ReadonlyMap<
+    string,
+    ReadonlyMap<string, readonly PlanOccurrence[]>
+  >
+  readonly occurrencesByName: ReadonlyMap<string, readonly PlanOccurrence[]>
+}
+
+function createPlanValidationContext(plan: PlanResult): PlanValidationContext | undefined {
+  const occurrencesById = uniqueMap(plan.occurrences, (occurrence) => occurrence.id)
+  const decisionsByOccurrenceId = uniqueMap(plan.decisions, (decision) => decision.occurrenceId)
+  const operationsById = uniqueMap(plan.operations, (operation) => operation.id)
+  const operationsByOccurrenceId = uniqueMap(plan.operations, (operation) => operation.occurrenceId)
+  const packagesById = uniqueMap(plan.repository.packages, (pkg) => pkg.id)
+  if (
+    !(
+      occurrencesById &&
+      decisionsByOccurrenceId &&
+      operationsById &&
+      operationsByOccurrenceId &&
+      packagesById
+    )
+  ) {
+    return undefined
+  }
+
+  const boundaryIdByPackageId = new Map<string, string>()
+  const mutablePackageIdsByBoundaryId = new Map<string, Set<string>>()
+  for (const relationship of plan.repository.relationships.boundaryPackages) {
+    if (boundaryIdByPackageId.has(relationship.packageId)) return undefined
+    boundaryIdByPackageId.set(relationship.packageId, relationship.boundaryId)
+    const packageIds = mutablePackageIdsByBoundaryId.get(relationship.boundaryId)
+    if (packageIds) packageIds.add(relationship.packageId)
+    else
+      mutablePackageIdsByBoundaryId.set(relationship.boundaryId, new Set([relationship.packageId]))
+  }
+
+  const mutableOccurrencesByOwnerAndName = new Map<string, Map<string, PlanOccurrence[]>>()
+  const mutableOccurrencesByName = new Map<string, PlanOccurrence[]>()
+  for (const occurrence of plan.occurrences) {
+    const byName = mutableOccurrencesByOwnerAndName.get(occurrence.ownerId)
+    const occurrences = byName?.get(occurrence.name)
+    if (occurrences) occurrences.push(occurrence)
+    else if (byName) byName.set(occurrence.name, [occurrence])
+    else {
+      mutableOccurrencesByOwnerAndName.set(
+        occurrence.ownerId,
+        new Map([[occurrence.name, [occurrence]]]),
+      )
+    }
+    const namedOccurrences = mutableOccurrencesByName.get(occurrence.name)
+    if (namedOccurrences) namedOccurrences.push(occurrence)
+    else mutableOccurrencesByName.set(occurrence.name, [occurrence])
+  }
+
+  const occurrencesByOwnerAndName = new Map<
+    string,
+    ReadonlyMap<string, readonly PlanOccurrence[]>
+  >()
+  for (const [ownerId, byName] of mutableOccurrencesByOwnerAndName) {
+    occurrencesByOwnerAndName.set(
+      ownerId,
+      new Map([...byName].map(([name, occurrences]) => [name, Object.freeze([...occurrences])])),
+    )
+  }
+  const occurrencesByName = new Map<string, readonly PlanOccurrence[]>(
+    [...mutableOccurrencesByName].map(([name, occurrences]) => [
+      name,
+      Object.freeze([...occurrences]),
+    ]),
+  )
+  const packageIdsByBoundaryId = new Map<string, ReadonlySet<string>>(
+    [...mutablePackageIdsByBoundaryId].map(([boundaryId, packageIds]) => [boundaryId, packageIds]),
+  )
+
+  return Object.freeze({
+    occurrencesById,
+    decisionsByOccurrenceId,
+    operationsById,
+    operationsByOccurrenceId,
+    packageWorkspacePathsById: new Map(
+      [...packagesById].map(([id, pkg]) => [id, pkg.workspacePath]),
+    ),
+    boundaryIdByPackageId,
+    packageIdsByBoundaryId,
+    occurrencesByOwnerAndName,
+    occurrencesByName,
+  })
+}
+
 function hasValidPlanSemantics(plan: PlanResult): boolean {
   try {
     const parsedAsOf = Date.parse(plan.asOf)
@@ -558,11 +659,10 @@ function hasValidPlanSemantics(plan: PlanResult): boolean {
     if (!hasValidRepositorySemantics(plan.repository)) return false
     if (!hasValidReferences(plan)) return false
 
-    const occurrenceIds = new Set(plan.occurrences.map((occurrence) => occurrence.id))
-    if (occurrenceIds.size !== plan.occurrences.length) return false
-    const decisionsByOccurrence = new Map(
-      plan.decisions.map((decision) => [decision.occurrenceId, decision]),
-    )
+    const context = createPlanValidationContext(plan)
+    if (!context) return false
+    const occurrenceIds = new Set(context.occurrencesById.keys())
+    const decisionsByOccurrence = context.decisionsByOccurrenceId
     if (
       decisionsByOccurrence.size !== plan.decisions.length ||
       decisionsByOccurrence.size !== occurrenceIds.size ||
@@ -571,22 +671,11 @@ function hasValidPlanSemantics(plan: PlanResult): boolean {
       return false
     }
 
-    const operationIds = new Set<string>()
-    const operationsById = new Map<string, (typeof plan.operations)[number]>()
-    const operationOccurrences = new Set<string>()
     const repositorySources = new Map(
       plan.repository.sources.map((source) => [source.path, source.byteHash]),
     )
     for (const operation of plan.operations) {
-      if (operationIds.has(operation.id) || operationOccurrences.has(operation.occurrenceId)) {
-        return false
-      }
-      operationIds.add(operation.id)
-      operationsById.set(operation.id, operation)
-      operationOccurrences.add(operation.occurrenceId)
-      const occurrence = plan.occurrences.find(
-        (candidate) => candidate.id === operation.occurrenceId,
-      )
+      const occurrence = context.occurrencesById.get(operation.occurrenceId)
       const decision = decisionsByOccurrence.get(operation.occurrenceId)
       if (
         !(occurrence && decision) ||
@@ -614,7 +703,7 @@ function hasValidPlanSemantics(plan: PlanResult): boolean {
       }
       if (decision.status === 'operation') {
         const operation = decision.operationId
-          ? operationsById.get(decision.operationId)
+          ? context.operationsById.get(decision.operationId)
           : undefined
         if (!operation || operation.occurrenceId !== decision.occurrenceId) return false
       } else if (decision.operationId !== undefined) {
@@ -645,8 +734,8 @@ function hasValidPlanSemantics(plan: PlanResult): boolean {
     ) {
       return false
     }
-    if (plan.schemaVersion === 2 && !hasValidSelectionSemantics(plan)) return false
-    if (!hasValidPlanSignals(plan)) return false
+    if (plan.schemaVersion === 2 && !hasValidSelectionSemantics(plan, context)) return false
+    if (!hasValidPlanSignals(plan, context)) return false
     if (!hasValidPlanExecution(plan)) return false
     return (
       counts.operations === plan.operations.length &&
@@ -659,11 +748,11 @@ function hasValidPlanSemantics(plan: PlanResult): boolean {
   }
 }
 
-function hasValidSelectionSemantics(plan: PlanResultV2): boolean {
+function hasValidSelectionSemantics(plan: PlanResultV2, context: PlanValidationContext): boolean {
   const { requests, summary } = plan.selection
   const seen = new Set<string>()
   let catalogPhase = false
-  const decisionsById = new Map(plan.decisions.map((decision) => [decision.occurrenceId, decision]))
+  const decisionsById = context.decisionsByOccurrenceId
   const workspacePrefix = '$cli:exclude-workspace:'
   const catalogPrefix = '$cli:exclude-catalog:'
   const expectedRulesByOccurrence = new Map<string, string[]>()
@@ -714,7 +803,7 @@ function hasValidSelectionSemantics(plan: PlanResultV2): boolean {
       if (!packageId) return false
       const [directRuleId, consumerRuleId] = workspaceSelectionRuleIds(request.value, packageId)
       for (const occurrenceId of expectedOccurrenceIds) {
-        const occurrence = plan.occurrences.find((candidate) => candidate.id === occurrenceId)
+        const occurrence = context.occurrencesById.get(occurrenceId)
         if (!occurrence) return false
         addExpectedRule(
           occurrenceId,
@@ -723,7 +812,7 @@ function hasValidSelectionSemantics(plan: PlanResultV2): boolean {
       }
     } else {
       for (const occurrenceId of expectedOccurrenceIds) {
-        const occurrence = plan.occurrences.find((candidate) => candidate.id === occurrenceId)
+        const occurrence = context.occurrencesById.get(occurrenceId)
         if (!occurrence?.catalogId) return false
         addExpectedRule(occurrenceId, catalogSelectionRuleId(request.value, occurrence.catalogId))
       }
@@ -796,7 +885,7 @@ function hasValidSelectionSemantics(plan: PlanResultV2): boolean {
   return canonicalJson(summary) === canonicalJson(expectedSummary)
 }
 
-function hasValidPlanSignals(plan: PlanResult): boolean {
+function hasValidPlanSignals(plan: PlanResult, context: PlanValidationContext): boolean {
   const fields = [plan.signals, plan.signalEvidence, plan.summary.signals]
   if (fields.every((field) => field === undefined)) return true
   if (fields.some((field) => field === undefined)) return false
@@ -871,8 +960,8 @@ function hasValidPlanSignals(plan: PlanResult): boolean {
           : []),
       ].every(isContractSafeText) ||
       !hasValidSignalTruth(signal) ||
-      !hasValidSignalEvidenceTruth(signal, signalEvidenceById, plan) ||
-      !hasValidSignalSubject(signal, signalEvidenceById, plan)
+      !hasValidSignalEvidenceTruth(signal, signalEvidenceById, plan, context) ||
+      !hasValidSignalSubject(signal, signalEvidenceById, context)
     ) {
       return false
     }
@@ -903,9 +992,7 @@ function hasValidPlanSignals(plan: PlanResult): boolean {
           signal.effect === defaultEffect)) ||
       (signal.override === undefined && signal.effect !== defaultEffect) ||
       (signal.effect === 'block' &&
-        signal.subject.occurrenceIds.some((id) =>
-          plan.operations.some((operation) => operation.occurrenceId === id),
-        ))
+        signal.subject.occurrenceIds.some((id) => context.operationsByOccurrenceId.has(id)))
     ) {
       return false
     }
@@ -1005,11 +1092,9 @@ function hasValidSignalTruth(signal: NonNullable<PlanResult['signals']>[number])
 function hasValidSignalSubject(
   signal: NonNullable<PlanResult['signals']>[number],
   evidenceById: Map<string, NonNullable<PlanResult['signalEvidence']>[number]>,
-  plan: PlanResult,
+  context: PlanValidationContext,
 ): boolean {
-  const occurrences = signal.subject.occurrenceIds.map((id) =>
-    plan.occurrences.find((item) => item.id === id),
-  )
+  const occurrences = signal.subject.occurrenceIds.map((id) => context.occurrencesById.get(id))
   if (occurrences.some((item) => !item)) return false
   const resolved = occurrences as PlanResult['occurrences']
   if (
@@ -1019,10 +1104,11 @@ function hasValidSignalSubject(
     return false
   }
   if (signal.subject.workspacePath !== undefined) {
-    const packages = new Map(plan.repository.packages.map((item) => [item.id, item.workspacePath]))
     if (
       resolved.some(
-        (occurrence) => packages.get(occurrence.ownerId) !== signal.subject.workspacePath,
+        (occurrence) =>
+          context.packageWorkspacePathsById.get(occurrence.ownerId) !==
+          signal.subject.workspacePath,
       )
     ) {
       return false
@@ -1052,9 +1138,7 @@ function hasValidSignalSubject(
   }
   const occurrenceId = signal.subject.occurrenceIds[0]!
   const occurrence = resolved[0]!
-  const workspacePath = plan.repository.packages.find(
-    (item) => item.id === occurrence.ownerId,
-  )?.workspacePath
+  const workspacePath = context.packageWorkspacePathsById.get(occurrence.ownerId)
   if (
     workspacePath === undefined
       ? signal.subject.workspacePath !== undefined
@@ -1072,6 +1156,7 @@ function hasValidSignalEvidenceTruth(
   signal: NonNullable<PlanResult['signals']>[number],
   evidenceById: Map<string, NonNullable<PlanResult['signalEvidence']>[number]>,
   plan: PlanResult,
+  context: PlanValidationContext,
 ): boolean {
   const evidence = signal.evidenceRefs
     .map((id) => evidenceById.get(id))
@@ -1083,12 +1168,12 @@ function hasValidSignalEvidenceTruth(
   const graph = evidence.find((item) => item.kind === 'planned-graph')
   const runtime = one('repository-runtime')
   const runtimeProjection = runtime
-    ? validateRuntimeEvidenceProjection(runtime, signal, plan)
+    ? validateRuntimeEvidenceProjection(runtime, signal, plan, context)
     : undefined
-  const peerProjectionValid = graph ? validatePeerEvidenceProjection(graph, signal, plan) : false
+  const peerProjectionValid = graph ? validatePeerEvidenceProjection(graph, signal, context) : false
   const registryOnly = one('registry-version')
   const registryTargetValid = registry
-    ? hasValidTargetRegistryProjection(registry, signal, plan)
+    ? hasValidTargetRegistryProjection(registry, signal, context)
     : false
 
   switch (signal.reason) {
@@ -1209,7 +1294,7 @@ function hasValidSignalEvidenceTruth(
     case 'COHORT_ALIGNED':
     case 'COHORT_DIVERGED': {
       const cohort = one('explicit-cohort')
-      const aligned = cohort ? evaluateSerializedCohort(cohort, plan) : undefined
+      const aligned = cohort ? evaluateSerializedCohort(cohort, context) : undefined
       return (
         cohort?.status === 'observed' &&
         ['config', 'library', 'cli'].includes(cohort.facts.source ?? '') &&
@@ -1219,7 +1304,7 @@ function hasValidSignalEvidenceTruth(
     }
     case 'COHORT_MEMBER_UNKNOWN': {
       const cohort = one('explicit-cohort')
-      return cohort?.status === 'unknown' && evaluateSerializedCohort(cohort, plan) === undefined
+      return cohort?.status === 'unknown' && evaluateSerializedCohort(cohort, context) === undefined
     }
     case 'COHORT_INFERRED_SUGGESTION': {
       const cohort = one('inferred-cohort')
@@ -1289,7 +1374,7 @@ function hasValidSignalEvidenceTruth(
     case 'CURRENT_DEPRECATED':
     case 'CURRENT_VERSION_UNKNOWN':
     case 'CURRENT_DEPRECATION_UNKNOWN': {
-      const currentVersion = expectedCurrentSignalVersion(signal, plan)
+      const currentVersion = expectedCurrentSignalVersion(signal, context)
       return (
         registryOnly?.facts.versionRole === 'current' &&
         (signal.reason === 'CURRENT_VERSION_UNKNOWN'
@@ -1450,9 +1535,9 @@ function hasValidPassiveRegistryFact(
 function hasValidTargetRegistryProjection(
   evidence: NonNullable<PlanResult['signalEvidence']>[number],
   signal: NonNullable<PlanResult['signals']>[number],
-  plan: PlanResult,
+  context: PlanValidationContext,
 ): boolean {
-  const expected = expectedSignalTarget(signal, plan)
+  const expected = expectedSignalTarget(signal, context)
   return (
     evidence.facts.targetVersion === (expected ?? 'unknown') &&
     (expected ? evidence.status === 'observed' : evidence.status === 'unknown')
@@ -1461,77 +1546,72 @@ function hasValidTargetRegistryProjection(
 
 function expectedSignalTarget(
   signal: NonNullable<PlanResult['signals']>[number],
-  plan: PlanResult,
+  context: PlanValidationContext,
 ): string | undefined {
-  const occurrence = plan.occurrences.find((item) => item.id === signal.subject.occurrenceIds[0])
+  const occurrence = context.occurrencesById.get(signal.subject.occurrenceIds[0] ?? '')
   if (!occurrence) return undefined
-  const candidate = plan.decisions.find((item) => item.occurrenceId === occurrence.id)?.candidate
-    ?.targetVersion
+  const candidate = context.decisionsByOccurrenceId.get(occurrence.id)?.candidate?.targetVersion
   if (candidate && semver.valid(candidate)) return candidate
   return exactDeclaredVersion(occurrence.declaredValue, occurrence.role)
 }
 
 function expectedCurrentSignalVersion(
   signal: NonNullable<PlanResult['signals']>[number],
-  plan: PlanResult,
+  context: PlanValidationContext,
 ): string | undefined {
-  const occurrence = plan.occurrences.find((item) => item.id === signal.subject.occurrenceIds[0])
+  const occurrence = context.occurrencesById.get(signal.subject.occurrenceIds[0] ?? '')
   if (!occurrence) return undefined
   return exactDeclaredVersion(occurrence.declaredValue, occurrence.role)
+}
+
+function signalEvaluationContexts(
+  primary: PlanOccurrence,
+  context: PlanValidationContext,
+): readonly PlanOccurrence[] {
+  if (primary.role !== 'catalog-owner') return [primary]
+  return (context.occurrencesByName.get(primary.name) ?? []).filter(
+    (occurrence) =>
+      occurrence.role === 'catalog-consumer' && occurrence.catalogId === primary.catalogId,
+  )
 }
 
 function validatePeerEvidenceProjection(
   evidence: NonNullable<PlanResult['signalEvidence']>[number],
   signal: NonNullable<PlanResult['signals']>[number],
-  plan: PlanResult,
+  validationContext: PlanValidationContext,
 ): boolean {
-  const primary = plan.occurrences.find((item) => item.id === signal.subject.occurrenceIds[0])
+  const primary = validationContext.occurrencesById.get(signal.subject.occurrenceIds[0] ?? '')
   const peerName = evidence.facts.peer
   if (!(primary && peerName)) return false
-  const contexts =
-    primary.role === 'catalog-owner'
-      ? plan.occurrences.filter(
-          (item) =>
-            item.role === 'catalog-consumer' &&
-            item.catalogId === primary.catalogId &&
-            item.name === primary.name,
-        )
-      : [primary]
+  const contexts = signalEvaluationContexts(primary, validationContext)
   const context = contexts.find(
     (item) => evidence.subject === `${primary.id}:${item.id}:${peerName}`,
   )
   if (!context) return false
-  const providers = plan.occurrences.filter(
-    (item) =>
-      item.ownerId === context.ownerId && item.name === peerName && isPeerProviderOccurrence(item),
-  )
-  const boundaryId = plan.repository.relationships.boundaryPackages.find(
-    (item) => item.packageId === context.ownerId,
-  )?.boundaryId
+  const providers = [
+    ...(validationContext.occurrencesByOwnerAndName.get(context.ownerId)?.get(peerName) ?? []),
+  ].filter(isPeerProviderOccurrence)
+  const boundaryId = validationContext.boundaryIdByPackageId.get(context.ownerId)
+  const namedOccurrences = validationContext.occurrencesByName.get(peerName) ?? []
+  const boundaryPackageIds = boundaryId
+    ? validationContext.packageIdsByBoundaryId.get(boundaryId)
+    : undefined
   const boundaryProviders = boundaryId
-    ? plan.occurrences.filter(
+    ? namedOccurrences.filter(
         (item) =>
           item.ownerId !== context.ownerId &&
-          item.name === peerName &&
           isPeerProviderOccurrence(item) &&
-          plan.repository.relationships.boundaryPackages.some(
-            (relationship) =>
-              relationship.packageId === item.ownerId && relationship.boundaryId === boundaryId,
-          ),
+          Boolean(boundaryPackageIds?.has(item.ownerId)),
       )
     : []
-  const overrides = plan.occurrences.filter(
+  const overrides = namedOccurrences.filter(
     (item) =>
-      item.name === peerName &&
       item.role === 'override' &&
       (item.ownerId === context.ownerId ||
-        (boundaryId !== undefined &&
-          plan.repository.relationships.boundaryPackages.some(
-            (relationship) =>
-              relationship.packageId === item.ownerId && relationship.boundaryId === boundaryId,
-          ))),
+        (boundaryId !== undefined && Boolean(boundaryPackageIds?.has(item.ownerId)))),
   )
-  const projection = providers.length === 1 ? projectPeerProvider(plan, providers[0]!) : undefined
+  const projection =
+    providers.length === 1 ? projectPeerProvider(providers[0]!, validationContext) : undefined
   const expectedStatus =
     overrides.length > 0 || providers.length > 1
       ? 'conflicting'
@@ -1571,26 +1651,21 @@ function isPeerProviderOccurrence(occurrence: PlanResult['occurrences'][number])
 }
 
 function projectPeerProvider(
-  plan: PlanResult,
   provider: PlanResult['occurrences'][number],
+  context: PlanValidationContext,
 ): { range: string | null; sourceRefs: string[] } {
   if (provider.role !== 'catalog-consumer') {
-    const requested = plan.operations.find(
-      (item) => item.occurrenceId === provider.id,
-    )?.requestedValue
+    const requested = context.operationsByOccurrenceId.get(provider.id)?.requestedValue
     return {
       range: normalizePeerProviderRange(requested ?? provider.declaredValue),
       sourceRefs: [],
     }
   }
-  const owner = plan.occurrences.find(
-    (item) =>
-      item.role === 'catalog-owner' &&
-      item.catalogId === provider.catalogId &&
-      item.name === provider.name,
+  const owner = (context.occurrencesByName.get(provider.name) ?? []).find(
+    (item) => item.role === 'catalog-owner' && item.catalogId === provider.catalogId,
   )
   if (!owner) return { range: null, sourceRefs: [] }
-  const requested = plan.operations.find((item) => item.occurrenceId === owner.id)?.requestedValue
+  const requested = context.operationsByOccurrenceId.get(owner.id)?.requestedValue
   return {
     range: normalizePeerProviderRange(requested ?? owner.declaredValue),
     sourceRefs: [owner.id],
@@ -1609,32 +1684,20 @@ function validateRuntimeEvidenceProjection(
   evidence: NonNullable<PlanResult['signalEvidence']>[number],
   signal: NonNullable<PlanResult['signals']>[number],
   plan: PlanResult,
+  context: PlanValidationContext,
 ): { complete: boolean } | undefined {
-  const primary = plan.occurrences.find((item) => item.id === signal.subject.occurrenceIds[0])
+  const primary = context.occurrencesById.get(signal.subject.occurrenceIds[0] ?? '')
   if (!primary) return undefined
-  if (evidence.facts.targetVersion !== (expectedSignalTarget(signal, plan) ?? 'unknown')) {
+  if (evidence.facts.targetVersion !== (expectedSignalTarget(signal, context) ?? 'unknown')) {
     return undefined
   }
-  const contexts =
-    primary.role === 'catalog-owner'
-      ? plan.occurrences.filter(
-          (item) =>
-            item.role === 'catalog-consumer' &&
-            item.catalogId === primary.catalogId &&
-            item.name === primary.name,
-        )
-      : [primary]
+  const contexts = signalEvaluationContexts(primary, context)
   const relevantOccurrences = [primary, ...contexts].filter(
     (item, index, items) => items.findIndex((candidate) => candidate.id === item.id) === index,
   )
   const boundaryIds = new Set(
     relevantOccurrences
-      .map(
-        (occurrence) =>
-          plan.repository.relationships.boundaryPackages.find(
-            (item) => item.packageId === occurrence.ownerId,
-          )?.boundaryId,
-      )
+      .map((occurrence) => context.boundaryIdByPackageId.get(occurrence.ownerId))
       .filter((item): item is string => Boolean(item)),
   )
   const declarations = plan.repository.runtimeDeclarations.filter((item) =>
@@ -1682,7 +1745,7 @@ function validateRuntimeEvidenceProjection(
 
 function evaluateSerializedCohort(
   evidence: NonNullable<PlanResult['signalEvidence']>[number],
-  plan: PlanResult,
+  context: PlanValidationContext,
 ): boolean | undefined {
   const configured = Object.entries(evidence.facts)
     .filter(([key]) => key.startsWith('configuredMember.'))
@@ -1709,14 +1772,14 @@ function evaluateSerializedCohort(
     ) {
       return undefined
     }
+    const proposedByOccurrenceId = new Map(proposedItems.map((item) => [item.occurrenceId, item]))
+    const candidateByOccurrenceId = new Map(candidateItems.map((item) => [item.occurrenceId, item]))
     if (
-      new Set(proposedItems.map((item) => item.occurrenceId)).size !== proposedItems.length ||
-      new Set(candidateItems.map((item) => item.occurrenceId)).size !== candidateItems.length ||
+      proposedByOccurrenceId.size !== proposedItems.length ||
+      candidateByOccurrenceId.size !== candidateItems.length ||
       proposedItems.some((item) => {
-        const occurrence = plan.occurrences.find((candidate) => candidate.id === item.occurrenceId)
-        const decision = plan.decisions.find(
-          (candidate) => candidate.occurrenceId === item.occurrenceId,
-        )
+        const occurrence = context.occurrencesById.get(item.occurrenceId)
+        const decision = context.decisionsByOccurrenceId.get(item.occurrenceId)
         return !(
           occurrence &&
           configured.includes(occurrence.name) &&
@@ -1726,20 +1789,14 @@ function evaluateSerializedCohort(
       }) ||
       configured.some(
         (name) =>
-          !proposedItems.some(
-            (item) =>
-              plan.occurrences.find((candidate) => candidate.id === item.occurrenceId)?.name ===
-              name,
+          !(context.occurrencesByName.get(name) ?? []).some((occurrence) =>
+            proposedByOccurrenceId.has(occurrence.id),
           ),
       ) ||
-      proposedItems.some(
-        (item) => !candidateItems.some((candidate) => candidate.occurrenceId === item.occurrenceId),
-      ) ||
+      proposedItems.some((item) => !candidateByOccurrenceId.has(item.occurrenceId)) ||
       candidateItems.some((item) => {
         if (item.candidate === undefined) return true
-        const decision = plan.decisions.find(
-          (candidate) => candidate.occurrenceId === item.occurrenceId,
-        )
+        const decision = context.decisionsByOccurrenceId.get(item.occurrenceId)
         const expected =
           decision?.status === 'operation' || decision?.reason === 'SIGNAL_POLICY_BLOCKED'
         return item.candidate !== expected
@@ -1755,9 +1812,7 @@ function evaluateSerializedCohort(
     return (
       new Set(
         candidateItems
-          .filter((candidate) =>
-            proposedItems.some((item) => item.occurrenceId === candidate.occurrenceId),
-          )
+          .filter((candidate) => proposedByOccurrenceId.has(candidate.occurrenceId))
           .map((candidate) => candidate.candidate),
       ).size === 1
     )
