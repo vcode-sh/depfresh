@@ -211,15 +211,23 @@ function withFingerprint(plan: PlanResultV1): PlanResultV1 {
   return { ...plan, planFingerprint: createPlanFingerprint(plan) }
 }
 
-function validateWithLookupCount(plan: PlanResultV1): { comparisons: number; valid: boolean } {
+function validateWithLookupCount(plan: PlanResultV1): {
+  comparisons: number
+  configuredMembershipComparisons: number
+  valid: boolean
+} {
   let comparisons = 0
+  let configuredMembershipComparisons = 0
   const tracked = new Set<unknown>([
     plan.occurrences,
     plan.decisions,
     plan.repository.relationships.boundaryPackages,
   ])
+  const configuredNames = new Set(plan.occurrences.map((occurrence) => occurrence.name))
   const descriptor = Object.getOwnPropertyDescriptor(Array.prototype, 'find')
+  const includesDescriptor = Object.getOwnPropertyDescriptor(Array.prototype, 'includes')
   const originalFind = Array.prototype.find
+  const originalIncludes = Array.prototype.includes
   Object.defineProperty(Array.prototype, 'find', {
     ...descriptor,
     value: function <T>(
@@ -238,11 +246,31 @@ function validateWithLookupCount(plan: PlanResultV1): { comparisons: number; val
       ]) as T | undefined
     },
   })
+  Object.defineProperty(Array.prototype, 'includes', {
+    ...includesDescriptor,
+    value: function (this: unknown[], searchElement: unknown, fromIndex?: number): boolean {
+      const configuredMembers =
+        fromIndex === undefined &&
+        this.length === configuredNames.size &&
+        this.every((value) => typeof value === 'string' && configuredNames.has(value))
+      if (!configuredMembers) {
+        return Reflect.apply(originalIncludes, this, [searchElement, fromIndex]) as boolean
+      }
+      for (const value of this) {
+        configuredMembershipComparisons += 1
+        if (value === searchElement) return true
+      }
+      return false
+    },
+  })
   try {
     const valid = validatePlanResult(plan)
-    return { comparisons, valid }
+    return { comparisons, configuredMembershipComparisons, valid }
   } finally {
     if (descriptor) Object.defineProperty(Array.prototype, 'find', descriptor)
+    if (includesDescriptor) {
+      Object.defineProperty(Array.prototype, 'includes', includesDescriptor)
+    }
   }
 }
 
@@ -255,6 +283,18 @@ describe('plan semantic validation indexes', () => {
     expect(large.valid).toBe(true)
     expect(large.comparisons).toBeLessThanOrEqual(small.comparisons + (128 - 8) * 12)
     expect(large.comparisons).toBeLessThanOrEqual(128 * 12)
+  })
+
+  it('keeps configured cohort membership lookup growth linear', () => {
+    const small = validateWithLookupCount(createIndexedPlan(8))
+    const large = validateWithLookupCount(createIndexedPlan(128))
+
+    expect(small.valid).toBe(true)
+    expect(large.valid).toBe(true)
+    expect(large.configuredMembershipComparisons).toBeLessThanOrEqual(
+      small.configuredMembershipComparisons + (128 - 8) * 2,
+    )
+    expect(large.configuredMembershipComparisons).toBeLessThanOrEqual(128 * 2)
   })
 
   it('rejects duplicate entity IDs before indexed lookup', () => {

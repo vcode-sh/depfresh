@@ -1765,9 +1765,10 @@ function evaluateSerializedCohort(
     }))
   const strategy = evidence.facts.strategy
   try {
+    const configuredNames = new Set(configured)
     if (
       configured.length < 2 ||
-      new Set(configured).size !== configured.length ||
+      configuredNames.size !== configured.length ||
       !['update-together', 'same-major', 'same-version'].includes(strategy ?? '')
     ) {
       return undefined
@@ -1782,7 +1783,7 @@ function evaluateSerializedCohort(
         const decision = context.decisionsByOccurrenceId.get(item.occurrenceId)
         return !(
           occurrence &&
-          configured.includes(occurrence.name) &&
+          configuredNames.has(occurrence.name) &&
           semver.valid(item.version) &&
           decision?.candidate?.targetVersion === item.version
         )
