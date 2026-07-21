@@ -844,6 +844,8 @@ describe('2.1.2 release readiness', () => {
     )
     const verifier = read('scripts/verify-installed-read-only.mjs')
     expect(verifier).toContain('DEPFRESH_COMMAND_SHIM')
+    expect(verifier).toContain("copyFileSync(process.execPath, join(directory, 'node.exe'))")
+    expect(verifier).not.toContain("join(directory, 'node.cmd')")
     expect(verifier).toContain('shell: false')
     expect(verifier).not.toContain('shell: true')
   })

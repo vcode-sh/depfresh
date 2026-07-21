@@ -38,7 +38,7 @@ const COMMAND_TIMEOUT_MS = 30_000
 const LIVE_PTY_TIMEOUT_MS = 15 * 60_000
 const LIVE_PTY_OUTPUT_BYTES = 4 * 1024 * 1024
 const EXPECTED_COLUMNS = [80, 118]
-const EXPECTED_REPLAY_TOTALS = { files: 1, suites: 5, tests: 69 }
+const EXPECTED_REPLAY_TOTALS = { files: 1, suites: 5, tests: 71 }
 const GIT_EXECUTABLE = '/usr/bin/git'
 const scriptPath = fileURLToPath(import.meta.url)
 

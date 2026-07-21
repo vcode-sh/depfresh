@@ -1,6 +1,7 @@
 import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import {
+  copyFileSync,
   lstatSync,
   mkdirSync,
   mkdtempSync,
@@ -59,7 +60,6 @@ try {
       USERPROFILE: isolatedHome,
       XDG_CACHE_HOME: join(isolatedHome, 'cache'),
       DEPFRESH_COMMAND_SHIM: commandShim,
-      DEPFRESH_NODE_EXECUTABLE: process.execPath,
     }
     const observedVersion = runCommandShim(commandShim, ['--version'], packageRoot, env).trim()
     if (observedVersion !== version) throw new Error('Installed CLI version mismatch')
@@ -192,10 +192,7 @@ function requireVersion(value) {
 
 function installNodeLauncher(directory) {
   if (process.platform === 'win32') {
-    writeFileSync(
-      join(directory, 'node.cmd'),
-      '@echo off\r\n"%DEPFRESH_NODE_EXECUTABLE%" %*\r\n',
-    )
+    copyFileSync(process.execPath, join(directory, 'node.exe'))
     return
   }
   symlinkSync(process.execPath, join(directory, 'node'))

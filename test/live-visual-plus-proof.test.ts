@@ -558,7 +558,7 @@ function liveProofFixture(
     cliPath: replayCli,
     cliSha256,
     containmentRoot: artifactRoot,
-    expected: { files: 1, suites: 5, tests: 69 },
+    expected: { files: 1, suites: 5, tests: 71 },
     installedRoot,
     outputPath: replayEvidencePath,
     packageVersion: '2.1.2',
@@ -680,16 +680,16 @@ function completeReplayReport() {
   return {
     numFailedTests: 0,
     numFailedTestSuites: 0,
-    numPassedTests: 69,
+    numPassedTests: 71,
     numPassedTestSuites: 5,
     numPendingTests: 0,
     numPendingTestSuites: 0,
     numTodoTests: 0,
-    numTotalTests: 69,
+    numTotalTests: 71,
     numTotalTestSuites: 5,
     testResults: [
       {
-        assertionResults: Array.from({ length: 69 }, () => ({ status: 'passed' })),
+        assertionResults: Array.from({ length: 71 }, () => ({ status: 'passed' })),
         status: 'passed',
       },
     ],
