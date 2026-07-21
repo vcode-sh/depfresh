@@ -29,7 +29,7 @@ const publicAssets = [
 ]
 
 describe('published workflow assets', () => {
-  it('pins the publishable package manifest to the 2.1.2 release candidate', () => {
+  it('pins the publishable package manifest to the 2.1.2 release identity', () => {
     expect(packageJson.version).toBe('2.1.2')
   })
 

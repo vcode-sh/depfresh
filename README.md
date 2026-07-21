@@ -10,8 +10,10 @@ reviewable plan/apply workflow when you need stronger guarantees.
 
 ## Try it
 
-These exact commands are prepared for 2.1.2; use them after the hosted release completes. Recursive
-workspace discovery is on by default, so `-r` is not needed.
+These commands pin depfresh 2.1.2. Source text alone does not establish publication; npm and GitHub
+external records are authoritative. The tag workflow creates the hosted release only after the
+aggregate suite, exact npm 12 artifact verification, and exact public-integrity gates succeed.
+Recursive workspace discovery is on by default, so `-r` is not needed.
 
 ```bash
 # Bun
@@ -63,8 +65,7 @@ line before writing the final review. Every non-success target and recovery path
 The former bounded-preview projection is the historical compact semantic contract completed by
 [Plan 037](plans/037-visual-plus-compact-2.1.1.md). [Plan 038](plans/038-visual-plus-hybrid-default.md)
 owns the completed and locally proven visual-composition successor. The 2.1.1 local candidate
-is preserved as historical evidence. The 2.1.2 release candidate is locally verified; hosted CI,
-tag, npm, and GitHub release proof remain pending.
+is preserved as historical evidence.
 
 Eligibility requires the CLI progress route, non-silent output, non-interactive and non-global
 operation, and no direct or addon `beforePackageWrite` hook. `--write --interactive` keeps the

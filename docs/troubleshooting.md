@@ -94,8 +94,8 @@ remains visible.
 The former bounded-preview projection is the historical compact semantic contract completed by
 [Plan 037](../plans/037-visual-plus-compact-2.1.1.md). [Plan 038](../plans/038-visual-plus-hybrid-default.md)
 owns its completed and locally proven visual-composition successor. The 2.1.1 local candidate
-is preserved as historical evidence. The 2.1.2 release candidate is locally verified; hosted CI,
-tag, npm, and GitHub release proof remain pending.
+is preserved as historical evidence. Source text alone does not establish publication; npm and
+GitHub external records are authoritative.
 
 Repository and package-manager context now appears only after discovery has observed it. Seeing no
 context during startup is expected and avoids false placeholders; an `unknown` value printed after

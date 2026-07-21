@@ -16,8 +16,9 @@ Supported manager/version/lockfile combinations are discoverable from
 blocks execution. Process phases never run lifecycle scripts.
 
 Exact artifact verification is narrower than install support: capabilities advertise npm
-`>=11.12.0 <12.0.0`, the public `https://registry.npmjs.org/`, and exact SHA-512 integrity evidence.
-Other managers, npm versions, registries, or missing integrity block that phase before apply.
+`>=11.12.0 <12.0.0 || >=12.0.0 <12.1.0`, the public `https://registry.npmjs.org/`, and exact
+SHA-512 integrity evidence. Other managers, npm versions, registries, or missing integrity block
+that phase before apply.
 
 Global updates are a separate observed workflow. `--global-all` inspects npm, pnpm, and Bun;
 `--global-all --write` requires explicit global write/process authority and reports each manager

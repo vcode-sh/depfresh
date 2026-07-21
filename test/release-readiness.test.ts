@@ -261,7 +261,7 @@ describe('2.1.2 release readiness', () => {
     expect(read('test/wun-demo-proof.mjs')).toContain("capabilities.version, '2.1.2'")
   })
 
-  it('pins maintained README install commands to the prepared 2.1.2 release', () => {
+  it('pins maintained README install commands without treating source text as publication proof', () => {
     const readme = read('README.md')
     const currentInstructions = readme.slice(
       readme.indexOf('## Try it'),
@@ -272,7 +272,7 @@ describe('2.1.2 release readiness', () => {
     expect(currentInstructions).not.toContain('depfresh@2.1.1')
     expect(currentInstructions).not.toContain('current public release')
     expect(readme.replace(/\s+/gu, ' ')).toContain(
-      'The 2.1.2 release candidate is locally verified; hosted CI, tag, npm, and GitHub release proof remain pending.',
+      'Source text alone does not establish publication; npm and GitHub external records are authoritative.',
     )
   })
 
@@ -287,7 +287,7 @@ describe('2.1.2 release readiness', () => {
     expect(currentInstructions).not.toContain('bunx depfresh@2.1.0')
   })
 
-  it('binds the 2.1.2 hardening notes to local-candidate truth', () => {
+  it('binds the 2.1.2 hardening notes to durable release truth', () => {
     expect(existsSync(join(root, 'docs/releases/v2.1.2.md'))).toBe(true)
     const release = read('docs/releases/v2.1.2.md')
 
@@ -304,8 +304,12 @@ describe('2.1.2 release readiness', () => {
     ]) {
       expect(release, item).toContain(item)
     }
-    expect(release.replace(/\s+/gu, ' ')).toContain(
-      'Status: locally verified release candidate; hosted CI, tag, npm, and GitHub release proof remain pending.',
+    const normalizedRelease = release.replace(/\s+/gu, ' ')
+    expect(normalizedRelease).toContain(
+      'Source text alone does not establish publication; npm and GitHub external records are authoritative.',
+    )
+    expect(normalizedRelease).toContain(
+      'The tag workflow creates the hosted release only after the aggregate suite, exact npm 12 artifact verification, and exact public-integrity gates succeed.',
     )
     expect(release).toContain('../../plans/038-visual-plus-hybrid-default.md')
     expect(release).toContain('../superpowers/plans/2026-07-20-2.1.2-hardening.md')
@@ -314,6 +318,25 @@ describe('2.1.2 release readiness', () => {
     )
     expect(release).not.toContain('TBD')
     expect(release).not.toContain('TODO')
+  })
+
+  it('keeps current 2.1.2 status text durable before and after publication', () => {
+    for (const path of [
+      'README.md',
+      'docs/README.md',
+      'docs/troubleshooting.md',
+      'docs/releases/v2.1.2.md',
+    ]) {
+      const content = read(path)
+      const normalized = content.replace(/\s+/gu, ' ')
+
+      expect(normalized, path).toContain(
+        'Source text alone does not establish publication; npm and GitHub external records are authoritative.',
+      )
+      expect(content, path).not.toMatch(
+        /2\.1\.2 release candidate|proof remains pending|remain Task 9 evidence|use them after the hosted release completes/iu,
+      )
+    }
   })
 
   it('binds the 2.1.1 local evidence to the hybrid release candidate', () => {
@@ -425,9 +448,7 @@ describe('2.1.2 release readiness', () => {
     expect(normalized('README.md')).toContain('pnpm `>=10.0.0 <12.0.0`')
     expect(normalized('README.md')).toContain('Bun `>=1.2.0 <2.0.0`')
     expect(normalized('README.md')).toContain('npm `>=11.12.0 <12.0.0 || >=12.0.0 <12.1.0`')
-    expect(normalized('docs/README.md')).toContain(
-      'completed Plan 038 hybrid default and the 2.1.2 locally verified release candidate',
-    )
+    expect(normalized('docs/README.md')).toContain('completed Plan 038 hybrid default')
     expect(read('docs/integrations/README.md')).toContain('completed and locally proven Plan 038')
     expect(read('docs/troubleshooting.md')).toContain(
       'completed and locally proven visual-composition successor',
@@ -458,6 +479,9 @@ describe('2.1.2 release readiness', () => {
     expect(normalized('docs/cli/examples.md')).toContain('pnpm `>=10.0.0 <12.0.0`')
     expect(normalized('docs/cli/examples.md')).toContain('Bun `>=1.2.0 <2.0.0`')
     expect(normalized('docs/api/functions.md')).toContain(
+      'npm `>=11.12.0 <12.0.0 || >=12.0.0 <12.1.0`',
+    )
+    expect(normalized('skills/depfresh/recipes/manager-phases.md')).toContain(
       'npm `>=11.12.0 <12.0.0 || >=12.0.0 <12.1.0`',
     )
     expect(normalized('SECURITY.md')).toContain('npm `>=10.0.0 <13.0.0`')

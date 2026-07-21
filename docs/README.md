@@ -47,8 +47,9 @@ Everything I know about depfresh is in here, split into files so you can pretend
 
 - **[Troubleshooting](./troubleshooting.md)** -- Common issues, workspace gotchas, and known limitations. The page you'll find via Google at 2 AM after everything breaks. I've been there. The kettle's already on.
 
-- **[2.1.2 Release Notes](./releases/v2.1.2.md)** -- The completed Plan 038 hybrid default and the
-  2.1.2 locally verified release candidate; hosted and public proof remains pending.
+- **[2.1.2 Release Notes](./releases/v2.1.2.md)** -- The completed Plan 038 hybrid default and
+  release hardening. Source text alone does not establish publication; npm and GitHub external
+  records are authoritative.
 
 - **[2.1.1 Release Notes](./releases/v2.1.1.md)** -- Historical Plan 037 compact evidence and the
   superseded Plan 038 local-candidate evidence.
