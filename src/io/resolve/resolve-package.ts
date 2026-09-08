@@ -15,13 +15,15 @@ import { loadNpmrc } from '../../utils/npmrc'
 import { getSafeErrorDetails } from '../../utils/redact'
 import { resolveDiscoveryContext } from '../packages/root-detection'
 import { type ResolveContext, recordResolutionTrace } from './context'
+import { resolutionErrorDetails } from './resolution-error'
 import { resolveDependency } from './resolve-dependency'
 
-function createResolutionError(dep: RawDep): ResolvedDepChange {
+function createResolutionError(dep: RawDep, error?: unknown): ResolvedDepChange {
   return {
     ...dep,
     targetVersion: dep.currentVersion,
     diff: 'error',
+    resolutionError: resolutionErrorDetails(error),
     pkgData: {
       name: dep.aliasName ?? dep.name,
       versions: [],
@@ -116,7 +118,7 @@ export async function resolvePackageWithLogger(
                 reason: 'RESOLUTION_FAILED',
                 eligibleVersions: [],
               })
-              return createResolutionError(dep)
+              return createResolutionError(dep, error)
             } finally {
               await runBestEffortCallback(
                 logger,

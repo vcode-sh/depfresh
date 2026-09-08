@@ -39,7 +39,7 @@ const applyRuntime = vi.hoisted(() => ({
 
 vi.mock('../apply/index', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../apply/index')>()
-  const { applyPlanWithRuntime } = await import('../apply/engine')
+  const { applyPlanWithRuntime, applyWriteWithRuntime } = await import('../apply/engine')
   return {
     ...actual,
     applyWithExecutionEvidence: async (
@@ -60,16 +60,21 @@ vi.mock('../apply/index', async (importOriginal) => {
         }
       >()
       let vcsEvidence: RepositoryVcsEvidence | undefined
-      const applyResult = await applyPlanWithRuntime(
-        args[0],
+      const executionOptions = [
         args[1],
         args[2],
         applyRuntime.overrides,
-        (evidence) => evidenceByTarget.set(evidence.targetPath, { ...evidence }),
-        (evidence) => {
+        (evidence: { targetPath: string; operationIds: string[]; replacementAttempted: boolean }) =>
+          evidenceByTarget.set(evidence.targetPath, { ...evidence }),
+        (evidence: RepositoryVcsEvidence) => {
           vcsEvidence = evidence
         },
-      )
+        args[3],
+      ] as const
+      const applyResult =
+        'repositoryIdentity' in args[0]
+          ? await applyWriteWithRuntime(args[0], ...executionOptions)
+          : await applyPlanWithRuntime(args[0], ...executionOptions)
       applyRuntime.result = applyResult
       applyRuntime.evidence = [...evidenceByTarget.values()]
       return {
@@ -148,6 +153,126 @@ describe('command-level check apply integration', () => {
     expect(readDependency(fixture.manifests[1]!, 'beta')).toBe('^1.0.1')
     expect(readDependency(fixture.manifests[2]!, 'gamma')).toBe('^1.0.1')
     expect(existsSync(join(fixture.root, '.depfresh'))).toBe(false)
+  })
+
+  it.each(['unstaged', 'staged', 'staged-plus-unstaged'] as const)(
+    'updates a %s manifest while preserving user edits and the Git index',
+    async (state) => {
+      const fixture = createWorkspace()
+      const git = findExecutable('git')
+      initializeGit(git, fixture.root)
+      const manifest = fixture.manifests[0]!
+      const original = JSON.parse(readFileSync(manifest, 'utf8'))
+      writeJson(manifest, { ...original, description: 'User edit' })
+      if (state !== 'unstaged') {
+        execFileSync(git, ['add', '--', 'package.json'], { cwd: fixture.root })
+      }
+      if (state === 'staged-plus-unstaged') {
+        writeJson(manifest, { ...original, description: 'User edit', license: 'MIT' })
+      }
+      const baseline = readFileSync(manifest, 'utf8')
+      const index = readFileSync(join(fixture.root, '.git/index'))
+
+      const result = await runCheck(fixture.root, 'json')
+
+      expect(result.exitCode).toBe(0)
+      expect(readFileSync(manifest, 'utf8')).toBe(baseline.replace('^1.0.0', '^1.0.2'))
+      expect(readFileSync(join(fixture.root, '.git/index'))).toEqual(index)
+    },
+  )
+
+  it('preserves a concurrent edit to an already dirty manifest and blocks every replacement', async () => {
+    const fixture = createWorkspace()
+    initializeGit(findExecutable('git'), fixture.root)
+    const manifest = fixture.manifests[0]!
+    const original = JSON.parse(readFileSync(manifest, 'utf8'))
+    writeJson(manifest, { ...original, description: 'Baseline user edit' })
+    const otherBytes = fixture.manifests.slice(1).map((path) => readFileSync(path))
+    const index = readFileSync(join(fixture.root, '.git/index'))
+    let concurrentBytes: string | undefined
+    applyRuntime.overrides = {
+      checkpoint(name) {
+        if (name !== 'before-precommit') return
+        writeJson(manifest, { ...original, description: 'Concurrent user edit' })
+        concurrentBytes = readFileSync(manifest, 'utf8')
+      },
+    }
+
+    const result = await runCheck(fixture.root, 'json')
+
+    expect(concurrentBytes).toBeDefined()
+    expect(result.exitCode).toBe(2)
+    expect(readFileSync(manifest, 'utf8')).toBe(concurrentBytes)
+    expectManifestBytes(fixture.manifests.slice(1), otherBytes)
+    expect(readFileSync(join(fixture.root, '.git/index'))).toEqual(index)
+    expect(capturedAttempts()).toEqual([false, false, false])
+  })
+
+  it('updates added, untracked, and renamed manifests without changing the Git index', async () => {
+    const fixture = createWorkspace()
+    const git = findExecutable('git')
+    initializeGit(git, fixture.root)
+    const manifests: string[] = []
+    for (const name of ['added', 'untracked']) {
+      const directory = join(fixture.root, 'packages', name)
+      mkdirSync(directory)
+      const manifest = join(directory, 'package.json')
+      writeJson(manifest, {
+        name,
+        description: 'User-created package',
+        dependencies: { alpha: '^1.0.0' },
+      })
+      manifests.push(manifest)
+    }
+    execFileSync(git, ['add', '--', 'packages/added/package.json'], { cwd: fixture.root })
+    execFileSync(git, ['mv', 'packages/a', 'packages/renamed'], { cwd: fixture.root })
+    const renamed = join(fixture.root, 'packages/renamed/package.json')
+    manifests.push(renamed)
+    const baseline = manifests.map((path) => readFileSync(path, 'utf8'))
+    const index = readFileSync(join(fixture.root, '.git/index'))
+
+    const result = await runCheck(fixture.root, 'json')
+
+    expect(result.exitCode).toBe(0)
+    for (const [position, manifest] of manifests.entries()) {
+      expect(readFileSync(manifest, 'utf8')).toBe(
+        baseline[position]!.replace('^1.0.0', manifest === renamed ? '^1.0.1' : '^1.0.2'),
+      )
+    }
+    expect(readFileSync(join(fixture.root, '.git/index'))).toEqual(index)
+  })
+
+  it('leaves an unmerged manifest and its Git index untouched', async () => {
+    const fixture = createWorkspace()
+    const git = findExecutable('git')
+    initializeGit(git, fixture.root)
+    const manifest = fixture.manifests[0]!
+    const bytes = readFileSync(manifest)
+    const blob = execFileSync(git, ['hash-object', '-w', '--stdin'], {
+      cwd: fixture.root,
+      input: bytes,
+      encoding: 'utf8',
+    }).trim()
+    execFileSync(git, ['update-index', '--index-info'], {
+      cwd: fixture.root,
+      input: [
+        `0 ${'0'.repeat(blob.length)}\tpackage.json`,
+        ...[1, 2, 3].map((stage) => `100644 ${blob} ${stage}\tpackage.json`),
+        '',
+      ].join('\n'),
+    })
+    const index = readFileSync(join(fixture.root, '.git/index'))
+    const before = fixture.manifests.map((path) => readFileSync(path))
+
+    const result = await runCheck(fixture.root, 'json')
+
+    expect(result.exitCode).toBe(2)
+    expect(
+      capturedApplyResult().operations.every((operation) => operation.reason === 'MERGE_CONFLICT'),
+    ).toBe(true)
+    expectManifestBytes(fixture.manifests, before)
+    expect(readFileSync(join(fixture.root, '.git/index'))).toEqual(index)
+    expect(capturedAttempts()).toEqual([false, false, false])
   })
 
   it('blocks all three targets when the apply-time Git preflight becomes unavailable', async () => {
@@ -454,10 +579,10 @@ process.exit(result.status ?? 1)
       childPath,
       `import { readFileSync, writeFileSync } from 'node:fs'
 import ${JSON.stringify(signalsUrl)}
-import { applyPlanWithRuntime } from ${JSON.stringify(engineUrl)}
+import { applyWriteWithRuntime } from ${JSON.stringify(engineUrl)}
 const plan = JSON.parse(readFileSync(${JSON.stringify(planPath)}, 'utf8'))
 const authority = { write: true, install: false, update: false, execute: false, verifyCommand: false, globalWrite: false }
-await applyPlanWithRuntime(plan, { cwd: ${JSON.stringify(fixture.root)} }, authority, {
+await applyWriteWithRuntime(plan, { cwd: ${JSON.stringify(fixture.root)} }, authority, {
   checkpoint(name, context) {
     if (name !== 'after-replace' || context.index !== 0) return
     writeFileSync(${JSON.stringify(marker)}, 'replaced')
@@ -696,9 +821,9 @@ function findExecutable(name: string): string {
 
 async function startRegistry(): Promise<{ server: Server; url: string }> {
   const server = createServer((request, response) => {
-    const name = decodeURIComponent(
+    const [name = '', version] = decodeURIComponent(
       new URL(request.url ?? '/', 'http://registry.local').pathname.slice(1),
-    )
+    ).split('/')
     if (!['alpha', 'beta', 'gamma'].includes(name)) {
       response.writeHead(404, { 'content-type': 'application/json' })
       response.end(JSON.stringify({ error: 'not found' }))
@@ -706,6 +831,10 @@ async function startRegistry(): Promise<{ server: Server; url: string }> {
     }
     response.writeHead(200, { 'content-type': 'application/json' })
     const latest = name === 'alpha' ? '1.0.2' : '1.0.1'
+    if (version) {
+      response.end(JSON.stringify({ name, version }))
+      return
+    }
     response.end(
       JSON.stringify({
         name,

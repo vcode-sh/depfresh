@@ -32,9 +32,9 @@ export async function loadPackagesWithLogger(
   outputLogger?: Logger,
 ): Promise<PackageMeta[]> {
   if (options.global || options.globalAll) return discoverPackages(options, observer, outputLogger)
-  const { inspectRepositoryWithProjection } = await import('../../repository/inspect')
+  const { inspectDependenciesWithProjection } = await import('../../repository/inspect')
   return (
-    await inspectRepositoryWithProjection(options, observer, invocationSelection, outputLogger)
+    await inspectDependenciesWithProjection(options, observer, invocationSelection, outputLogger)
   ).packages
 }
 

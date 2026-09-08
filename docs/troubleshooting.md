@@ -226,6 +226,14 @@ Supported lockfile names are `package-lock.json`, `npm-shrinkwrap.json`, `pnpm-l
 format. Declared Node evidence is limited to
 `engines.node`, `.nvmrc`, `.node-version`, and the `nodejs` entry in `.tool-versions`.
 
+### Updating manifests with local changes
+
+Ordinary `depfresh -w` updates the selected dependency entries in your current working files.
+You do not need to commit or stash existing edits first. Unrelated content and the Git index are
+preserved. Actual merge conflicts and files changed during the write still block replacement.
+
+A saved machine plan has a stricter contract, described below.
+
 ### Apply says a plan is stale or a target is dirty
 
 Apply requires the target file, occurrence value, physical identity, repository identity, and

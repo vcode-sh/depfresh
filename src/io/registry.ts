@@ -20,6 +20,8 @@ interface FetchOptions {
   timeout: number
   retries: number
   logger: Logger
+  compact?: boolean
+  onCompactVersions?: (project: (version: string) => PackageData | undefined) => void
   monotonicNow?: () => number
 }
 
@@ -64,7 +66,7 @@ async function fetchNpmPackage(
   const url = `${registry.url}${encodedName}`
 
   const headers: Record<string, string> = {
-    accept: 'application/json',
+    accept: options.compact ? 'application/vnd.npm.install-v1+json' : 'application/json',
   }
 
   if (registry.token) {
@@ -78,6 +80,62 @@ async function fetchNpmPackage(
   }
   const json = payload as Record<string, unknown>
 
+  if (options.compact && options.onCompactVersions && isRecord(json.versions)) {
+    options.onCompactVersions(compactVersionProjector(name, registry, json.versions))
+  }
+  return readNpmPackage(name, registry, json, options.compact)
+}
+
+function compactVersionProjector(
+  name: string,
+  registry: RegistryConfig,
+  versions: Record<string, unknown>,
+): (version: string) => PackageData | undefined {
+  return (version) => {
+    const record = versions[version]
+    if (
+      !isRecord(record) ||
+      record.name !== name ||
+      record.version !== version ||
+      !isRecord(record.dist)
+    )
+      return undefined
+    return readNpmPackage(name, registry, { ...record, versions: { [version]: record } })
+  }
+}
+
+export async function fetchPackageVersionData(
+  name: string,
+  version: string,
+  options: FetchOptions,
+): Promise<PackageData> {
+  if (!semver.valid(version)) throw new ResolveError('Invalid npm version metadata request')
+  const registry = getRegistryForPackage(name, options.npmrc)
+  const encodedName = name.startsWith('@')
+    ? `@${encodeURIComponent(name.slice(1))}`
+    : encodeURIComponent(name)
+  const headers: Record<string, string> = { accept: 'application/json' }
+  if (registry.token) {
+    headers.authorization =
+      registry.authType === 'basic' ? `Basic ${registry.token}` : `Bearer ${registry.token}`
+  }
+  const json = await fetchWithRetry(
+    `${registry.url}${encodedName}/${encodeURIComponent(version)}`,
+    headers,
+    options,
+  )
+  if (!isRecord(json) || json.name !== name || json.version !== version) {
+    throw new ResolveError(`Unexpected npm version metadata identity for ${name}@${version}`)
+  }
+  return readNpmPackage(name, registry, { ...json, versions: { [version]: json } })
+}
+
+function readNpmPackage(
+  name: string,
+  registry: RegistryConfig,
+  json: Record<string, unknown>,
+  compact = false,
+): PackageData {
   const versionsObj = isRecord(json.versions) ? json.versions : {}
   const versions = Object.entries(versionsObj)
     .filter(([candidate, metadata]) => semver.valid(candidate) && isRecord(metadata))
@@ -106,6 +164,8 @@ async function fetchNpmPackage(
       deprecated[ver] = deprecatedValue
       deprecationPresence[ver] = 'present'
     } else deprecationPresence[ver] = 'unknown'
+
+    if (compact) continue
 
     signaturePresence[ver] = readSignaturePresence(data)
     provenancePresence[ver] = readProvenancePresence(data)
@@ -143,17 +203,18 @@ async function fetchNpmPackage(
     versions,
     distTags,
     time,
+    ...(compact ? { compact: true as const } : {}),
     deprecated: Object.keys(deprecated).length > 0 ? deprecated : undefined,
     signaturePresence: Object.keys(signaturePresence).length > 0 ? signaturePresence : undefined,
     provenancePresence: Object.keys(provenancePresence).length > 0 ? provenancePresence : undefined,
     artifactIntegrity: Object.keys(artifactIntegrity).length > 0 ? artifactIntegrity : undefined,
     registry: canonicalRegistryIdentity(registry.url),
     deprecationPresence,
-    engineMetadata,
+    engineMetadata: compact ? undefined : engineMetadata,
     peerDependencies: Object.keys(peerDependencies).length > 0 ? peerDependencies : undefined,
     optionalPeerDependencies:
       Object.keys(optionalPeerDependencies).length > 0 ? optionalPeerDependencies : undefined,
-    peerMetadata,
+    peerMetadata: compact ? undefined : peerMetadata,
     engines: Object.keys(engines).length > 0 ? engines : undefined,
     description: typeof json.description === 'string' ? json.description : undefined,
     homepage: typeof json.homepage === 'string' ? json.homepage : undefined,

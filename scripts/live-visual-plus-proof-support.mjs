@@ -110,14 +110,14 @@ export function analyzeHybridRun(result, columns, argv, repositoryName) {
       line.includes('read-only'),
   )
   const topologyPattern =
-    /^([0-9]+) packages (?:·|-) ([0-9]+) declared (?:·|-) ([0-9]+) eligible (?:·|-) ([0-9]+) updates (?:·|-) ([0-9]+) files$/u
+    /^([0-9]+) packages? (?:·|-) ([0-9]+) declared (?:·|-) ([0-9]+) eligible (?:·|-) ([0-9]+) updates? (?:·|-) ([0-9]+) files?$/u
   const severityPattern =
     /^Major ([0-9]+) (?:·|-) Minor ([0-9]+) (?:·|-) Patch ([0-9]+)$/u
   const topology = lines.findIndex((line) => topologyPattern.test(line))
   const severity = lines.findIndex((line) => severityPattern.test(line))
-  const breaking = lines.findIndex((line) => line === 'Breaking changes')
-  const ledger = lines.findIndex((line, index) => index > breaking && isLedgerHeader(line))
-  const indexes = [context, topology, severity, breaking, ledger]
+  const majorHeading = lines.findIndex((line) => line === 'Major updates' || line === 'Breaking changes')
+  const ledger = lines.findIndex((line, index) => index > severity && isLedgerHeader(line))
+  const indexes = [context, topology, severity, ledger]
   if (
     indexes.some((index) => index < 0) ||
     indexes.some((value, index) => index > 0 && value <= indexes[index - 1])
@@ -128,6 +128,9 @@ export function analyzeHybridRun(result, columns, argv, repositoryName) {
   const severityMatch = severityPattern.exec(lines[severity])
   const topologyCounts = topologyMatch?.slice(1).map(Number) ?? []
   const severityCounts = severityMatch?.slice(1).map(Number) ?? []
+  if (severityCounts[0] > 0 && !(majorHeading > severity && majorHeading < ledger)) {
+    throw new Error('Live Visual+ major update section is incomplete')
+  }
   const declared = topologyCounts[3]
   const topologyFiles = topologyCounts[4]
   const receiptIndex = lines.findIndex(
@@ -136,14 +139,14 @@ export function analyzeHybridRun(result, columns, argv, repositoryName) {
   if (!Number.isSafeInteger(declared) || declared < 1 || receiptIndex < 0) {
     throw new Error('Live Visual+ update membership is incomplete')
   }
-  const rows = parseLedgerRows(lines.slice(breaking + 1, receiptIndex))
+  const rows = parseLedgerRows(lines.slice(severity + 1, receiptIndex))
   const parsedRows = rows.map((row) => ({ evidence: parseTypedLedgerEvidence(row), row }))
   const distinctRows = new Set(
     parsedRows.flatMap(({ evidence, row }) =>
       evidence === undefined ? [] : [semanticLedgerRowKey(row, evidence)],
     ),
   )
-  const receiptMatch = /^Review complete (?:·|-) ([0-9]+) updates across ([0-9]+) files? (?:·|-) write not attempted$/u.exec(
+  const receiptMatch = /^Review complete (?:·|-) ([0-9]+) updates? across ([0-9]+) files? (?:·|-) write not attempted$/u.exec(
     lines[receiptIndex],
   )
   const receiptUpdates = Number(receiptMatch?.[1])
@@ -213,7 +216,7 @@ export function analyzeLongRun(result, columns, argv, expectedOperations) {
     'Reviewed physical targets',
     'Review complete',
   ])
-  const topology = exactSectionLine(screen, /\b([0-9]+) updates (?:→|->) ([0-9]+) files?\b/u)
+  const topology = exactSectionLine(screen, /\b([0-9]+) updates? (?:→|->) ([0-9]+) files?\b/u)
   const ownerSection = exactSection(screen, 'Owner impact', 'Shared dependencies')
   const sharedSection = exactSection(screen, 'Shared dependencies', 'Complete change list')
   const operationSection = exactSection(
@@ -447,7 +450,7 @@ function hasValidLedgerEvidence(row, parsed) {
   const compatibility = parsed.evidence.filter(({ type }) => type === 'compatibility')
   if (compatibility.length > 1) return false
   if (row.source !== 'catalog') return catalogs.length === 0
-  return catalogs.length === 1 && catalogs[0].value === `catalog ${row.owner}: ${row.file}`
+  return catalogs.length === 0 || catalogs.length === 1 && catalogs[0].value === `catalog ${row.owner}: ${row.file}`
 }
 
 function parseTypedLedgerEvidence(row) {
@@ -494,16 +497,16 @@ function parseLedgerOwner(value) {
 }
 
 function isLedgerHeader(line) {
-  return /^dependency\s{2,}current\s+(?:(?:→|->)\s+)?target\s{2,}severity\s{2,}age$/u.test(
+  return /^dependency\s{2,}current\s+(?:(?:→|->)\s+)?target\s{2,}severity(?:\s{2,}age)?$/u.test(
     line,
   )
 }
 
 function parseLedgerRow(line) {
-  const medium = /^(.+?)\s{2,}(\S+)\s+(?:→|->)\s+(\S+)\s{2,}(Major|Minor|Patch)\s{2,}(\S+)$/u.exec(
+  const medium = /^(.+?)\s{2,}(\S+)\s+(?:→|->)\s+(\S+)\s{2,}(Major|Minor|Patch)(?:\s{2,}(\S+))?$/u.exec(
     line,
   )
-  const wide = /^(.+?)\s{2,}(\S+)\s{2,}(\S+)\s{2,}(Major|Minor|Patch)\s{2,}(\S+)$/u.exec(
+  const wide = /^(.+?)\s{2,}(\S+)\s{2,}(\S+)\s{2,}(Major|Minor|Patch)(?:\s{2,}(\S+))?$/u.exec(
     line,
   )
   const row = medium ?? wide

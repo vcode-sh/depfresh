@@ -35,11 +35,12 @@ export function canonicalizeFilepath(filepath: string): string {
 export function createPackageWriteRequest(
   pkg: PackageMeta,
   change: ResolvedDepChange,
+  normalizeFilepath = canonicalizeFilepath,
 ): PhysicalWriteRequest {
   return {
     change,
     occurrence: {
-      file: canonicalizeFilepath(pkg.filepath),
+      file: normalizeFilepath(pkg.filepath),
       path: getPackageOccurrencePath(change),
     },
     exactExpectedValue: change.rawVersion,
@@ -49,11 +50,12 @@ export function createPackageWriteRequest(
 export function createCatalogWriteRequest(
   catalog: CatalogSource,
   change: ResolvedDepChange,
+  normalizeFilepath = canonicalizeFilepath,
 ): PhysicalWriteRequest {
   return {
     change,
     occurrence: {
-      file: canonicalizeFilepath(catalog.filepath),
+      file: normalizeFilepath(catalog.filepath),
       path: getCatalogOccurrencePath(catalog, change.name),
     },
     exactExpectedValue: change.rawVersion,

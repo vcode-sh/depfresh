@@ -151,7 +151,7 @@ export const DEFAULT_OPTIONS: Partial<depfreshOptions> = {
   all: false,
   group: true,
   sort: 'diff-asc',
-  timediff: true,
+  timediff: false,
   cooldown: 0,
   nodecompat: true,
   long: false,

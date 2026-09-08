@@ -1,465 +1,110 @@
-# Table Output
+# Table output
 
-The eligible local CLI default is the five-region hybrid review described below. Compatibility
-routes retain the grouped table and receipts documented separately on this page.
-
-```bash
-depfresh --output table   # default -- for humans with eyeballs
-# or just:
-depfresh
-```
+The default CLI view shows the selected version changes and a short result. It highlights major
+updates and concrete compatibility warnings without requiring a clean working tree.
 
 ## Columns
 
-When exact workspace/catalog exclusions are requested, depfresh prints one durable line before
-registry resolution, for example `Exclusions: 2 workspaces · 1 catalog · 34 occurrences`. If a
-workspace exclusion leaves shared catalog owners eligible, a second concise note explains that
-`--exclude-catalog` is required to exclude them. Progress rendering suspends around both lines.
+| Column | Meaning |
+| --- | --- |
+| dependency | Package name, grouped by its manifest or catalog owner. |
+| current | The version expression currently in the file. |
+| target | The selected replacement expression. |
+| severity | Semver difference: Major, Minor, or Patch. |
+| age | Publication age, shown only with `--timediff`. |
 
-| Column    | Description                                                  |
-|-----------|--------------------------------------------------------------|
-| **name**  | Package name. The thing you `npm install`-ed and forgot about. |
-| **source**| Where it lives: `dependencies`, `devDependencies`, `overrides`, etc. Shown when `--group` is off. |
-| **current** | What you've got.                                           |
-| **target** | What you should have. The entire target range is colour-coded by severity. |
-| **diff**  | `major`, `minor`, or `patch`. The severity label uses the same colour as the target. |
-| **age**   | How long ago the target version was published. Unstyled and enabled by default (`--timediff`). |
-
-## Hybrid Styling
-
-The ledger applies severity colour to the entire target range and severity label. Age remains
-unstyled. Current ranges are muted, and the severity bar uses the same redundant mapping:
-
-- **Red** -- `major` update. Breaking changes ahead. Godspeed.
-- **Yellow** -- `minor` update. New features, theoretically backwards-compatible. Theoretically.
-- **Green** -- `patch` update. Bug fixes. The safest bet you'll make all day.
-- **Gray** -- the current range. It remains visually secondary to the proposed target.
-
-Colour is supplementary. `Major`, `Minor`, and `Patch` remain visible text, and neither target
-styling nor the severity bar changes semantic membership.
+A major version is a reason to review migration notes, not proof that the application will break.
+Conversely, an update within the same major version is not proof that it has no breaking changes.
+Missing compatibility information is summarized once rather than repeated on every row.
 
 ## Example
 
-This is the exact ANSI-stripped 118-column projection produced by the deterministic reviewed hybrid
-fixture. Risk focus repeats major operations for attention; the complete ledger still contains
-every selected update exactly once, so its seven rows match both the overview and receipt.
+The exact widths and separators adapt to the terminal. A small review can look like this:
 
-<!-- visual-plus-default-example:start -->
-<!-- source-coupled: createVisualPlusHybridFixtureInput(118) + renderVisualPlusHybridReview + renderVisualPlusReceipt; ANSI stripped -->
 ```text
-hybrid-fixture · pnpm 10.33.0 · workspace · major · read-only
-3 packages · 7 declared · 7 eligible · 7 updates · 3 files
+example - single package - major - read-only
+1 package - 2 declared - 2 eligible - 2 updates - 1 file
 
-Major 3 · Minor 2 · Patch 2
-████████████████████████████████████████
+Major 1 - Minor 1 - Patch 0
+Major updates
+alpha
+  ^1.0.0 -> ^2.0.0 - example
 
-Breaking changes
-react-dropzone
-  ^15.0.0 → ^17.0.0 · ~5d · web (apps/web/package.json)
-  0 compatible · 0 incompatible · 1 unknown
-  ^15.0.0 → ^18.0.0 · ~10d · web (packages/web/package.json)
-  1 compatible · 0 incompatible · 0 unknown
-vitest
-  ^3.2.0 → ^4.0.0 · unknown · web (apps/web/package.json)
-  0 compatible · 1 incompatible · 0 unknown
-
-web · apps/web/package.json
+example - package.json
   dependencies
-dependency                                current  target   severity  age
-─────────────────────────────────────────────────────────────────────────────
-react-dropzone                            ^15.0.0  ^17.0.0  Major     ~5d
-  compat unknown: Node support unknown
+dependency   current -> target   severity
+alpha        ^1.0.0 -> ^2.0.0    Major
+beta         ^1.0.0 -> ^1.1.0    Minor
 
-  devDependencies
-dependency                                current  target  severity  age
-────────────────────────────────────────────────────────────────────────────
-vitest                                    ^3.2.0   ^4.0.0  Major     unknown
-  compat incompatible: requires Node >=22
-typescript                                ^5.8.0   ^5.9.0  Minor     ~45d
-
-web · packages/web/package.json
-  dependencies
-dependency                                current  target   severity  age
-─────────────────────────────────────────────────────────────────────────────
-react-dropzone                            ^15.0.0  ^18.0.0  Major     ~10d
-nanoid                                    ^5.1.0   ^5.2.0   Minor     ~2d
-  compat incompatible: requires Node >=20
-picocolors [compat unknown]               ^1.1.0   ^1.1.1   Patch     unknown
-
-default · pnpm-workspace.yaml
-  catalog
-dependency                                current  target  severity  age
-────────────────────────────────────────────────────────────────────────────
-eslint [compat unknown]                   ^9.0.0   ^9.1.0  Patch     ~4mo
-  catalog default: pnpm-workspace.yaml
-
-Review complete · 7 updates across 3 files · write not attempted
-Exit 0
+Review complete - 2 updates across 1 file - write not attempted
 ```
-<!-- visual-plus-default-example:end -->
 
-*(Actual output has ANSI colours. Your terminal is fancier than this markdown file.)*
+Known changes to Node or peer requirements and target deprecation notices are advisory. They do
+not claim that depfresh has tested the application against the new version. Registry discovery
+failures identify the unresolved dependency and the actual cause; missing optional metadata does
+not discard an otherwise resolved update.
 
 ## Display Options
 
-**`--group` / `-G`** (default: `true`)
-Groups updates by dependency source -- `dependencies`, `devDependencies`, `overrides`, and so on. Disable with `--no-group` for a flat list with a `source` column instead.
+| Option | Default | Behavior |
+| --- | --- | --- |
+| `--group`, `-G` | `true` | Group by dependency source. `--no-group` uses a flat list with a source column. |
+| `--sort`, `-s` | `diff-asc` | Sort by semver difference, name, or publication time. |
+| `--timediff`, `-T` | `false` | Fetch publication history and show release ages. |
+| `--long`, `-L` | `false` | Show detailed operations, owners, occurrences, and write diagnostics. |
+| `--all`, `-a` | `false` | Include packages without updates. |
+| `--nodecompat` | `true` | Show available Node compatibility information without treating unknown as compatible. |
+| `--explain`, `-E` | `false` | Show release-shape and metadata notes in interactive selection. |
 
-**`--sort` / `-s`** (default: `diff-asc`)
-Controls row ordering. Options:
+Sort values are `diff-asc` (major first), `diff-desc` (patch first), `name-asc`, `name-desc`,
+`time-asc` (oldest first), and `time-desc` (newest first). Time-based sorting, `newest`, and a
+nonzero `cooldown` still require publication history even when the age column is hidden.
 
-| Value       | What it does                             |
-|-------------|------------------------------------------|
-| `diff-asc`  | Major, then Minor, then Patch. |
-| `diff-desc` | Patch, then Minor, then Major. |
-| `time-asc`  | Oldest first. Shaming your neglect.      |
-| `time-desc` | Newest first. Fresh drama at the top.    |
-| `name-asc`  | Alphabetical. For the orderly.           |
-| `name-desc` | Reverse alphabetical. For the chaotic.   |
-
-**`--timediff` / `-T`** (default: `true`)
-Shows how long ago each target version was published. Disable with `--no-timediff` if ignorance is your coping strategy.
-
-**`--long` / `-L`** (default: `false`)
-Shows the complete Visual+ audit, including every selected operation, owner, shared dependency,
-occurrence, and physical target. Outside eligible Visual+ routes, it retains the legacy package
-homepage detail beneath each row.
-
-**`--all` / `-a`** (default: `false`)
-Shows all packages, including the ones that are actually up to date. A confidence boost, if you need one.
-
-**`--nodecompat`** (default: `true`)
-Displays legacy Node.js engine indicators. A green check or red cross is shown only when a caller
-provided an evaluated result; `?node` means engine metadata exists but repository compatibility is
-unknown. Use `depfresh plan --json` for the repository-declaration signal contract.
-
-**`--explain` / `-E`** (default: `false`)
-In the interactive detail view (`-I`), shows human-readable release-shape notes plus deprecation,
-unknown repository Node compatibility, and missing signature-metadata warnings. Release shape and
-passive registry presence are not safety or verification results.
+Ordinary checks use compact npm version metadata. `--timediff` opts into an advisory history
+request; if it fails, resolved updates remain available and their ages stay unknown. Saved machine plans retain their own evidence
+requirements.
 
 ## Compatibility Table Write Receipts
 
-This section describes the grouped compatibility receipt used when Visual+ is not eligible, such
-as library `check()` calls and routes with a direct or addon `beforePackageWrite` hook. The
-underlying command-level write safety is shared, but the current eligible CLI journey has a
-different final projection; see [Visual+ result journeys](#visual-result-journeys).
-
-Write mode ends with one receipt grouped by repository-relative physical target, status, and
-reason. Repeated occurrences with the same physical cause do not produce repeated warnings. For
-example, a command whose later target becomes stale after an earlier per-file replacement reports:
-
-```text
-Partial result · 0 updates applied across 0 files; 1 update reverted across 1 file; 1 file blocked
-package.json · 1 update reverted
-Write reverted (COMMIT_FAILED_REVERTED)
-packages/package.json · 1 update not attempted
-Write conflicted (SOURCE_CHANGED)
-Exit 2 · inspect the changed files and correct each blocked target before rerunning
-```
-
-`applied` means the requested occurrence value was observed after replacement. `reverted` means the
-original value was observed after recovery, so the requested update was not retained; a receipt
-with any reverted outcome is partial, reports reverted operation and physical-file counts, and
-exits with code `2`. `failed` means a known operation failed; `unknown` means required evidence or
-final state could not be confirmed. `VCS_UNAVAILABLE` is the compatibility outcome for a Git
-preflight whose evidence could not be confirmed. The human receipt may add its narrower sanitized
-cause, such as `VCS_OUTPUT_LIMIT_EXCEEDED`.
-
-One local write command collects its selected physical targets, preflights all of them, and uses one
-lock and journal lifecycle. Every individual file replacement is an atomic same-directory rename;
-the repository as a whole is not an atomic transaction. A failure after one replacement starts
-best-effort recovery, and incomplete recovery or final observation remains `unknown`. A partial,
-failed, or unknown write exits with code `2`.
-
-Inspect changed files before rerunning a partial write. `Safety block · no files were changed`
-appears only when no applied or reverted outcome exists, exact command evidence proves every
-blocking group was not attempted, and no journal, recovery path, external effect, or cleanup
-uncertainty remains. The receipt's `Exit` line uses the final normal command exit code, including
-strict resolution or post-write failures; it is not inferred from write outcomes alone. Guidance
-says to fix the Git evidence problem only when every local blocking group is `VCS_UNAVAILABLE` and
-no strict resolution, global write, or strict post-write failure also causes the final exit. Mixed
-local causes use blocked-target guidance. When one of those non-local causes also exists, the
-position-neutral guidance is
-`Exit 2 · review all reported errors and correct each blocked target before rerunning`; for a
-partial write it also tells the operator to review the changed files. Each receipt group retains
-its exact local status and cause.
-
-Global package-manager outcomes are rendered separately on stdout. Every sanitized non-applied
-item uses its manager, package, status, and exact available reason, including failures detected
-before a manager command can be planned and exact executor reasons when a global apply result
-exists:
-
-```text
-Global write outcomes
-npm · typescript · unknown · INVENTORY_TIMEOUT
-```
-
-These lines are not physical-file receipt groups and make no file-count or atomicity claim. Global
-outcomes remain in their state-machine summary and are never counted as physical files.
-
-The complete receipt is one ordered durable stdout block: headline, physical groups and reasons,
-then final exit guidance. Receipt fragments are never split across stdout and stderr, including in
-CI and pipes.
-
-<a id="visual-result-journeys"></a>
+Library `check()` calls, interactive selection, global writes, and hook-controlled routes keep
+their existing output surfaces. They share the same observed write outcomes. Use
+[`--output json`](json.md) for machine-readable counts and per-occurrence results.
 
 ## Visual+ Result Journeys
 
-Visual+ is the eligible local CLI table journey. Its default has five ordered regions: context,
-overview, risk focus, update ledger, and receipt. The complete ledger renders every selected update
-exactly once without internal operation, owner, dependency, or source-file IDs.
-`--long` remains the exhaustive Visual+ audit: lifecycle, every selected operation, owner, shared
-dependency, occurrence, physical target, and exact receipt.
-
-The default successful result has no durable lifecycle rail. A capable terminal owns one
-replaceable live line while work is active, clears it before the durable review, and never writes
-completed phases into scrollback. Plain, pipes, CI, and `TERM=dumb` retain the same five regions
-without ANSI or cursor control. Wide layouts align dependency, current, target, severity, and age;
-medium layouts keep the key columns with continuation lines; narrow layouts use lossless labeled
-rows. `NO_COLOR` changes styling only, and `TERM=dumb` uses ASCII tokens.
-
-The update ledger retains physical-owner grouping. Within each owner, `--group`, `--sort`,
-`--timediff`, and `--nodecompat` retain their resolved display meaning. In particular, `diff-asc`
-orders Major, Minor, then Patch; `diff-desc` orders Patch, Minor, then Major. The responsive review
-may be as long as its complete ledger requires; it does not replace successful updates with
-previews. Every non-success target, applied/restored/unrecovered recovery path, and conservative
-receipt remains visible.
-
-The Complete and Safety block examples use the deterministic 76-operation, 14-target renderer
-fixture. Partial and Recovery incomplete use smaller renderer-contract inputs; Partial remains the
-synthetic/future-producer projection qualified below. All are exact final-receipt excerpts.
-
-The journey is eligible only through CLI progress routing with table output, a non-silent log
-level, local non-global operation, no interactive selection, and no direct or addon
-`beforePackageWrite` hook. Library `check()` calls and veto-capable hook routes use the
-compatibility table surface above.
-
-During active work, a capable terminal may draw one replaceable lifecycle line. After discovery,
-the durable hybrid context renders observed repository name/path, workspace scope, and package-
-manager evidence before overview, risk focus, ledger, and receipt. It never writes false
-`Repository unknown` or `Package manager unknown` startup placeholders; `unknown` after discovery
-means the required evidence was genuinely absent.
-
-A capable terminal uses Unicode separators, colour, and its one replaceable live line. The final
-successful review contains no lifecycle history. A plain fallback is append-only and colourless,
-but emits the same final regions after durable facts exist. Its ledger uses ASCII where needed,
-while existing receipt punctuation still follows Unicode capability: CI and ordinary pipes can
-retain `·`, and `TERM=dumb` makes the whole journey ASCII. Width changes geometry, not membership.
-These snippets pair the capable form with the public plain `TERM=dumb` form.
-
 ### Complete
 
-Capable terminal:
-
-```text
-Complete · 76 updates applied across 14 files
-All 14 files observed at the requested values · recovery not needed · 2.4s
-Exit 0
-```
-
-Plain `TERM=dumb` fallback:
-
-```text
-Complete - 76 updates applied across 14 files
-All 14 files observed at the requested values - recovery not needed - 2.4s
-Exit 0
-```
-
-`Exit 0` means every selected value was observed at its requested final value and recovery was not
-needed. The duration is measured, so its value varies.
+A successful write reports how many updates were applied and which files were affected. Existing
+local edits do not require a commit or stash. Depfresh preserves unrelated content and the Git
+index; `-w` does not run an install or lifecycle scripts.
 
 ### Safety block
 
-Capable terminal:
-
-```text
-Safety block · no files were changed
-Applied 0  Blocked 0  Not attempted 76  Failed 0  Unknown 76
-Preflight could not confirm Git state for packages/target-0/package.json.
-Preflight could not confirm Git state for packages/target-1/package.json.
-Preflight could not confirm Git state for packages/target-2/package.json.
-Preflight could not confirm Git state for packages/target-3/package.json.
-Preflight could not confirm Git state for packages/target-4/package.json.
-Preflight could not confirm Git state for packages/target-5/package.json.
-Preflight could not confirm Git state for packages/target-6/package.json.
-Preflight could not confirm Git state for packages/target-7/package.json.
-Preflight could not confirm Git state for packages/target-8/package.json.
-Preflight could not confirm Git state for packages/target-9/package.json.
-Preflight could not confirm Git state for packages/target-10/package.json.
-Preflight could not confirm Git state for packages/target-11/package.json.
-Preflight could not confirm Git state for packages/target-12/package.json.
-Preflight could not confirm Git state for packages/target-13/package.json.
-Next: review all reported errors and restore trustworthy Git evidence for every reported target before rerunning.
-Exit 2
-```
-
-Plain `TERM=dumb` fallback:
-
-```text
-Safety block - no files were changed
-Applied 0  Blocked 0  Not attempted 76  Failed 0  Unknown 76
-Preflight could not confirm Git state for packages/target-0/package.json.
-Preflight could not confirm Git state for packages/target-1/package.json.
-Preflight could not confirm Git state for packages/target-2/package.json.
-Preflight could not confirm Git state for packages/target-3/package.json.
-Preflight could not confirm Git state for packages/target-4/package.json.
-Preflight could not confirm Git state for packages/target-5/package.json.
-Preflight could not confirm Git state for packages/target-6/package.json.
-Preflight could not confirm Git state for packages/target-7/package.json.
-Preflight could not confirm Git state for packages/target-8/package.json.
-Preflight could not confirm Git state for packages/target-9/package.json.
-Preflight could not confirm Git state for packages/target-10/package.json.
-Preflight could not confirm Git state for packages/target-11/package.json.
-Preflight could not confirm Git state for packages/target-12/package.json.
-Preflight could not confirm Git state for packages/target-13/package.json.
-Next: review all reported errors and restore trustworthy Git evidence for every reported target before rerunning.
-Exit 2
-```
-
-This headline is reserved for exact evidence that no replacement was attempted, no selected file
-changed, and no recovery, journal, external-effect, or cleanup uncertainty remains. Here all 76
-operations are both not attempted and unknown because Git evidence could not be confirmed; the 14
-reasons identify physical targets rather than duplicating one line per operation.
+If a selected file changes during the operation, has an unresolved merge conflict, or cannot be
+safely read or written, the result states the cause and affected paths. A failure before any
+replacement confirms that no files were changed. Repeated blocked/not-attempted booleans are not
+part of the default summary.
 
 ### Partial renderer compatibility projection
 
-`Partial` is a canonical renderer projection retained for compatibility with synthetic/internal
-inputs and a possible future producer. The current command apply engine does not produce this
-headline in an eligible Visual+ CLI run: after any replacement starts, a failure enters recovery
-and the renderer prioritizes `Recovered`, `Recovery incomplete`, or `Recovery unknown`. The
-currently reachable human partial surface is the
-[compatibility `Partial result`](#compatibility-table-write-receipts) shown above.
-
-Capable terminal:
-
-```text
-Partial
-Applied 1  Blocked 0  Not attempted 1  Failed 1  Unknown 0
-Applied: package.json
-Restored: none
-Unrecovered: none
-Next: review all reported errors and inspect every applied or incomplete target; do not rerun until the repository state is understood.
-Exit 2
-```
-
-Plain `TERM=dumb` fallback:
-
-```text
-Partial
-Applied 1  Blocked 0  Not attempted 1  Failed 1  Unknown 0
-Applied: package.json
-Restored: none
-Unrecovered: none
-Next: review all reported errors and inspect every applied or incomplete target; do not rerun until the repository state is understood.
-Exit 2
-```
-
-For this renderer contract, `Partial` means at least one requested value was retained while another
-operation remained incomplete. Recovery was not needed or executed in the synthetic projection, so
-there is no journal, restored path, unrecovered path, or external effect. Do not treat this example
-as evidence that the current eligible CLI engine can reach the headline.
+If some writes were attempted, the result distinguishes applied, failed, and unattempted work.
+The short presentation does not convert an incomplete or unobservable result into success.
 
 ### Recovery incomplete
 
-Capable terminal:
-
-```text
-Recovery incomplete
-Applied 1  Blocked 1  Not attempted 1  Failed 0  Unknown 0  Reverted 1
-Applied: mixed/package.json
-Restored: reverted/package.json
-Unrecovered: mixed/package.json
-Journal: journal-mixed
-External effects: install tree may have changed
-Next: preserve retained evidence and reconcile every applied, restored, and unrecovered path and external effect before any retry.
-Exit 2
-```
-
-Plain `TERM=dumb` fallback:
-
-```text
-Recovery incomplete
-Applied 1  Blocked 1  Not attempted 1  Failed 0  Unknown 0  Reverted 1
-Applied: mixed/package.json
-Restored: reverted/package.json
-Unrecovered: mixed/package.json
-Journal: journal-mixed
-External effects: install tree may have changed
-Next: preserve retained evidence and reconcile every applied, restored, and unrecovered path and external effect before any retry.
-Exit 2
-```
-
-For the current eligible CLI engine, a post-replacement failure enters recovery and this recovery
-headline takes precedence over the renderer compatibility projection above. A fully restored run
-uses `Recovered`; unobservable recovery uses `Recovery unknown`. Preserve the journal, inspect all
-named paths and external effects, and stop competing writers before retrying. Never delete retained
-evidence merely to make a later run proceed. Every incomplete Visual+ write receipt includes
-exactly one `Next:` line immediately before `Exit 2`. Safety blocks conservatively require review
-of every reported error because non-write exit causes can coexist with a Git blocker. Failed and
-unknown states require inspecting diagnostics and target state; recovery-incomplete and
-recovery-unknown states require preserving retained evidence before any retry.
-
-The action is conservative because the renderer does not treat a local write reason as the only
-possible cause of exit `2`:
-
-| Incomplete receipt | Safe next action |
-| --- | --- |
-| Git-evidence safety block | Review all reported errors and restore trustworthy Git evidence for every reported target before rerunning. |
-| Other safety block | Review all reported errors and correct every reported preflight blocker before rerunning. |
-| Partial | Review all reported errors and inspect every applied or incomplete target; do not rerun until the repository state is understood. |
-| Failed | Review all reported errors and inspect every failed target; rerun only after every known cause is corrected. |
-| Unknown | Review all reported errors and inspect every target; do not rerun until every final state is known. |
-| Recovered | Review all reported errors and restored paths; rerun only after every cause is corrected. |
-| Recovery incomplete | Preserve retained evidence and reconcile every applied, restored, and unrecovered path and external effect before any retry. |
-| Recovery unknown | Preserve retained evidence and establish every named path and external effect; do not retry until every final state is known. |
+When a write fails after replacement starts, the result identifies restored and unrecovered
+paths. Preserve recovery evidence and resolve the named failure before retrying. See
+[troubleshooting](../troubleshooting.md#apply-reports-a-lock-or-recovery-requirement).
 
 ### Counts, preflight, and atomicity
 
-The totals line counts selected operations, not files:
-
-- `Applied` -- the requested value was observed after replacement.
-- `Blocked` -- authoritative policy or safety evidence blocked the operation.
-- `Not attempted` -- replacement was proved not to have started.
-- `Failed` -- a known operation failed.
-- `Unknown` -- required evidence or final state could not be confirmed.
-- `Skipped` and `Reverted` appear when nonzero; `Mixed targets` is a physical-target count.
-
-These are evidence flags, not a partition: one operation can be both blocked and not attempted, or
-both unknown and not attempted. Headlines and `across N files` clauses provide physical-file
-counts.
-
-Before the first replacement, one local write command collects and preflights every selected
-physical target, including exact target Git state. It rechecks target evidence before replacement,
-then uses one lock and journal lifecycle. Each file is staged beside its source and replaced by an
-atomic same-directory rename. Multiple renames do not make the repository atomic. A later failure
-therefore starts best-effort recovery across files; unobservable or incomplete recovery stays
-unknown and exits `2`.
+Update counts describe selected physical entries, not necessarily unique package names. Shared
+catalog entries are written once. File replacement is atomic per file; a multi-file update is not
+one atomic filesystem transaction. A saved `plan/apply` operation retains stricter preconditions
+than an ordinary `-w` run.
 
 ### Public fallbacks and separate modes
 
-- A capable local TTY uses colour and motion. `NO_COLOR` removes colour but retains recognized
-  lifecycle motion. A narrow capable TTY changes wrapping only and also retains motion.
-- Non-TTY pipes and CI are colourless, append-only, and complete. Direct table pipes also print a
-  stderr hint recommending `--output json` for structured consumption.
-- `TERM=dumb` is append-only ASCII. Narrow terminals wrap semantic fields rather than dropping
-  rows, targets, paths, counts, or final evidence.
-- `--interactive` uses its selection UI and does not use Visual+.
-- `--output json` keeps the schema-v1 compatibility envelope and `writeOutcomes`; it does not add
-  Visual+ maps, frames, or receipt-only fields.
-- `--global` and `--global-all` keep manager-specific outcomes and non-transactional global
-  semantics. Global items are never counted as local files.
-
-For compatibility and Visual+ local table writes, a complete write exits `0`; a safety block,
-failed result, unknown result, or recovery result exits `2`. A reachable compatibility
-`Partial result` also exits `2`. A read-only check still exits `0` unless `--fail-on-outdated`
-requests `1`. Versioned `apply --json` uses its separate `0`/`1`/`2` machine contract.
-
-## Contextual Tips
-
-When updates exist, depfresh helpfully reminds you of things you probably already know:
-
-- If you're in `default` mode: *"Run `depfresh major` to check for major updates"*
-- If you haven't written: *"Add `-w` to write changes to package files"*
-
-These only appear in table output. JSON users are assumed to know what they're doing.
+Pipes, CI, `TERM=dumb`, and `NO_COLOR` retain readable output without unsupported terminal control
+sequences. Width changes must not hide selected updates or alter their owners and versions.
+`--long` exposes additional details; JSON retains structured outcomes.

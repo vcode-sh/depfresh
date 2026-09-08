@@ -173,7 +173,7 @@ CLI ignore paths replace configured custom ignore paths for that invocation, whi
 | `--all` | `-a` | boolean | `false` | Show all packages, including the ones that are already up to date. For completionists and auditors. |
 | `--group` | `-G` | boolean | `true` | Group output by dependency source (dependencies, devDependencies, etc.). Disable with `--no-group` if you prefer chaos. |
 | `--sort <strategy>` | `-s` | string | `diff-asc` | Sort order for the output table. See [Sorting](#sorting). |
-| `--timediff` | `-T` | boolean | `true` | Show how long ago each target version was published. Useful for spotting suspiciously fresh packages. Disable with `--no-timediff`. |
+| `--timediff` | `-T` | boolean | `false` | Show release ages. Fetches publication history in addition to the compact version metadata used by ordinary checks. |
 | `--nodecompat` | -- | boolean | `true` | Show legacy engine metadata indicators. `?node` means repository compatibility is unknown; authoritative plan signals use repository declarations, never the executor runtime. |
 | `--long` | `-L` | boolean | `false` | Show extra details per package -- currently the homepage URL. For when you need to rage-read a changelog. |
 | `--explain` | `-E` | boolean | `false` | Show human-readable explanations for update types in interactive mode. Tells you *why* a version change matters. Only works with `--interactive`. |

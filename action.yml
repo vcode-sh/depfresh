@@ -493,20 +493,21 @@ runs:
           exit 2
         fi
 
-    - name: Handle fail-on-outdated
-      if: ${{ steps.run.outputs.exit-code == '1' && inputs.fail-on-outdated == 'true' && inputs.write != 'true' }}
+    - name: Handle findings
+      if: ${{ steps.run.outputs.exit-code == '1' }}
       shell: bash
       env:
+        COMMAND: ${{ inputs.command }}
+        FAIL_ON_OUTDATED: ${{ inputs.fail-on-outdated }}
+        WRITE: ${{ inputs.write }}
         OUTDATED_COUNT: ${{ steps.parse.outputs.outdated-count }}
       run: |
-        printf '::warning::depfresh found %s outdated dependencies\n' "$OUTDATED_COUNT"
-        exit 1
-
-    - name: Handle machine findings
-      if: ${{ steps.run.outputs.exit-code == '1' && inputs.command != 'check' }}
-      shell: bash
-      run: |
-        echo '::warning::depfresh returned a reviewable non-success result'
+        if [[ "$COMMAND" == 'check' ]]; then
+          if [[ "$FAIL_ON_OUTDATED" != 'true' || "$WRITE" == 'true' ]]; then exit 0; fi
+          printf '::warning::depfresh found %s outdated dependencies\n' "$OUTDATED_COUNT"
+        else
+          echo '::warning::depfresh returned a reviewable non-success result'
+        fi
         exit 1
 
     - name: Clean up

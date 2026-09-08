@@ -4,7 +4,21 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Semver
 
 ## Unreleased
 
-## [2.1.3] - 2026-09-08
+## [2.1.4] - 2026-09-08
+
+### Changed
+
+- Simplified everyday updates: preserve existing edits, use compact registry metadata, and show
+  concise compatibility warnings. Release ages are optional and best-effort with `--timediff`.
+- Separated ordinary writes from saved-plan validation and avoided full repository evidence
+  collection when dependency selection does not need it. CI reuses one tested package.
+
+### Fixed
+
+- Resolve large npm packages without downloading full history during ordinary checks, reuse
+  registry results throughout each run, and report the actual cause of resolution failures.
+
+## [2.1.3] - Unreleased
 
 ### Changed
 
@@ -826,8 +840,9 @@ First release. Wrote it from scratch because waiting for PRs to get merged in ta
 - TTY detection. No spinners in your CI logs. `NO_COLOR` respected.
 - 54 tests. More than some production apps I've seen.
 
-[Unreleased]: https://github.com/vcode-sh/depfresh/compare/v2.1.3...HEAD
-[2.1.3]: https://github.com/vcode-sh/depfresh/compare/v2.1.2...v2.1.3
+[Unreleased]: https://github.com/vcode-sh/depfresh/compare/v2.1.4...HEAD
+[2.1.4]: https://github.com/vcode-sh/depfresh/compare/v2.1.2...v2.1.4
+[2.1.3]: https://github.com/vcode-sh/depfresh/compare/v2.1.2...2e3efbf0ad1c27908f134b1c458d1b1052554d98
 [2.1.2]: https://github.com/vcode-sh/depfresh/compare/v2.1.1...v2.1.2
 [2.1.1]: https://github.com/vcode-sh/depfresh/compare/v2.1.0...v2.1.1
 [2.1.0]: https://github.com/vcode-sh/depfresh/compare/v2.0.2...v2.1.0

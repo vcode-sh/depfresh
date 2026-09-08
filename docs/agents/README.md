@@ -15,7 +15,7 @@ DEPFRESH=(pnpm exec depfresh)
 Otherwise use one exact approved package version:
 
 ```bash
-DEPFRESH_VERSION=2.1.3
+DEPFRESH_VERSION=2.1.4
 DEPFRESH=(npm exec --yes --package="depfresh@$DEPFRESH_VERSION" -- depfresh)
 ```
 

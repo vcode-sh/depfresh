@@ -77,7 +77,7 @@ input; it does not evaluate TypeScript or JavaScript config modules.
 | `all` | `boolean` | `false` | Show all dependencies, even ones that are already up to date. Enjoy the dopamine of seeing green checkmarks. |
 | `group` | `boolean` | `true` | Group results by package file. |
 | `sort` | `SortOption` | `'diff-asc'` | Sort order. Options: `diff-asc`, `diff-desc`, `time-asc`, `time-desc`, `name-asc`, `name-desc`. |
-| `timediff` | `boolean` | `true` | Show time since last publish. Guilt-trip yourself into updating. |
+| `timediff` | `boolean` | `false` | Opt in to release ages and publication-history fetching. |
 | `cooldown` | `number` | `0` | Minimum proven age in days before suggesting an update. Missing or invalid publish-time metadata is skipped while enabled. |
 | `nodecompat` | `boolean` | `true` | Show legacy target engine metadata. `?node` means repository compatibility is unknown; authoritative plan signals require repository runtime evidence and never use the executor runtime. |
 | `long` | `boolean` | `false` | Extended display with the package homepage URL. |

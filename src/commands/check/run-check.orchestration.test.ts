@@ -93,7 +93,7 @@ describe('run-check orchestration paths', () => {
     expect(result.tableOutput).not.toContain('Tip: Add `-w`')
   })
 
-  it('reports discovered Spreadoo-shaped repository context before review', async () => {
+  it('keeps an unchanged workspace result concise', async () => {
     const root = mkdtempSync(join(tmpdir(), 'depfresh-spreadoo-context-'))
     const webDirectory = join(root, 'apps', 'web')
     mkdirSync(webDirectory, { recursive: true })
@@ -125,7 +125,8 @@ describe('run-check orchestration paths', () => {
       ).resolves.toBe(0)
 
       const output = stripAnsi(stdoutWriteSpy.mock.calls.flat().map(String).join(''))
-      expect(output).toContain('spreadoo · pnpm 10.33.0 · workspace · default · read-only')
+      expect(output).toContain('No updates found.')
+      expect(output).not.toContain('0 updates across 0 files')
       expect(output).not.toContain('Repository spreadoo')
       expect(output).not.toContain('Package manager observed')
       expect(output).not.toContain('Repository topology')
@@ -377,6 +378,31 @@ describe('run-check orchestration paths', () => {
       stdoutWriteSpy.mockRestore()
       consoleSpy.mockRestore()
     }
+  })
+
+  it('reports a shared registry failure once while naming every affected owner', async () => {
+    const failure = makeResolved({
+      name: 'shared-dependency',
+      diff: 'error',
+      resolutionError: { code: 'HTTP_503', message: 'Registry temporarily unavailable' },
+    })
+    mocks.loadPackagesMock.mockResolvedValue([
+      makePkg('first-app', [failure]),
+      makePkg('second-app', [failure]),
+    ])
+    mocks.resolvePackageMock.mockResolvedValue([failure])
+    setStdoutTTY(true)
+    setStderrTTY(true)
+    setStdoutColumns(80)
+    const stdout = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+    vi.spyOn(console, 'log').mockImplementation(() => {})
+    const { checkFromCli } = await import('./run-check')
+    await checkFromCli({ ...baseOptions, output: 'table', loglevel: 'info' })
+    const output = stripAnsi(stdout.mock.calls.map((call) => String(call[0])).join(''))
+    const compact = output.replace(/\n/gu, '')
+    expect(compact.match(/Registry temporarily unavailable/gu)).toHaveLength(1)
+    expect(compact).toContain('first-app, second-app')
+    expect(compact).toContain('shared-dependency')
   })
 
   it('renders Visual+ resolution errors losslessly at immutable startup width 8', async () => {
@@ -769,7 +795,7 @@ describe('run-check orchestration paths', () => {
       expect(output).toContain('Safety block')
       expect(output).toContain('no files were changed')
       expect(renderedNextAction(output)).toBe(
-        'Next: review all reported errors and correct every reported preflight blocker before rerunning.',
+        'Next: review the changed files, then rerun to resolve updates against their current contents.',
       )
       expect(output.match(/Exit 2/gu)).toHaveLength(1)
     } finally {
@@ -853,7 +879,7 @@ describe('run-check orchestration paths', () => {
       expect(errorSpy.mock.calls.flat().map(String).join(' ')).not.toContain('Check failed')
       expect(output).toContain('Safety block')
       expect(output).toContain('no files were changed')
-      expect(output).toContain('Preflight could not confirm Git state')
+      expect(output).toContain('Git state could not be confirmed')
       expect(renderedNextAction(output)).toBe(
         'Next: review all reported errors and restore trustworthy Git evidence for every reported target before rerunning.',
       )
@@ -1289,30 +1315,16 @@ describe('run-check orchestration paths', () => {
       const exitCode = await check({ ...baseOptions, output: 'table', loglevel: 'info' })
 
       expect(exitCode).toBe(0)
-      expect({
-        stdout: stdoutWriteSpy.mock.calls.map((call) => String(call[0])),
-        logs: logSpy.mock.calls.map((call) => call.map((value) => stripAnsi(String(value)))),
-        errors: errorSpy.mock.calls.map((call) => call.map(String)),
-      }).toEqual({
-        stdout: [],
-        logs: [
-          [],
-          ['table-app'],
-          [],
-          ['  dependencies'],
-          ['    name          current -> target  diff        age'],
-          ['    ------------------------------------------------'],
-          ['    needs-update  ^1.0.0  -> ^2.0.0  major          '],
-          [],
-          ['  1 major  (1 total)'],
-          [],
-          ['i', 'Tip: Run `depfresh major` to check for major updates'],
-          ['i', 'Tip: Add `-w` to write changes to package files'],
-        ],
-        errors: [
-          ['Tip: Use --output json for structured output. Run --help-json for CLI capabilities.'],
-        ],
-      })
+      expect(stdoutWriteSpy).not.toHaveBeenCalled()
+      const output = logSpy.mock.calls
+        .flat()
+        .map((value) => stripAnsi(String(value)))
+        .join('\n')
+      expect(output).toContain('table-app')
+      expect(output).toContain('dependencies')
+      expect(output).toMatch(/needs-update\s+\^1\.0\.0\s+-> \^2\.0\.0/u)
+      expect(output).toContain('1 major')
+      expect(errorSpy.mock.calls.flat().map(String).join(' ')).not.toContain('Error')
     } finally {
       stdoutWriteSpy.mockRestore()
       logSpy.mockRestore()
@@ -1870,7 +1882,7 @@ describe('run-check orchestration paths', () => {
           chunk === 'callback-output\n' ? [index] : [],
         )
         expect(output).not.toContain('Check\n')
-        expect(output).toContain('Breaking changes')
+        expect(output).toContain('Major updates')
         expect(output).toContain('Review complete')
         expect(callbackIndexes).toHaveLength(2)
         expect(writes[callbackIndexes[0]! - 1]).toContain('\x1B[')

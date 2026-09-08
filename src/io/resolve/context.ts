@@ -14,8 +14,10 @@ export interface ResolutionTrace {
 export interface ResolveContext {
   limit: LimitFunction
   inFlight: Map<string, Promise<PackageData>>
+  compactVersions: Map<string, (version: string) => PackageData | undefined>
   traces: Map<string, ResolutionTrace>
   metadata: Map<string, { packageName: string; currentVersion: string; data: PackageData }>
+  compactMetadata?: boolean
   now?: number
   metrics: {
     fetchesStarted: number
@@ -25,11 +27,13 @@ export interface ResolveContext {
 
 export function createResolveContext(
   options: depfreshOptions,
-  deterministic?: { now?: number },
+  deterministic?: { now?: number; compactMetadata?: boolean },
 ): ResolveContext {
   return {
     limit: pLimit(options.concurrency),
+    compactMetadata: deterministic?.compactMetadata,
     inFlight: new Map(),
+    compactVersions: new Map(),
     traces: new Map(),
     metadata: new Map(),
     ...(deterministic?.now === undefined ? {} : { now: deterministic.now }),

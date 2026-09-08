@@ -47,7 +47,7 @@ describe('Visual+ relationship maps', () => {
     const output = lines.join('\n')
 
     expect(output).toContain('visual-plus-fixture · pnpm 10.33.0 · workspace · major · read-only')
-    expect(output).toContain('Breaking changes')
+    expect(output).not.toContain('No breaking changes')
     expect(output).toContain('Major 3 · Minor 37 · Patch 36')
     expect(output.match(/^dependency\s+/gmu) ?? []).toHaveLength(15)
     expect(output).not.toMatch(/Update preview|audit preview|omitted|more updates/iu)

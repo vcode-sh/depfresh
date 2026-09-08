@@ -76,12 +76,18 @@ describe('release safety', () => {
     )
     expect(buildIndex).toBeGreaterThanOrEqual(0)
     expect(suiteIndex).toBeGreaterThan(buildIndex)
-    for (const job of ['build', 'visual-plus-pty', 'distribution-smoke']) {
+    for (const job of ['build', 'distribution-smoke']) {
       const download = ci.jobs?.[job]?.steps?.find((step) =>
         step.uses?.startsWith('actions/download-artifact@'),
       )
       expect(download?.with, job).toMatchObject({ name: 'depfresh-tested-dist', path: 'dist' })
     }
+    const replay = ci.jobs?.['visual-plus-pty']
+    expect(replay?.needs).toBe('distribution-smoke')
+    expect(
+      replay?.steps?.find((step) => step.uses?.startsWith('actions/download-artifact@'))?.with,
+    ).toMatchObject({ name: 'depfresh-tested-package', path: 'artifacts' })
+    expect(replay?.steps?.some((step) => step.run?.includes('npm pack'))).toBe(false)
     const windows = ci.jobs?.['windows-installed']
     expect(windows?.needs).toBe('distribution-smoke')
     expect(

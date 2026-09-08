@@ -715,6 +715,29 @@ describe('GitHub Action argument authority', () => {
   })
 })
 
+describe('GitHub Action finding handling', () => {
+  it.each([
+    ['check', 'true', 'false', 1, '7 outdated dependencies'],
+    ['check', 'false', 'false', 0, ''],
+    ['check', 'true', 'true', 0, ''],
+    ['plan', 'true', 'false', 1, 'reviewable non-success result'],
+  ])(
+    'reports %s findings under fail-on-outdated=%s and write=%s',
+    (command, fail, write, status, message) => {
+      const result = runStep('Handle findings', {
+        COMMAND: command,
+        FAIL_ON_OUTDATED: fail,
+        WRITE: write,
+        OUTDATED_COUNT: '7',
+      })
+      expect(result.status).toBe(status)
+      if (status === 0) expect(result.stdout).toBe('')
+      else expect(result.stdout).toContain(message)
+      if (command !== 'check') expect(result.stdout).not.toContain('outdated dependencies')
+    },
+  )
+})
+
 describe('GitHub Action outputs and cleanup', () => {
   it.each([
     [

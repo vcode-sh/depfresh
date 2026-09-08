@@ -1,16 +1,10 @@
 import { lstatSync, readFileSync, realpathSync } from 'node:fs'
-import { dirname, isAbsolute, relative, resolve, sep } from 'node:path'
+import { isAbsolute, relative, resolve, sep } from 'node:path'
 import detectIndent from 'detect-indent'
-import { version } from '../../../package.json' with { type: 'json' }
 import { canonicalJson } from '../../contracts/canonical-json'
-import {
-  createPlanFingerprint,
-  createRepositoryFingerprint,
-  hashExactBytes,
-} from '../../contracts/fingerprint'
+import { hashExactBytes } from '../../contracts/fingerprint'
 import { sanitizeContractText } from '../../contracts/sanitize'
-import type { ApplyResult, PlanResult } from '../../contracts/schemas'
-import { assertPlanResult } from '../../contracts/validate'
+import type { ApplyResult } from '../../contracts/schemas'
 import { ConfigError } from '../../errors'
 import { snapshotInvocationAuthority } from '../../invocation-authority'
 import {
@@ -31,6 +25,7 @@ import type {
 } from '../../types'
 import { sanitizeTerminalText } from '../../utils/format'
 import { applyWithExecutionEvidence } from './index'
+import type { ApplyWriteInput } from './types'
 
 export interface LegacyWriteDiagnostic {
   code: RepositoryDiagnosticCode
@@ -141,7 +136,7 @@ export interface LegacySelectionEvidenceOperation {
 }
 
 export interface LegacyPlanConstruction {
-  plan: PlanResult
+  plan: ApplyWriteInput
   projections: LegacyProjection[]
   blocked: boolean
   blockReason?: 'AMBIGUOUS_OCCURRENCE' | 'UNSUPPORTED_WRITE_SOURCE'
@@ -167,6 +162,47 @@ const LOCAL_FILE_AUTHORITY: InvocationAuthority = {
   artifactVerify: false,
   networkAccess: false,
   globalWrite: false,
+}
+
+// Review uses already loaded occurrences; it grants no write authority or filesystem evidence.
+export function createLegacyReviewEvidence(
+  root: string,
+  selections: readonly LegacyCommandSelection[],
+): LegacySelectionEvidenceResult {
+  validateSelections(selections)
+  const containedSource = (base: string, filepath: string): string | undefined => {
+    const path = resolve(filepath)
+    return inside(base, path) ? path : undefined
+  }
+  const projections: LegacyProjection[] = []
+  for (const selection of selections) {
+    for (const [changeIndex, change] of selection.changes.entries()) {
+      const collected = collectInput(root, selection.pkg, change, containedSource)
+      if (!collected.ok) return freezeEvidenceUnavailable('UNSUPPORTED_WRITE_SOURCE')
+      const input = collected.input
+      const physicalKey = physicalOccurrenceKey(input.relativePath, input.path)
+      projections.push({
+        packageIndex: selection.packageIndex,
+        changeIndex,
+        change,
+        occurrence: { file: input.filepath, path: [...input.path] },
+        expectedValue: input.expectedValue,
+        requestedValue: input.requestedValue,
+        physicalKey,
+        operationId: createRepositoryId('operation', physicalKey),
+        ownerLabel: selectionOwnerLabel(root, selection.pkg, containedSource),
+        ...(input.catalog ? { catalog: { ...input.catalog } } : {}),
+      })
+    }
+  }
+  const operations = [
+    ...new Map(
+      projections.map((projection) => [projection.physicalKey!, { id: projection.operationId! }]),
+    ).entries(),
+  ]
+    .sort(([left], [right]) => compareText(left, right))
+    .map(([, operation]) => operation)
+  return createSelectionEvidence(root, projections, { operations }, containedSource)
 }
 
 export function createLegacyPlan(
@@ -255,7 +291,7 @@ export function createLegacyPlan(
     physicalInputs.push(stableInput(candidates))
   }
 
-  const plan = buildPlan(root, physicalInputs)
+  const plan = buildWriteInput(root, physicalInputs)
   const operationIds = new Map(
     plan.operations.map((operation) => [
       physicalOccurrenceKey(operation.file, operation.path),
@@ -320,7 +356,8 @@ function validateSelections(selections: readonly LegacyCommandSelection[]): void
 function createSelectionEvidence(
   root: string,
   projections: readonly LegacyProjection[],
-  plan: PlanResult,
+  plan: { operations: readonly { id: string }[] },
+  sourcePath = canonicalContainedSource,
 ): LegacySelectionEvidenceResult {
   const unsupported = projections.some(
     (projection) => projection.blockedOutcome?.reason === 'UNSUPPORTED_WRITE_SOURCE',
@@ -349,7 +386,7 @@ function createSelectionEvidence(
   for (const [, candidates] of [...byPhysicalKey].sort(([left], [right]) =>
     compareText(left, right),
   )) {
-    const facts = candidates.map((projection) => evidenceFacts(root, projection))
+    const facts = candidates.map((projection) => evidenceFacts(root, projection, sourcePath))
     if (facts.some((fact) => fact === undefined)) {
       return freezeEvidenceUnavailable('UNBOUND_OPERATION')
     }
@@ -420,12 +457,13 @@ function createSelectionEvidence(
 function evidenceFacts(
   root: string,
   projection: LegacyProjection,
+  sourcePath = canonicalContainedSource,
 ):
   | Omit<LegacySelectionEvidenceOperation, 'operationId' | 'packageIndex' | 'changeIndex'>
   | undefined {
   const diff = projection.change.diff
   if (diff !== 'major' && diff !== 'minor' && diff !== 'patch') return undefined
-  const canonical = canonicalContainedSource(root, projection.occurrence.file)
+  const canonical = sourcePath(root, projection.occurrence.file)
   if (!canonical) return undefined
   const physicalTarget = repositoryRelative(root, canonical)
   if (projection.catalog && projection.catalog.sourcePath !== physicalTarget) return undefined
@@ -497,10 +535,14 @@ function catalogOwner(
   }
 }
 
-function selectionOwnerLabel(root: string, pkg: PackageMeta): string | undefined {
+function selectionOwnerLabel(
+  root: string,
+  pkg: PackageMeta,
+  sourcePath = canonicalContainedSource,
+): string | undefined {
   const safeName = sanitizeTerminalText(pkg.name).trim()
   if (safeName.length > 0) return safeName
-  const canonical = canonicalContainedSource(root, pkg.filepath)
+  const canonical = sourcePath(root, pkg.filepath)
   return canonical ? repositoryRelative(root, canonical) : undefined
 }
 
@@ -545,6 +587,7 @@ export async function applyLegacyCommandWrite(
     construction.plan,
     { cwd: root },
     LOCAL_FILE_AUTHORITY,
+    'working-tree',
   )
   return {
     status: 'executed',
@@ -563,20 +606,19 @@ function collectInput(
   root: string,
   pkg: PackageMeta,
   change: ResolvedDepChange,
+  sourcePath = canonicalContainedSource,
 ): { ok: true; input: LegacyOperationInput } | { ok: false; outcome: WriteOutcome } {
   let request: ReturnType<typeof createPackageWriteRequest>
   let indent = pkg.indent
   let catalogEvidence: LegacyOperationInput['catalog']
   if (pkg.type === 'package.json' || pkg.type === 'package.yaml') {
-    if (!canonicalContainedSource(root, pkg.filepath)) {
+    if (!sourcePath(root, pkg.filepath)) {
       return { ok: false, outcome: unsupportedOutcome(pkg.filepath, change) }
     }
-    request = createPackageWriteRequest(pkg, change)
+    request = createPackageWriteRequest(pkg, change, resolve)
   } else {
     const rawMatches = findCatalogMatches(pkg.catalogs ?? [], change)
-    const unsafeMatch = rawMatches.find(
-      (catalog) => !canonicalContainedSource(root, catalog.filepath),
-    )
+    const unsafeMatch = rawMatches.find((catalog) => !sourcePath(root, catalog.filepath))
     if (unsafeMatch) {
       return { ok: false, outcome: unsupportedOutcome(unsafeMatch.filepath, change) }
     }
@@ -595,11 +637,11 @@ function collectInput(
       }
     }
     const catalog = matches[0]!
-    const canonicalCatalogSource = canonicalContainedSource(root, catalog.filepath)
+    const canonicalCatalogSource = sourcePath(root, catalog.filepath)
     if (!canonicalCatalogSource) {
       return { ok: false, outcome: unsupportedOutcome(catalog.filepath, change) }
     }
-    request = createCatalogWriteRequest(catalog, change)
+    request = createCatalogWriteRequest(catalog, change, resolve)
     indent = catalog.indent
     catalogEvidence = {
       manager: catalog.type,
@@ -608,7 +650,7 @@ function collectInput(
     }
   }
   const values = resolvePhysicalValues(request, undefined)
-  const canonical = canonicalContainedSource(root, request.occurrence.file)
+  const canonical = sourcePath(root, request.occurrence.file)
   if (!canonical) {
     return {
       ok: false,
@@ -665,7 +707,7 @@ function deduplicateCatalogMatches(
 ): CatalogSource[] {
   const matches = new Map<string, CatalogSource>()
   for (const catalog of catalogs) {
-    const request = createCatalogWriteRequest(catalog, change)
+    const request = createCatalogWriteRequest(catalog, change, resolve)
     const key = physicalOccurrenceKey(request.occurrence.file, request.occurrence.path)
     if (!matches.has(key)) matches.set(key, catalog)
   }
@@ -674,7 +716,7 @@ function deduplicateCatalogMatches(
     .map(([, catalog]) => catalog)
 }
 
-function buildPlan(root: string, inputs: readonly LegacyOperationInput[]): PlanResult {
+function buildWriteInput(root: string, inputs: readonly LegacyOperationInput[]): ApplyWriteInput {
   const files = [...new Set(inputs.map((input) => input.filepath))].sort((left, right) =>
     compareText(repositoryRelative(root, left), repositoryRelative(root, right)),
   )
@@ -692,19 +734,7 @@ function buildPlan(root: string, inputs: readonly LegacyOperationInput[]): PlanR
     id: createRepositoryId('source', source.path),
     path: source.path,
     format: source.path.endsWith('.json') ? ('json' as const) : ('yaml' as const),
-    byteHash: source.byteHash,
-    parseState: 'parsed' as const,
     indent: detectIndent(source.bytes.toString('utf8')).indent || source.indent,
-    newline: detectNewline(source.bytes.toString('utf8')),
-    trailingNewline: /\r?\n$/u.test(source.bytes.toString('utf8')),
-  }))
-  const packages = sourceFiles.map((source, index) => ({
-    id: createRepositoryId('package', source.path),
-    sourceFileId: source.id,
-    path: source.path,
-    workspacePath: dirname(source.path) === '.' ? '.' : dirname(source.path),
-    name: `legacy-${index}`,
-    private: false,
   }))
   const sortedInputs = [...inputs].sort((left, right) =>
     compareText(
@@ -731,42 +761,6 @@ function buildPlan(root: string, inputs: readonly LegacyOperationInput[]): PlanR
     }
     return { id: `operation-${hashExactBytes(canonicalJson(base)).slice(0, 24)}`, ...base }
   })
-  const occurrences = operations.map((operation) => ({
-    id: operation.occurrenceId,
-    ownerId: packages.find((pkg) => pkg.sourceFileId === operation.sourceFileId)!.id,
-    sourceFileId: operation.sourceFileId,
-    file: operation.file,
-    name: operation.name,
-    path: [...operation.path],
-    field: operation.path[0] ?? 'dependencies',
-    role: 'dependency' as const,
-    protocol: 'semver' as const,
-    declaredValue: operation.expectedValue,
-    writeable: true,
-  }))
-  const identity = createRepositoryId('repository', '.')
-  const repositorySources = sources.map(({ path, byteHash }) => ({ path, byteHash }))
-  const repository = {
-    identity,
-    fingerprint: createRepositoryFingerprint({
-      schemaVersion: 1,
-      rootIdentity: identity,
-      sources: repositorySources,
-    }),
-    modelSchemaVersion: 1 as const,
-    sources: repositorySources,
-    boundaries: [],
-    sourceFiles,
-    packages,
-    catalogs: [],
-    runtimeDeclarations: [],
-    relationships: {
-      workspaceMembers: [],
-      catalogConsumers: [],
-      boundaryPackages: [],
-      lockfileBoundaries: [],
-    },
-  }
   const rawVcs = collectVcsEvidence(
     root,
     sources.map((source) => source.path),
@@ -786,59 +780,16 @@ function buildPlan(root: string, inputs: readonly LegacyOperationInput[]): PlanR
       ...(diagnostic.detail === undefined ? {} : { detail: diagnostic.detail }),
     })),
   }
-  const decisions = operations.map((operation) => ({
-    occurrenceId: operation.occurrenceId,
-    status: 'operation' as const,
-    reason: 'LEGACY_WRITE_SELECTED',
-    operationId: operation.id,
-    policy: {
-      status: 'selected' as const,
-      reason: 'POLICY_DEFAULT_INCLUDED' as const,
-      action: 'include' as const,
-      mode: 'default' as const,
-      matchedRuleIds: [],
-      indeterminateRuleIds: [],
-    },
-  }))
-  const semantic = {
-    contract: 'depfresh.plan' as const,
-    schemaVersion: 1 as const,
-    toolVersion: version,
-    repository,
-    asOf: '1970-01-01T00:00:00.000Z',
-    occurrences,
-    decisions,
+  const repositoryIdentity = createRepositoryId('repository', '.')
+  return {
+    repositoryIdentity,
+    sourceFiles,
     operations,
-    execution: {
-      mode: 'file-only' as const,
-      status: 'ready' as const,
-      timeoutMs: 120_000,
-      targets: [],
-    },
-    evidence: [],
-    lockfiles: [],
     vcs,
-    diagnostics: [],
-    risks: [],
-    errors: [],
-    requiredCapabilities: [
-      'filesystem-read' as const,
-      'registry-read' as const,
-      ...(operations.length === 0 ? [] : (['file-write'] as const)),
-    ],
-    summary: {
-      total: operations.length,
-      operations: operations.length,
-      unchanged: 0,
-      skipped: 0,
-      blocked: 0,
-      unknown: 0,
-      errors: 0,
-    },
+    planFingerprint: hashExactBytes(
+      canonicalJson({ repositoryIdentity, sourceFiles, operations, vcs }),
+    ),
   }
-  const plan = { ...semantic, planFingerprint: createPlanFingerprint(semantic) }
-  assertPlanResult(plan)
-  return plan
 }
 
 function projectAppliedPackages(
@@ -1009,15 +960,6 @@ function physicalOccurrenceKey(file: string, path: readonly string[]): string {
   return canonicalJson({ file, path })
 }
 
-function detectNewline(value: string): 'crlf' | 'lf' | 'mixed' | 'none' {
-  const crlf = (value.match(/\r\n/gu) ?? []).length
-  const lf = (value.match(/(?<!\r)\n/gu) ?? []).length
-  if (crlf > 0 && lf > 0) return 'mixed'
-  if (crlf > 0) return 'crlf'
-  if (lf > 0) return 'lf'
-  return 'none'
-}
-
 function compareText(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0
 }
@@ -1062,7 +1004,7 @@ function toLegacyReason(reason: string): WriteOutcome['reason'] {
 }
 
 function toLegacyDiagnostics(
-  diagnostics: PlanResult['vcs']['diagnostics'],
+  diagnostics: ApplyWriteInput['vcs']['diagnostics'],
   operations: Array<{ file: string; reason: string }>,
   root: string,
 ): LegacyWriteDiagnostic[] {

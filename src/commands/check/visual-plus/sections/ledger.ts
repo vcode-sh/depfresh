@@ -448,12 +448,14 @@ function dependencyCell(
 
 function rowEvidence(row: VisualPlusLedgerRow, input: VisualPlusSectionInput): readonly string[] {
   const result: string[] = []
-  if (input.run.display.nodecompat && row.compatibility.status !== 'compatible') {
+  if (input.run.display.nodecompat && row.compatibility.status === 'incompatible') {
     result.push(
       `compat ${row.compatibility.status}${row.compatibility.detail ? `: ${row.compatibility.detail}` : ''}`,
     )
   }
-  if (row.catalog) result.push(`catalog ${row.catalog.name}: ${row.catalog.sourcePath}`)
+  if (row.catalog && input.run.detailLevel !== 'compact') {
+    result.push(`catalog ${row.catalog.name}: ${row.catalog.sourcePath}`)
+  }
   return result
 }
 

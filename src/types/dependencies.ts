@@ -58,6 +58,8 @@ export interface UpdateScore {
 
 export interface ResolvedDepChange extends RawDep {
   targetVersion: string
+  resolutionError?: { code: string; message: string }
+  metadataWarning?: { code: string; message: string }
   diff: DiffType
   pkgData: PackageData
   resolvedUrl?: string

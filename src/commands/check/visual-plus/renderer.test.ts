@@ -506,7 +506,7 @@ describe('Visual+ live renderer', () => {
 
       expect(lines.length).toBeGreaterThan(80)
       expect(lines.every((line) => visualLength(line) <= width)).toBe(true)
-      expect(output).toContain('Breaking changes')
+      expect(output).toContain('Major updates')
       expect(output).toContain('Major 3')
       expect(output).toContain('Minor 37')
       expect(output).toContain('Patch 36')
@@ -645,7 +645,7 @@ describe('Visual+ live renderer', () => {
       run: compactRun,
     })
 
-    expect(view.output()).toContain('Breaking changes')
+    expect(view.output()).toContain('Major updates')
     expect(view.output()).not.toMatch(/Lifecycle|\bactive\b/u)
     for (const phase of phaseNames) {
       expect(view.output()).not.toMatch(new RegExp(`^${phase} - `, 'mu'))

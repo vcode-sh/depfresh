@@ -49,6 +49,48 @@ export function buildRepositoryModel(
   ignorePaths: readonly string[] = [],
   vcsMode: 'probe' | 'disabled' = 'probe',
 ): RepositoryModel {
+  const model = buildDependencyCore(root, projection, report)
+  const extension = collectRepositoryEvidence(
+    root,
+    report,
+    model.sourceFiles,
+    model.packages,
+    model.diagnostics,
+    ignorePaths,
+    vcsMode,
+  )
+  Object.assign(model, {
+    root: extension.root,
+    boundaries: extension.boundaries,
+    lockfiles: extension.lockfiles,
+    runtimeDeclarations: extension.runtimeDeclarations,
+    vcs: extension.vcs,
+    evidence: extension.evidence,
+    evidenceRefs: extension.evidence.map((conclusion) => conclusion.id),
+  })
+  model.relationships.boundaryPackages = extension.boundaryPackages
+  model.relationships.lockfileBoundaries = extension.lockfileBoundaries
+  recordIdCollisions(model)
+  model.diagnostics.sort(compareDiagnostics)
+  return model
+}
+
+export function buildDependencyRepositoryModel(
+  root: string,
+  projection: PackageMeta[],
+  report: DiscoveryReport,
+): RepositoryModel {
+  const model = buildDependencyCore(root, projection, report)
+  recordIdCollisions(model)
+  model.diagnostics.sort(compareDiagnostics)
+  return model
+}
+
+function buildDependencyCore(
+  root: string,
+  projection: PackageMeta[],
+  report: DiscoveryReport,
+): RepositoryModel {
   const diagnostics = diagnosticsFromDiscovery(root, report)
   const sourcePaths = collectSourcePaths(root, projection, report)
   const parsedSourceCandidates = sourcePaths.flatMap((filepath) => {
@@ -118,40 +160,20 @@ export function buildRepositoryModel(
 
   const sourceFiles = parsedSources.map((parsed) => parsed.source).sort(compareByPath)
   const sortedPackages = packages.sort(compareByPath)
-  const extension = collectRepositoryEvidence(
-    root,
-    report,
-    sourceFiles,
-    sortedPackages,
-    diagnostics,
-    ignorePaths,
-    vcsMode,
-  )
-
   const model: RepositoryModel = {
     schemaVersion: REPOSITORY_MODEL_SCHEMA_VERSION,
     rootId: createRepositoryId('repository', '.'),
-    root: extension.root,
-    boundaries: extension.boundaries,
     sourceFiles,
     packages: sortedPackages,
     catalogs: catalogs.sort((a, b) => a.id.localeCompare(b.id)),
-    lockfiles: extension.lockfiles,
-    runtimeDeclarations: extension.runtimeDeclarations,
-    vcs: extension.vcs,
-    evidence: extension.evidence,
     occurrences: occurrences.sort((a, b) => a.id.localeCompare(b.id)),
     relationships: {
       workspaceMembers,
       catalogConsumers,
-      boundaryPackages: extension.boundaryPackages,
-      lockfileBoundaries: extension.lockfileBoundaries,
     },
     diagnostics: diagnostics.sort(compareDiagnostics),
-    evidenceRefs: extension.evidence.map((conclusion) => conclusion.id),
+    evidenceRefs: [],
   }
-  recordIdCollisions(model)
-  model.diagnostics.sort(compareDiagnostics)
   return model
 }
 

@@ -511,7 +511,7 @@ describe('resolvePackage - cache behavior', () => {
   )
 
   it.each(['GITHUB_TOKEN', 'GH_TOKEN'] as const)(
-    'bypasses persistent and shared in-flight GitHub metadata when %s is present',
+    'isolates authenticated GitHub metadata by token when %s is present',
     async (tokenVariable) => {
       const { fetchPackageData } = await import('../registry')
       const { createResolveContext, resolvePackage } = await import('./index')
@@ -558,7 +558,7 @@ describe('resolvePackage - cache behavior', () => {
         )
         await vi.waitFor(() => expect(fetchPackageData).toHaveBeenCalledTimes(2))
 
-        expect(context.inFlight.size).toBe(0)
+        expect(context.inFlight.size).toBe(2)
         expect([...context.inFlight.keys()].join('\n')).not.toContain('github-token')
         expect(cache.get).not.toHaveBeenCalled()
         expect(cache.set).not.toHaveBeenCalled()
@@ -636,3 +636,57 @@ describe('resolvePackage - cache behavior', () => {
     expect(cache.close).not.toHaveBeenCalled()
   })
 })
+
+it.each([false, true])(
+  'reuses a completed fetch within a cache-disabled run (failure: %s)',
+  async (fails) => {
+    const { fetchPackageData } = await import('../registry')
+    const { createResolveContext, resolvePackage } = await import('./index')
+    vi.mocked(fetchPackageData).mockReset()
+    if (fails) vi.mocked(fetchPackageData).mockRejectedValue(new Error('Registry unavailable'))
+    else vi.mocked(fetchPackageData).mockResolvedValue(mockPkgData)
+    const options = makeOptions({ mode: 'latest', cacheTTL: 0 })
+    const context = createResolveContext(options)
+    const cache = createMockCache()
+    const pkg = makePkg([makeDep()])
+    const first = await resolvePackage(pkg, options, cache, npmrc, undefined, undefined, context)
+    const second = await resolvePackage(pkg, options, cache, npmrc, undefined, undefined, context)
+    expect(fetchPackageData).toHaveBeenCalledTimes(1)
+    expect(second).toEqual(first)
+    expect(first[0]?.diff).toBe(fails ? 'error' : 'major')
+  },
+)
+
+it.each([false, true])(
+  'keeps completed authenticated results scoped to their credentials (failure: %s)',
+  async (fails) => {
+    const { fetchPackageData } = await import('../registry')
+    const { createResolveContext, resolvePackage } = await import('./index')
+    vi.mocked(fetchPackageData).mockReset()
+    if (fails) vi.mocked(fetchPackageData).mockRejectedValue(new Error('HTTP 403'))
+    else vi.mocked(fetchPackageData).mockResolvedValue(mockPkgData)
+    const options = makeOptions({ mode: 'latest', cacheTTL: 0 })
+    const context = createResolveContext(options)
+    const registry = { url: 'https://registry.example/', token: 'credential-a' }
+    const authenticated = { ...npmrc, registries: new Map([['default', registry]]) }
+    const cache = createMockCache()
+    const pkg = makePkg([makeDep()])
+    for (const token of ['credential-a', 'credential-a', 'credential-b', 'credential-b']) {
+      registry.token = token
+      const result = await resolvePackage(
+        pkg,
+        options,
+        cache,
+        authenticated,
+        undefined,
+        undefined,
+        context,
+      )
+      expect(result[0]?.diff).toBe(fails ? 'error' : 'major')
+    }
+    expect(fetchPackageData).toHaveBeenCalledTimes(2)
+    expect([...context.inFlight.keys()].join(' ')).not.toContain('credential-')
+    expect(cache.get).not.toHaveBeenCalled()
+    expect(cache.set).not.toHaveBeenCalled()
+  },
+)

@@ -72,6 +72,11 @@ export function renderVisualPlusTransaction(input: VisualPlusSectionInput): read
 function renderVisualPlusDetailedCompactTransaction(
   input: VisualPlusSectionInput,
 ): readonly string[] {
+  if (
+    input.writeReceipt?.canonical.noFilesChanged &&
+    input.writeReceipt.canonical.verdict === 'safety-block'
+  )
+    return []
   const targetResults = new Map(
     input.snapshot.results.targets.map((result) => [result.path, result]),
   )
@@ -91,27 +96,34 @@ function renderVisualPlusDetailedCompactTransaction(
       : unrecovered.has(target.path)
         ? `${separator}unrecovered`
         : ''
-    const safety = result
-      ? `${separator}blocked ${result.blocked}${separator}not attempted ${result.notAttempted}${separator}unknown ${result.unknown}`
-      : ''
     logical.push(
-      `Target ${sanitizeTerminalText(target.path)}${separator}${target.operationIds.length} ${target.operationIds.length === 1 ? 'update' : 'updates'}${separator}${result?.outcome ?? 'pending'}${safety}${recovery}`,
+      `Target ${sanitizeTerminalText(target.path)}${separator}${target.operationIds.length} ${target.operationIds.length === 1 ? 'update' : 'updates'}${separator}${compactOutcome(result)}${recovery}`,
     )
     for (const operationId of target.operationIds) {
       const change = changes.get(operationId)
       const operationMetadata = metadata.get(operationId)
       const operation = operationResults.get(operationId)
       if (!(change && operationMetadata)) continue
-      const flags = operation
-        ? `${separator}blocked ${operation.blocked}${separator}not attempted ${operation.notAttempted}${separator}unknown ${operation.unknown}`
-        : ''
       const reason = operation?.reason
         ? `${separator}reason ${sanitizeTerminalText(operation.reason)}`
         : ''
       logical.push(
-        `Update ${sanitizeTerminalText(change.name)}${separator}source ${sanitizeTerminalText(operationMetadata.source)}${separator}${sanitizeTerminalText(change.current)}${arrow}${sanitizeTerminalText(change.target)}${separator}outcome ${operation?.outcome ?? 'pending'}${flags}${reason}`,
+        `Update ${sanitizeTerminalText(change.name)}${separator}source ${sanitizeTerminalText(operationMetadata.source)}${separator}${sanitizeTerminalText(change.current)}${arrow}${sanitizeTerminalText(change.target)}${separator}outcome ${compactOutcome(operation)}${reason}`,
       )
     }
   }
   return visualPlusSectionLines(input, logical)
+}
+
+function compactOutcome(
+  result:
+    | { outcome: string; blocked: boolean; notAttempted: boolean; unknown: boolean }
+    | undefined,
+): string {
+  if (!result) return 'pending'
+  const facts = [result.outcome]
+  if (result.blocked && result.outcome !== 'blocked') facts.push('blocked')
+  if (result.notAttempted && result.outcome !== 'blocked') facts.push('not attempted')
+  if (result.unknown && result.outcome !== 'unknown') facts.push('final state unknown')
+  return facts.join(', ')
 }

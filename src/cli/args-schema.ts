@@ -146,8 +146,8 @@ export const args: ArgsDef = {
   timediff: {
     type: 'boolean',
     alias: 'T',
-    description: 'Show time since version was published',
-    default: true,
+    description: 'Show release ages (fetches publication history)',
+    default: false,
   },
   cooldown: {
     type: 'string',

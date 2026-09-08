@@ -19,7 +19,7 @@ depfresh ships with sensible defaults. Here's what you get for free:
 | `loglevel` | `'info'` | Normal amount of talking |
 | `sort` | `'diff-asc'` | Patch updates first, majors last |
 | `group` | `true` | Groups deps by package |
-| `timediff` | `true` | Shows how old your versions are |
+| `timediff` | `false` | Opt in to release ages and publication-history fetching |
 | `nodecompat` | `true` | Shows legacy engine metadata; repository compatibility is evaluated by `plan` signals |
 | `ignorePaths` | `['**/node_modules/**', ...]` | Skips the obvious |
 | `ignoreOtherWorkspaces` | `true` | Skips nested monorepos |

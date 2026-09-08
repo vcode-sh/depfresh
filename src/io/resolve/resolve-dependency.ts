@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import * as semver from 'semver'
 import type { Cache } from '../../cache/index'
 import type {
@@ -20,10 +21,11 @@ import {
   normalizeVersion,
   rebuildXRange,
 } from '../../utils/versions'
-import { fetchPackageData } from '../registry'
+import { fetchPackageData, fetchPackageVersionData } from '../registry'
 import { getPackageMode } from '../resolve-mode'
 import { getResolveCachePolicy } from './cache-policy'
 import { type ResolveContext, recordResolutionMetadata, recordResolutionTrace } from './context'
+import { resolutionErrorDetails } from './resolution-error'
 import { selectVersionCandidate, type VersionCandidateSelection } from './version-filter'
 
 const authenticatedNpmrcIds = new WeakMap<ReturnType<typeof loadNpmrc>, number>()
@@ -85,11 +87,29 @@ export async function resolveDependency(
     return null
   }
 
+  const compact = Boolean(
+    resolveContext?.compactMetadata &&
+      options.cooldown <= 0 &&
+      mode !== 'newest' &&
+      !options.sort.startsWith('time-') &&
+      !options.signalRules?.length &&
+      !options.cohorts?.length &&
+      !packageName.startsWith('github:') &&
+      !packageName.startsWith('jsr:'),
+  )
+  const fullCacheIdentity = { ...cacheIdentity }
+  if (compact) {
+    if (cacheIdentity.persistentKey) cacheIdentity.persistentKey += '|compact'
+    if (cacheIdentity.inFlightKey) cacheIdentity.inFlightKey += '|compact'
+  }
   const cachePolicy = getResolveCachePolicy(options)
   let pkgData =
     cachePolicy.bypassRead || !cacheIdentity.persistentKey
       ? undefined
-      : cache.get(cacheIdentity.persistentKey)
+      : ((compact && options.timediff && fullCacheIdentity.persistentKey
+          ? cache.get(fullCacheIdentity.persistentKey)
+          : undefined) ?? cache.get(cacheIdentity.persistentKey))
+  const persistentCacheHit = pkgData !== undefined
 
   if (!pkgData) {
     try {
@@ -111,10 +131,15 @@ export async function resolveDependency(
           timeout: options.timeout,
           retries: options.retries,
           logger,
-        }).finally(() => {
-          if (cacheIdentity.inFlightKey) {
-            resolveContext?.inFlight.delete(cacheIdentity.inFlightKey)
-          }
+          ...(compact
+            ? {
+                compact: true,
+                onCompactVersions: (project: (version: string) => PackageData | undefined) => {
+                  if (cacheIdentity.inFlightKey)
+                    resolveContext?.compactVersions.set(cacheIdentity.inFlightKey, project)
+                },
+              }
+            : {}),
         })
 
         if (cacheIdentity.inFlightKey) {
@@ -125,7 +150,13 @@ export async function resolveDependency(
 
       if (cachePolicy.shouldWrite && cacheIdentity.persistentKey) {
         try {
-          cache.set(cacheIdentity.persistentKey, pkgData, options.cacheTTL)
+          if (
+            !pkgData.compact ||
+            cachePolicy.bypassRead ||
+            !cache.get(cacheIdentity.persistentKey)
+          ) {
+            cache.set(cacheIdentity.persistentKey, pkgData, options.cacheTTL)
+          }
         } catch (error) {
           logger.debug(
             `Failed to write cache entry for ${packageName}: ${getSafeErrorDetails(error).message}`,
@@ -143,6 +174,7 @@ export async function resolveDependency(
         ...dep,
         targetVersion: dep.currentVersion,
         diff: 'error',
+        resolutionError: resolutionErrorDetails(error),
         pkgData: { name: packageName, versions: [], distTags: {} },
       }
     }
@@ -241,6 +273,106 @@ export async function resolveDependency(
   }
 
   const cleanCurrent = normalizeVersion(currentVersion) ?? undefined
+  let metadataWarning: ResolvedDepChange['metadataWarning']
+  if (pkgData.compact) {
+    for (const version of new Set([cleanCurrent, targetVersion])) {
+      if (!(version && pkgData.versions.includes(version))) continue
+      if (pkgData.enrichedVersions?.includes(version)) continue
+      const projected = cacheIdentity.inFlightKey
+        ? resolveContext?.compactVersions.get(cacheIdentity.inFlightKey)?.(version)
+        : undefined
+      if (projected) {
+        pkgData = mergeVersionMetadata(pkgData, projected)
+        continue
+      }
+      try {
+        const key = cacheIdentity.inFlightKey
+          ? `${cacheIdentity.inFlightKey}|version:${version}`
+          : undefined
+        let request = key ? resolveContext?.inFlight.get(key) : undefined
+        if (request) {
+          if (resolveContext) resolveContext.metrics.dedupeHits += 1
+        } else {
+          if (resolveContext) resolveContext.metrics.fetchesStarted += 1
+          request = fetchPackageVersionData(packageName, version, {
+            npmrc,
+            timeout: Math.min(options.timeout, 2000),
+            retries: 0,
+            logger,
+          })
+          if (key) resolveContext?.inFlight.set(key, request)
+        }
+        pkgData = mergeVersionMetadata(pkgData, await request)
+      } catch (error) {
+        metadataWarning = resolutionErrorDetails(error)
+      }
+    }
+    if (!persistentCacheHit && cachePolicy.shouldWrite && cacheIdentity.persistentKey) {
+      try {
+        const cached = cachePolicy.bypassRead ? undefined : cache.get(cacheIdentity.persistentKey)
+        if (cached?.compact) pkgData = mergeVersionMetadata(cached, pkgData)
+        cache.set(cacheIdentity.persistentKey, pkgData, options.cacheTTL)
+      } catch (error) {
+        logger.debug(
+          `Failed to cache metadata for ${packageName}: ${getSafeErrorDetails(error).message}`,
+        )
+      }
+    }
+  }
+  const needsReleaseDates = (data: PackageData) =>
+    !Number.isFinite(Date.parse(data.time?.[targetVersion] ?? '')) ||
+    Boolean(
+      cleanCurrent &&
+        data.versions.includes(cleanCurrent) &&
+        !Number.isFinite(Date.parse(data.time?.[cleanCurrent] ?? '')),
+    )
+  if (compact && options.timediff && needsReleaseDates(pkgData)) {
+    if (pkgData.compact) {
+      try {
+        const key = fullCacheIdentity.inFlightKey
+        const advisoryKey = key ? `${key}|dates` : undefined
+        let request = key ? resolveContext?.inFlight.get(key) : undefined
+        request ??= advisoryKey ? resolveContext?.inFlight.get(advisoryKey) : undefined
+        const freshRequest = !request
+        if (request) {
+          if (resolveContext) resolveContext.metrics.dedupeHits += 1
+        } else {
+          if (resolveContext) resolveContext.metrics.fetchesStarted += 1
+          request = fetchPackageData(packageName, {
+            npmrc,
+            timeout: Math.min(options.timeout, 2000),
+            retries: 0,
+            logger,
+          })
+          if (advisoryKey) resolveContext?.inFlight.set(advisoryKey, request)
+        }
+        const dated = await request
+        pkgData = { ...pkgData, time: dated.time }
+        if (freshRequest && cachePolicy.shouldWrite && fullCacheIdentity.persistentKey) {
+          try {
+            cache.set(fullCacheIdentity.persistentKey, dated, options.cacheTTL)
+          } catch (error) {
+            logger.debug(
+              `Failed to cache metadata for ${packageName}: ${getSafeErrorDetails(error).message}`,
+            )
+          }
+        }
+      } catch (error) {
+        metadataWarning = resolutionErrorDetails(error)
+      }
+    }
+    if (needsReleaseDates(pkgData) && !metadataWarning) {
+      metadataWarning = {
+        code: 'ERR_RESOLVE',
+        message: 'Publication dates unavailable for selected versions',
+      }
+    }
+  }
+  recordResolutionMetadata(resolveContext, dep.occurrenceId, {
+    packageName,
+    currentVersion,
+    data: pkgData,
+  })
   const currentSignaturePresence = cleanCurrent
     ? getSignaturePresence(pkgData, cleanCurrent)
     : undefined
@@ -266,6 +398,7 @@ export async function resolveDependency(
     signaturePresence,
     currentSignaturePresence,
     nodeCompat,
+    ...(metadataWarning ? { metadataWarning } : {}),
   }
 }
 
@@ -328,7 +461,9 @@ function buildResolveCacheIdentity(
   npmrc: ReturnType<typeof loadNpmrc>,
 ): { persistentKey?: string; inFlightKey?: string } {
   if (packageName.startsWith('github:')) {
-    if (process.env.GITHUB_TOKEN || process.env.GH_TOKEN) return {}
+    const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN
+    if (token)
+      return { inFlightKey: `github-authenticated|${opaqueIdentity(token)}|${packageName}` }
     const key = `github|${packageName}`
     return { persistentKey: key, inFlightKey: key }
   }
@@ -350,7 +485,9 @@ function buildResolveCacheIdentity(
     npmrcId = nextAuthenticatedNpmrcId++
     authenticatedNpmrcIds.set(npmrc, npmrcId)
   }
-  return { inFlightKey: `npm-authenticated|${npmrcId}|${packageName}` }
+  return {
+    inFlightKey: `npm-authenticated|${npmrcId}|${opaqueIdentity(JSON.stringify(registry))}|${packageName}`,
+  }
 }
 
 function canonicalAnonymousRegistryIdentity(
@@ -365,5 +502,37 @@ function canonicalAnonymousRegistryIdentity(
     return url.toString()
   } catch {
     return undefined
+  }
+}
+
+function opaqueIdentity(value: string): string {
+  return createHash('sha256').update(value).digest('hex')
+}
+
+function mergeVersionMetadata(data: PackageData, version: PackageData): PackageData {
+  return {
+    ...data,
+    enrichedVersions: [
+      ...new Set([
+        ...(data.enrichedVersions ?? []),
+        ...(version.enrichedVersions ?? (version.compact ? [] : version.versions)),
+      ]),
+    ],
+    description: version.description ?? data.description,
+    homepage: version.homepage ?? data.homepage,
+    repository: version.repository ?? data.repository,
+    deprecated: { ...data.deprecated, ...version.deprecated },
+    signaturePresence: { ...data.signaturePresence, ...version.signaturePresence },
+    provenancePresence: { ...data.provenancePresence, ...version.provenancePresence },
+    artifactIntegrity: { ...data.artifactIntegrity, ...version.artifactIntegrity },
+    deprecationPresence: { ...data.deprecationPresence, ...version.deprecationPresence },
+    engineMetadata: { ...data.engineMetadata, ...version.engineMetadata },
+    peerDependencies: { ...data.peerDependencies, ...version.peerDependencies },
+    optionalPeerDependencies: {
+      ...data.optionalPeerDependencies,
+      ...version.optionalPeerDependencies,
+    },
+    peerMetadata: { ...data.peerMetadata, ...version.peerMetadata },
+    engines: { ...data.engines, ...version.engines },
   }
 }

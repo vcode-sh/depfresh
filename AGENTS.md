@@ -16,12 +16,15 @@ Two entry points: `src/cli/index.ts` (CLI via citty) and `src/index.ts` (library
 - **Package loading** (`src/io/packages.ts`) — Finds `package.json` files via tinyglobby, detects indentation
 - **Dependency parsing** (`src/io/dependencies.ts`) — Extracts deps from standard fields + overrides/resolutions, handles npm:/jsr: protocols
 - **Resolution** (`src/io/resolve.ts`) — Fetches registry metadata with p-limit concurrency, SQLite cache (`~/.depfresh/cache.db`) with memory fallback
-- **Registry** (`src/io/registry.ts`) — npm (abbreviated metadata) and JSR registries, retry with exponential backoff
+- **Registry** (`src/io/registry.ts`) — compact npm discovery for ordinary checks, publication
+  history only when requested or required by selection, and exact-version metadata for selected
+  updates; JSR/GitHub support and bounded retries
 - **Apply** (`src/commands/apply/`) — Validates immutable plans and exact target evidence, then
   stages, journals, atomically replaces, observes, and recovers local files under explicit authority;
   reviewed manager/verification phases run inside the same lock and journal lifecycle
 - **Write compatibility** (`src/io/write/`) — Low-level formatting-preserving writers; normal local
-  check writes delegate to the stale-safe apply engine
+  check writes pass physical operations directly to the shared stale-safe writer; saved plans
+  validate their external contract before entering that writer
 - **Catalogs** (`src/io/catalogs/`) — Loaders for pnpm/bun/yarn workspace catalogs
 - **Addons** (`src/addons/`) — Plugin system with lifecycle hooks
 - **Cache** (`src/cache/`) — SQLite-backed cache layer (`node:sqlite`)
@@ -160,7 +163,8 @@ import
   complete semantic results with validators imported from the exact installed package. Plan paths
   must resolve to contained regular non-symlink files, and contract/exit mismatches remain errors.
 - **Stale-safe apply** — Recheck every target before the first replacement and before each rename;
-  a stale or dirty target blocks the run while unrelated dirt does not. Preserve root-local lock,
+  a stale target blocks the run. Ordinary check writes preserve existing working-tree edits;
+  saved-plan apply retains its stricter Git-state policy. Preserve root-local lock,
   relative journal, same-directory backup, observed final-state, and unknown-on-ambiguity guarantees.
 - **Apply atomicity** — Claim atomic replacement only per file. Recovery is best effort across files;
   incomplete or unobservable recovery must retain evidence and never become success.

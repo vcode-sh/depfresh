@@ -29,7 +29,7 @@ import { isLocked } from '../../utils/versions'
 import { validateOptions } from '../../validate-options'
 import type { LegacyWriteDiagnostic } from '../apply/legacy'
 import {
-  createLegacyPlan,
+  createLegacyReviewEvidence,
   type LegacyCommandApplyResult,
   type LegacyCommandSelection,
   type LegacySelectionEvidence,
@@ -53,6 +53,7 @@ import { renderUpToDate, runExecute } from './post-write-actions'
 import type { ProcessPackageHooks } from './process-package'
 import { type CheckProgress, createCheckProgress } from './progress'
 import { renderResolutionErrors, renderTable, renderVisualPlusResolutionErrors } from './render'
+import { collectUpdateWarnings } from './render/update-warnings'
 import { type CheckRunController, createCheckRunController } from './run-controller'
 import type {
   CheckRunChange,
@@ -390,7 +391,7 @@ export async function runCheck(
         undefined,
         () => rendererError,
       )
-      if (visualRenderer) renderNonTtyHint(options)
+      if (visualRenderer && options.long) renderNonTtyHint(options)
       return noPackagesExitCode
     }
 
@@ -412,8 +413,24 @@ export async function runCheck(
       options.effectiveRoot ?? resolveDiscoveryContext(options.cwd).effectiveRoot
     const npmrc = loadNpmrc(executionRoot)
     const workspacePackageNames = new Set(packages.map((p) => p.name).filter(Boolean))
-    const resolveContext = createResolveContext(runtimeOptions)
+    const resolveContext = createResolveContext(runtimeOptions, { compactMetadata: true })
 
+    const humanWarnings = new Map<string, { dependency: ResolvedDepChange; owners: Set<string> }>()
+    const collectHumanWarnings = (pkg: PackageMeta, dependencies: readonly ResolvedDepChange[]) => {
+      for (const dependency of dependencies) {
+        const warning = dependency.metadataWarning ?? dependency.resolutionError
+        const key = JSON.stringify([
+          dependency.name,
+          dependency.currentVersion,
+          warning?.code,
+          sanitizeTerminalText(warning?.message ?? 'Failed to resolve from registry'),
+          Boolean(dependency.metadataWarning),
+        ])
+        const group = humanWarnings.get(key) ?? { dependency, owners: new Set<string>() }
+        group.owners.add(pkg.name || pkg.filepath)
+        humanWarnings.set(key, group)
+      }
+    }
     const packageHooks = (pkg: PackageMeta): ProcessPackageHooks => ({
       cache,
       npmrc,
@@ -429,6 +446,10 @@ export async function runCheck(
         hasUpdates = true
         availableUpdates += updates.length
         executionState.packagesWithUpdates += 1
+        collectHumanWarnings(
+          pkg,
+          updates.filter((update) => update.metadataWarning),
+        )
         if (options.output === 'json') {
           jsonPackages.push(buildJsonPackage(pkg.name, updates))
         } else if (!visualRenderer) {
@@ -443,23 +464,10 @@ export async function runCheck(
               name: dep.name,
               source: dep.source,
               currentVersion: dep.currentVersion,
-              message: 'Failed to resolve from registry',
+              message: dep.resolutionError?.message ?? 'Failed to resolve from registry',
             })
           }
-        } else {
-          writeDurable(durableOwner, () => {
-            if (visualRenderer && visualCapabilities) {
-              renderVisualPlusResolutionErrors(
-                pkg.name,
-                errors,
-                visualCapabilities,
-                (chunk) => void process.stdout.write(chunk),
-              )
-            } else {
-              renderResolutionErrors(pkg.name, errors)
-            }
-          })
-        }
+        } else collectHumanWarnings(pkg, errors)
       },
       onAllModeNoUpdates: () => {
         if (!options.all) return
@@ -563,6 +571,35 @@ export async function runCheck(
         progress,
         durableOwner,
       )
+      if (runtimeOptions.output !== 'json') {
+        writeDurable(durableOwner, () => {
+          for (const line of collectUpdateWarnings(
+            preparedPackages.map(({ pkg, selected }) => ({
+              owner: pkg.name || pkg.filepath,
+              updates: selected,
+            })),
+          )) {
+            if (visualRenderer && visualCapabilities) {
+              const theme = createVisualPlusTheme(visualCapabilities)
+              const text = visualCapabilities.unicode ? line : line.replaceAll('→', '->')
+              for (const wrapped of wrapVisualPlusText(text, visualCapabilities.width, theme)) {
+                process.stdout.write(`${wrapped}\n`)
+              }
+            } else logger.warn(line)
+          }
+          for (const { dependency, owners } of humanWarnings.values()) {
+            const ownerLabel = [...owners].sort().join(', ')
+            if (visualRenderer && visualCapabilities) {
+              renderVisualPlusResolutionErrors(
+                ownerLabel,
+                [dependency],
+                visualCapabilities,
+                (chunk) => void process.stdout.write(chunk),
+              )
+            } else renderResolutionErrors(ownerLabel, [dependency])
+          }
+        })
+      }
       const observeVisualSelection = (result: LegacySelectionEvidenceResult): void => {
         if (!visualRenderer) return
         throwRetainedRendererError(rendererError)
@@ -591,14 +628,14 @@ export async function runCheck(
       }
       if (visualRenderer && !runtimeOptions.write) {
         const selections = createReadOnlyLegacySelections(preparedPackages)
-        observeVisualSelection(createLegacyPlan(executionRoot, selections).selectionEvidence)
+        observeVisualSelection(createLegacyReviewEvidence(executionRoot, selections))
       }
       if (
         visualRenderer &&
         runtimeOptions.write &&
         !preparedPackages.some((prepared) => prepared.writeApproved && prepared.kind === 'local')
       ) {
-        observeVisualSelection(createLegacyPlan(executionRoot, []).selectionEvidence)
+        observeVisualSelection(createLegacyReviewEvidence(executionRoot, []))
       }
       const applyExecution = await applyPreparedPackages(
         preparedPackages,
@@ -887,7 +924,8 @@ export async function runCheck(
       canonicalWriteReceipt,
       () => rendererError,
     )
-    if (visualRenderer) renderNonTtyHint(options)
+    if (visualRenderer && (hasUpdates || executionState.failedResolutions > 0 || options.long))
+      renderNonTtyHint(options)
     return finalExitCode
   } catch (error) {
     progress?.done()

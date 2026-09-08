@@ -9,6 +9,7 @@ import {
   createVisualPlusTheme,
   formatVisualPlusAge,
   indentVisualPlusLines,
+  pluralVisualPlus,
   visualPlusSeparator,
   wrapVisualPlusJoined,
   wrapVisualPlusText,
@@ -78,6 +79,12 @@ export function renderVisualPlusHybridReview(
   const rows = createVisualPlusLedgerRows(input)
   const riskGroups = createVisualPlusMajorRiskGroups(insights)
   validateInsightMembership(input, insights, rows, riskGroups)
+  if (
+    input.run.detailLevel === 'compact' &&
+    input.snapshot.counts.updates === 0 &&
+    rows.length === 0
+  )
+    return []
   const theme = createVisualPlusTheme(input.capabilities)
   const width = input.capabilities.width
   const separator = visualPlusSeparator(input.capabilities)
@@ -96,21 +103,29 @@ export function renderVisualPlusHybridReview(
   const topology = insights.topology
   const topologyLines = wrapVisualPlusJoined(
     [
-      `${topology.packages} packages`,
+      pluralVisualPlus(topology.packages, 'package'),
       `${topology.declared} declared`,
       `${topology.eligible} eligible`,
-      `${topology.updates} updates`,
-      `${topology.files} files`,
+      pluralVisualPlus(topology.updates, 'update'),
+      pluralVisualPlus(topology.files, 'file'),
     ],
     separator,
     width,
     theme,
   )
   const labels = renderSeverityLabels(insights, input)
-  const bar = renderSeverityBar(insights, input)
+  const unknown = rows.filter((row) => row.compatibility.status === 'unknown').length
+  const warnings =
+    input.run.display.nodecompat && unknown > 0
+      ? wrapVisualPlusText(
+          `Compatibility could not be determined for ${unknown} ${unknown === 1 ? 'update' : 'updates'}.`,
+          width,
+          theme,
+        )
+      : []
   const risk = renderRiskFocus(input, riskGroups)
   const ledger = renderVisualPlusLedger(input, rows)
-  return [...context, ...topologyLines, '', ...labels, bar, '', ...risk, '', ...ledger]
+  return [...context, ...topologyLines, '', ...labels, ...risk, ...warnings, '', ...ledger]
 }
 
 function renderSeverityLabels(
@@ -132,17 +147,6 @@ function renderSeverityLabels(
   ]
 }
 
-function renderSeverityBar(insights: VisualPlusInsights, input: VisualPlusSectionInput): string {
-  const theme = createVisualPlusTheme(input.capabilities)
-  const width = Math.min(40, input.capabilities.width)
-  const allocations = proportionalAllocation(
-    [insights.distribution.major, insights.distribution.minor, insights.distribution.patch],
-    width,
-  )
-  const token = input.capabilities.unicode ? '█' : '#'
-  return `${theme.styleSeverity('major', token.repeat(allocations[0]!))}${theme.styleSeverity('minor', token.repeat(allocations[1]!))}${theme.styleSeverity('patch', token.repeat(allocations[2]!))}`
-}
-
 function renderRiskFocus(
   input: VisualPlusSectionInput,
   groups: readonly VisualPlusMajorRiskGroup[],
@@ -150,10 +154,8 @@ function renderRiskFocus(
   const theme = createVisualPlusTheme(input.capabilities)
   const separator = visualPlusSeparator(input.capabilities)
   const width = input.capabilities.width
-  const lines = wrapVisualPlusText('Breaking changes', width, theme).map(theme.heading)
-  if (groups.length === 0) {
-    return [...lines, ...wrapVisualPlusText('No breaking changes', width, theme)]
-  }
+  if (groups.length === 0) return []
+  const lines = wrapVisualPlusText('Major updates', width, theme).map(theme.heading)
   const duplicateLabels = duplicateOwnerLabels(input)
   for (const group of groups) {
     lines.push(...wrapVisualPlusWords(group.name, width, theme).map(theme.emphasis))
@@ -174,7 +176,7 @@ function renderRiskFocus(
         theme,
       )
       lines.push(...indentVisualPlusLines(transitionLines, width, theme))
-      if (input.run.display.nodecompat) {
+      if (input.run.display.nodecompat && transition.compatibility.incompatible > 0) {
         const compatibility = transition.compatibility
         const compatibilityLines = wrapVisualPlusJoined(
           [
@@ -270,23 +272,6 @@ function duplicateOwnerLabels(input: VisualPlusSectionInput): ReadonlySet<string
   return new Set(
     [...owners].filter(([, identities]) => identities.size > 1).map(([label]) => label),
   )
-}
-
-function proportionalAllocation(values: readonly number[], width: number): readonly number[] {
-  const total = values.reduce((sum, value) => sum + value, 0)
-  if (total === 0 || width === 0) return values.map(() => 0)
-  const exact = values.map((value) => (value / total) * width)
-  const result = exact.map(Math.floor)
-  let remaining = width - result.reduce((sum, value) => sum + value, 0)
-  const order = exact
-    .map((value, index) => ({ index, remainder: value - Math.floor(value) }))
-    .sort((left, right) => right.remainder - left.remainder || left.index - right.index)
-  for (const candidate of order) {
-    if (remaining === 0) break
-    result[candidate.index]! += 1
-    remaining -= 1
-  }
-  return result
 }
 
 function invalid(message: string): never {

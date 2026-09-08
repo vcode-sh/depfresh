@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { stripAnsi, visualLength } from '../../../utils/format'
-import { renderResolutionErrors } from './index'
+import { renderResolutionErrors, renderVisualPlusResolutionErrors } from './index'
 import { makeUpdate } from './test-helpers'
 
 describe('renderResolutionErrors', () => {
@@ -92,5 +92,35 @@ describe('renderResolutionErrors', () => {
     expect(output).not.toContain('\u001B[2J')
     expect(output).not.toContain('\u001B]0;owned')
     expect(output).not.toContain('\r\nspoofed')
+  })
+  it('groups metadata warnings without presenting selected updates as resolution failures', () => {
+    let output = ''
+    renderVisualPlusResolutionErrors(
+      'app',
+      ['one', 'two'].map((name) =>
+        makeUpdate({
+          name,
+          metadataWarning: { code: 'HTTP_503', message: 'Registry unavailable\u001b[2J' },
+        }),
+      ),
+      {
+        interactive: false,
+        color: false,
+        unicode: false,
+        motion: false,
+        cursorControl: false,
+        width: 80,
+        layout: 'medium',
+      },
+      (chunk) => {
+        output += chunk
+      },
+    )
+    expect(output).toContain('one')
+    expect(output).toContain('two')
+    expect(output.match(/Metadata unavailable/gu)).toHaveLength(1)
+    expect(output).not.toContain('resolution errors')
+    expect(output).not.toContain('\u001b')
+    expect(output.split('\n').every((line) => visualLength(line) <= 80)).toBe(true)
   })
 })

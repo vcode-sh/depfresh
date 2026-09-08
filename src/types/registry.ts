@@ -5,6 +5,9 @@ export type SignaturePresence = PassivePresence
 export type ProvenanceLevel = 'trusted' | 'attested' | 'none'
 
 export interface PackageData {
+  /** Internal abbreviated discovery result; exact versions need metadata enrichment. */
+  compact?: true
+  enrichedVersions?: string[]
   name: string
   versions: string[]
   distTags: Record<string, string>

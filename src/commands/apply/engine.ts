@@ -58,6 +58,8 @@ import type {
   ApplyOptions,
   ApplyPhase,
   ApplyRuntime,
+  ApplyTargetVcsPolicy,
+  ApplyWriteInput,
 } from './types'
 
 interface FileSnapshot {
@@ -123,10 +125,52 @@ export async function applyPlanWithRuntime(
   runtimeOverrides: Partial<ApplyRuntime> = {},
   executionEvidenceObserver?: ApplyExecutionEvidenceObserver,
   vcsEvidenceObserver?: ApplyVcsEvidenceObserver,
+  targetVcsPolicy: ApplyTargetVcsPolicy = 'clean',
 ): Promise<ApplyResult> {
   validateInputs(planInput, options)
   assertPlanResult(planInput)
-  const plan = planInput
+  return applyWriteWithRuntime(
+    {
+      planFingerprint: planInput.planFingerprint,
+      repositoryIdentity: planInput.repository.identity,
+      sourceFiles: planInput.repository.sourceFiles,
+      operations: planInput.operations,
+      vcs: planInput.vcs,
+    },
+    options,
+    requestedAuthority,
+    runtimeOverrides,
+    executionEvidenceObserver,
+    vcsEvidenceObserver,
+    targetVcsPolicy,
+    planInput,
+  )
+}
+
+interface PreparedWrite extends ApplyWriteInput {
+  execution: PlanResult['execution']
+}
+
+export async function applyWriteWithRuntime(
+  input: ApplyWriteInput,
+  options: ApplyOptions,
+  requestedAuthority: InvocationAuthority,
+  runtimeOverrides: Partial<ApplyRuntime> = {},
+  executionEvidenceObserver?: ApplyExecutionEvidenceObserver,
+  vcsEvidenceObserver?: ApplyVcsEvidenceObserver,
+  targetVcsPolicy: ApplyTargetVcsPolicy = 'working-tree',
+  savedPlan?: PlanResult,
+): Promise<ApplyResult> {
+  if (!savedPlan) validateInputs(input, options)
+  const plan: PreparedWrite = {
+    ...input,
+    execution: savedPlan?.execution ?? {
+      mode: 'file-only',
+      status: 'ready',
+      timeoutMs: 0,
+      targets: [],
+    },
+  }
   emitInitialExecutionEvidence(plan, executionEvidenceObserver)
   const authority = snapshotInvocationAuthority(requestedAuthority)
   if (!authority.write) {
@@ -146,7 +190,7 @@ export async function applyPlanWithRuntime(
     }
     return blockedResult(plan, phases, 'TARGET_NOT_CONTAINED', false)
   }
-  if (plan.repository.identity !== createRepositoryId('repository', '.')) {
+  if (plan.repositoryIdentity !== createRepositoryId('repository', '.')) {
     if (plan.operations.length === 0) {
       throw new ConfigError('Apply repository identity does not match the plan contract.', {
         reason: 'INVALID_CONFIG',
@@ -174,6 +218,7 @@ export async function applyPlanWithRuntime(
     plan,
     groups.map((group) => group.file),
     vcsEvidenceObserver,
+    targetVcsPolicy,
   )
   if (initialVcs) return blockedResult(plan, phases, initialVcs.reason, initialVcs.unknown)
   phases.push(phase('preflight', 'passed', 'PRECONDITIONS_CONFIRMED'))
@@ -210,7 +255,7 @@ export async function applyPlanWithRuntime(
 
   let preparedManagerPhases: PreparedManagerPhases | undefined
   if (plan.execution.mode !== 'file-only') {
-    const prepared = await prepareManagerPhases(root, plan, lock)
+    const prepared = await prepareManagerPhases(root, required(savedPlan), lock)
     if ('reason' in prepared) {
       phases.push(prepared.phase)
       phases.push(
@@ -294,7 +339,13 @@ export async function applyPlanWithRuntime(
   try {
     runtime.checkpoint('before-precommit', {})
     if (!ownsApplyLock(lock)) throw new ApplyRunError('LOCK_LOST')
-    const recheckFailure = recheckAllTargets(root, plan, groups, vcsEvidenceObserver)
+    const recheckFailure = recheckAllTargets(
+      root,
+      plan,
+      groups,
+      vcsEvidenceObserver,
+      targetVcsPolicy,
+    )
     if (recheckFailure) throw new ApplyRunError(recheckFailure.reason, recheckFailure.unknown)
     runtime.checkpoint('after-precommit', {})
     phases.push(phase('precommit', 'passed', 'ALL_TARGETS_RECHECKED'))
@@ -425,7 +476,7 @@ export async function applyPlanWithRuntime(
       try {
         managerPhaseExecution = await executeManagerPhases(
           root,
-          plan,
+          required(savedPlan),
           preparedManagerPhases,
           lock,
           journal,
@@ -603,7 +654,7 @@ export async function applyPlanWithRuntime(
 }
 
 function emitInitialExecutionEvidence(
-  plan: PlanResult,
+  plan: PreparedWrite,
   observer: ApplyExecutionEvidenceObserver | undefined,
 ): void {
   if (!observer) return
@@ -628,7 +679,7 @@ function emitExecutionEvidence(
   } catch {}
 }
 
-function validateExecutionAuthority(plan: PlanResult, authority: InvocationAuthority): void {
+function validateExecutionAuthority(plan: PreparedWrite, authority: InvocationAuthority): void {
   const phaseRequired =
     plan.operations.length > 0 &&
     plan.execution.status === 'ready' &&
@@ -736,7 +787,7 @@ function canonicalRoot(cwd: string): string | undefined {
   }
 }
 
-function preflightTargets(root: string, plan: PlanResult): TargetGroup[] | PreflightFailure {
+function preflightTargets(root: string, plan: PreparedWrite): TargetGroup[] | PreflightFailure {
   const byFile = new Map<string, ApplyOperation[]>()
   const occurrenceKeys = new Set<string>()
   for (const operation of plan.operations) {
@@ -749,7 +800,7 @@ function preflightTargets(root: string, plan: PlanResult): TargetGroup[] | Prefl
   }
 
   const identities = new Set<string>()
-  const sourceFiles = new Map(plan.repository.sourceFiles.map((source) => [source.id, source]))
+  const sourceFiles = new Map(plan.sourceFiles.map((source) => [source.id, source]))
   const groups: TargetGroup[] = []
   for (const [file, operations] of [...byFile.entries()].sort(([left], [right]) =>
     left.localeCompare(right),
@@ -838,9 +889,10 @@ function readSnapshot(root: string, file: string): FileSnapshot {
 
 function validateTargetVcs(
   root: string,
-  plan: PlanResult,
+  plan: PreparedWrite,
   targets: string[],
-  observer?: ApplyVcsEvidenceObserver,
+  observer: ApplyVcsEvidenceObserver | undefined,
+  targetVcsPolicy: ApplyTargetVcsPolicy,
 ): PreflightFailure | undefined {
   const current = collectVcsEvidence(root, targets)
   emitVcsEvidence(observer, current)
@@ -854,7 +906,10 @@ function validateTargetVcs(
   const observed = new Map(current.targetFiles.map((target) => [target.path, target.state]))
   for (const target of targets) {
     const state = observed.get(target)
-    if (!(state && isAllowedTargetState(state))) {
+    if (targetVcsPolicy === 'working-tree' && state === 'conflicted') {
+      return { reason: 'MERGE_CONFLICT', unknown: false }
+    }
+    if (!(state && isAllowedTargetState(state, targetVcsPolicy))) {
       return { reason: 'TARGET_DIRTY', unknown: false }
     }
     if (planned.get(target) !== state) {
@@ -874,8 +929,21 @@ function isNonRepository(
   )
 }
 
-function isAllowedTargetState(state: RepositoryVcsTargetStateName): boolean {
-  return state === 'clean' || state === 'ignored'
+function isAllowedTargetState(
+  state: RepositoryVcsTargetStateName,
+  policy: ApplyTargetVcsPolicy,
+): boolean {
+  return (
+    state === 'clean' ||
+    state === 'ignored' ||
+    (policy === 'working-tree' &&
+      (state === 'staged' ||
+        state === 'unstaged' ||
+        state === 'staged-plus-unstaged' ||
+        state === 'added' ||
+        state === 'untracked' ||
+        state === 'renamed'))
+  )
 }
 
 function stageTargets(
@@ -971,9 +1039,10 @@ function rootRelative(root: string, path: string): string {
 
 function recheckAllTargets(
   root: string,
-  plan: PlanResult,
+  plan: PreparedWrite,
   groups: TargetGroup[],
-  vcsEvidenceObserver?: ApplyVcsEvidenceObserver,
+  vcsEvidenceObserver: ApplyVcsEvidenceObserver | undefined,
+  targetVcsPolicy: ApplyTargetVcsPolicy,
 ): PreflightFailure | undefined {
   for (const group of groups) {
     let current: FileSnapshot
@@ -1007,6 +1076,7 @@ function recheckAllTargets(
     plan,
     groups.map((group) => group.file),
     vcsEvidenceObserver,
+    targetVcsPolicy,
   )
 }
 
@@ -1323,7 +1393,7 @@ function recoveryAfterCleanup(
 }
 
 function blockedResult(
-  plan: PlanResult,
+  plan: PreparedWrite,
   phases: ApplyPhase[],
   reason: string,
   unknown: boolean,
@@ -1382,7 +1452,7 @@ function operationResult(
 }
 
 function createResult(
-  plan: PlanResult,
+  plan: PreparedWrite,
   operations: ApplyOperationResult[],
   phases: ApplyPhase[],
   recovery: ApplyResult['recovery'],
@@ -1450,7 +1520,7 @@ function createResult(
     schemaVersion: 1,
     toolVersion: version,
     planFingerprint: plan.planFingerprint,
-    repositoryIdentity: plan.repository.identity,
+    repositoryIdentity: plan.repositoryIdentity,
     status,
     operations,
     phases: completePhases,
@@ -1462,7 +1532,7 @@ function createResult(
   return result
 }
 
-function applyCapabilities(plan: PlanResult): ApplyResult['requiredCapabilities'] {
+function applyCapabilities(plan: PreparedWrite): ApplyResult['requiredCapabilities'] {
   const capabilities: ApplyResult['requiredCapabilities'] = ['filesystem-read', 'file-write']
   if (
     plan.operations.length === 0 ||

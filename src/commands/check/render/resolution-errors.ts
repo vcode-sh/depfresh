@@ -24,12 +24,18 @@ export function renderResolutionErrors(
     currentVersion: sanitizeTerminalText(dep.currentVersion),
   }))
   const terminalWidth = getTerminalWidth()
-  const message = 'Failed to resolve from registry'
+  const messages = safeErrors.map((dep) =>
+    sanitizeTerminalText(
+      dep.metadataWarning
+        ? `Metadata unavailable: ${dep.metadataWarning.message}`
+        : (dep.resolutionError?.message ?? 'Failed to resolve from registry'),
+    ),
+  )
   let nameWidth = terminalWidth ? Math.max(4, ...safeErrors.map((dep) => dep.name.length)) : 0
   let currentWidth = terminalWidth
     ? Math.max(4, ...safeErrors.map((dep) => dep.currentVersion.length))
     : 0
-  let messageWidth = terminalWidth ? Math.max(8, message.length) : 0
+  let messageWidth = terminalWidth ? Math.max(8, ...messages.map((message) => message.length)) : 0
 
   if (terminalWidth) {
     while (4 + nameWidth + 2 + currentWidth + 2 + messageWidth > terminalWidth) {
@@ -57,8 +63,11 @@ export function renderResolutionErrors(
   )
   log(
     terminalWidth
-      ? fitCell(`  ${c.red('resolution errors')}`, terminalWidth)
-      : `  ${c.red('resolution errors')}`,
+      ? fitCell(
+          `  ${c.red(errors.every((error) => error.metadataWarning) ? 'metadata warnings' : 'resolution errors')}`,
+          terminalWidth,
+        )
+      : `  ${c.red(errors.every((error) => error.metadataWarning) ? 'metadata warnings' : 'resolution errors')}`,
   )
   log(
     terminalWidth
@@ -71,7 +80,8 @@ export function renderResolutionErrors(
       : `    ${c.gray('------------------------------------------------------------')}`,
   )
 
-  for (const dep of safeErrors) {
+  for (const [index, dep] of safeErrors.entries()) {
+    const message = messages[index]!
     const name = terminalWidth ? fitCell(dep.name, nameWidth) : dep.name
     const current = terminalWidth ? fitCell(dep.currentVersion, currentWidth) : dep.currentVersion
     const msg = terminalWidth ? fitCell(message, messageWidth) : message
@@ -90,15 +100,23 @@ export function renderVisualPlusResolutionErrors(
   if (errors.length === 0) return
 
   const theme = createVisualPlusTheme(capabilities)
-  const logicalLines = [
-    'Resolution errors',
-    `Package: ${packageName}`,
-    ...errors.flatMap((dependency) => [
-      `Dependency: ${dependency.name}`,
-      `Current: ${dependency.currentVersion}`,
-      'Message: Failed to resolve from registry',
-    ]),
-  ]
+  const groups = new Map<string, string[]>()
+  for (const dependency of errors) {
+    const message = sanitizeTerminalText(
+      dependency.metadataWarning
+        ? `Metadata unavailable: ${dependency.metadataWarning.message}`
+        : (dependency.resolutionError?.message ?? 'Failed to resolve from registry'),
+    )
+    const names = groups.get(message) ?? []
+    names.push(
+      `${sanitizeTerminalText(dependency.name)} ${sanitizeTerminalText(dependency.currentVersion)}`,
+    )
+    groups.set(message, names)
+  }
+  const logicalLines = [...groups].map(
+    ([message, names]) =>
+      `${sanitizeTerminalText(packageName)}: ${names.join(', ')} ${capabilities.unicode ? '—' : '-'} ${message}`,
+  )
 
   for (const logicalLine of logicalLines) {
     for (const line of wrapVisualPlusText(logicalLine, capabilities.width, theme)) {

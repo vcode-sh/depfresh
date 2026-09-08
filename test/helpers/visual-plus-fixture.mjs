@@ -452,7 +452,16 @@ function createRegistryResponses(declarations, asOfMs) {
     ).toISOString()
     const metadata = {
       name,
-      versions: Object.fromEntries(versions.map((version) => [version, {}])),
+      versions: Object.fromEntries(
+        versions.map((version) => [
+          version,
+          {
+            name,
+            version,
+            dist: { tarball: `https://registry.example.test/${name}/-/${version}.tgz` },
+          },
+        ]),
+      ),
       time: Object.fromEntries(versions.map((version) => [version, publishedAt])),
       'dist-tags': { latest: definition.target },
     }

@@ -59,6 +59,22 @@ export function renderVisualPlusReceipt(input: VisualPlusSectionInput): readonly
   const separator = visualPlusSeparator(input.capabilities)
   if (snapshot.exitCode === null) return visualPlusSectionLines(input, ['Pending'])
 
+  if (
+    input.run.detailLevel === 'compact' &&
+    snapshot.exitCode === 0 &&
+    snapshot.counts.updates === 0 &&
+    snapshot.counts.operations === 0 &&
+    snapshot.counts.targets === 0
+  ) {
+    const message =
+      snapshot.counts.unresolved > 0
+        ? `Check incomplete: ${snapshot.counts.unresolved} ${snapshot.counts.unresolved === 1 ? 'dependency' : 'dependencies'} could not be checked.`
+        : snapshot.counts.packages === 0
+          ? 'No packages found.'
+          : 'No updates found.'
+    return visualPlusSectionLines(input, [message])
+  }
+
   if (input.run.detailLevel === 'compact' && !snapshot.write && snapshot.exitCode === 0) {
     return visualPlusSectionLines(input, [
       `Review complete${separator}${pluralVisualPlus(snapshot.counts.operations, 'update')} across ${pluralVisualPlus(snapshot.counts.targets, 'file')}${separator}write not attempted`,
@@ -134,7 +150,9 @@ export function renderVisualPlusReceipt(input: VisualPlusSectionInput): readonly
     const reasons = safetyBlockReasons(input)
     return visualPlusSectionLines(input, [
       `Safety block${separator}no files were changed`,
-      totalsLine(snapshot.results.totals, snapshot.results.targetTotals),
+      ...(input.run.detailLevel === 'compact'
+        ? []
+        : [totalsLine(snapshot.results.totals, snapshot.results.targetTotals)]),
       ...reasons,
       safetyBlockAction(input),
       `Exit ${snapshot.exitCode}`,
@@ -282,21 +300,51 @@ function retainedEvidenceLines(input: VisualPlusSectionInput, headline: string):
 function safetyBlockReasons(input: VisualPlusSectionInput): readonly string[] {
   const separator = visualPlusSeparator(input.capabilities)
   const groups = input.writeReceipt!.canonical.groups
-  const lines = groups.map((group) => {
-    if (group.reason === 'VCS_UNAVAILABLE') {
-      const path = sanitizeTerminalText(group.file)
-      return `Preflight could not confirm Git state for ${path}.`
+  if (input.run.detailLevel === 'compact') {
+    const explanations: Record<string, string> = {
+      MERGE_CONFLICT: 'An unresolved merge conflict blocked the write.',
+      TARGET_DIRTY: 'Existing changes blocked the write.',
+      SOURCE_CHANGED: 'Source content changed since review.',
+      EXPECTED_VALUE_MISMATCH: 'A dependency value changed since review.',
+      VCS_UNAVAILABLE: 'Git state could not be confirmed.',
+      AMBIGUOUS_OCCURRENCE: 'A dependency location is ambiguous.',
+      UNSUPPORTED_WRITE_SOURCE: 'A selected source cannot be updated safely.',
     }
-    const diagnostic = group.diagnostic ? ` / ${sanitizeTerminalText(group.diagnostic)}` : ''
-    return `${sanitizeTerminalText(group.file)}${separator}${sanitizeTerminalText(group.reason)}${diagnostic}`
-  })
-  return [...new Set(lines)]
+    const causes = [
+      ...new Set(
+        groups.map(
+          (group) =>
+            explanations[group.reason] ?? `Write blocked: ${sanitizeTerminalText(group.reason)}.`,
+        ),
+      ),
+    ]
+    const targets = [...new Set(groups.map((group) => sanitizeTerminalText(group.file)))]
+    return [...causes, 'Selected files not updated:', ...targets.map((file) => `  ${file}`)]
+  }
+  return [
+    ...new Set(
+      groups.map((group) => {
+        const diagnostic = group.diagnostic ? ` / ${sanitizeTerminalText(group.diagnostic)}` : ''
+        return `${sanitizeTerminalText(group.file)}${separator}${sanitizeTerminalText(group.reason)}${diagnostic}`
+      }),
+    ),
+  ]
 }
 
 function safetyBlockAction(input: VisualPlusSectionInput): string {
-  const onlyGitEvidence = input.writeReceipt!.canonical.groups.every(
-    (group) => group.reason === 'VCS_UNAVAILABLE',
-  )
+  const groups = input.writeReceipt!.canonical.groups
+  if (
+    groups.every((group) => ['SOURCE_CHANGED', 'EXPECTED_VALUE_MISMATCH'].includes(group.reason))
+  ) {
+    return 'Next: review the changed files, then rerun to resolve updates against their current contents.'
+  }
+  if (groups.every((group) => group.reason === 'MERGE_CONFLICT')) {
+    return 'Next: resolve the merge conflict, then rerun to review the current dependency values.'
+  }
+  if (groups.every((group) => group.reason === 'TARGET_DIRTY')) {
+    return 'Next: review and resolve the existing changes in these files before retrying.'
+  }
+  const onlyGitEvidence = groups.every((group) => group.reason === 'VCS_UNAVAILABLE')
   return onlyGitEvidence
     ? 'Next: review all reported errors and restore trustworthy Git evidence for every reported target before rerunning.'
     : 'Next: review all reported errors and correct every reported preflight blocker before rerunning.'

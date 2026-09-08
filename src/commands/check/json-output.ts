@@ -21,6 +21,7 @@ export interface JsonPackage {
     deprecated?: string | boolean
     publishedAt?: string
     currentVersionTime?: string
+    metadataWarning?: { code: string; message: string }
   }>
 }
 
@@ -114,6 +115,7 @@ export function buildJsonPackage(name: string, updates: ResolvedDepChange[]): Js
       ...(u.deprecated ? { deprecated: u.deprecated } : {}),
       ...(u.publishedAt ? { publishedAt: u.publishedAt } : {}),
       ...(u.currentVersionTime ? { currentVersionTime: u.currentVersionTime } : {}),
+      ...(u.metadataWarning ? { metadataWarning: { ...u.metadataWarning } } : {}),
     })),
   }
 }

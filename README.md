@@ -10,23 +10,23 @@ reviewable plan/apply workflow when you need stronger guarantees.
 
 ## Try it
 
-These commands pin depfresh 2.1.3. Source text alone does not establish publication; npm and GitHub
+These commands pin depfresh 2.1.4. Source text alone does not establish publication; npm and GitHub
 external records are authoritative. The tag workflow creates the hosted release only after the
 aggregate suite, exact npm 12 artifact verification, and exact public-integrity gates succeed.
 Recursive workspace discovery is on by default, so `-r` is not needed.
 
 ```bash
 # Bun
-bunx depfresh@2.1.3
+bunx depfresh@2.1.4
 
 # pnpm
-pnpm dlx depfresh@2.1.3
+pnpm dlx depfresh@2.1.4
 
 # npm
-npm exec --yes --package=depfresh@2.1.3 -- depfresh
+npm exec --yes --package=depfresh@2.1.4 -- depfresh
 
 # Yarn
-yarn dlx depfresh@2.1.3
+yarn dlx depfresh@2.1.4
 ```
 
 Node.js 24.15.0 or newer is required.
@@ -34,7 +34,7 @@ Node.js 24.15.0 or newer is required.
 For a team or CI, pin depfresh in the project instead:
 
 ```bash
-pnpm add -D --save-exact depfresh@2.1.3
+pnpm add -D --save-exact depfresh@2.1.4
 pnpm exec depfresh
 ```
 
@@ -51,45 +51,29 @@ depfresh --output json   # structured compatibility output
 depfresh --no-recursive  # inspect only the root package
 ```
 
-`depfresh -w` updates package files while preserving their formatting. It does not run an install
-or lifecycle scripts. Use the reviewed plan/apply workflow when lockfile, install, or verification
-phases are required.
+`depfresh -w` updates selected dependency entries in your current working files. Existing local
+edits, including staged changes, do not require a commit or stash. Formatting, unrelated content,
+and the Git index are preserved. Merge conflicts and files changed during the operation still
+block replacement. The command does not run an install or lifecycle scripts. Ordinary writes use the shared file
+writer directly; only saved plans require the full plan contract.
 
-For eligible local CLI table runs, Visual+ defaults to the five-region hybrid review: context,
-overview, risk focus, a complete update ledger, and a receipt. The ledger shows every selected
-update exactly once without internal IDs. `--long` remains the exhaustive audit of operations,
-owners, shared dependencies, occurrences, physical targets, lifecycle, and exact receipts. A
-successful compact result has no durable lifecycle rail; a capable terminal clears its one live
-line before writing the final review. Every non-success target and recovery path remains visible.
+When there are no updates, the default local view prints one short result. Unresolved dependencies
+are reported as an incomplete check.
 
-The former bounded-preview projection is the historical compact semantic contract completed by
-[Plan 037](plans/037-visual-plus-compact-2.1.1.md). [Plan 038](plans/038-visual-plus-hybrid-default.md)
-owns the completed and locally proven visual-composition successor. The 2.1.1 local candidate
-is preserved as historical evidence.
+The default output shows available updates, major-version changes, concrete compatibility
+warnings, and a short write result. A major version is a reason to review migration notes, not
+proof that your application will break. Missing compatibility information is reported as unknown;
+it does not prevent ordinary updates.
 
-Eligibility requires the CLI progress route, non-silent output, non-interactive and non-global
-operation, and no direct or addon `beforePackageWrite` hook. `--write --interactive` keeps the
-interactive selection surface. After discovery, Visual+ prints observed repository, workspace, and
-package-manager evidence. Wide, medium, and narrow layouts preserve the same five regions; plain,
-pipes, CI, and `TERM=dumb` use deterministic styling without cursor control. `NO_COLOR` changes
-styling only. `--group`, `--sort`, `--timediff`, and `--nodecompat` remain meaningful in the ledger.
-For example, a fully observed write ends with:
+Ordinary checks use compact registry metadata and fetch detailed metadata only for the current
+and selected target versions of updates. Publication-history modes such as `newest` and `cooldown`
+retain their date-based behavior. Use `--timediff` to opt in to release ages; it fetches publication
+history on a best-effort basis and is off by default. Unavailable release ages do not discard
+resolved updates. `--long` retains detailed owners, occurrences, and write diagnostics.
 
-```text
-Complete · 76 updates applied across 14 files
-All 14 files observed at the requested values · recovery not needed · 2.4s
-Exit 0
-```
-
-A clean command-level preflight block ends with `Safety block · no files were changed`, one safe
-`Next:` action, and `Exit 2`. After replacement starts, a failure renders `Recovered`,
-`Recovery incomplete`, or `Recovery unknown` first and names applied, restored, and unrecovered
-paths. Each file replacement is atomic, but the repository is not one atomic transaction and
-recovery is best effort. See the
-[table output journey reference](docs/output-formats/table.md#visual-result-journeys) for
-capable/plain examples and count definitions. Interactive selection, JSON output, and global writes
-use their existing separate surfaces. Library `check()` calls and veto-capable hook routes retain
-the compatibility table surface.
+Use `--output json` for structured results or `-w -I` to select updates interactively. See
+[table output](docs/output-formats/table.md) for display controls and
+[troubleshooting](docs/troubleshooting.md) for actionable failure explanations.
 
 ## Safe plan and apply
 
@@ -212,6 +196,7 @@ registry and does not inherit project npm configuration.
 - [Output contracts](docs/output-formats/README.md)
 - [GitHub Action and integrations](docs/integrations/README.md)
 - [Troubleshooting](docs/troubleshooting.md)
+- [2.1.4 release notes](docs/releases/v2.1.4.md)
 - [2.1.3 release notes](docs/releases/v2.1.3.md)
 - [2.1.2 release notes](docs/releases/v2.1.2.md)
 - [2.1.1 release notes](docs/releases/v2.1.1.md)

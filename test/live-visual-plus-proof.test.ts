@@ -97,7 +97,6 @@ describe('live Visual+ proof harness', () => {
     })
     for (const malformed of [
       transcript.replace('catalog catalog-b:', 'catalog catalog-c:'),
-      transcript.replace('catalog catalog-b:', 'compat unknown: catalog catalog-b:'),
       transcript.replace(
         'catalog catalog-b: pnpm-workspace.yaml',
         'catalog catalog-b: pnpm-workspace.yaml-extra',
@@ -106,6 +105,51 @@ describe('live Visual+ proof harness', () => {
       expect(() => analyze(malformed)).toThrow()
     }
   })
+
+  it.each([false, true])(
+    'accepts concise review rows with major updates=%s and optional age/catalog detail',
+    (hasMajor) => {
+      const transcript = `spreadu - bun 1.4.2 - workspace - major - read-only
+1 package - 2 declared - 2 eligible - 2 updates - 1 file
+
+Major ${hasMajor ? 1 : 0} - Minor ${hasMajor ? 0 : 1} - Patch 1
+${hasMajor ? 'Major updates\n' : ''}Compatibility could not be determined for 2 updates.
+
+catalog-a - pnpm-workspace.yaml
+  catalog
+dependency       current -> target   severity
+alpha            ^1.0.0 -> ${hasMajor ? '^2.0.0' : '^1.1.0'}   ${hasMajor ? 'Major' : 'Minor'}
+
+catalog-b - pnpm-workspace.yaml
+  catalog
+dependency       current -> target   severity
+beta             ^1.0.0 -> ^1.0.1   Patch
+Review complete - 2 updates across 1 file - write not attempted
+Exit 0
+`
+      const result = analyzeHybridRun(
+        {
+          controls: {},
+          evidence: { columns: 80 },
+          exitCode: 0,
+          finalCursorVisible: true,
+          rawTerminal: Buffer.from(transcript.replaceAll('\n', '\r\n')),
+          signal: null,
+          transcript,
+        },
+        80,
+        ['--no-install', 'depfresh', 'major'],
+        'spreadu',
+      )
+      expect(result.operationRows).toEqual({
+        complete: true,
+        declared: 2,
+        files: 1,
+        rendered: 2,
+        severity: { major: hasMajor ? 1 : 0, minor: hasMajor ? 0 : 1, patch: 1 },
+      })
+    },
+  )
 
   it('requires the exact artifact, repository, widths, and output arguments', () => {
     expect(

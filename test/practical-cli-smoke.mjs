@@ -185,6 +185,9 @@ function getRegistryMetadata(name) {
   const time = {}
   for (const version of data.versions) {
     versions[version] = {
+      name,
+      version,
+      dist: { tarball: `https://registry.example.test/${name}/-/${version}.tgz` },
       ...(data.engines?.[version] ? { engines: { node: data.engines[version] } } : {}),
     }
     time[version] = new Date(Date.now() - 7 * 86_400_000).toISOString()
@@ -1021,13 +1024,14 @@ process.exit(result.status ?? 1)
   const orderedReceipt = [
     'Safety block',
     'no files were changed',
-    'Applied 0  Blocked 0  Not attempted 1  Failed 0  Unknown 1',
-    'Preflight could not confirm Git state for package.json.',
+    'Git state could not be confirmed.',
+    'Selected files not updated:',
+    'package.json',
     'Exit 2',
   ]
   let previousIndex = -1
   for (const fragment of orderedReceipt) {
-    const index = result.stdout.indexOf(fragment)
+    const index = result.stdout.indexOf(fragment, previousIndex + 1)
     assert.ok(index > previousIndex, `Missing or unordered stdout receipt fragment: ${fragment}`)
     previousIndex = index
     assert.ok(!result.stderr.includes(fragment), `Receipt fragment leaked to stderr: ${fragment}`)

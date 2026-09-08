@@ -2,10 +2,12 @@ import { describe, expect, it } from 'vitest'
 import { ConfigError } from '../../errors'
 import type { depfreshOptions } from '../../types'
 import {
+  buildJsonPackage,
   buildLegacyCheckJsonError,
   buildLegacyCheckJsonResult,
   type JsonExecutionState,
 } from './json-output'
+import { makeUpdate } from './render/test-helpers'
 
 const timestamp = '2026-07-16T00:00:00.000Z'
 const executionState: JsonExecutionState = {
@@ -26,6 +28,25 @@ const executionState: JsonExecutionState = {
 }
 
 describe('legacy check JSON compatibility builders', () => {
+  it('retains advisory metadata failures without counting them as failed resolutions', () => {
+    const update = makeUpdate({
+      metadataWarning: { code: 'HTTP_503', message: 'Registry unavailable' },
+    })
+    const result = buildLegacyCheckJsonResult(
+      [buildJsonPackage('example', [update])],
+      { cwd: '/example', mode: 'default' } as depfreshOptions,
+      { ...executionState, noPackagesFound: false, scannedPackages: 1, packagesWithUpdates: 1 },
+      [],
+      timestamp,
+    )
+    expect(result.packages[0]?.updates[0]).toMatchObject({
+      target: update.targetVersion,
+      metadataWarning: update.metadataWarning,
+    })
+    expect(result.errors).toEqual([])
+    expect(result.summary.failedResolutions).toBe(0)
+  })
+
   it('retains the v1 absolute-path and timestamp compatibility fields', () => {
     const result = buildLegacyCheckJsonResult(
       [],

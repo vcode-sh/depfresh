@@ -5,6 +5,18 @@ export interface ApplyOptions {
   cwd: string
 }
 
+export interface ApplyWriteInput {
+  planFingerprint: string
+  repositoryIdentity: string
+  sourceFiles: Array<
+    Pick<PlanResult['repository']['sourceFiles'][number], 'id' | 'path' | 'format' | 'indent'>
+  >
+  operations: ApplyOperation[]
+  vcs: PlanResult['vcs']
+}
+
+export type ApplyTargetVcsPolicy = 'clean' | 'working-tree'
+
 export type ApplyOperation = PlanResult['operations'][number]
 export type ApplyOperationResult = ApplyResult['operations'][number]
 export type ApplyPhase = ApplyResult['phases'][number]

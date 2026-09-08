@@ -60,7 +60,16 @@ const registry = createServer((request, response) => {
   response.end(
     JSON.stringify({
       name,
-      versions: Object.fromEntries(versions.map((version) => [version, {}])),
+      versions: Object.fromEntries(
+        versions.map((version) => [
+          version,
+          {
+            name,
+            version,
+            dist: { tarball: `https://registry.example.test/${name}/-/${version}.tgz` },
+          },
+        ]),
+      ),
       time: Object.fromEntries(versions.map((version) => [version, '2026-06-01T00:00:00.000Z'])),
       'dist-tags': { latest: versions.at(-1) },
     }),
@@ -161,11 +170,11 @@ bunx --package file:${repositoryRoot} depfresh
 node ${cliPath} --cwd . plan --json --mode minor --include-locked > depfresh-plan.json
 \`\`\`
 
-Run from this directory after depfresh 2.1.3 is available:
+Run from this directory after depfresh 2.1.4 is available:
 
 \`\`\`bash
-bunx depfresh@2.1.3
-bunx depfresh@2.1.3 plan --json --mode minor --include-locked > depfresh-plan.json
+bunx depfresh@2.1.4
+bunx depfresh@2.1.4 plan --json --mode minor --include-locked > depfresh-plan.json
 \`\`\`
 
 The \`native\` catalog and direct dependencies in \`apps/native\` are excluded by
@@ -250,7 +259,7 @@ const cleanStatus = await runGit(demoRoot, ['status', '--short'])
 assert.equal(cleanStatus, '')
 
 const capabilities = parseJson(await runCli(demoRoot, ['capabilities', '--json']), 0)
-assert.equal(capabilities.version, '2.1.3')
+assert.equal(capabilities.version, '2.1.4')
 
 const inspected = parseJson(await runCli(demoRoot, ['inspect', '--json']), 0)
 assert.equal(inspected.repository.packageManager, undefined)

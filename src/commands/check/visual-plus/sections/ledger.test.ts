@@ -199,7 +199,7 @@ describe('Visual+ hybrid ledger row model', () => {
       .join('\n')
 
     expect(output).not.toMatch(/\bage\b|~(?:\d|\.)/iu)
-    expect(output).toContain('compat unknown')
+    expect(output).toContain('requires Node')
   })
 
   it('removes compatibility detail when nodecompat is disabled', () => {
@@ -209,7 +209,8 @@ describe('Visual+ hybrid ledger row model', () => {
       .join('\n')
 
     expect(output).not.toMatch(/compat|compatible|incompatible|Node support|requires Node/iu)
-    expect(output).toContain('catalog default: pnpm-workspace.yaml')
+    expect(output).toContain('pnpm-workspace.yaml')
+    expect(output).toMatch(/eslint\s+\^9\.0\.0\s+→ \^9\.1\.0/u)
   })
 
   it('does not mutate its validated inputs or row projection', () => {

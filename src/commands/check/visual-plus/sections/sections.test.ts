@@ -816,8 +816,8 @@ describe('Visual+ pure sections', () => {
 
     expect(isStrictVisualPlusWriteSuccess(blocked)).toBe(false)
     expect(requiresVisualPlusDetailedTransaction(blocked)).toBe(true)
-    expect(blockedLines.filter((line) => line.startsWith('Target '))).toHaveLength(14)
-    expect(blockedLines.filter((line) => line.startsWith('Update '))).toHaveLength(76)
+    expect(blockedLines).toEqual([])
+    expect(renderVisualPlusReceipt(blocked).join('\n')).toContain('no files were changed')
     expect(blockedLines.join('\n')).not.toMatch(/more targets|omitted/iu)
     expect(blockedLines.join('\n')).not.toMatch(/Operation ID|operation-|IDs /u)
   })
@@ -880,16 +880,16 @@ describe('Visual+ pure sections', () => {
     const output = lines.join('\n')
 
     expect(output).toContain(
-      'Target packages/target-8/package.json · 5 updates · skipped · blocked true · not attempted true · unknown false',
+      'Target packages/target-8/package.json · 5 updates · skipped, blocked, not attempted',
     )
     expect(output).toContain(
-      'Target packages/target-9/package.json · 5 updates · skipped · blocked false · not attempted true · unknown false',
+      'Target packages/target-9/package.json · 5 updates · skipped, not attempted',
     )
     expect(output).toContain(
-      'Target packages/target-10/package.json · 5 updates · skipped · blocked false · not attempted false · unknown true',
+      'Target packages/target-10/package.json · 5 updates · skipped, final state unknown',
     )
     expect(output).toContain(
-      'Update dependency-8-0 · source dependencies · ^1.0.0 → ^1.1.0 · outcome skipped · blocked true · not attempted true · unknown false',
+      'Update dependency-8-0 · source dependencies · ^1.0.0 → ^1.1.0 · outcome skipped, blocked, not attempted',
     )
     expect(lines.filter((line) => line.startsWith('Target '))).toHaveLength(14)
     expect(lines.filter((line) => line.startsWith('Update '))).toHaveLength(76)
@@ -959,8 +959,7 @@ describe('Visual+ pure sections', () => {
       'Applied 0  Blocked 76  Not attempted 76  Failed 0  Unknown 0',
       ...Array.from(
         { length: 14 },
-        (_, index) =>
-          `Preflight could not confirm Git state for packages/target-${index}/package.json.`,
+        (_, index) => `packages/target-${index}/package.json · VCS_UNAVAILABLE`,
       ),
       'Next: review all reported errors and restore trustworthy Git evidence for every reported target before rerunning.',
       'Exit 2',
@@ -1560,9 +1559,9 @@ describe('Visual+ receipt decision table', () => {
     const wideLines = renderVisualPlusTransaction(duplicateHumanOperations(240)).map(stripAnsi)
     const narrowLines = renderVisualPlusTransaction(duplicateHumanOperations(40)).map(stripAnsi)
     const dependency =
-      'Update dep | source dependencies | 1.0.0 -> 2.0.0 | outcome blocked | blocked true | not attempted true | unknown false | reason dependency policy blocked'
+      'Update dep | source dependencies | 1.0.0 -> 2.0.0 | outcome blocked | reason dependency policy blocked'
     const override =
-      'Update dep | source overrides | 1.0.0 -> 2.0.0 | outcome unknown | blocked false | not attempted false | unknown true | reason override evidence unavailable'
+      'Update dep | source overrides | 1.0.0 -> 2.0.0 | outcome unknown | reason override evidence unavailable'
 
     expect(wideLines, wideLines.join('\n')).toContain(dependency)
     expect(wideLines, wideLines.join('\n')).toContain(override)
@@ -1613,7 +1612,9 @@ describe('Visual+ receipt decision table', () => {
 
     expect(isStrictVisualPlusWriteSuccess(input)).toBe(false)
     expect(requiresVisualPlusDetailedTransaction(input)).toBe(true)
-    expect(renderVisualPlusTransaction(input).map(stripAnsi)).not.toEqual([])
+    if ('outcome' in options && options.outcome === 'blocked')
+      expect(renderVisualPlusTransaction(input)).toEqual([])
+    else expect(renderVisualPlusTransaction(input).map(stripAnsi)).not.toEqual([])
     expect(renderVisualPlusReceipt(input).map(stripAnsi).at(-1)).toBe(
       `Exit ${input.snapshot.exitCode}`,
     )
@@ -1885,7 +1886,7 @@ describe('Visual+ receipt decision table', () => {
     [
       'VCS_UNAVAILABLE',
       undefined,
-      'Preflight could not confirm Git state for package.json.',
+      'package.json - VCS_UNAVAILABLE',
       'Next: review all reported errors and restore trustworthy Git evidence for every reported target before rerunning.',
     ],
     [
@@ -1904,7 +1905,7 @@ describe('Visual+ receipt decision table', () => {
       'SOURCE_CHANGED',
       undefined,
       'package.json - SOURCE_CHANGED',
-      'Next: review all reported errors and correct every reported preflight blocker before rerunning.',
+      'Next: review the changed files, then rerun to resolve updates against their current contents.',
     ],
   ] as const)(
     'renders canonical safety reason %s without inventing Git',
@@ -1930,19 +1931,29 @@ describe('Visual+ receipt decision table', () => {
     },
   )
 
-  it('binds VCS-unavailable safety prose to each canonical group target', () => {
-    const lines = renderVisualPlusReceipt(createVisualPlusSectionInput(fixture('blocked', 2))).map(
-      stripAnsi,
-    )
-
-    expect(lines).toContain(
-      'Preflight could not confirm Git state for packages/target-0/package.json.',
-    )
-    expect(lines).toContain(
-      'Preflight could not confirm Git state for packages/target-13/package.json.',
-    )
-    expect(lines).not.toContain('Preflight could not confirm Git state for package.json.')
-  })
+  it.each([
+    ['MERGE_CONFLICT', 'An unresolved merge conflict blocked the write.'],
+    ['SOURCE_CHANGED', 'Source content changed since review.'],
+  ])(
+    'reports shared preflight cause %s once without blaming every selected file',
+    (reason, message) => {
+      const input = compactInput(fixture('blocked', 2))
+      const canonical = {
+        ...input.writeReceipt!.canonical,
+        groups: input.writeReceipt!.canonical.groups.map((group) => ({ ...group, reason })),
+      }
+      const lines = renderVisualPlusReceipt(
+        createVisualPlusSectionInput({
+          ...input,
+          writeReceipt: { ...input.writeReceipt!, canonical },
+        }),
+      ).map(stripAnsi)
+      expect(lines.filter((line) => line === message)).toHaveLength(1)
+      expect(lines).toContain('Selected files not updated:')
+      for (const group of canonical.groups) expect(lines).toContain(`  ${group.file}`)
+      expect(lines.join('\n')).not.toMatch(/package\.json.*(?:conflict|changed)/u)
+    },
+  )
 
   it('renders all retained evidence for partial and recovery branches', () => {
     const recovery: CheckRunRecovery = {

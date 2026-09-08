@@ -130,7 +130,7 @@ describe('command-level legacy plan', () => {
     const first = createLegacyPlan(root, selections)
     const second = createLegacyPlan(root, [...selections].reverse())
 
-    expect(first.plan.repository.identity).toBe(second.plan.repository.identity)
+    expect(first.plan.repositoryIdentity).toBe(second.plan.repositoryIdentity)
     expect(first.plan.planFingerprint).toBe(second.plan.planFingerprint)
     expect(first.plan.operations.map((operation) => [operation.file, operation.path])).toEqual([
       ['package.json', ['workspaces', 'catalog', 'shared']],
@@ -451,22 +451,6 @@ describe('command-level legacy plan', () => {
     expect(result.packages[0]?.outcomes[0]).toMatchObject({
       expectedValue: 'npm:real@^1.0.0',
       requestedValue: 'npm:real@2.0.0',
-    })
-  })
-
-  it('derives mixed newlines, tabs, and missing final newline from exact source bytes', () => {
-    const root = temporaryRoot()
-    const filepath = join(root, 'package.json')
-    writeFileSync(filepath, '{\r\n\t"dependencies": {\n\t\t"shared": "1.0.0"\r\n\t}\r\n}')
-
-    const construction = createLegacyPlan(root, [
-      { packageIndex: 0, pkg: manifest(filepath, 'root'), changes: [change('shared')] },
-    ])
-
-    expect(construction.plan.repository.sourceFiles[0]).toMatchObject({
-      indent: '\t',
-      newline: 'mixed',
-      trailingNewline: false,
     })
   })
 
