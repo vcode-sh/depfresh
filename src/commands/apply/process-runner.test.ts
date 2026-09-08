@@ -149,6 +149,30 @@ describe('Plan 020 no-shell process runner', () => {
   })
 
   it.each([
+    ['an ownership-boundary process that may adopt orphans', 100, true],
+    ['an observed baseline worker', 200, false],
+  ] as const)(
+    'does not mistake %s for proof of unrelated ancestry',
+    (_name, parentPid, expected) => {
+      const baseline = new Map([
+        [100, { key: '100:start', parentPid: 1, processGroup: 100 }],
+        [200, { key: '200:start', parentPid: 100, processGroup: 200 }],
+      ])
+      const survivor = { key: '400:start', parentPid, processGroup: 400 }
+
+      expect(
+        isUnattributedProcessSurvivor(400, survivor, {
+          baseline,
+          childPid: 300,
+          current: new Map([...baseline, [400, survivor]]),
+          escaped: new Set(),
+          processGroupSurvived: false,
+        }),
+      ).toBe(expected)
+    },
+  )
+
+  it.each([
     ['stale original child', 300, 300, false, false],
     ['stale original-group child', 301, 300, false, false],
     ['live original-group child', 301, 300, true, true],

@@ -4,6 +4,16 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Semver
 
 ## Unreleased
 
+## [2.1.3] - 2026-09-08
+
+### Changed
+
+- Updated dependencies and GitHub Actions; consolidated duplicate CI checks.
+
+### Fixed
+
+- Fixed dependency freshness automation, terminal tests, and orphan-process supervision.
+
 ## [2.1.2] - 2026-07-21
 
 ### Changed
@@ -816,7 +826,8 @@ First release. Wrote it from scratch because waiting for PRs to get merged in ta
 - TTY detection. No spinners in your CI logs. `NO_COLOR` respected.
 - 54 tests. More than some production apps I've seen.
 
-[Unreleased]: https://github.com/vcode-sh/depfresh/compare/v2.1.2...HEAD
+[Unreleased]: https://github.com/vcode-sh/depfresh/compare/v2.1.3...HEAD
+[2.1.3]: https://github.com/vcode-sh/depfresh/compare/v2.1.2...v2.1.3
 [2.1.2]: https://github.com/vcode-sh/depfresh/compare/v2.1.1...v2.1.2
 [2.1.1]: https://github.com/vcode-sh/depfresh/compare/v2.1.0...v2.1.1
 [2.1.0]: https://github.com/vcode-sh/depfresh/compare/v2.0.2...v2.1.0

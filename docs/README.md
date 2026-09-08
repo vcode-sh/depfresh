@@ -47,6 +47,7 @@ Everything I know about depfresh is in here, split into files so you can pretend
 
 - **[Troubleshooting](./troubleshooting.md)** -- Common issues, workspace gotchas, and known limitations. The page you'll find via Google at 2 AM after everything breaks. I've been there. The kettle's already on.
 
+- **[2.1.3 Release Notes](./releases/v2.1.3.md)** -- Dependency updates and CI maintenance.
 - **[2.1.2 Release Notes](./releases/v2.1.2.md)** -- The completed Plan 038 hybrid default and
   release hardening. Source text alone does not establish publication; npm and GitHub external
   records are authoritative.

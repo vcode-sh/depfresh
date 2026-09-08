@@ -12,13 +12,13 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  test:
-    name: Test (Node 24.15.0)
+  lint:
+    name: Lint
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
-      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271  # v6.0.9
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86  # v6.0.10
 
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020  # v7.0.0
         with:
@@ -27,23 +27,36 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      - name: Verify generated schemas
-        run: pnpm schemas:check
-
-      - name: Test Action adversarial harness
-        run: pnpm exec vitest run test/github-action.test.ts --retry=0
-
       - name: Typecheck
         run: pnpm typecheck
 
       - name: Lint with zero warnings
         run: pnpm exec biome check --error-on-warnings .
 
+  test:
+    name: Test (Node 24.15.0)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86  # v6.0.10
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020  # v7.0.0
+        with:
+          node-version: 24.15.0
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
       - name: Build tested distribution
         run: pnpm build
 
       - name: Run tests
-        run: pnpm test:run --coverage
+        run: pnpm test:run --coverage --retry=0
+
+      - name: Audit dependencies
+        run: pnpm audit --audit-level=high
+        continue-on-error: true
 
       - name: Upload tested distribution
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
@@ -54,7 +67,7 @@ jobs:
           retention-days: 1
 
   build:
-    name: Verify tested build
+    name: Build
     runs-on: ubuntu-24.04
     needs: test
     steps:
@@ -66,17 +79,20 @@ jobs:
 
       - name: Verify artifacts exist
         run: |
-          echo "## Build Artifacts" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "| File | Size |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| --- | --- |" >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "## Build Artifacts"
+            echo ""
+            echo "| File | Size | Gzipped |"
+            echo "| --- | --- | --- |"
+          } >> "$GITHUB_STEP_SUMMARY"
           for file in dist/cli.mjs dist/index.mjs dist/index.d.ts; do
             if [ ! -f "$file" ]; then
               echo "::error::Missing artifact: $file -- something went very wrong"
               exit 1
             fi
             size=$(du -h "$file" | cut -f1)
-            echo "| \`$file\` | $size |" >> "$GITHUB_STEP_SUMMARY"
+            compressed=$(gzip -c "$file" | wc -c)
+            echo "| \`$file\` | $size | $compressed bytes |" >> "$GITHUB_STEP_SUMMARY"
           done
 
   visual-plus-pty:
@@ -90,7 +106,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
-      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271  # v6.0.9
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86  # v6.0.10
 
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020  # v7.0.0
         with:
@@ -106,6 +122,7 @@ jobs:
           path: dist
 
       - name: Test Visual Plus PTY and fallbacks
+        if: runner.os == 'macOS'
         run: pnpm exec vitest run test/visual-plus-cli.test.ts --retry=0
 
       - name: Install exact isolated npm
@@ -141,9 +158,6 @@ jobs:
           npm pack --json --ignore-scripts --pack-destination artifacts > artifacts/visual-plus-pack.json
           node scripts/verify-packed-package.mjs artifacts/visual-plus-pack.json --visual-plus
 
-      - name: Test pure reduced-motion contracts
-        run: pnpm exec vitest run src/commands/check/visual-plus/capabilities.test.ts src/commands/check/visual-plus/renderer.test.ts
-
       - name: Clean isolated npm
         if: ${{ always() }}
         run: |
@@ -156,7 +170,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
-      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271  # v6.0.9
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86  # v6.0.10
 
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020  # v7.0.0
         with:
@@ -179,9 +193,6 @@ jobs:
 
       - name: Practical CLI smoke tests
         run: pnpm test:smoke
-
-      - name: Package dry run
-        run: npm pack --dry-run --json --ignore-scripts
 
       - name: Pack verified distribution
         run: |

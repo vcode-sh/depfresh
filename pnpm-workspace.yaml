@@ -1,5 +1,6 @@
 allowBuilds:
   esbuild: true
 minimumReleaseAgeExclude:
-  - undici@8.8.0
-  - tsdown@0.22.12
+  - '@types/node@26.5.0'
+  - '@clack/core@1.5.0'
+  - '@clack/prompts@1.8.0'

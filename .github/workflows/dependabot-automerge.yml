@@ -23,7 +23,14 @@ jobs:
       # Auto-merge patch and minor updates -- majors need a human
       - name: Auto-merge
         if: steps.metadata.outputs.update-type != 'version-update:semver-major'
-        run: gh pr merge --auto --squash "$PR_URL"
+        shell: bash
+        run: |
+          AUTO_MERGE_ALLOWED=$(gh api "repos/$GITHUB_REPOSITORY" --jq '.allow_auto_merge')
+          case "$AUTO_MERGE_ALLOWED" in
+            true) gh pr merge --auto --squash "$PR_URL" ;;
+            false) echo "Auto-merge is disabled for this repository; leaving the PR for review." ;;
+            *) echo "Unable to determine repository auto-merge setting." >&2; exit 1 ;;
+          esac
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

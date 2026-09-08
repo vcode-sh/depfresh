@@ -43,7 +43,6 @@ const { cliPath } = resolveVisualPlusCliPath({
   cliPath: process.env.DEPFRESH_VISUAL_PLUS_CLI_PATH,
   installRoot: process.env.DEPFRESH_VISUAL_PLUS_INSTALL_ROOT,
 })
-const asOfMs = Date.parse('2026-07-19T00:00:00.000Z')
 let fixtureParent = ''
 const registryResponses: Array<{ get(name: string): Buffer | undefined }> = []
 let registry: Server
@@ -902,7 +901,8 @@ describe('Visual+ built CLI', () => {
       encoding: 'utf8',
     })
 
-    expect(version.trim()).toBe('2.1.2')
+    const manifest = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
+    expect(version.trim()).toBe(manifest.version)
   })
 
   it('removes a partial fixture directory and retains its builder failure', () => {
@@ -1307,7 +1307,7 @@ describe('Visual+ built CLI', () => {
     120_000,
   )
 
-  describe.sequential('CI constrained PTY fallback', () => {
+  describe('CI constrained PTY fallback', { concurrent: false }, () => {
     let fixture: ReturnType<typeof createVisualPlusFixture> | undefined
     let result: Awaited<ReturnType<typeof runReadOnlyPty>> | undefined
     let journeyReady = false
@@ -1377,7 +1377,7 @@ describe('Visual+ built CLI', () => {
     })
   })
 
-  describe.sequential('TERM=dumb constrained PTY fallback', () => {
+  describe('TERM=dumb constrained PTY fallback', { concurrent: false }, () => {
     let fixture: ReturnType<typeof createVisualPlusFixture> | undefined
     let result: Awaited<ReturnType<typeof runReadOnlyPty>> | undefined
     let captureReady = false
@@ -2270,7 +2270,7 @@ function createFixture(name: string, overrides: FixtureCreationOverrides = {}) {
   const canonicalDirectory = realpathSync(directory)
   try {
     const fixture = (overrides.build ?? createVisualPlusFixture)(canonicalDirectory, {
-      asOfMs,
+      asOfMs: Date.now(),
       registryUrl,
     })
     registryResponses.push(fixture.registry.responses)

@@ -154,6 +154,7 @@ describe('installed Visual+ replay failure classification', () => {
           'list',
           'test/visual-plus-cli.test.ts',
           '--json',
+          '--no-static-parse',
         ],
         { encoding: 'utf8', maxBuffer: 1024 * 1024 },
       ),

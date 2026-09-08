@@ -10,23 +10,23 @@ reviewable plan/apply workflow when you need stronger guarantees.
 
 ## Try it
 
-These commands pin depfresh 2.1.2. Source text alone does not establish publication; npm and GitHub
+These commands pin depfresh 2.1.3. Source text alone does not establish publication; npm and GitHub
 external records are authoritative. The tag workflow creates the hosted release only after the
 aggregate suite, exact npm 12 artifact verification, and exact public-integrity gates succeed.
 Recursive workspace discovery is on by default, so `-r` is not needed.
 
 ```bash
 # Bun
-bunx depfresh@2.1.2
+bunx depfresh@2.1.3
 
 # pnpm
-pnpm dlx depfresh@2.1.2
+pnpm dlx depfresh@2.1.3
 
 # npm
-npm exec --yes --package=depfresh@2.1.2 -- depfresh
+npm exec --yes --package=depfresh@2.1.3 -- depfresh
 
 # Yarn
-yarn dlx depfresh@2.1.2
+yarn dlx depfresh@2.1.3
 ```
 
 Node.js 24.15.0 or newer is required.
@@ -34,7 +34,7 @@ Node.js 24.15.0 or newer is required.
 For a team or CI, pin depfresh in the project instead:
 
 ```bash
-pnpm add -D --save-exact depfresh@2.1.2
+pnpm add -D --save-exact depfresh@2.1.3
 pnpm exec depfresh
 ```
 
@@ -212,6 +212,7 @@ registry and does not inherit project npm configuration.
 - [Output contracts](docs/output-formats/README.md)
 - [GitHub Action and integrations](docs/integrations/README.md)
 - [Troubleshooting](docs/troubleshooting.md)
+- [2.1.3 release notes](docs/releases/v2.1.3.md)
 - [2.1.2 release notes](docs/releases/v2.1.2.md)
 - [2.1.1 release notes](docs/releases/v2.1.1.md)
 - [2.1.0 release notes](docs/releases/v2.1.0.md)

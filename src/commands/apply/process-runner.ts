@@ -629,7 +629,10 @@ function hasBaselineAncestor(
     visited.add(parentPid)
     const parent = current.get(parentPid)
     if (!parent) return false
-    if (sameProcessIdentity(baseline.get(parentPid), parent)) return true
+    if (sameProcessIdentity(baseline.get(parentPid), parent)) {
+      // Ownership-boundary processes can adopt orphans; their PPID does not prove unrelated ancestry.
+      return parent.parentPid > 1 && baseline.has(parent.parentPid)
+    }
     parentPid = parent.parentPid
   }
   return false
